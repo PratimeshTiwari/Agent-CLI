@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.37.0**
+## Current version: **1.38.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,44 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.38.0 — 2026-09-26
+
+**It was clicking the microphone.**
+
+Reported with two screenshots: the dictation waveform running, a stop button
+where send had been, and the prompt still sitting in the composer — and it
+stays that way until dictation is stopped by hand, so the turn is lost and the
+machine is listening. `/logs extension` had been saying so since 11:22 that
+morning, twice, in as many words:
+
+```
+SELECTORS.sendButton matched nothing; found
+<button aria-label="Dictate (⌘⇧D)"> by shape instead.
+```
+
+- **The ladder was never broken.** Measured against the live composer: with
+  text in the box exactly one button appears — `aria-label="Send message"` —
+  and `button[aria-label*="send" i]` matches it. The fallback was running
+  *before that button had mounted*, in a window where the only candidates are
+  whatever the composer churned while Angular settled. "Appeared after the text
+  did" is a good signal and not a sufficient one: a control that was always
+  there can re-render as a new node and read as having appeared.
+- **A grace period.** The fallback exists for a selector that *changed*, which
+  is a permanent condition — if the ladder is going to match, it matches on the
+  first check. It no longer runs in the first second, which is several times
+  what the send button takes to mount and a twentieth of the function's budget.
+- **A veto, like the one the mode picker has always had.**
+  `findModelTriggerStructurally` has excluded `mic|voice|attach|…` since it was
+  written; this function was left without one.
+- **And containment, because a denylist is only as good as its list.** A test
+  of every control the live page offers found `Temporary chat` walking straight
+  through the veto. Candidates are now narrowed to the composer's own subtree,
+  walking up from the prompt box the way the picker finder does — and stopping
+  before `body`, since an ancestor holding both the prompt and the navigation
+  is already past the composer. If nothing in the composer qualifies there is
+  **no** candidate; the first cut left the unnarrowed list in place, which
+  defeated the check entirely.
 
 ### 1.37.0 — 2026-09-26
 
