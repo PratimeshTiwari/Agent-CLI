@@ -1470,6 +1470,35 @@ function describeMenu(items) {
   }));
 }
 
+/**
+ * The mode picker's trigger, waiting for it to mount if it has not yet.
+ *
+ * **Both callers need this and only one had it.** 1.37.0 taught
+ * `readModelOptions` to wait, because a tab reports ready on `canType` — the
+ * composer being in the DOM — while Angular mounts the picker a beat later.
+ * `selectModelByLabel` was left looking once and throwing.
+ *
+ * That is the path a *subagent* takes. Its tab is always brand new, so it is
+ * the one caller guaranteed to hit the race — and it did, twice in four
+ * minutes on 2026-09-26:
+ *
+ *     20:44:04  switch_model  no control that opens the mode picker
+ *     20:45:48  switch_model  no control that opens the mode picker
+ *
+ * When that throw happens the subagent keeps whatever model the tab opened
+ * with, which is the account's current one. So on a Pro session every
+ * subagent silently ran on **Pro** — reported as "on pro model subagent is not
+ * working well, on flash-lite it worked fine", which is the same observation
+ * from the other side: a cheap tab opens cheap, so the bug was invisible
+ * there.
+ *
+ * Returns null rather than throwing, so each caller keeps its own message.
+ */
+async function findModelTrigger() {
+  const now = () => findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
+  return now() || await waitForDom(now, PICKER_READY_BUDGET_MS);
+}
+
 function modelMenuItems() {
   for (const selector of SELECTORS.modelMenuItem) {
     const found = [...document.querySelectorAll(selector)];
@@ -1545,12 +1574,7 @@ async function readModelOptions() {
    * Observer-based, so it costs nothing on a warm tab — the trigger is almost
    * always already there and `waitForDom` returns on its first check.
    */
-  const trigger = findElement(SELECTORS.modelTrigger)
-    || findModelTriggerStructurally()
-    || await waitForDom(
-      () => findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally(),
-      PICKER_READY_BUDGET_MS,
-    );
+  const trigger = await findModelTrigger();
   if (!trigger) throw new Error('[find_model_trigger] no control that opens the mode picker');
 
   try {
@@ -1566,7 +1590,26 @@ async function readModelOptions() {
       items = await openModelMenu(trigger);
     }
     if (items.length === 0) throw new Error('[open_model_menu] the picker did not open, or has no options');
-    return describeMenu(items).filter((m) => m.label);
+    const described = describeMenu(items).filter((m) => m.label);
+
+    /*
+     * Which one is selected, from the trigger when the menu will not say.
+     *
+     * `describeModelOption` reads a `selected` class, and on the real page that
+     * is the only marker — `aria-checked` and `aria-selected` are both absent.
+     * In a tab that has just mounted the class can be missing on every item,
+     * and the server then logs `model_picker_unreadable`: a list it cannot
+     * compare against the rung, which is the same as no list at all. Observed
+     * on 2026-09-26, minutes after a subagent tab opened.
+     *
+     * The trigger's own label carries the answer — "Open mode picker, currently
+     * Pro" — with no interaction, and `markSelected` already resolves it by
+     * position for `switch_model`. Used only when the class says nothing, so
+     * the DOM's own marker still wins wherever it exists.
+     */
+    return described.some((m) => m.selected)
+      ? described
+      : markSelected(described, currentModelLabel());
   } finally {
     // Always: a menu left open swallows the next click, and the turn after that
     // looks like a dead tab — a failure surfacing nowhere near its cause.
@@ -1661,7 +1704,7 @@ async function selectModelByLabel(label) {
   const wanted = String(label || '').trim().toLowerCase();
   if (!wanted) throw new Error('[switch_model] no model named');
 
-  const trigger = findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
+  const trigger = await findModelTrigger();
   if (!trigger) throw new Error('[find_model_trigger] no control that opens the mode picker');
 
   const items = await openModelMenu(trigger);

@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.38.0**
+## Current version: **1.39.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,47 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.39.0 — 2026-09-27
+
+**Subagents were silently running on your main model.**
+
+Reported as *"subagent should be on lite/medium — but it went on pro"*, and
+from the other side: *"on pro the subagent is not working well; on flash-lite
+it worked fine."* Both are the same fault seen from opposite ends — a cheap tab
+opens cheap, so the bug is invisible there.
+
+- **The trigger wait was added to one caller and not the other.** 1.37.0 taught
+  `readModelOptions` to wait for the picker to mount, because a tab reports
+  ready on `canType` — the composer being in the DOM — while Angular mounts the
+  picker a beat later. `selectModelByLabel` was left looking once and throwing,
+  and that is the path `switch_model` takes.
+
+  A **subagent's tab is always brand new**, so it is the one caller guaranteed
+  to hit that race. It did, twice in four minutes:
+
+  ```
+  20:44:04  switch_model  no control that opens the mode picker
+  20:45:48  switch_model  no control that opens the mode picker
+  ```
+
+  When that throw happens the subagent keeps whatever the tab opened with —
+  the account's current model. On a Pro session, every subagent ran on Pro:
+  slower, more expensive, and more likely to time out or answer in prose
+  instead of calling `return_result`, which is what the rest of that log shows.
+
+  Both callers now share `findModelTrigger`, which waits.
+
+- **A menu with nothing marked selected is no longer unreadable.**
+  `describeModelOption` reads a `selected` class, which is the page's only
+  marker — `aria-checked` and `aria-selected` are both absent. A freshly
+  mounted menu can have it on no item at all, and the server then logs
+  `model_picker_unreadable` and treats the list as no list. Seen at 20:43:24,
+  minutes after a subagent tab opened.
+
+  The trigger's own label carries the answer with no interaction, and
+  `markSelected` already resolves it by position. Used only when the class says
+  nothing, so the DOM's own marker still wins wherever it exists.
 
 ### 1.38.0 — 2026-09-26
 
