@@ -36,6 +36,12 @@
 // ── Constants & State ───────────────────────────────────────────────
 
 const RESPONSE_IDLE_TIMEOUT = 15000; // 15s of no new text = response complete
+/*
+ * How long the send-button ladder gets before the structural fallback is
+ * allowed to guess. The fallback is for a selector that *changed*; a button
+ * that has not mounted yet is a different problem with a different answer.
+ */
+const SEND_LADDER_GRACE_MS = 1000;
 const RESPONSE_MAX_TIMEOUT = 300000; // 5 min absolute max (safety net)
 // Every completion path below needs `lastResponseText` to be non-empty, so a
 // scrape that matches nothing used to sit here for the full 5 minutes with no
@@ -418,9 +424,94 @@ function enabledButtons() {
  * @param {Set<Element>} before  enabled buttons as they were before typing
  * @param {Element} input        the prompt box, for the tie-break
  */
+/**
+ * Controls this must never return, however the page churns.
+ *
+ * **It clicked the microphone.** Reported with two screenshots on 2026-09-26:
+ * the dictation waveform running, a stop button where send had been, and the
+ * prompt still sitting in the composer unsent — and it stays that way until
+ * dictation is stopped by hand. `/logs extension` had been saying so since
+ * 11:22 that morning, twice, in as many words:
+ *
+ *     SELECTORS.sendButton matched nothing; found
+ *     <button aria-label="Dictate (⌘⇧D)"> by shape instead.
+ *
+ * "Appeared after the text did" is a good signal and it is not a sufficient
+ * one. The composer re-renders while Angular settles, so a control that was
+ * always there can arrive as a *new node* and read as having appeared — and
+ * with the real send button not yet mounted it is then the only candidate.
+ *
+ * `findModelTriggerStructurally` has had a veto like this since it was
+ * written, for the same reason, and this function was left without one.
+ * Matched on the label because that is what the page gives us; a send button
+ * has never been called any of these.
+ */
+const NOT_THE_SEND_BUTTON = /dictate|microphone|\bmic\b|voice|speech|listen|attach|upload|file|image|photo|camera|canvas|research|settings|menu|more|close|open|toggle|sidebar|cancel|stop/i;
+
+/**
+ * @param {Set<Element>} before  enabled buttons as they were before typing
+ * @param {Element} input        the prompt box, for the tie-break
+ */
 function findSendButtonStructurally(before, input) {
   if (!before) return null;
-  const appeared = [...enabledButtons()].filter((b) => !before.has(b));
+
+  const vetoed = (b) => NOT_THE_SEND_BUTTON.test(
+    `${b.getAttribute('aria-label') || ''} ${b.getAttribute('data-test-id') || ''} `
+    + `${b.querySelector('mat-icon')?.getAttribute('data-mat-icon-name') || ''}`,
+  );
+
+  let appeared = [...enabledButtons()].filter((b) => !before.has(b) && !vetoed(b));
+
+  /*
+   * **And it has to be in the composer.**
+   *
+   * The veto above is a denylist, so it is only ever as good as its list — a
+   * test of every control the live page offers found `Temporary chat` walking
+   * straight through it, and that one lives in the sidebar. Anything in the
+   * page can churn and look new; only a handful of things are in the box you
+   * are typing into.
+   *
+   * So the candidates are narrowed to the input's own subtree first, walking
+   * up until an ancestor contains one. That is exactly what
+   * `findModelTriggerStructurally` does to find the mode picker, and for the
+   * same reason: containment is a fact about the page, where a name is a
+   * guess about the page's vocabulary.
+   *
+   * Falls back to the unnarrowed list when there is no input to walk from —
+   * the veto still applies, and half a signal beats none.
+   */
+  if (input && appeared.length > 0) {
+    let narrowed = false;
+    let node = input;
+    for (let level = 0; node && level < 8; level += 1) {
+      /*
+       * Never `body`, and never the root.
+       *
+       * Walk up far enough and *everything* is contained, so the walk finds a
+       * sidebar button as readily as a composer one and containment stops
+       * meaning anything. The regions of a page are siblings, so an ancestor
+       * that holds both the prompt box and the navigation is already past the
+       * composer — stopping short of it is what keeps this a statement about
+       * the composer rather than about the document.
+       */
+      if (node === document.body || node === document.documentElement) break;
+      const inside = appeared.filter((b) => node.contains(b));
+      if (inside.length > 0) { appeared = inside; narrowed = true; break; }
+      node = node.parentElement;
+    }
+
+    /*
+     * Nothing in the composer, so there is no candidate — not "fall back to
+     * whatever was left".
+     *
+     * Leaving the unnarrowed list in place here was the first version of this,
+     * and it defeated the whole check: a lone sidebar button that had churned
+     * was still the only entry, so it was returned exactly as before. The
+     * containment test has to be able to say *no*, or it is not a test.
+     */
+    if (!narrowed) return null;
+  }
+
   if (appeared.length === 0) return null;
   if (appeared.length === 1) return appeared[0];
 
@@ -708,8 +799,29 @@ function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
 
       const btn = findElement(SELECTORS.sendButton);
 
-      // The ladder found nothing. Ask which control the text brought with it.
-      if (!btn && buttonsBeforeText) {
+      /*
+       * The ladder found nothing. Ask which control the text brought with it —
+       * **but not yet.**
+       *
+       * This fallback exists for a *changed selector*, which is a permanent
+       * condition: if the ladder is going to match, it matches on the first
+       * check. Running the fallback immediately meant it also covered "the
+       * button has not rendered yet", which is a transient one — and in that
+       * window the real send button does not exist, so the only candidates are
+       * whatever the composer churned while Angular settled.
+       *
+       * That is how it came to click the microphone (see
+       * `NOT_THE_SEND_BUTTON`). The veto makes that specific mistake
+       * impossible; this makes the whole class unlikely, by letting the page
+       * finish before concluding the page has changed.
+       *
+       * Measured against the live composer: `aria-label="Send message"` mounts
+       * within a few hundred milliseconds of the text landing, and the ladder
+       * matches it. A second is several times that and still a twentieth of
+       * this function's budget.
+       */
+      const ladderHadAChance = Date.now() - startTime >= SEND_LADDER_GRACE_MS;
+      if (!btn && buttonsBeforeText && ladderHadAChance) {
         const byShape = findSendButtonStructurally(buttonsBeforeText, input);
         if (byShape) {
           reportDrift('sendButton', byShape);
