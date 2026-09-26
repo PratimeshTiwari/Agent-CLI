@@ -277,13 +277,36 @@ test('a trigger that mounts late is still found', async () => {
   assert.ok(await pending, 'the read gave up before the picker had mounted');
 });
 
-test('the read waits for the trigger, and retries an empty menu once', () => {
+test('both picker paths wait for the trigger, not just the read', () => {
+  /*
+   * The wait lives in one helper now. It had been in `readModelOptions` only,
+   * and `selectModelByLabel` — the path a *subagent* takes, whose tab is always
+   * brand new — looked once and threw. That is why a subagent silently kept
+   * whatever model its tab opened with.
+   */
+  assert.match(src, /async function findModelTrigger\(\)[\s\S]{0,400}?waitForDom\(/,
+    'the shared trigger lookup does not wait for the picker to mount');
+
+  for (const fn of ['async function readModelOptions(', 'async function selectModelByLabel(']) {
+    const body = src.slice(src.indexOf(fn), src.indexOf('\n}', src.indexOf(fn)));
+    assert.match(body, /await findModelTrigger\(\)/,
+      `${fn} looks the trigger up itself, so it does not wait`);
+  }
+});
+
+test('the read retries an empty menu once', () => {
   const body = src.slice(src.indexOf('async function readModelOptions('), src.indexOf('\n}', src.indexOf('async function readModelOptions(')));
-  assert.match(body, /waitForDom\(/,
-    'readModelOptions throws the moment the trigger is missing, so a tab opened '
-    + 'for this very purpose is too young to answer');
   assert.match(body, /items = await openModelMenu\(trigger\)/,
     'an empty menu is reported as broken rather than retried');
+});
+
+test('and falls back to the trigger when no item is marked selected', () => {
+  const body = src.slice(src.indexOf('async function readModelOptions('), src.indexOf('\n}', src.indexOf('async function readModelOptions(')));
+  assert.match(body, /markSelected\(described, currentModelLabel\(\)\)/,
+    'a freshly mounted menu with no `selected` class is reported as unreadable, '
+    + 'which the server treats as no list at all');
+  assert.match(body, /described\.some\(\(m\) => m\.selected\)/,
+    'the fallback runs unconditionally, so the DOM’s own marker is discarded');
 });
 
 test('and the wait is bounded, so a genuinely missing picker still fails', () => {
