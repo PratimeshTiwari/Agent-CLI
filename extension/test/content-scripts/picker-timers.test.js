@@ -314,3 +314,37 @@ test('and the wait is bounded, so a genuinely missing picker still fails', () =>
   assert.ok(budget > 0 && budget <= 15000,
     `${budget}ms — a changed selector would hang every read instead of erroring`);
 });
+
+/*
+ * A menu that opened *enough* is not a menu that opened.
+ *
+ * `openModelMenu` returns as soon as it sees more than one item — the right
+ * bar for "it opened", the wrong one for "the option I want is in there".
+ * Angular fills the list in, so a menu read a moment early holds a prefix, and
+ * the entry being asked for is very often the one still missing.
+ *
+ * A subagent hits this because its tab is seconds old:
+ *
+ *     08:14:22  switch_model  the picker has no option called "3.5 Flash-Lite"
+ *
+ * The throw leaves the tab on whatever it opened with, so the subagent ran on
+ * the main session's model — reported as "I saw subagent on pro while it
+ * should have been on lite".
+ */
+test('a switch retries when the wanted option is not in the menu yet', () => {
+  const body = src.slice(src.indexOf('async function selectModelByLabel('));
+  const fn = body.slice(0, body.indexOf('\n}'));
+
+  assert.match(fn, /if \(!items\.find\(matches\)\) \{[\s\S]{0,200}?openModelMenu\(trigger\)/,
+    'a half-built menu is reported as a missing option and the tab keeps its model');
+  assert.match(fn, /closeModelMenu\(trigger\);[\s\S]{0,80}?items = await openModelMenu/,
+    're-reading the same open menu finds the same prefix — it has to be reopened');
+});
+
+test('and says what the picker did offer when it gives up', () => {
+  const body = src.slice(src.indexOf('async function selectModelByLabel('));
+  const fn = body.slice(0, body.indexOf('\n}'));
+  assert.match(fn, /it offered: \$\{described\.map/,
+    '"no option called X" reads as a wrong label; the list is what tells a '
+    + 'half-built menu from a real rename');
+});

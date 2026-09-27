@@ -1741,6 +1741,30 @@ export class AgentLoop {
   startNewChat({ timeoutMs = 5000 } = {}) {
     const previous = this.chatThread;
     this.chatThread = null;
+
+    /*
+     * **A new conversation has never seen the system prompt.** By definition.
+     *
+     * `_recordThread` resets the prompt state when the thread changes, which
+     * is what catches the person opening a new chat in the tab themselves —
+     * and it is guarded on there having been a *previous* thread, because the
+     * first id of a session belongs to turn 0, which already carried the full
+     * prompt.
+     *
+     * That guard is defeated by the line above. `/new` nulls `chatThread`
+     * first, so by the time the new conversation's first reply arrives
+     * `previous` is null and the reset never fires. The next prompt is then
+     * the short turn — a bracketed context line and a list of tool **names** —
+     * typed into a chat that has never been given the definitions.
+     *
+     * Reported as "it did not send the new base prompt on new?", with the
+     * screenshot showing Gemini answering that it does not have "direct
+     * execution access to your local workspace or the specific custom tools
+     * you've configured". `tool_amnesia` caught it a moment later and spent a
+     * turn re-sending the definitions — the backstop working, for a failure
+     * prevention should have made impossible.
+     */
+    this.promptBuilder?.resetPromptState?.();
     // The thread we are leaving. `_recordThread` only ever overwrites, so
     // without this the conversation that was just handed over has no address —
     // and a handover you cannot look back from is a reset with a nicer name.
