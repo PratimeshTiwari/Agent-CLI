@@ -755,6 +755,28 @@ export class WebSocketServer {
           break;
         }
 
+        /*
+         * **A notice is never fatal.** By definition it reports something
+         * that did not go wrong for the user — so it must never reach the two
+         * lines below, which end the turn and abort *every* lane.
+         *
+         * It did, in 1.41.0, and it was mine. `menu_left_open` is a notice sent
+         * on this channel because this channel is the only way a content script
+         * can write to the log — and the branch below decides fatality by op, so
+         * any op not on the allow-list above is treated as a dead turn. Reported
+         * with a screenshot: the `!` row in the transcript and the main turn
+         * stopped, while the subagent it had delegated to went on generating.
+         *
+         * Placed *after* the settle and `session_lost` branches, deliberately:
+         * a notice still settles the picker watchdog and still resolves a lost
+         * session. The rule this file already states — how loudly something is
+         * recorded must not decide what the bridge does about it — was written
+         * about demotion stopping a *settle*. It turns out to hold the other way
+         * too, and an allow-list of the ops that may stay alive cannot enforce
+         * it: the next informational op would be killed the same way.
+         */
+        if (payload?.level === 'notice') break;
+
         // The turn is dead, so hand the bridge lock back — otherwise every
         // later prompt queues behind a request that will never be answered.
         this.agentLoop.isProcessing = false;
