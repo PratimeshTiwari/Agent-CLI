@@ -17,7 +17,8 @@
 # Knobs, all optional:
 #   AGENT_REPO=<url>        where to clone from
 #   AGENT_BRANCH=<name>     which branch (default: main)
-#   AGENT_INSTALL_DIR=<dir> where to put it (default: ~/Gemini-Agent)
+#   AGENT_INSTALL_DIR=<dir> where to put it (default: ~/Agent-CLI, or an existing
+#                           ~/Gemini-Agent checkout from before the rename)
 #   --yes / AGENT_YES=1     take the default on every question, ask nothing
 
 set -euo pipefail
@@ -59,7 +60,7 @@ if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
 fi
 
 if [ -z "$SELF_DIR" ] || [ ! -f "$SELF_DIR/server/package.json" ]; then
-  REPO="${AGENT_REPO:-https://github.com/PratimeshTiwari/Gemini-Agent.git}"
+  REPO="${AGENT_REPO:-https://github.com/PratimeshTiwari/Agent-CLI.git}"
   BRANCH="${AGENT_BRANCH:-main}"
 
   step "Fetching the code"
@@ -69,7 +70,17 @@ if [ -z "$SELF_DIR" ] || [ ! -f "$SELF_DIR/server/package.json" ]; then
   # question — the same rule every other prompt here follows.
   TARGET="${AGENT_INSTALL_DIR:-}"
   if [ -z "$TARGET" ]; then
-    TARGET="$HOME/Gemini-Agent"
+    # The repo was renamed Gemini-Agent → Agent-CLI on 2026-09-27, and so was
+    # this default. Every install before that lives at ~/Gemini-Agent, and the
+    # rule below is that re-running the one-liner is an *update* — so a checkout
+    # already there is the install, and is used. Without this, re-running would
+    # clone a second copy at ~/Agent-CLI and repoint the shims at it, leaving
+    # the old one on disk looking current.
+    if [ -d "$HOME/Gemini-Agent/.git" ] && [ ! -e "$HOME/Agent-CLI" ]; then
+      TARGET="$HOME/Gemini-Agent"
+    else
+      TARGET="$HOME/Agent-CLI"
+    fi
     if [ "$ASSUME_YES" != "1" ] && ( : < /dev/tty ) 2>/dev/null; then
       printf '  \033[1mInstall to %s?\033[0m [Y/n] ' "$TARGET" > /dev/tty
       read -r reply < /dev/tty || reply=''
@@ -94,6 +105,16 @@ if [ -z "$SELF_DIR" ] || [ ! -f "$SELF_DIR/server/package.json" ]; then
   if [ -d "$TARGET/.git" ]; then
     # Re-running the one-liner is an update, not a second install.
     ok "found an existing checkout at $TARGET"
+    # Follow the rename. GitHub redirects the old URL, but only until someone
+    # creates a repo at the old name — then this fetch would silently pull
+    # somebody else's code. Only the exact old URL is rewritten: a fork, a
+    # mirror or an ssh remote is the owner's choice and is left alone.
+    case "$(git -C "$TARGET" remote get-url origin 2>/dev/null)" in
+      https://github.com/PratimeshTiwari/Gemini-Agent|https://github.com/PratimeshTiwari/Gemini-Agent.git)
+        git -C "$TARGET" remote set-url origin "https://github.com/PratimeshTiwari/Agent-CLI.git"
+        ok "origin now points at the renamed repo (Agent-CLI)"
+        ;;
+    esac
     git -C "$TARGET" fetch --quiet origin "$BRANCH"
     if [ -n "$(git -C "$TARGET" status --porcelain)" ]; then
       warn "local changes present — not touching them, using the checkout as it is"
@@ -180,7 +201,7 @@ if [ -w "$SHIM_DIR" ]; then
   for name in agent agent-cli; do
     cat > "$SHIM_DIR/$name" <<SHIM
 #!/bin/sh
-# Installed by Gemini-Agent's setup.sh. Points at the checkout it was run
+# Installed by Agent-CLI's setup.sh. Points at the checkout it was run
 # from; move the checkout and re-run setup.
 exec node "$ROOT/server/src/index.js" "\$@"
 SHIM
@@ -211,7 +232,11 @@ rc_file() {
   esac
 }
 
-MARKER="# added by Gemini-Agent setup.sh"
+MARKER="# added by Agent-CLI setup.sh"
+# What the line said before the rename. It is how a re-run knows it already
+# wrote one, so it must go on being recognised — dropping it would make every
+# existing install look unconfigured and get a second PATH line appended.
+OLD_MARKER="# added by Gemini-Agent setup.sh"
 
 if command -v agent >/dev/null 2>&1; then
   ok "'agent' already resolves — nothing to add"
@@ -227,7 +252,7 @@ else
   if [ -z "$RC" ]; then
     warn "unrecognised shell (${SHELL:-unset}) — add this yourself:"
     printf '\n    %s\n\n' "$LINE"
-  elif [ -f "$RC" ] && grep -qF "$MARKER" "$RC"; then
+  elif [ -f "$RC" ] && { grep -qF "$MARKER" "$RC" || grep -qF "$OLD_MARKER" "$RC"; }; then
     ok "$RC already has it"
   else
     echo "  This would go at the end of $RC:"

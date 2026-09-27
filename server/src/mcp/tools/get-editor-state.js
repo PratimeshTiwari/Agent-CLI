@@ -67,7 +67,7 @@ export default {
       return { result: lines.join('\n') };
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { error: 'Editor state not found. The user needs to install the Gemini-Agent VS Code companion extension and open this workspace.' };
+        return { error: 'Editor state not found. The user needs to install the Agent-CLI VS Code companion extension and open this workspace.' };
       }
       return { error: `Failed to read editor state: ${err.message}` };
     }
