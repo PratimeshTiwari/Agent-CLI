@@ -20,6 +20,24 @@
  *   - It collapses repeats. A poller failing every tick, or a crash loop,
  *     would otherwise bury everything else — the 401-per-interval bug wrote the
  *     same line hundreds of times.
+ *   - It separates **failures** from **notices**. Three days of logs held 274
+ *     rows of which 76% were one optional subsystem, and most of those were
+ *     *expected states*: a background `discover_models` at connect, before any
+ *     tab exists, correctly declining to open one — logged as a failure every
+ *     session. While that is true nobody can look at `/logs` and see a
+ *     regression, which is the only thing the log is for.
+ *
+ * A notice is written to the same file, collapsed the same way, and shown by
+ * `/logs <flow>` the same way. What it does not do is count as a failure. That
+ * distinction is a `level` field, present only on notices, so that every line
+ * written before this existed reads as a failure — which is the honest reading
+ * of history, not a convenient one.
+ *
+ * **Demote, never drop.** The temporary `picker_trace` instrumentation is what
+ * found the relay-drift bug in one run after five wrong theories had been
+ * shipped; a log that discards what is merely *expected* is a log that cannot
+ * be used to find out why an expectation was wrong. The test is whether a
+ * reader should act on the row, not whether it is interesting.
  */
 
 import fs from 'fs';
@@ -70,6 +88,36 @@ function appendRecord(file, record) {
 }
 
 /**
+ * Write the tally line for one collapsed signature.
+ *
+ * One function because there are two callers — `flushExpired`, when a window
+ * closes, and `flushPending`, on process exit — and they had a copy each. The
+ * duplication was not theoretical: deleting the level from one of them left the
+ * whole suite green, because every test reached the other. Two copies of "write
+ * the tally" is how one of them ends up forgetting.
+ */
+function writeTally(state) {
+  try {
+    appendRecord(paths.errorLogPath(state.workspace), {
+      time: new Date(state.at).toISOString(),
+      flow: state.flow,
+      op: state.op,
+      message: state.message,
+      // Carried, or the collapse silently promotes a notice back to a failure:
+      // the tally is the only line reaching disk for repeats 2..N, so a storm of
+      // 50 notices would read as 49 failures and one notice.
+      ...(state.level === 'notice' ? { level: 'notice' } : {}),
+      // A tally line stands for repeats only — it is not itself another
+      // occurrence. Counting it as one is how a storm of 12 read as 13.
+      tally: true,
+      repeatedSince: state.count,
+    });
+  } catch {
+    /* the next flush will try again; on exit there is nothing further to try */
+  }
+}
+
+/**
  * Write out the tally for any signature whose window has closed.
  *
  * Called on every log write, which is the only clock this module has. A
@@ -80,22 +128,7 @@ function appendRecord(file, record) {
 function flushExpired(now) {
   for (const [key, state] of recent) {
     if (now - state.at < REPEAT_WINDOW_MS) continue;
-    if (state.count > 0) {
-      try {
-        appendRecord(paths.errorLogPath(state.workspace), {
-          time: new Date(state.at).toISOString(),
-          flow: state.flow,
-          op: state.op,
-          message: state.message,
-          // A tally line stands for repeats only — it is not itself another
-          // occurrence. Counting it as one is how a storm of 12 read as 13.
-          tally: true,
-          repeatedSince: state.count,
-        });
-      } catch {
-        /* the next flush will try again */
-      }
-    }
+    if (state.count > 0) writeTally(state);
     recent.delete(key);
   }
 }
@@ -131,6 +164,9 @@ function rotate(file) {
  * @param {string} entry.message - one line, the thing that went wrong
  * @param {any} [entry.detail] - stack, payload, whatever helps
  * @param {object} [entry.meta] - small structured extras (taskId, prNumber…)
+ * @param {'error'|'notice'} [entry.level] - `notice` for an expected state that
+ *   is worth a record and is not a failure. Written only when it is `notice`,
+ *   so an absent field means failure and every pre-existing line reads as one.
  * @returns {object|null} the entry written, or null if it was a collapsed repeat
  */
 export function logError(workspace, entry) {
@@ -142,8 +178,11 @@ export function logError(workspace, entry) {
 
     const message = String(entry.message).split('\n')[0].slice(0, 400);
     const op = entry.op || null;
-    // Keyed by workspace too: one process can serve more than one.
-    const key = `${workspace}\u0000${entry.flow}\u0000${op}\u0000${message}`;
+    const level = entry.level === 'notice' ? 'notice' : 'error';
+    // Keyed by workspace too: one process can serve more than one. Level is in
+    // the key because collapsing across it would file one under the other, and
+    // which one wins would depend on call order.
+    const key = `${workspace}\u0000${entry.flow}\u0000${op}\u0000${level}\u0000${message}`;
 
     const previous = recent.get(key);
     if (previous && now - previous.at < REPEAT_WINDOW_MS) {
@@ -152,13 +191,17 @@ export function logError(workspace, entry) {
       return null; // collapsed; the tally is written when the window closes
     }
 
-    recent.set(key, { at: now, count: 0, workspace, flow: entry.flow, op, message });
+    recent.set(key, { at: now, count: 0, workspace, flow: entry.flow, op, message, level });
 
     const record = {
       time: new Date(now).toISOString(),
       flow: entry.flow,
       op,
       message,
+      // Only on notices. A `level: 'error'` on every line would be four bytes
+      // per row saying what the absence of it already says, and it would make
+      // the pre-level history look like a different kind of record.
+      ...(level === 'notice' ? { level } : {}),
       detail: truncate(entry.detail),
       meta: entry.meta,
     };
@@ -170,16 +213,48 @@ export function logError(workspace, entry) {
   }
 }
 
+/**
+ * Record an expected state: worth keeping, not a failure.
+ *
+ * Use it when a reader should *not* act on the row. A background poll declining
+ * because there is no tab yet, a build mismatch that needs a reload rather than
+ * a diagnosis, a search falling back to an equivalent slower path — all three
+ * were indistinguishable from real breakage in `/logs` and together made up
+ * most of it.
+ *
+ * The bar is deliberately "should someone act on this?" and not "is this
+ * interesting?". A row nobody can act on teaches people to stop reading the
+ * log, which costs more than whatever the row was recording.
+ */
+export function logNotice(workspace, entry) {
+  return logError(workspace, { ...entry, level: 'notice' });
+}
+
 /** A logger bound to one workspace and flow, for call sites that log a lot. */
 export function flowLogger(workspace, flow) {
   return (op, message, detail, meta) => logError(workspace, { flow, op, message, detail, meta });
 }
 
 /**
- * Read recent failures, newest first.
- * @param {{ flow?: string, limit?: number }} [options]
+ * The level of a record, for lines written before the field existed.
+ *
+ * Absent means failure. That is the honest default: those rows were written by
+ * call sites that believed they were reporting breakage, and re-reading history
+ * as calmer than it was would hide the very trend the level exists to expose.
  */
-export function readErrors(workspace, { flow, limit = 50 } = {}) {
+const levelOf = (record) => (record?.level === 'notice' ? 'notice' : 'error');
+
+/**
+ * Read recent entries, newest first.
+ *
+ * `level` filters; omitting it returns **both**, which is what drilling into a
+ * flow wants. A notice beside the failure it preceded is most of what makes a
+ * failure diagnosable — the point of demoting was to stop notices being
+ * *counted* as failures, not to hide them from the person reading the detail.
+ *
+ * @param {{ flow?: string, limit?: number, level?: 'error'|'notice' }} [options]
+ */
+export function readErrors(workspace, { flow, limit = 50, level } = {}) {
   const out = [];
   for (const file of [paths.errorLogPath(workspace), paths.errorLogPath(workspace).replace(/\.jsonl$/, '.1.jsonl')]) {
     let raw;
@@ -193,6 +268,7 @@ export function readErrors(workspace, { flow, limit = 50 } = {}) {
       try {
         const record = JSON.parse(line);
         if (flow && record.flow !== flow) continue;
+        if (level && levelOf(record) !== level) continue;
         out.push(record);
       } catch {
         /* a truncated final line from a write in flight */
@@ -222,20 +298,26 @@ export function readErrors(workspace, { flow, limit = 50 } = {}) {
  * `pending` marks the ones that have not reached disk, which is what `since`
  * has to exclude — "failures since <time>" is a claim about the log file.
  *
+ * `level` filters both sources, so a caller counting failures cannot be handed
+ * notices by the in-memory half after the on-disk half was filtered — which is
+ * the shape of bug this whole module's pending/on-disk split keeps producing.
+ *
  * @returns {Array<{record: object, weight: number, pending: boolean}>}
  */
-export function weightedErrors(workspace, { limit = 1000 } = {}) {
-  const onDisk = readErrors(workspace, { limit })
+export function weightedErrors(workspace, { limit = 1000, level } = {}) {
+  const onDisk = readErrors(workspace, { limit, level })
     .map((r) => ({ record: r, weight: r.tally ? (r.repeatedSince || 0) : 1, pending: false }));
 
   const pending = [];
   for (const state of recent.values()) {
     if (state.workspace !== workspace || state.count === 0) continue;
+    if (level && state.level !== level) continue;
     pending.push({
       record: {
         flow: state.flow,
         op: state.op,
         message: state.message,
+        ...(state.level === 'notice' ? { level: 'notice' } : {}),
         time: new Date(state.at).toISOString(),
       },
       weight: state.count,
@@ -247,8 +329,22 @@ export function weightedErrors(workspace, { limit = 1000 } = {}) {
 }
 
 export function summarizeErrors(workspace) {
-  const entriesAll = weightedErrors(workspace);
+  /*
+   * Failures only, and the notices counted separately beside them.
+   *
+   * This is the whole of "make the log honest". `total` drove a menu and a
+   * heading that said *"N failures logged"*, and over 09-25 → 09-27 N was 274
+   * of which roughly ten were failures. A number that is wrong by a factor of
+   * twenty-five is not a number anyone can notice a regression in, and the
+   * response it trained was to stop opening `/logs` at all.
+   *
+   * The notices are surfaced rather than dropped, because "quiet day, 40
+   * notices" and "quiet day, 0 notices" are different days — the first one has
+   * a background poll firing at a tab that never exists.
+   */
+  const entriesAll = weightedErrors(workspace, { level: 'error' });
   const onDisk = entriesAll.filter((e) => !e.pending);
+  const noticeEntries = weightedErrors(workspace, { level: 'notice' });
 
   const byFlow = new Map();
   for (const { record, weight } of entriesAll) {
@@ -262,12 +358,26 @@ export function summarizeErrors(workspace) {
     byFlow.set(record.flow, bucket);
   }
 
+  let noticeLast = null;
+  let noticeMessage = null;
+  for (const { record } of noticeEntries) {
+    if (!noticeLast || record.time > noticeLast) {
+      noticeLast = record.time;
+      noticeMessage = record.message;
+    }
+  }
+
   return {
     total: entriesAll.reduce((n, e) => n + e.weight, 0),
     since: onDisk.length > 0 ? onDisk[onDisk.length - 1].record.time : null,
     byFlow: [...byFlow.values()]
       .map((b) => ({ ...b, label: FLOWS[b.flow] || b.flow }))
       .sort((a, b) => b.count - a.count),
+    notices: {
+      count: noticeEntries.reduce((n, e) => n + e.weight, 0),
+      last: noticeLast,
+      lastMessage: noticeMessage,
+    },
   };
 }
 
@@ -280,20 +390,7 @@ export function summarizeErrors(workspace) {
  */
 export function flushPending() {
   for (const [key, state] of recent) {
-    if (state.count > 0) {
-      try {
-        appendRecord(paths.errorLogPath(state.workspace), {
-          time: new Date(state.at).toISOString(),
-          flow: state.flow,
-          op: state.op,
-          message: state.message,
-          tally: true,
-          repeatedSince: state.count,
-        });
-      } catch {
-        /* shutting down; nothing further to try */
-      }
-    }
+    if (state.count > 0) writeTally(state);
     recent.delete(key);
   }
 }

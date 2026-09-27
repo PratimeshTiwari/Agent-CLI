@@ -21,7 +21,7 @@ import { resolveEffort } from '../core/effort.js';
 import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/restart.js';
 import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
-import { logError } from '../core/error-log.js';
+import { logError, logNotice } from '../core/error-log.js';
 import { extensionVersionNotice } from '../core/extension-version.js';
 
 /**
@@ -306,17 +306,36 @@ export class WebSocketServer {
             timestamp: Date.now(),
           });
           this.agentLoop?._notify?.(stale);
-          logError(this.agentLoop?.workspace, {
+          /*
+           * A notice, not a failure — it is the one row in the log that names
+           * its own fix.
+           *
+           * It fired **19 times over four days**, and every one of those was a
+           * true statement about a build that needed reloading rather than a
+           * fault to diagnose. Counted as a failure it did worse than take up
+           * space: a stale build makes *everything else* fail, so the `/logs`
+           * summary showed a cluster of breakage whose actual cause was one row
+           * in the same list, indistinguishable from the symptoms it caused.
+           *
+           * `stale` is the detail because `extensionVersionNotice` already
+           * writes the instruction — both versions and where to reload — and a
+           * notice that says what to do is the whole reason this level exists.
+           */
+          logNotice(this.agentLoop?.workspace, {
             flow: 'bridge',
             op: 'extension_stale',
-            message: 'The extension in Chrome is not the build beside this server',
+            message: 'The extension in Chrome is not the build beside this server — reload it',
             detail: stale,
           });
         }
 
         const resumed = this.flushPendingInjects();
         if (resumed > 0) {
-          logError(this.agentLoop?.workspace, {
+          // A repair that worked. The failure was the disconnect, which is
+          // already logged where it happened; this line says the prompts
+          // survived it, and a recovery counted as a failure makes the log
+          // report two faults where there was one and no loss.
+          logNotice(this.agentLoop?.workspace, {
             flow: 'bridge',
             op: 'inject_resumed',
             message: `Extension reconnected; re-sent ${resumed} prompt(s) held while it was away`,
@@ -669,11 +688,28 @@ export class WebSocketServer {
         // changed selector on gemini.google.com arrived as "failed", which is
         // the one thing you already knew.
         const tagged = /^\[([a-z_]+)\]\s*/i.exec(payload?.message || '');
+        /*
+         * The browser gets to say an `error` was an expected state.
+         *
+         * Only the extension knows the difference for the case that dominated
+         * the log: a background `discover_models` declining because no tab
+         * exists yet is correct behaviour and was **65 rows**, while the same
+         * message after `/effort` opened a tab and still could not reach it is
+         * a real fault. The distinction is `userInitiated`, which lives in the
+         * browser and never reaches here.
+         *
+         * So `level` travels on the payload. It changes nothing else: the
+         * `session_lost` and `NON_FATAL_EXTENSION_OPS` branches below run
+         * exactly as before, because how loudly something is recorded must not
+         * decide what the bridge does about it — that coupling is how a demoted
+         * row would quietly stop settling the picker's watchdog.
+         */
         logError(this.agentLoop?.workspace, {
           flow: 'extension',
           op: payload?.op || tagged?.[1] || payload?.stage || 'unknown',
           message: (payload?.message || payload?.error || 'Extension reported an error')
             .replace(/^\[[a-z_]+\]\s*/i, ''),
+          level: payload?.level === 'notice' ? 'notice' : 'error',
           detail: payload?.detail || payload?.stack,
           meta: { targetModel: payload?.targetModel, url: payload?.url, stage: payload?.stage },
         });

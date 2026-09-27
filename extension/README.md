@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.40.0**
+## Current version: **1.41.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,35 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.41.0 — 2026-09-27
+
+- **A decline is not a failure, and the browser is the only thing that knows.**
+  A background `discover_models` poll runs at connect and once a turn. When this
+  extension owns no tab it declines rather than opening one — a poll must never
+  make a window appear to answer a question nobody asked — and it reports the
+  decline so the server's watchdog settles instead of waiting out its whole
+  budget on silence.
+
+  That report was filed as a failure. **65 rows in three days**, the largest
+  single entry in the log, every one of them correct behaviour:
+
+  ```
+  discover_models  no gemini tab this extension owns — open one from the agent…
+  ```
+
+  It now carries `level: 'notice'`, and only for that case. `switch_model`
+  always follows something someone did; a `userInitiated` discovery has already
+  tried `ensureModelTab` and failed to open one; `focus_tab` is ctrl+b and
+  someone is watching for the tab. All three stay loud, which is the half that
+  matters — demoting a picker fault would hide exactly what the next piece of
+  work is about.
+
+  The message changes with the level too. `lastTabFailure` ends in *"open one
+  from the agent, or reload the extension if you opened it yourself"*, which is
+  advice for someone who asked for something and did not get it; handed to a
+  background poll it tells the reader to fix a thing that is not broken. A row
+  nobody can act on is how a log stops being read.
 
 ### 1.40.0 — 2026-09-27
 

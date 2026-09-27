@@ -1041,6 +1041,48 @@ written as its own record marked `tally: true` when the window closes or the pro
 so a storm of 500 shows as 500, not 1, and the tally line is never miscounted as another
 occurrence.
 
+**Failures and notices are counted apart, and the number was off by a factor of 25.** Over
+09-25 → 09-27 the log held **274 rows**; roughly **ten** were product failures. The largest
+single entry was **65 rows** of a background `discover_models` poll declining to open a tab
+at connect, before any tab exists — correct behaviour, filed as a failure on every session
+forever. While that was true nobody could open `/logs` and see a regression, which is the
+only thing the log is for. `logNotice` writes a `level: 'notice'` field; `summarizeErrors`
+counts failures and reports notices beside them; `/logs notices` lists them.
+
+The field is present **only** on notices, so every line written before it existed reads as a
+failure — the honest reading of history, since those rows were written by call sites that
+believed they reported breakage.
+
+**Demote, never drop.** `/logs <flow>` still shows both, marked `✗` and `·`: a notice beside
+the failure after it is often the explanation, and one `extension_stale` accounts for the six
+selector faults under it. The temporary `picker_trace` instrumentation is what found the
+relay-drift bug in one run after five wrong theories had been *shipped*; a log that discards
+what is merely expected cannot be used to find out why an expectation was wrong. The bar is
+**should a reader act on this**, never whether it is interesting.
+
+**Two ops were one name for two opposite readings, and both needed a discriminator rather
+than a verdict.** "No tab" is expected for a background poll and a real fault for an
+`/effort` that has already tried `ensureModelTab` and failed — and only the extension knows
+which, because `userInitiated` lives in the browser, so `level` travels on the `error`
+payload. `stale_response` meant either *you pressed stop*, where discarding the reply is the
+feature working, or *a watchdog gave up*, where the deadline was shorter than the work;
+`noteUserStop` records the difference and `handleUserMessage` clears it, because a reason
+with no clock is a flag that ages into a lie. **Never demote by op name** — the op is what
+the two cases share.
+
+**And how loudly something is recorded must not decide what the bridge does about it.** The
+`error` case still settles `NON_FATAL_EXTENSION_OPS` and resolves `session_lost` regardless
+of level. Coupling those is how a demoted row stops settling a watchdog, which is a hung turn
+reported as a quiet log.
+
+`writeTally` is one function because it had been two — `flushExpired` and `flushPending` held
+a copy each, and deleting the level from one left the whole suite green because every test
+reached the other. The storm test could not catch it either: inside the 60s window the tally
+is still a number in memory and never reaches disk, so **a test that never advances the clock
+does not test the collapse.** `test/core/log-levels.test.js` calls `flushPending` for exactly
+that reason, and every demotion there has a negative control naming the case that must stay
+loud.
+
 ### The command log
 
 `core/command-log.js` appends every `run_command` to `<ws>/.agent/logs/commands/<date>.jsonl`,
@@ -1073,7 +1115,11 @@ The branches in this repo are deliberate: they are the history. `beta-v1` … `b
 `fix/bridge-lock-and-cli`, `v1-stable` are kept on purpose, not left behind. Do not delete
 them, and do not squash their history away.
 
-- Branch from `main`, name it for the work (`fix/…`, `feat/…`, or the next `beta-vN`).
+- Branch from `main`, named `vN.M/short-description`. The series reached **v3.27** and
+  **v4 opens with `v4.0/honest-log`** — v3 was 34 PRs in six days that did not feel like
+  progress, and the reason only became legible once the failure log stopped counting expected
+  states as failures. v4 is the production-readiness plan in
+  `.agent/artifacts/plans/2026-09-27-production-readiness.md`, worked in order.
 - Open a PR into `main`. That is the only way work reaches `main`.
 - A force-push to `main` is not a merge and is not covered by this: it is a repair, it needs
   the owner to ask for it explicitly, and it breaks every open PR targeting `main` plus every

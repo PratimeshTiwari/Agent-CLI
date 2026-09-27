@@ -767,9 +767,13 @@
       heartbeatTimer = null;
     }
   }
-  function reportTabFailure(op) {
-    const message = takeTabFailure() || `[${op}] could not reach a model tab`;
-    sendToServer({ type: "error", payload: { op, stage: "tab", message } });
+  function reportTabFailure(op, { expected = false } = {}) {
+    const specific = takeTabFailure();
+    const message = expected ? `[${op}] no tab open yet, so there is no picker to read \u2014 nothing to do` : specific || `[${op}] could not reach a model tab`;
+    sendToServer({
+      type: "error",
+      payload: { op, stage: "tab", message, ...expected ? { level: "notice" } : {} }
+    });
   }
   async function handleServerMessage(message) {
     const { type, payload } = message;
@@ -819,7 +823,11 @@
           { type, payload },
           payload?.targetModel || "gemini",
           payload?.sessionId || null
-        )) reportTabFailure(type);
+        )) {
+          reportTabFailure(type, {
+            expected: type === "discover_models" && !payload?.userInitiated
+          });
+        }
         break;
       case "heartbeat_ack":
         break;
