@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.41.0**
+## Current version: **1.42.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,56 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.42.0 — 2026-09-27
+
+Four reports from one session of use, and two of the faults were 1.41.0's own.
+
+- **A notice killed the turn.** 1.41.0 sent `menu_left_open` as a notice on the
+  `error` channel, and the bridge decides what is fatal by *op*: anything not on
+  its non-fatal list aborted every lane, including the main turn. Seen as a `!`
+  row in the transcript while a subagent went on generating. The server now
+  treats any `level: 'notice'` as non-fatal, after the settle and
+  `session_lost` branches, so a new informational op cannot fall into the same
+  hole. *(A server change: restart the agent as well as reloading this.)*
+
+- **The cleanup closed a switch's own menu, and the subagent ran on Pro.** The
+  worker gives a subagent's model switch **5s** and then sends its prompt; in a
+  freshly opened tab the switch's own waits add up to about **14**. So the
+  inject arrived mid-switch, and 1.41.0's `dismissStuckMenu` took the switch's
+  open menu for an abandoned one. Picker operations now register themselves
+  (`trackPicker`), and an inject waits for any still running before it cleans
+  up — the page knows when a switch has finished, where the worker only
+  guessed. The wait is derived from the picker's own budgets, and recorded as a
+  `picker_wait` trace stage when it happens.
+
+- **Pasted and never sent.** Two faults, one clock. `waitForSendButton` polled
+  with a page `setTimeout` against a 30s deadline; in a hidden tab that timer
+  runs about once a minute, so the first check ran before Gemini rendered the
+  button and the next one arrived after the deadline — with the button on
+  screen. It is driven by a MutationObserver now. And a click was never
+  checked: `click()` was followed by `traceMark('send')` and nothing else.
+  `confirmSend` now waits for evidence that Gemini took the prompt — the
+  composer clearing, the Stop button, a new response — and clicks again if our
+  text is provably still there, twice, then fails honestly. It never retries on
+  uncertainty and never once generation has started, which is what keeps it
+  from becoming a double send. Each retry is logged as `send_retried`, because
+  how often a click is swallowed is a number nobody could measure until now.
+
+- **Every turn was about a second slower.** The paste-settle check slept
+  `setTimeout(…, 50)` between looks, and in a hidden tab 50ms is roughly a
+  second: the `type` stage went from a **27ms** median over 376 turns to
+  **994ms**, and one turn-0 paste took **22 seconds**. It waits on the DOM now.
+
+- **Twelve-second holds are recorded, not guessed at.** Three turns finished
+  with `complete` at almost exactly 12,000ms — every `looksUnfinished` grace
+  check spent after Gemini had stopped. The cause is unknown, so an expired hold
+  now logs `unfinished_hold_expired` with the tail of the text it held on.
+
+The two hidden-tab faults are tested with a `setTimeout` that **never fires**,
+which is the worst a hidden tab can do and a condition nothing in this suite had
+simulated — every earlier test ran on Node's timers, which are never throttled.
+Both tests fail against the previous code.
 
 ### 1.41.0 — 2026-09-27
 

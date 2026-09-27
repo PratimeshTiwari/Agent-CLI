@@ -221,8 +221,15 @@ export function TurnSummary({ isLive, duration, worked, touched, status, tick = 
   return (
     <Text color="gray">
       {isLive ? (
+        /*
+         * No "Worked for" while the turn is running. It is past tense, and
+         * "Worked for ⠋ 🤔 Thinking…" was read as a turn that had stopped —
+         * reported with a screenshot asking whether the agent had died, when it
+         * was mid-way through its second search. The words describe a finished
+         * turn, so they appear when it has one: the duration below.
+         */
         <>
-          {'  '}Worked for{' '}
+          {'  '}
           <Text color="cyan"><Dots tick={tick} /> {status}</Text>
         </>
       ) : (

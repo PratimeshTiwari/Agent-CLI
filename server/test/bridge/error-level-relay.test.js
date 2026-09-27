@@ -125,3 +125,30 @@ test('a genuine failure still takes the lane down', async () => {
   assert.equal(loop.isProcessing, false);
   assert.equal(summarizeErrors(loop.workspace).total, 1);
 });
+
+test('a notice never ends the turn, whatever its op', async () => {
+  /*
+   * Shipped broken in 1.41.0. `menu_left_open` is a notice from the content
+   * script, and this branch decided fatality by op — so an op not on the
+   * non-fatal allow-list aborted every lane, including the user's main turn,
+   * while the subagent it had delegated to carried on generating in its tab.
+   *
+   * Any op, not a list of them: the failure was that a *new* informational op
+   * fell through, and a test that names `menu_left_open` alone would pass the
+   * next one straight into the same hole.
+   */
+  for (const op of ['menu_left_open', 'send_retried', 'some_future_notice', 'inject_prompt']) {
+    const loop = fakeLoop();
+    await deliver(loop, { op, level: 'notice', message: `[${op}] nothing went wrong for the user` });
+    assert.equal(loop.aborted, false, `a ${op} notice aborted every lane`);
+    assert.equal(loop.isProcessing, true, `a ${op} notice ended the turn`);
+  }
+});
+
+test('and the same op without the level still ends it', async () => {
+  // The negative control: the early exit is keyed on the level, so a real
+  // failure that happens to share an op name is not quietly kept alive.
+  const loop = fakeLoop();
+  await deliver(loop, { op: 'menu_left_open', message: 'a real failure with this name' });
+  assert.equal(loop.aborted, true);
+});

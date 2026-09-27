@@ -273,7 +273,13 @@ when the answer is "no". The close-confirmation loop was deleted rather than con
 never retried and never reported, so every tick of it was spent on a value nobody read.
 
 **The lesson generalises past this file: a clock fix has as many sites as the clock has
-callers.** Nothing in the codebase distinguished the two, and the second one was invisible
+callers.** It had four. The typing path held the other two until 2026-09-27: the paste-settle
+check slept `setTimeout(…, 50)` between looks (the `type` stage went from a **27ms** median over
+376 turns to **994ms**, one turn-0 paste took **22s**), and `waitForSendButton` polled on a page
+timer against a 30s deadline — first look before Gemini rendered the button, next look after the
+deadline, prompt pasted and never sent. Both run on the observer clock now, and both are tested
+with a `setTimeout` that **never fires**, which is the only honest model of a hidden tab: every
+earlier test ran on Node's timers, which are never throttled, and so could not see either bug. Nothing in the codebase distinguished the two, and the second one was invisible
 because its symptom — a picker that does not change — reads as a DOM-selector bug. It was
 diagnosed as one twice.
 
@@ -301,6 +307,15 @@ turn it prevents. And it tries **Escape before the trigger**, which is not a mat
 the trigger *toggles*, so clicking it after Escape has closed the menu **opens it again**. The
 first DOM fixture modelled a trigger that could only close and could not see that; the second
 toggles, as Gemini's does. **A fixture that is kinder than the page tests the fixture.**
+
+**And the first cut closed menus that were not stuck.** A subagent's tab is switched to its
+model and then typed into; the worker gives the switch **5s**, and in a fresh tab the switch's
+own waits add up to about **14**. So the inject arrived mid-switch and the cleanup closed the
+switch's own menu — the switch failed and the subagent ran on Pro. Picker operations register
+themselves now (`trackPicker`, including the fire-and-forget close, which would otherwise let the
+count reach zero while a toggle is still pending), and the inject waits for them before deciding
+a menu is abandoned. **Containment must not be able to tell a stuck thing from a busy one by
+looking at it**; it has to be told which is which by the thing that owns it.
 
 The notice it sends says *"tried to close it"*, not *"closed it"*, and does not re-check. Angular
 Material animates the overlay out, so a synchronous look after Escape can still see it open on
@@ -681,6 +696,13 @@ into a browser next turn. Neither is defined here, so the gate excludes both.
 `id` is a real Identifier, that was true; for a method, whose non-computed `MethodDefinition`
 key is deliberately never visited, it never was. Added in the handler rather than in
 `referencesIn`, so that function goes on answering only the question it is good at.
+
+**`grep_search` answered 0 to `a|b|c`.** `isRegex` defaults to false, which is
+`--fixed-strings`, so the most ingrained grep habit a model has searched for the literal string,
+pipes included. On this repo `parseToolCall|tool_call|extractToolCalls|handleToolCall` returned
+**0** where the regex returned **26**, and in the session that surfaced it the model then read a
+131 KB file three times. Identifier-only alternation is searched as alternatives now, and says so
+in the result; a literal `a || b` or a shell pipe is still searched as written.
 
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
@@ -1104,7 +1126,11 @@ the two cases share.
 
 **And how loudly something is recorded must not decide what the bridge does about it.** The
 `error` case still settles `NON_FATAL_EXTENSION_OPS` and resolves `session_lost` regardless
-of level. Coupling those is how a demoted row stops settling a watchdog, which is a hung turn
+of level. **It holds the other way too, and 1.41.0 shipped proof:** `menu_left_open` was a
+notice on the `error` channel, and the bridge decided fatality by op, so it aborted every lane
+including the user's turn. A notice is now never fatal, checked *after* the settle and
+`session_lost` branches. An allow-list of the ops that may stay alive cannot enforce this: the
+next informational op falls into the same hole. Coupling those is how a demoted row stops settling a watchdog, which is a hung turn
 reported as a quiet log.
 
 `writeTally` is one function because it had been two — `flushExpired` and `flushPending` held
