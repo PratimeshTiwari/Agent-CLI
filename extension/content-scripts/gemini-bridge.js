@@ -1707,7 +1707,35 @@ async function selectModelByLabel(label) {
   const trigger = await findModelTrigger();
   if (!trigger) throw new Error('[find_model_trigger] no control that opens the mode picker');
 
-  const items = await openModelMenu(trigger);
+  const matches = (el) => describeModelOption(el).label.trim().toLowerCase() === wanted;
+
+  /*
+   * A menu that opened *enough* is not a menu that opened.
+   *
+   * `openModelMenu` returns as soon as it sees more than one item, which is
+   * the right bar for "it opened" and the wrong one for "the option I want is
+   * in there". Angular fills the list in, so a menu read a moment early holds
+   * a prefix of it — and the entry being asked for is very often the one still
+   * missing.
+   *
+   * That is what a subagent hits, because its tab is seconds old:
+   *
+   *     08:14:22  switch_model  the picker has no option called "3.5 Flash-Lite"
+   *
+   * The throw leaves the tab on whatever it opened with, so the subagent ran
+   * on the main session's model — reported as "I saw subagent on pro while it
+   * should have been on lite". Same shape as the trigger race fixed in 1.39.0,
+   * one level further in.
+   *
+   * Retried by closing and reopening rather than re-reading: the list is built
+   * when the menu opens, so looking at the same open menu again finds the same
+   * prefix.
+   */
+  let items = await openModelMenu(trigger);
+  if (!items.find(matches)) {
+    closeModelMenu(trigger);
+    items = await openModelMenu(trigger);
+  }
 
   /*
    * Describe them *now*, while the menu we already opened is on screen.
@@ -1723,11 +1751,14 @@ async function selectModelByLabel(label) {
    * it. The switch had *worked*; the second open is what swallowed the send.
    */
   const described = describeMenu(items).filter((m) => m.label);
-  const hit = items.find((el) => describeModelOption(el).label.trim().toLowerCase() === wanted);
+  const hit = items.find(matches);
 
   if (!hit) {
     closeModelMenu(trigger);
-    throw new Error(`[switch_model] the picker has no option called "${label}"`);
+    // Naming what it *did* offer: "no option called X" reads as a wrong label,
+    // and the list is what tells a half-built menu from a real rename.
+    throw new Error(`[switch_model] the picker has no option called "${label}" `
+      + `(it offered: ${described.map((m) => m.label).join(', ') || 'nothing'})`);
   }
 
   // What the trigger said before, so "has it settled" can be asked without

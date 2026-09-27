@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.39.0**
+## Current version: **1.40.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,29 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.40.0 — 2026-09-27
+
+- **A menu that opened *enough* is not a menu that opened.** `openModelMenu`
+  returns as soon as it sees more than one item — the right bar for "it
+  opened", the wrong one for "the option I want is in there". Angular fills the
+  list in, so a menu read a moment early holds a *prefix* of it, and the entry
+  being asked for is very often the one still missing:
+
+  ```
+  08:14:22  switch_model  the picker has no option called "3.5 Flash-Lite"
+  ```
+
+  That throw leaves the tab on whatever it opened with, so the subagent ran on
+  the main session's model — reported as *"I saw subagent on pro while it
+  should have been on lite"*, the same complaint 1.39.0 addressed one level
+  out. A miss is retried once, closing and reopening rather than re-reading:
+  the list is built when the menu opens, so looking again at the same open menu
+  finds the same prefix.
+
+  And a genuine miss now names what the picker *did* offer. "No option called
+  X" reads as a wrong label; the list is what tells a half-built menu from a
+  real rename.
 
 ### 1.39.0 — 2026-09-27
 
