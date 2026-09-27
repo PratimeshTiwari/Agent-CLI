@@ -277,9 +277,35 @@ function stopHeartbeat() {
  * `discover_models` went unanswered on every run with no way to tell "no tab"
  * from "no answer".
  */
-function reportTabFailure(op) {
-  const message = takeTabFailure() || `[${op}] could not reach a model tab`;
-  sendToServer({ type: 'error', payload: { op, stage: 'tab', message } });
+/**
+ * Say why a tab operation did nothing, and how loudly.
+ *
+ * `expected` demotes the report to a notice. Exactly one caller sets it and it
+ * accounts for **65 of 274 rows** in three days of logs: a background
+ * `discover_models` poll, which runs at connect and once a turn, declining
+ * because this extension owns no tab yet. That is the correct behaviour — a
+ * poll must never make a window appear to answer a question nobody asked — and
+ * it was filed as a failure every session, on every session, forever.
+ *
+ * The report still goes, and that part is not negotiable: the server's watchdog
+ * settles on it, and the alternative is the silence that made
+ * `model_options_unanswered` unable to tell "no tab to ask" from "asked and got
+ * no answer". What changes is only whether a reader should act on it.
+ *
+ * The message changes with the level too. `lastTabFailure` ends in *"open one
+ * from the agent, or reload the extension if you opened it yourself"*, which is
+ * advice for someone who asked for something and did not get it. Handing that
+ * to a background poll tells the reader to fix a thing that is not broken.
+ */
+function reportTabFailure(op, { expected = false } = {}) {
+  const specific = takeTabFailure();
+  const message = expected
+    ? `[${op}] no tab open yet, so there is no picker to read — nothing to do`
+    : specific || `[${op}] could not reach a model tab`;
+  sendToServer({
+    type: 'error',
+    payload: { op, stage: 'tab', message, ...(expected ? { level: 'notice' } : {}) },
+  });
 }
 
 async function handleServerMessage(message) {
@@ -382,7 +408,19 @@ async function handleServerMessage(message) {
       }
       if (!await sendToModelTab(
         { type, payload }, payload?.targetModel || 'gemini', payload?.sessionId || null,
-      )) reportTabFailure(type);
+      )) {
+        /*
+         * Expected only for a **background** `discover_models`.
+         *
+         * `switch_model` always follows something someone did, so no tab there
+         * is a real fault — and so is a `userInitiated` discovery, which has
+         * just tried `ensureModelTab` above and failed to open one. Demoting
+         * either would hide the picker faults that P2 exists to contain.
+         */
+        reportTabFailure(type, {
+          expected: type === 'discover_models' && !payload?.userInitiated,
+        });
+      }
       break;
     case 'heartbeat_ack':
       break;

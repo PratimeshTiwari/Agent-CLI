@@ -25,8 +25,14 @@ const keys = readFileSync(join(here, '../../src/ui/hooks/use-key-bindings.js'), 
 test('busy is read from the loop, not from React state', () => {
   // React's `isProcessing` is set by handleSubmit itself, so asking it whether
   // a turn is running answers a question about this function, not the agent.
+  //
+  // Bounded by the *construct* rather than by a character count. This read
+  // `slice(0, 4000)` and went red when five lines were added above the guard —
+  // measuring a byte offset, not the thing it is named for. The regex is what
+  // discriminates: `if (isProcessing) { setQueued` appears nowhere, so it still
+  // fails on the mistake it was written for and no longer fails on a comment.
   const submit = app.slice(app.indexOf('const handleSubmit'));
-  assert.match(submit.slice(0, 4000), /if \(agentLoop\.isProcessing\) \{\s*\n\s*setQueued/);
+  assert.match(submit, /if \(agentLoop\.isProcessing\) \{\s*\n\s*setQueued/);
 });
 
 test('draining waits for the loop, a closed diff prompt and no open menu', () => {

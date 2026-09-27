@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.40.0**
+## Current version: **1.41.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,78 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.41.0 — 2026-09-27
+
+- **A decline is not a failure, and the browser is the only thing that knows.**
+  A background `discover_models` poll runs at connect and once a turn. When this
+  extension owns no tab it declines rather than opening one — a poll must never
+  make a window appear to answer a question nobody asked — and it reports the
+  decline so the server's watchdog settles instead of waiting out its whole
+  budget on silence.
+
+  That report was filed as a failure. **65 rows in three days**, the largest
+  single entry in the log, every one of them correct behaviour:
+
+  ```
+  discover_models  no gemini tab this extension owns — open one from the agent…
+  ```
+
+  It now carries `level: 'notice'`, and only for that case. `switch_model`
+  always follows something someone did; a `userInitiated` discovery has already
+  tried `ensureModelTab` and failed to open one; `focus_tab` is ctrl+b and
+  someone is watching for the tab. All three stay loud, which is the half that
+  matters — demoting a picker fault would hide exactly what the next piece of
+  work is about.
+
+  The message changes with the level too. `lastTabFailure` ends in *"open one
+  from the agent, or reload the extension if you opened it yourself"*, which is
+  advice for someone who asked for something and did not get it; handed to a
+  background poll it tells the reader to fix a thing that is not broken. A row
+  nobody can act on is how a log stops being read.
+
+- **The picker had a veto and no containment, and now it has both.** CLAUDE.md
+  had recorded this as an open rule violation: *"a structural fallback needs a
+  veto and containment… the mode picker's fallback still has only the veto."*
+  A veto works only while every path that could leave a menu open is known, and
+  eight selector ladders against a page Google redesigns without telling anyone
+  means that assumption expires without warning.
+
+  An open menu puts an overlay across the composer. The send button is behind
+  it, `waitForSendButton` finds a control it cannot click and burns its whole
+  budget, and the turn is lost — two turns away from the picker operation that
+  caused it. So **every inject now clears a stuck menu before typing**
+  (`dismissStuckMenu`), and the turn stops trusting the picker to have cleaned
+  up. It is synchronous and unbudgeted — with no menu open it is two DOM reads,
+  which is every turn — it cannot throw, and it tries **Escape as well as the
+  trigger**, because they fail differently: Escape needs no selector at all, so
+  it still closes a menu whose trigger selector is the thing that changed. It
+  reports `menu_left_open` as a notice, because a silent repair is how the
+  microphone click went unnoticed.
+
+  Tested against a DOM, with every function *and* `SELECTORS` lifted from the
+  shipped source. The first fixture had a trigger that could only close, and
+  against it an unconditional `trigger.click()` after Escape looked harmless —
+  on the real page that toggle **re-opens the menu Escape has just shut**. Found
+  by mutating the source and watching the suite stay green; the fixture toggles
+  now.
+
+- **`switch_model` refuses to open a menu over a live composer.** `discover_models`
+  has had that guard since 1.30.0 and `switch_model` never did, which is the one
+  that matters more: a discovery over a live composer costs a read, a switch over
+  one costs the turn. The server defers a *main lane* switch while the lane is
+  busy, but a **subagent** switch goes out with no lane check — its tab is its
+  own, and its tab is precisely the one about to be typed into. Deferred, never
+  dropped, and it remembers the *label*: unlike a discovery, a switch is not
+  idempotent. When both are pending the switch drains first, because it changes
+  the very thing a discovery would report.
+
+  Verified end to end with the picker forced to fail on every call: **20 of 20
+  turns completed**, all five tool rounds and one subagent included, with two
+  picker failures landing mid-turn. A `/effort` typed one second into a
+  deliberately slow turn was held for four seconds and dispatched **4ms after**
+  that turn's reply — the original report, *"/effort during a turn killed it"*,
+  no longer reproduces.
 
 ### 1.40.0 — 2026-09-27
 

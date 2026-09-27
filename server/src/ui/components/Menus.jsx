@@ -718,6 +718,17 @@ export function Menus({
                   label: `${String(f.count).padStart(3)}  ${f.flow.padEnd(10)} ${f.label}`,
                   value: f.flow,
                 })),
+                // Reachable, and below the failures. These are the expected
+                // states that used to be mixed in with them and outnumbered
+                // them three to one; a reader wants them available and never
+                // first.
+                ...(activeMenu.summary.notices?.count
+                  ? [{
+                    label: `${String(activeMenu.summary.notices.count).padStart(3)}  `
+                      + 'notices    Expected states — nothing to act on',
+                    value: 'notices',
+                  }]
+                  : []),
                 { label: '🧹  Clear the log', value: 'clear' },
               ]}
               onSelect={(item) => {

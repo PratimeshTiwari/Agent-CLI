@@ -110,6 +110,13 @@ export function channelHealth(workspace) {
 
   // Weighted, because `errors.jsonl` collapses repeats inside a 60s window and
   // counting lines would report a storm of 500 as 1.
+  //
+  // Both levels, deliberately. Every op below is a failure of the text channel
+  // and none of them is a notice today — but this counts by *name*, so filtering
+  // to `level: 'error'` would silently read as 0% if one were ever demoted, and
+  // a rate that reports zero because the row moved is worse than no rate. If an
+  // op here does become expected, the row belongs in `CHANNEL_OPS` or nowhere,
+  // not quietly at a level this query cannot see.
   const counts = new Map(CHANNEL_OPS.map((o) => [o.op, 0]));
   for (const { record, weight } of weightedErrors(workspace, { limit: 100000 })) {
     if (counts.has(record.op)) counts.set(record.op, counts.get(record.op) + weight);

@@ -166,6 +166,25 @@ let isInjecting = false;
 let pendingDiscover = false;
 
 /**
+ * A switch that arrived while a prompt was going in.
+ *
+ * The label rather than a boolean, because unlike a discovery a switch is not
+ * idempotent — deferring it has to remember *what* was asked for. Last write
+ * wins: two switches queued behind one inject want the second one, and applying
+ * both would open the menu twice for a state only the last one describes.
+ *
+ * `discover_models` has had this guard since 1.30.0 and `switch_model` never
+ * did, which is the one that matters more: a discovery over a live composer
+ * costs a read, a switch over one costs the turn. The server defers a *main
+ * lane* switch when the lane is busy, and that covered the reported case — but
+ * the lane is the server's view of the tab, a **subagent** switch is dispatched
+ * with no lane check at all on the grounds that its tab is its own, and its tab
+ * is precisely the one about to be typed into. The composer is in the page, so
+ * the page is the only thing that can answer for it.
+ */
+let pendingSwitch = null;
+
+/**
  * The opening of the prompt we last typed, so "did it actually go?" can be
  * **observed** rather than inferred.
  *
@@ -584,6 +603,14 @@ async function injectPrompt(text) {
   }
 
   isInjecting = true;
+  /*
+   * Before `traceStart`, so a stuck menu is not charged to `find_input`.
+   *
+   * Set `isInjecting` first: dismissing dispatches a key event, and a
+   * `discover_models` or `switch_model` arriving in that window must see a busy
+   * composer and defer rather than re-open the menu we are closing.
+   */
+  dismissStuckMenu();
   traceStart();
   lastTypedPrefix = String(text || '').replace(/\s+/g, ' ').trim().slice(0, TYPED_PREFIX_CHARS);
 
@@ -751,8 +778,22 @@ async function injectPrompt(text) {
     return false;
   } finally {
     isInjecting = false;
-    // The composer is free again, so a read that was turned away can run.
-    if (pendingDiscover) {
+    /*
+     * The composer is free again, so what was turned away can run.
+     *
+     * A switch goes first. If both are pending the switch changes the very
+     * thing a discovery reports, so reading before switching publishes a list
+     * that is about to be wrong — and the server compares that list against the
+     * rung to decide whether to warn about a mismatch. `selectModelByLabel`
+     * returns the options it already had in hand from its own menu open, so the
+     * switch answers the discovery too and there is no second menu.
+     */
+    if (pendingSwitch) {
+      const label = pendingSwitch;
+      pendingSwitch = null;
+      pendingDiscover = false; // answered by the switch's own read
+      runSwitchModel(label);
+    } else if (pendingDiscover) {
       pendingDiscover = false;
       readModelOptions()
         .then((models) => safeSend({ type: 'model_options', payload: { models } }))
@@ -1547,6 +1588,110 @@ async function closeModelMenu(trigger) {
 }
 
 /**
+ * Clear a picker menu that is still open, before a prompt is typed under it.
+ *
+ * **This is the containment, and it is the half the picker has never had.**
+ * Everything else about the picker is a *veto* — don't open a menu over a live
+ * composer, don't act on a half-read list — and a veto only works while every
+ * path that could leave a menu open is known. There are eight selector ladders
+ * against a page Google redesigns without telling anyone, so that assumption
+ * expires without warning. The turn should not depend on it.
+ *
+ * So the turn stops trusting the picker to have cleaned up and checks for
+ * itself. An open menu puts an overlay across the composer: the send button is
+ * behind it, `waitForSendButton` finds a control it cannot click and burns its
+ * whole budget, and the turn is lost — two turns away from the picker operation
+ * that actually caused it, which is what made this so expensive to diagnose.
+ *
+ * Three properties make it safe to put on the hot path of every turn:
+ *
+ *   - **Synchronous and unbudgeted.** No `waitForDom`, no `findModelTrigger`
+ *     (which waits up to 8s for a picker to *appear* — right for reading one,
+ *     absurd before typing). With no menu open this is a couple of DOM reads
+ *     and returns false, which is the overwhelmingly common case.
+ *   - **It cannot throw.** A prompt must never fail to send because the cleanup
+ *     before it went wrong; that would make this a *cause* of the thing it
+ *     exists to prevent, which is the shape CLAUDE.md records twice ("the
+ *     repair caused the next bug, twice").
+ *   - **Escape as well as the trigger**, because they fail differently. The
+ *     trigger click is what `closeModelMenu` uses and is known to work; Escape
+ *     goes through Angular Material's overlay keydown handler and needs no
+ *     selector at all, so it still closes a menu whose trigger selector is the
+ *     thing that changed.
+ *
+ * It reports, because a menu found open here means a picker path failed to
+ * clean up and that is worth knowing even though the turn now survives it. A
+ * silent repair is how the microphone click went unnoticed.
+ */
+function dismissStuckMenu() {
+  try {
+    const trigger = findElement(SELECTORS.modelTrigger);
+    const open = trigger?.getAttribute('aria-expanded') === 'true'
+      || modelMenuItems().length > 1;
+    if (!open) return false;
+
+    safeSend({
+      type: 'error',
+      payload: {
+        op: 'menu_left_open',
+        stage: 'inject',
+        // A notice: the turn is about to proceed normally, so there is nothing
+        // to act on *now*. It is recorded because a picker path failed to clean
+        // up, which is a real thing to fix and invisible without this row.
+        level: 'notice',
+        /*
+         * "Tried to", not "closed it". This runs *before* the attempt and does
+         * not re-check afterwards, deliberately: Angular Material animates the
+         * overlay out, so a synchronous look straight after Escape can still see
+         * it open on the live page, and escalating on that would put a false
+         * failure in the log for every stuck menu — the noise the log levels
+         * exist to remove. Whether the prompt then landed is already observed,
+         * properly, by the send path (`composerStillHoldsPrompt`), which reports
+         * its own failure. A message that claimed success here would be the
+         * `switchedTo` mistake again: a claim where an observation belongs.
+         */
+        message: '[menu_left_open] the mode picker was still open before typing; tried to close it',
+      },
+    });
+
+    // Escape first: no selector, and it is what a person would press.
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true,
+    }));
+    if (trigger?.getAttribute('aria-expanded') === 'true') trigger.click();
+    return true;
+  } catch {
+    // Best effort. The send below is still attempted, and its own failure path
+    // reports properly — swallowing here only means we did not make it worse.
+    return false;
+  }
+}
+
+/**
+ * Perform a switch and report what the picker *reads* back.
+ *
+ * Extracted because there are now two callers — the message handler, and the
+ * drain that runs a switch which was deferred past a live composer. Two copies
+ * of this would be two copies of the `switchedTo`-is-an-observation-not-a-claim
+ * reasoning, and the deferred one is the copy nobody would look at again.
+ */
+function runSwitchModel(label) {
+  selectModelByLabel(label)
+    .then((models) => safeSend({
+      type: 'model_options',
+      payload: {
+        models,
+        switchedTo: (models.find((m) => m.selected) || {}).label || null,
+        requested: label ?? null,
+      },
+    }))
+    .catch((err) => safeSend({
+      type: 'error',
+      payload: { op: 'switch_model', message: err.message },
+    }));
+}
+
+/**
  * Read the mode picker, without deciding anything.
  *
  * What Gemini offers depends on the subscription: the version numbers move, and
@@ -2252,19 +2397,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
        * open over an unsent prompt, with `3.1 Pro` correctly ticked behind it.
        * The switch had worked; the confirmation is what broke the turn.
        */
-      selectModelByLabel(payload?.label)
-        .then((models) => safeSend({
-          type: 'model_options',
-          payload: {
-            models,
-            switchedTo: (models.find((m) => m.selected) || {}).label || null,
-            requested: payload?.label ?? null,
-          },
-        }))
-        .catch((err) => safeSend({
-          type: 'error',
-          payload: { op: 'switch_model', message: err.message },
-        }));
+      /*
+       * Never over a live composer — the guard `discover_models` has had since
+       * 1.30.0, and the one this arm needed more.
+       *
+       * Opening the picker puts an overlay across the composer, so the send
+       * button sits behind it: `waitForSendButton` finds a control it cannot
+       * click, burns its budget, and the turn is lost. Reported with two
+       * screenshots — the turn-0 prompt in the composer, the picker open on top
+       * of it, nothing sent.
+       *
+       * The server already defers a **main lane** switch while the lane is
+       * busy, which is what fixed that report. It is not enough on its own: a
+       * *subagent* switch is dispatched with no lane check, deliberately, on
+       * the grounds that its tab is its own — and its tab is exactly the one
+       * about to be typed into. The lane is also the server's model of the tab,
+       * while `isInjecting` is the tab's own answer, and only one of those two
+       * can be wrong about a composer.
+       *
+       * Deferred, never dropped, for the reason CLAUDE.md gives: dropping a
+       * notification costs a line, dropping a *request* leaves whoever is
+       * waiting on it waiting. The worst case here is a switch that lands one
+       * turn later than asked, which is what the mismatch row exists to say.
+       */
+      if (isInjecting) {
+        pendingSwitch = payload?.label ?? null;
+        sendResponse({ success: true, deferred: true });
+        return false;
+      }
+      runSwitchModel(payload?.label);
       sendResponse({ success: true });
       return true;
 

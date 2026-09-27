@@ -507,6 +507,16 @@ Once the agent is running, you can use built-in slash commands to manage your se
 - Type `/compact` to fold older turns into a summary by hand, or `/clear` to drop them.
 - Type `/logs` to read failures grouped by where they came from, and `/commands` for
   every shell command the agent has run, blocked or rejected.
+
+  **`/logs` counts failures, not events.** Three days of logs once held 274 rows of which
+  roughly ten were product failures; the rest were *expected states* — a background poll
+  declining because no browser tab exists yet, a build that needed reloading, a search
+  taking the slower of two equivalent paths. A heading reading "274 failures" about ten
+  failures is not a number anyone can spot a regression in, so those are **notices** now:
+  written to the same file, counted separately, and listed by `/logs notices`. Drilling into
+  a flow still shows both, marked `✗` and `·`, because a notice beside the failure that
+  followed it is often the explanation — one stale build accounts for the six selector
+  faults under it.
 - Type `/logs extension` for how long the browser is actually taking — the median and
   slowest tenth for each stage of a turn, from finding the input box to the reply finishing.
   That is the number to compare when it feels slower than it used to.
@@ -635,7 +645,7 @@ Everything the agent writes into a workspace lives in one directory, `.agent/`:
 ├── sessions/          # conversation history, and archive.jsonl — turns a
 │                     #   summary replaced, kept so the agent can look them up
 └── logs/
-    ├── errors.jsonl     # every failure, tagged with the flow it came from (/logs)
+    ├── errors.jsonl     # every failure and notice, tagged with its flow (/logs)
     ├── traces.jsonl     # how long each browser turn took, per stage
     └── commands/        # one file per day: every shell command run (/commands)
 ```
@@ -694,7 +704,196 @@ missing one**, since the model reaches for it and concludes the code is not ther
 
 ---
 
-### v3 — 2026-09-22 … 2026-09-26 · PRs #26–#43
+### v4.0 — 2026-09-27 · `v4.0/honest-log` · extension 1.41.0
+
+**A new series, because the last one ended by measuring itself.** v3 was 34 PRs
+in six days and did not feel like progress; the reason turned out to be
+legible only once the failure log was read properly, and what it said is that
+**the log was lying**. Over 09-25 → 09-27 it held 274 rows. Roughly **ten** were
+product failures.
+
+```bash
+/logs                # failures
+/logs notices        # the expected states that used to be counted as failures
+```
+
+#### The log now counts failures, not events
+
+Three quarters of every row was one optional subsystem, and most of those were
+*expected states*. The largest single entry — **65 rows** — was a background
+`discover_models` poll declining to open a browser tab, at connect, before any
+tab exists. That is correct behaviour: a poll must never make a window appear to
+answer a question nobody asked. It was filed as a failure every session, on
+every session, forever.
+
+While that was true nobody could open `/logs` and see a regression, which is the
+only thing the log is for. So there are two levels:
+
+- **failures** — something went wrong, and someone should act on it;
+- **notices** — an expected state, worth a record, nothing to do.
+
+Demoted: the background poll's missing tab, `extension_stale` (which already
+names its own fix), `inject_resumed` (a repair that worked), `grep_no_ripgrep`
+(the fallback returns identical results, only slower), and the half of
+`stale_response` that means *you pressed stop*.
+
+**Demote, never drop.** Notices stay in the same file, collapse the same way, and
+`/logs <flow>` still shows both marked `✗` and `·` — because a notice beside the
+failure after it is often the explanation, and one stale build accounts for the
+six selector faults under it. The temporary instrumentation that finally caught
+v3's picker bug was exactly this kind of row; a log that discards what is merely
+*expected* cannot be used to find out why an expectation was wrong.
+
+#### Two things that were one name for two opposite readings
+
+- **"No tab"** is correct for a background poll and a real fault for an
+  `/effort` you typed — which has already tried to open a tab and failed. Only
+  the extension knows which, because the discriminator is `userInitiated` and it
+  lives in the browser, so the level now travels on the message. `switch_model`,
+  `focus_tab` and a user-initiated discovery all stay loud; there is one
+  condition deciding it and a test that fails if `switch_model` is ever added to
+  it.
+- **`stale_response`** — a reply arriving after the turn ended — meant either
+  *you stopped it*, where discarding the reply is the feature working, or *a
+  watchdog gave up*, where the deadline was shorter than the work. The second is
+  the signal the row is worth having; undifferentiated, it was eight rows saying
+  one of two opposite things. `noteUserStop` records the difference, and it is
+  cleared when the next turn starts, because a reason with no clock is a flag
+  that ages into a lie.
+
+#### The picker can fail without costing a turn
+
+Everything the model picker had was a *veto* — don't open a menu over a live
+composer, don't act on a half-read list. A veto only works while every path that
+could leave a menu open is known, and eight selector ladders against a page Google
+redesigns without warning means that assumption expires without notice. An open
+menu puts an overlay across the composer: the send lands on its backdrop and the
+turn is lost, two turns away from whatever left it open.
+
+So the turn stops trusting the picker. **Every prompt now clears a stuck menu
+before typing** — synchronously, in two DOM reads when nothing is open, which is
+every turn. It tries Escape before the menu's own button, and the order matters:
+the button *toggles*, so pressing it after Escape has already closed the menu
+opens it again. The first test page modelled a button that could only close and
+could not see that; the one that ships toggles, like Gemini's.
+
+And `switch_model` now refuses to open a menu while a prompt is going in, which
+`discover_models` has done since 1.30.0. A subagent's switch is sent with no lane
+check — its tab is its own, and its tab is exactly the one about to be typed into.
+
+**Verified with the picker forced to fail on every call:** 20 of 20 turns
+completed, five tool round trips and a subagent included, with two picker
+failures landing in the middle of a turn. An `/effort` typed a second into a
+deliberately slow turn was held for four seconds and sent **4ms after** that
+turn's reply — the report that started this, *"/effort during a turn killed it"*,
+no longer reproduces.
+
+#### What the exit criterion actually measures
+
+The log's goal was *fewer than five rows on a normal working day*. Re-scoring
+09-27 under the new rules: **8 failures, 12 notices**, down from 20
+undifferentiated rows — and **four of the remaining eight are the model picker**.
+The picker work above stops those failures costing turns; it does not stop them
+happening, because the selectors are the architecture. Whether a normal day now
+reads under five is a reading to take after a few days of use, not a number to
+write down today.
+
+#### Found by trying to break the tests
+
+Every demotion has a negative control naming the case that must stay loud, and
+three of them did not work until they were checked by mutating the source and
+watching the suite stay green:
+
+- a **tally line that forgot its level** — the collapse writes one line for
+  repeats 2..N, so 50 notices would have resurfaced as 49 failures. The storm
+  test passed anyway, because inside the 60-second window the tally is still a
+  number in memory and never reaches disk.
+- **two copies of "write the tally"**, in `flushExpired` and `flushPending`.
+  Deleting the level from one left everything green, because every test reached
+  the other. Now one function: two copies of a thing is how one of them ends up
+  forgetting.
+- a test that **cleared the flag by hand** and then checked the result, which
+  measures the test rather than the code.
+
+A brittle assertion also went: `queued-prompts.test.js` bounded a source scrape
+at 4,000 characters and went red when a comment was added above the line it was
+looking for. It reads to the construct now — a test measuring a byte offset is
+not measuring the thing it is named for.
+
+---
+
+### v3.12 – v3.27 — 2026-09-26 … 2026-09-27 · PRs #44–#59
+
+**Sixteen PRs in two days, and what they made visible is why v4 starts with a
+plan rather than another fix.** The model-picker hunt below (#26–#43) ended; this
+is the work that came out of finishing it.
+
+```bash
+git log --oneline --merges v3.11..HEAD
+```
+
+**The effort ladder stopped being named after models** (#44). Three rungs, now
+`low` / `medium` / `high`. The old names were the mistake: `flash` meant *our*
+terse rung and *Google's* middle one, in the same sentence. Effort is how hard to
+work; the model is whatever the browser's picker offers, read from the page.
+
+**The picker's four matching strategies became two** (#45), and #46 brought both
+READMEs current — which is the last time they were, until this entry.
+
+**Three things the bridge was doing wrong, each found by watching it rather than
+reasoning about it:**
+
+- **It was clicking the microphone** (#54, extension 1.38.0). The send-button
+  ladder had a structural fallback with no veto, so when every selector missed it
+  picked the nearest icon button — starting dictation and losing the turn. A
+  structural fallback needs a veto *and* containment; the mode picker's still has
+  only the veto.
+- **Subagents were silently running on the main model** (#55, 1.39.0).
+- **A freshly opened tab reports ready before its picker exists** (#50, 1.37.0).
+  Readiness is the *composer*, and Angular mounts the picker a beat later — so
+  three separate bugs came from code that looked once and gave up. A ladder miss
+  and a control that has not mounted yet are not the same thing.
+
+**A stalled turn now ends on screen** (#56) instead of spinning for hours, and
+**the subagent watchdog was 5.4× the slowest turn ever recorded** (#52) — five
+minutes, against a measured p99 of 44.7s. Timings are now recorded per stage
+(#49), including for turns that timed out, so the next timeout argument has
+numbers: **median 8.5s, p90 20.9s, p99 44.7s, slowest ever 55.7s**.
+
+**Notices raised outside a turn reach the transcript** (#48). `_notify` sent
+`type: 'status'`, which every front-end draws as the label on the *spinner* — and
+the spinner only exists during a turn. So `✓ Browser model is now …`, the
+confirmation that the switch **worked**, was invisible for the entire time that
+feature was being debugged, and so was every connect-time row.
+
+**Two gated decisions closed on data** (#53). `/logs tools` records which tools
+are actually called, one row per turn. The earlier hand-count — 41 sessions, 529
+calls, eight of eighteen tools never called once — turned out not to be
+repeatable at all: tool calls are stripped from a reply before it reaches the
+session history, so a probe over 2,790 of them was matching `"name"` keys inside
+tool *results*.
+
+**Removed: terminal failure forwarding** (#51). The companion forwarded failed
+commands to the CLI as a marker you could send or delete. Both halves worked and
+the design was right. It **never wrote a single record** in its entire life,
+because the offer appeared only when a command failed in an *unwatched* terminal,
+once per session, as a dismissable toast. Zero uses is not a discoverability
+hypothesis worth a second guess. The thing to fix first, if it returns, is that
+the offer was tied to a failure happening.
+
+**Also:** `/new` resends the base prompt and a half-built picker is retried
+(#58); `ctrl+e` no longer expands a file read into the transcript (#57);
+backspace works after recalling history into an empty prompt (#59); bridge
+message dispatch went from 53% to 70% covered (#47).
+
+#### Extension versions in this range
+
+1.35.0 → 1.40.0, three of which are listed above as bugs they fixed. The
+per-change record is in [`extension/README.md`](extension/README.md).
+
+---
+
+### v3.0 – v3.11 — 2026-09-22 … 2026-09-26 · PRs #26–#43
 
 **Eighteen PRs, and one of them is the reason for the other seventeen.** The
 model picker — the thing that puts the browser tab on the model the effort rung

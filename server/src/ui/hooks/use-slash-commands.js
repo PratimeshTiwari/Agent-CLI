@@ -616,7 +616,8 @@ export async function handleSlashCommand(query, {
 
       if (arg === 'clear') {
         const n = clearErrors(agentLoop.workspace);
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `🧹 Cleared ${n} logged failure${n === 1 ? '' : 's'}.`, isLocal: true }]);
+        // "entries", because the log holds notices too and this deletes both.
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `🧹 Cleared ${n} logged entr${n === 1 ? 'y' : 'ies'}.`, isLocal: true }]);
         setIsProcessing(false);
         return;
       }
@@ -697,6 +698,36 @@ export async function handleSlashCommand(query, {
         return;
       }
 
+      /*
+       * `/logs notices` — the expected states, on purpose kept out of the way.
+       *
+       * These are rows nobody should act on: a background poll with no tab to
+       * read, a build that needs reloading, a search that took the slower of
+       * two equivalent paths. They were **76% of the log**, and while they were
+       * counted as failures a real regression was invisible in it.
+       *
+       * They are still here rather than dropped. "Quiet day, 0 notices" and
+       * "quiet day, 40 notices" are different days, and the second one has a
+       * poll firing at a tab that never exists.
+       */
+      if (arg === 'notices' || arg === 'notice') {
+        const entries = readErrors(agentLoop.workspace, { level: 'notice', limit: 20 });
+        const body = entries.length === 0
+          ? 'Nothing to report — no expected states logged.'
+          : entries.map((e) => {
+            const when = new Date(e.time).toLocaleTimeString();
+            const repeat = e.repeatedSince ? ` _(+${e.repeatedSince} more like it)_` : '';
+            return `  ${when} **${e.op || '—'}** _${e.flow}_ — ${e.message}${repeat}`;
+          }).join('\n');
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
+          role: 'assistant', isLocal: true,
+          content: `### 🔔 Notices\n_Expected states. Recorded so a trend is visible, `
+            + `not because anything needs doing._\n\n${body}`,
+        }]);
+        setIsProcessing(false);
+        return;
+      }
+
       // `/logs <flow>` drills into one; bare `/logs` answers "what is breaking?"
       if (arg && FLOWS[arg]) {
         // The extension is the one flow with timings as well as failures, and
@@ -723,6 +754,16 @@ export async function handleSlashCommand(query, {
               + rungs
               + '\n\n';
         }
+        /*
+         * Both levels here, notices marked.
+         *
+         * Drilling into a flow is where diagnosis happens, and a notice beside
+         * the failure that followed it is most of what makes the failure
+         * legible — a stale build explains the six selector faults under it.
+         * Demoting was about what gets *counted*, never about hiding evidence:
+         * the `picker_trace` instrumentation found the relay-drift bug in one
+         * run after five wrong theories had been shipped on reasoning alone.
+         */
         const entries = readErrors(agentLoop.workspace, { flow: arg, limit: 15 });
         const body = entries.length === 0
           ? `Nothing logged for **${arg}**.`
@@ -730,7 +771,8 @@ export async function handleSlashCommand(query, {
             const when = new Date(e.time).toLocaleTimeString();
             const repeat = e.repeatedSince ? ` _(+${e.repeatedSince} more like it)_` : '';
             const detail = e.detail ? `\n    \`${String(e.detail).split('\n')[0].slice(0, 120)}\`` : '';
-            return `  ${when} **${e.op || '—'}** — ${e.message}${repeat}${detail}`;
+            const mark = e.level === 'notice' ? '·' : '✗';
+            return `  ${mark} ${when} **${e.op || '—'}** — ${e.message}${repeat}${detail}`;
           }).join('\n');
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `### 🩺 ${arg} — ${FLOWS[arg]}\n${timing}${body}`, isLocal: true }]);
         setIsProcessing(false);
@@ -745,16 +787,31 @@ export async function handleSlashCommand(query, {
         setIsProcessing(false);
         return;
       }
+      /*
+       * A notice count, never a notice heading.
+       *
+       * The point of the split is that the first number someone reads is the
+       * number of things that went wrong. Saying "0 failures" and stopping
+       * would throw away the other half of the reading, so the notices get one
+       * trailing line and a command — enough to notice 40 of them, not enough
+       * to compete with the answer.
+       */
+      const noticeLine = summary.notices?.count
+        ? `\n\n_${summary.notices.count} notice${summary.notices.count === 1 ? '' : 's'} — `
+          + 'expected states, nothing to act on. `/logs notices` to read them._'
+        : '';
       let content;
       if (summary.total === 0) {
-        content = '### 🩺 Failures\nNothing has failed since the log was last cleared.';
+        content = '### 🩺 Failures\nNothing has failed since the log was last cleared.'
+          + noticeLine;
       } else {
         const rows = summary.byFlow.map((f) => {
           const when = new Date(f.last).toLocaleTimeString();
           return `  **${f.flow}** ${String(f.count).padStart(3)}  _${f.label}_\n`
             + `      last ${when} — ${f.lastMessage}`;
         }).join('\n');
-        content = `### 🩺 ${summary.total} failure${summary.total === 1 ? '' : 's'} logged\n${rows}\n\n`
+        content = `### 🩺 ${summary.total} failure${summary.total === 1 ? '' : 's'} logged\n${rows}`
+          + `${noticeLine}\n\n`
           + `_\`/logs <flow>\` for detail · \`/logs clear\` to reset · full log in \`.agent/logs/errors.jsonl\`_`;
       }
       setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content, isLocal: true }]);

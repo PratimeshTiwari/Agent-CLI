@@ -21,7 +21,7 @@ import { resolveEffort } from '../core/effort.js';
 import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/restart.js';
 import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
-import { logError } from '../core/error-log.js';
+import { logError, logNotice } from '../core/error-log.js';
 import { extensionVersionNotice } from '../core/extension-version.js';
 
 /**
@@ -61,10 +61,12 @@ const EXTENSION_ORIGIN = /^(chrome-extension|moz-extension|safari-web-extension)
  * the lane — `discover_models` at connect and once a turn, `switch_model` from
  * `/effort` — and failing them costs a stale model list, nothing more.
  *
- * Named by op rather than by a `fatal` flag on the payload because the content
- * scripts cannot set fields on it: they prefix `[stage]` to the message and it
- * is lifted back into `op` above. The worker's own `reportTabFailure` sends the
- * same op names for the same operations, so both sides land here.
+ * Named by op rather than by a `fatal` flag on the payload, because the op is
+ * the one field *every* path already carries: the content script sets it on the
+ * payloads it builds, a thrown error carries it as a `[stage]` prefix that is
+ * lifted back into `op` above, and the worker's own `reportTabFailure` sends the
+ * same op names for the same operations. So both sides land here without a
+ * second field that half of them would forget.
  */
 const NON_FATAL_EXTENSION_OPS = new Set(['discover_models', 'switch_model', 'focus_tab']);
 
@@ -306,17 +308,36 @@ export class WebSocketServer {
             timestamp: Date.now(),
           });
           this.agentLoop?._notify?.(stale);
-          logError(this.agentLoop?.workspace, {
+          /*
+           * A notice, not a failure — it is the one row in the log that names
+           * its own fix.
+           *
+           * It fired **19 times over four days**, and every one of those was a
+           * true statement about a build that needed reloading rather than a
+           * fault to diagnose. Counted as a failure it did worse than take up
+           * space: a stale build makes *everything else* fail, so the `/logs`
+           * summary showed a cluster of breakage whose actual cause was one row
+           * in the same list, indistinguishable from the symptoms it caused.
+           *
+           * `stale` is the detail because `extensionVersionNotice` already
+           * writes the instruction — both versions and where to reload — and a
+           * notice that says what to do is the whole reason this level exists.
+           */
+          logNotice(this.agentLoop?.workspace, {
             flow: 'bridge',
             op: 'extension_stale',
-            message: 'The extension in Chrome is not the build beside this server',
+            message: 'The extension in Chrome is not the build beside this server — reload it',
             detail: stale,
           });
         }
 
         const resumed = this.flushPendingInjects();
         if (resumed > 0) {
-          logError(this.agentLoop?.workspace, {
+          // A repair that worked. The failure was the disconnect, which is
+          // already logged where it happened; this line says the prompts
+          // survived it, and a recovery counted as a failure makes the log
+          // report two faults where there was one and no loss.
+          logNotice(this.agentLoop?.workspace, {
             flow: 'bridge',
             op: 'inject_resumed',
             message: `Extension reconnected; re-sent ${resumed} prompt(s) held while it was away`,
@@ -663,17 +684,36 @@ export class WebSocketServer {
         // from inside the browser tab, and until now it was handled and thrown
         // away — a selector that changed on gemini.google.com looked, from the
         // terminal, like the agent simply going quiet.
-        // Content scripts run in the page and cannot set fields on this
-        // payload — it reaches here as a bare message — so they prefix the
-        // stage in brackets and it is lifted back out into `op`. Without it a
-        // changed selector on gemini.google.com arrived as "failed", which is
-        // the one thing you already knew.
+        // A content script's *thrown* error crosses the catch as its message
+        // alone — `throw new Error('[find_input] …')` then `{message:
+        // err.message}` — so the stage rides in brackets and is lifted back out
+        // into `op` here. Payloads the script builds itself set `op` (and now
+        // `level`) directly, and the worker relays them verbatim; the prefix is
+        // for the path that cannot. Without it a changed selector on
+        // gemini.google.com arrived as "failed", the one thing you already knew.
         const tagged = /^\[([a-z_]+)\]\s*/i.exec(payload?.message || '');
+        /*
+         * The browser gets to say an `error` was an expected state.
+         *
+         * Only the extension knows the difference for the case that dominated
+         * the log: a background `discover_models` declining because no tab
+         * exists yet is correct behaviour and was **65 rows**, while the same
+         * message after `/effort` opened a tab and still could not reach it is
+         * a real fault. The distinction is `userInitiated`, which lives in the
+         * browser and never reaches here.
+         *
+         * So `level` travels on the payload. It changes nothing else: the
+         * `session_lost` and `NON_FATAL_EXTENSION_OPS` branches below run
+         * exactly as before, because how loudly something is recorded must not
+         * decide what the bridge does about it — that coupling is how a demoted
+         * row would quietly stop settling the picker's watchdog.
+         */
         logError(this.agentLoop?.workspace, {
           flow: 'extension',
           op: payload?.op || tagged?.[1] || payload?.stage || 'unknown',
           message: (payload?.message || payload?.error || 'Extension reported an error')
             .replace(/^\[[a-z_]+\]\s*/i, ''),
+          level: payload?.level === 'notice' ? 'notice' : 'error',
           detail: payload?.detail || payload?.stack,
           meta: { targetModel: payload?.targetModel, url: payload?.url, stage: payload?.stage },
         });

@@ -803,6 +803,11 @@ export function App({ agentLoop, wsServer }) {
     if (cleanQuery === ':stop' || cleanQuery === '/stop') {
       wsServer.broadcast('extension', { type: 'stop_generation', timestamp: Date.now(), id: Date.now().toString() });
       agentLoop.isProcessing = false;
+      // Before the abort, because the browser may already be generating and the
+      // reply that lands in a moment is discarded on purpose. Without this the
+      // log cannot tell "you stopped it" from "something gave up on it", and
+      // those are opposite readings of the same row.
+      agentLoop.noteUserStop();
       agentLoop.abortExtensionWork();
       if (agentLoop.pendingCommandResolve) {
         agentLoop.pendingCommandResolve({ approved: false });

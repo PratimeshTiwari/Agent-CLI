@@ -428,6 +428,16 @@ export class AgentLoop {
 
     this.callbacks = callbacks;
     this.isProcessing = true;
+    /*
+     * A new turn is asked for, so the last stop no longer explains anything.
+     *
+     * Cleared here rather than when the late reply lands, because one stopped
+     * turn can produce more than one — the main lane's reply and a subagent's.
+     * They all belong to the turn that was stopped. What must *not* happen is a
+     * stop hours ago quietly demoting a genuine late reply in this turn, which
+     * is what a flag nobody clears would do.
+     */
+    this._userStoppedAt = null;
 
     // Check Context Size Warning and Auto-Compact
     // `contextTokens`, not `conversationHistory`. This read the history array
@@ -566,9 +576,35 @@ export class AgentLoop {
     // Allow subagent responses through even when main agent isn't processing —
     // background GitHub tasks use _executeSubagent without setting isProcessing.
     if (!this.isProcessing && !isSubagent) {
+      /*
+       * Two different things wear this one name, and only one is a fault.
+       *
+       * The browser was already generating when the turn ended, so the reply
+       * comes back to a loop that no longer wants it and is correctly thrown
+       * away. *Why* the turn ended is the whole question. If **you** pressed
+       * esc or typed `:stop`, discarding the reply is the feature working —
+       * that is precisely what was asked for, and there is nothing to act on.
+       * If the turn ended because a watchdog gave up, the same row means the
+       * deadline was shorter than the work, which is a real signal and the one
+       * `stale_response` is worth reading for.
+       *
+       * Undifferentiated it was 8 rows saying one of two opposite things. The
+       * discriminator is recorded by `noteUserStop`, because only the front-end
+       * knows a keypress happened.
+       */
+      const stopped = this._userStoppedAt;
       logError(this.workspace, {
-        flow: 'agent', op: 'stale_response',
-        message: 'Response arrived after the turn had stopped',
+        flow: 'agent',
+        op: 'stale_response',
+        level: stopped ? 'notice' : 'error',
+        message: stopped
+          ? 'Reply arrived after you stopped the turn, and was discarded'
+          : 'Response arrived after the turn had stopped',
+        detail: stopped
+          ? undefined
+          : 'Nothing asked for this turn to end, so something gave up on it before '
+            + 'the browser had finished — check /logs agent for a timeout or stall '
+            + 'in the seconds before this.',
       });
       this._releaseExtension();
       return;
@@ -2090,6 +2126,22 @@ export class AgentLoop {
   abortExtensionWork() {
     this.extensionLock.abortAll();
     this.pendingGeminiResponse = null;
+  }
+
+  /**
+   * Record that the turn ended because the person asked it to.
+   *
+   * `abortExtensionWork` is the wrong place for this: it also runs on an
+   * injection error, a prompt-build exception and a stall, and every one of
+   * those is the case where a late reply *is* worth reading about. The UI is
+   * the only thing that knows a key was pressed, so it says so explicitly.
+   *
+   * It exists for exactly one reader — the `stale_response` branch in
+   * `handleGeminiResponse` — which is why it records a time rather than a
+   * boolean: a reason with no clock is a flag that ages into a lie.
+   */
+  noteUserStop() {
+    this._userStoppedAt = Date.now();
   }
 
   /**

@@ -7,7 +7,7 @@
 
 import { execFile } from 'child_process';
 import { AGENT_DIR } from '../../core/paths.js';
-import { logError } from '../../core/error-log.js';
+import { logNotice } from '../../core/error-log.js';
 import { promisify } from 'util';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, relative, extname, sep } from 'path';
@@ -102,7 +102,11 @@ export async function grepSearch(args, context) {
      */
     if (!warnedNoRipgrep) {
       warnedNoRipgrep = true;
-      logError(workspace, {
+      // A notice, which is what the paragraph above has always described: the
+      // results are the same and the only action is an optional install. It sat
+      // in the failure log for a week anyway, because there was no other level
+      // to write it at.
+      logNotice(workspace, {
         flow: 'tool',
         op: 'grep_no_ripgrep',
         message: 'No ripgrep binary on PATH, so grep_search used its built-in search. '
