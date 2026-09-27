@@ -319,14 +319,39 @@ function diffRowsFor(act) {
  *
  * Collapsed rows stay short either way — that is the summary, not the output.
  */
-const limitsFor = (isLive, verbose) => {
-  if (!verbose) return { lines: 6, chars: 400 };
+/**
+ * Tools whose output `ctrl+e` will not expand, however much room there is.
+ *
+ * **A read's output is a file you already have.** Expanding `read_file` on
+ * CLAUDE.md printed 2,046 lines and 136.9 KB into the transcript — a copy of
+ * something `cat` shows better, pushing the turn that mattered off the screen.
+ * The same is true of a listing or a search: what is worth keeping is the
+ * agent's *summary* of them, and the collapsed row already carries the shape
+ * (`read_file CLAUDE.md · 2046 lines · 136.9 KB`).
+ *
+ * The other half of the catalog is different in kind. An edit, a command, a
+ * background job — their output is the **only** record that the thing
+ * happened, and it exists nowhere else on disk. That is what expansion is for.
+ *
+ * Asked for in those words: *"never expand file_reads, no edits — we should
+ * show things like edit, or things that make sense, like a command run."*
+ *
+ * Named by tool rather than by output size, because a small read is still a
+ * copy of something you have and a long command output is still the only copy.
+ */
+const NOT_WORTH_EXPANDING = new Set([
+  'read_file', 'list_directory', 'grep_search', 'search_files', 'find_symbol',
+  'find_references', 'get_diagnostics', 'recall_history',
+]);
+
+const limitsFor = (isLive, verbose, toolName) => {
+  if (!verbose || NOT_WORTH_EXPANDING.has(toolName)) return { lines: 6, chars: 400 };
   return isLive ? { lines: 20, chars: 1200 } : { lines: Infinity, chars: Infinity };
 };
 
 /** One step inside a turn. Collapsed to a line unless `verbose`. */
 function ActionRow({ act, verbose, isLive, width = 80 }) {
-  const limit = limitsFor(isLive, verbose);
+  const limit = limitsFor(isLive, verbose, act.toolName);
   /*
    * The subject is budgeted against the real terminal width, not a constant.
    *
