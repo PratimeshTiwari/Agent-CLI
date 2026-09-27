@@ -153,18 +153,30 @@ export function App({ agentLoop, wsServer }) {
     return () => clearInterval(interval);
   }, [wsServer]);
 
-  // Timeout Warning
+  /*
+   * Two stages, because "slow" and "stuck" want different things said.
+   *
+   * At ten seconds the useful advice is about the tab, which is the ordinary
+   * cause. Past five minutes that advice is no longer true — the slowest turn
+   * ever recorded here is 55.7 seconds, measured over 350 — so the useful
+   * thing is the way out. Asked for directly after a turn ran to
+   * **25,742 seconds**: *"if the load is longer than 5 minutes and it does not
+   * stop, show the message with the stop command."*
+   *
+   * The backstop that should have ended that turn is seven minutes, so this
+   * row appears two minutes before it and stops being the only signal.
+   */
   const [isThinkingTooLong, setIsThinkingTooLong] = useState(false);
+  const [isThinkingStuck, setIsThinkingStuck] = useState(false);
   useEffect(() => {
-    let timer;
-    if (isProcessing) {
-      timer = setTimeout(() => {
-        setIsThinkingTooLong(true);
-      }, 10000);
-    } else {
+    if (!isProcessing) {
       setIsThinkingTooLong(false);
+      setIsThinkingStuck(false);
+      return undefined;
     }
-    return () => clearTimeout(timer);
+    const slow = setTimeout(() => setIsThinkingTooLong(true), 10_000);
+    const stuck = setTimeout(() => setIsThinkingStuck(true), 5 * 60_000);
+    return () => { clearTimeout(slow); clearTimeout(stuck); };
   }, [isProcessing]);
 
   // UI State
@@ -568,7 +580,7 @@ export function App({ agentLoop, wsServer }) {
     - promptExtraRows
     - (slashOpen ? slashMatches.length : 0)
     - (extensionConnected ? 0 : 1)
-    - (isThinkingTooLong ? 1 : 0)
+    - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
 
   /**
@@ -1260,6 +1272,7 @@ export function App({ agentLoop, wsServer }) {
             input={input}
             isProcessing={isProcessing}
             isThinkingTooLong={isThinkingTooLong}
+            isThinkingStuck={isThinkingStuck}
             isToolRunningRef={isToolRunningRef}
             addPaste={addPaste}
             pastes={pastes}

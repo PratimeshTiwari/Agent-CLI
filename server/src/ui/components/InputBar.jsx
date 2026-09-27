@@ -37,6 +37,7 @@ export function InputBar({
   input,
   isProcessing,
   isThinkingTooLong,
+  isThinkingStuck,
   isToolRunningRef,
   mode,
   newlineRef,
@@ -130,7 +131,15 @@ export function InputBar({
               {' · esc to stop)'}
             </Text>
           </Text>
-          {isThinkingTooLong && (
+          {/*
+            One row, two messages — never both, because the live frame budgets
+            this line and a row that wraps is charged as one and drawn as two.
+            Past five minutes the tab advice is no longer the likely cause, so
+            it is replaced rather than added to.
+          */}
+          {isThinkingStuck ? (
+            <Text color="yellow">  (Still waiting — press esc, or type :stop, to take the turn back)</Text>
+          ) : isThinkingTooLong && (
             <Text color="yellow">  (Taking a while — make sure the Chrome tab is not minimised)</Text>
           )}
         </Box>
