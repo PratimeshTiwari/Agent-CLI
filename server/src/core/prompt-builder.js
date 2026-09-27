@@ -565,7 +565,7 @@ export class PromptBuilder {
     const selfAwareness = `
 <self_awareness>
 You are currently operating in the user's workspace at: \`${this.workspace}\`
-Your OWN source code (the Gemini-Agent server) is at: \`${this.agentSourceDir}\`
+Your OWN source code (the Agent-CLI server) is at: \`${this.agentSourceDir}\`
 If the user asks you to modify yourself, you can read/write files directly in \`${this.agentSourceDir}\`.
 Effort: ${effort.id} — ${effort.blurb}
 </self_awareness>`;

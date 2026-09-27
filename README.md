@@ -62,7 +62,7 @@ extension and signing into a chat tab are things no installer can do for you.
 #### Automatic
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Gemini-Agent/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Agent-CLI/main/setup.sh | bash
 ```
 
 > **`main` is the released branch, and the command above is the right one.**
@@ -80,11 +80,18 @@ curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Gemini-Agent/main/s
 > git rev-list --left-right --count main...<branch>
 > ```
 
-Clones to `~/Gemini-Agent`, installs both workspaces, builds the extension bundle, puts
+Clones to `~/Agent-CLI`, installs both workspaces, builds the extension bundle, puts
 `agent` on your `PATH`, runs the tests, and offers to add a line to your `~/.zshrc` so the
 command survives a new terminal. Then it prints the two steps that cannot be automated:
 loading the Chrome extension, and signing into a chat tab. There is no API key to configure,
 which is exactly why a human has to be logged in somewhere.
+
+> **The repo was renamed from `Gemini-Agent` to `Agent-CLI` on 2026-09-27.** An existing
+> install needs nothing: re-running the one-liner finds your `~/Gemini-Agent` checkout, keeps
+> using it, and points its `origin` at the new name — GitHub redirects the old URL, but only
+> until someone else creates a repo there. It also still recognises the line it added to your
+> `~/.zshrc` under the old name, so it will not add a second one. New installs go to
+> `~/Agent-CLI`.
 
 Re-running it is an update, not a second install — it fast-forwards an existing checkout and
 leaves local changes alone. If something is already sitting at the target path and is not a
@@ -102,15 +109,15 @@ Piping a script from the internet into your shell is worth being suspicious of.
 and the same result:
 
 ```bash
-git clone https://github.com/PratimeshTiwari/Gemini-Agent.git
-cd Gemini-Agent && ./setup.sh   # asks where to install; enter for ~/Gemini-Agent
+git clone https://github.com/PratimeshTiwari/Agent-CLI.git
+cd Agent-CLI && ./setup.sh      # installs from this checkout, wherever you cloned it
 ```
 
 #### Manual
 
 ```bash
-git clone https://github.com/PratimeshTiwari/Gemini-Agent.git
-cd Gemini-Agent
+git clone https://github.com/PratimeshTiwari/Agent-CLI.git
+cd Agent-CLI
 
 npm install                          # both workspaces
 npm run build --workspace=extension  # Chrome loads the bundle, not the sources
@@ -140,7 +147,7 @@ already own — that calls the checkout by absolute path:
 
 ```sh
 #!/bin/sh
-exec node /path/to/Gemini-Agent/server/src/index.js "$@"
+exec node /path/to/Agent-CLI/server/src/index.js "$@"
 ```
 
 If that directory is not on your `PATH`, setup offers to add the line to your shell rc file.
@@ -1118,7 +1125,7 @@ narration beside a tool call is correct and common.
 
 ---
 
-### v2.1 — 2026-09-21 · [PR #19](https://github.com/PratimeshTiwari/Gemini-Agent/pull/19) · `v2.1/fix/tool-call-parsing-and-resume`
+### v2.1 — 2026-09-21 · [PR #19](https://github.com/PratimeshTiwari/Agent-CLI/pull/19) · `v2.1/fix/tool-call-parsing-and-resume`
 
 Three faults reported from use, each reproduced before it was touched. What they
 have in common: the product was measured rather than reasoned about, and in two
