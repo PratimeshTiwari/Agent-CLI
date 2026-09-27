@@ -108,6 +108,32 @@ export function buildAgentCallbacks({
           }
           return updated;
         });
+      } else if (msg.type === 'error') {
+        /*
+         * **The turn is over, and this is the only thing that says so.**
+         *
+         * `_onExtensionStall` clears `isProcessing` on the *loop* after the
+         * seven-minute backstop and reports why through here — and there was no
+         * `error` arm, so the message was delivered to a handler that ignored
+         * it. React's own `isProcessing` is separate and is set by the function
+         * that submits, so nothing cleared it: the spinner ran on with no turn
+         * behind it. Reported from use at **25,742 seconds** — seven hours —
+         * with `esc to stop` the only way out.
+         *
+         * CLAUDE.md states the rule about the side panel: a surface that
+         * ignores an unknown message type is not equally harmless for every
+         * type, and dropping a *request* deadlocks whoever waits on the answer.
+         * This is worse than a notification — it is the end of the turn.
+         */
+        setHistory((prev) => [...prev, {
+          role: 'assistant',
+          content: `! ${msg.payload?.message || 'The browser stopped responding.'}`,
+          isLocal: true,
+          timestamp: Date.now(),
+        }]);
+        setIsProcessing(false);
+        setActiveToolCalls([]);
+        isToolRunningRef.current = false;
       } else if (msg.type === 'response_stream') {
         // Intentionally do NOT update status here to prevent UI tearing and scroll glitches
         // caused by re-rendering the entire history component 50+ times per second.
