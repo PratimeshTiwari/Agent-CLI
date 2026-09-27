@@ -247,11 +247,30 @@ export function App({ agentLoop, wsServer }) {
    * when the caret was already on the first or last line.
    */
   const cursorRef = useRef(null);
+  /**
+   * Text handed to the prompt from outside the keyboard.
+   *
+   * **It used to nudge the caret itself, and that was a race it usually lost.**
+   * `cursorRef.current` is rebuilt during render, so `toEnd` closes over *that
+   * render's* value — and this called it on a zero-delay timeout, before React
+   * had re-rendered the field with the new text. So it ran
+   * `setOffset(previousValue.length)`.
+   *
+   * Recalling a long history entry into an **empty** prompt therefore set the
+   * caret to `''.length` — zero — with a long value behind it. Backspace is the
+   * one key that returns early at offset 0, so it silently did nothing, while
+   * every other key still worked. Pressing up or down again repaired it, by
+   * recalling once more from a value that was no longer empty. Reported in
+   * exactly those terms: *"backspace is not working… but working again after I
+   * did up and down arrow."*
+   *
+   * `PromptInput` already handles this correctly and always has: its effect
+   * sees a value it did not produce and moves the caret to the end of the value
+   * that actually arrived. Two mechanisms for one job, and the redundant one
+   * was the one that could be wrong.
+   */
   const setInputAtEnd = React.useCallback((next) => {
     setInput(next);
-    // The field puts the caret at the end of anything handed to it wholesale;
-    // this is here so the intent reads at the call site.
-    setTimeout(() => cursorRef.current?.toEnd?.(), 0);
   }, []);
   // Set while the input line holds a recalled history entry rather than typing.
   const [paletteSuppressed, setPaletteSuppressed] = useState(false);
