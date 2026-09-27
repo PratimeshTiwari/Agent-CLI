@@ -61,10 +61,12 @@ const EXTENSION_ORIGIN = /^(chrome-extension|moz-extension|safari-web-extension)
  * the lane — `discover_models` at connect and once a turn, `switch_model` from
  * `/effort` — and failing them costs a stale model list, nothing more.
  *
- * Named by op rather than by a `fatal` flag on the payload because the content
- * scripts cannot set fields on it: they prefix `[stage]` to the message and it
- * is lifted back into `op` above. The worker's own `reportTabFailure` sends the
- * same op names for the same operations, so both sides land here.
+ * Named by op rather than by a `fatal` flag on the payload, because the op is
+ * the one field *every* path already carries: the content script sets it on the
+ * payloads it builds, a thrown error carries it as a `[stage]` prefix that is
+ * lifted back into `op` above, and the worker's own `reportTabFailure` sends the
+ * same op names for the same operations. So both sides land here without a
+ * second field that half of them would forget.
  */
 const NON_FATAL_EXTENSION_OPS = new Set(['discover_models', 'switch_model', 'focus_tab']);
 
@@ -682,11 +684,13 @@ export class WebSocketServer {
         // from inside the browser tab, and until now it was handled and thrown
         // away — a selector that changed on gemini.google.com looked, from the
         // terminal, like the agent simply going quiet.
-        // Content scripts run in the page and cannot set fields on this
-        // payload — it reaches here as a bare message — so they prefix the
-        // stage in brackets and it is lifted back out into `op`. Without it a
-        // changed selector on gemini.google.com arrived as "failed", which is
-        // the one thing you already knew.
+        // A content script's *thrown* error crosses the catch as its message
+        // alone — `throw new Error('[find_input] …')` then `{message:
+        // err.message}` — so the stage rides in brackets and is lifted back out
+        // into `op` here. Payloads the script builds itself set `op` (and now
+        // `level`) directly, and the worker relays them verbatim; the prefix is
+        // for the path that cannot. Without it a changed selector on
+        // gemini.google.com arrived as "failed", the one thing you already knew.
         const tagged = /^\[([a-z_]+)\]\s*/i.exec(payload?.message || '');
         /*
          * The browser gets to say an `error` was an expected state.

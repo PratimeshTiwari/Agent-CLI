@@ -286,6 +286,38 @@ near the turn that stopped. `NON_FATAL_EXTENSION_OPS` is the gate, with a negati
 per branch — a bridge that aborts for nothing is a worse bug than the one being fixed, since
 a prompt that really is dead then holds the lane for seven minutes.
 
+**The picker had a veto and no containment until v4.0.** Everything it had was a veto —
+don't open a menu over a live composer, don't act on a half-read list — and a veto only works
+while every path that could leave a menu open is *known*. Eight selector ladders against a page
+Google redesigns without telling anyone means that assumption expires without warning. An open
+menu puts an overlay across the composer; the send lands on its backdrop, `waitForSendButton`
+burns its budget, and the turn is lost two turns away from its cause.
+
+`dismissStuckMenu` is the containment: every inject clears a stuck menu before typing, so the
+turn stops trusting the picker to have cleaned up. Three properties are load-bearing, because it
+runs on **every** turn. It is **synchronous and unbudgeted** — never `findModelTrigger`, which
+waits up to 8s for a picker to *appear*. It **cannot throw**, or it becomes a cause of the lost
+turn it prevents. And it tries **Escape before the trigger**, which is not a matter of taste:
+the trigger *toggles*, so clicking it after Escape has closed the menu **opens it again**. The
+first DOM fixture modelled a trigger that could only close and could not see that; the second
+toggles, as Gemini's does. **A fixture that is kinder than the page tests the fixture.**
+
+The notice it sends says *"tried to close it"*, not *"closed it"*, and does not re-check. Angular
+Material animates the overlay out, so a synchronous look after Escape can still see it open on
+the live page — escalating on that would log a false failure for every stuck menu, which is the
+noise the log levels exist to remove. Whether the prompt landed is observed properly by the send
+path.
+
+`switch_model` also gained the `isInjecting` guard `discover_models` had since 1.30.0. The server
+defers a *main-lane* switch while the lane is busy, but a **subagent** switch is dispatched with
+no lane check — and its tab is precisely the one about to be typed into. The lane is the server's
+model of the tab; `isInjecting` is the tab's own answer, and only one of them can be wrong about a
+composer.
+
+**Verified with the picker forced to fail on every call:** 20 of 20 turns, five tool rounds and a
+subagent, two failures landing mid-turn. A `/effort` typed a second into a deliberately slow turn
+was held and dispatched **4ms after** that turn's reply.
+
 **Chrome also discards background tabs**, which looks identical to a hang: the tab stays in
 the strip with its title intact while the page and content script are gone.
 `prepareTabForTurn` sets `autoDiscardable: false` on a tab about to hold a turn, and
@@ -1652,9 +1684,15 @@ dispatch paths still want scaffolding and are left for the split in P3.
   that compares an empty list to an empty list passes forever.
 - **Extension error richness** — *done.* The bridge already read `payload.op`/`stage`; nothing
   sent them. Service-worker errors now carry `op`, `stage`, `targetModel` and the DOM-side
-  message that actually failed. Content scripts run in the page and cannot set fields on that
-  payload, so they prefix `[stage]` to their message and the bridge lifts it back out — a
-  changed selector on gemini.google.com now logs as `find_input` rather than "failed".
+  message that actually failed. A content script's *thrown* error crosses its catch as the
+  message alone, so it prefixes `[stage]` and the bridge lifts it back out — a changed selector
+  on gemini.google.com now logs as `find_input` rather than "failed".
+
+  **This used to say content scripts "cannot set fields on that payload", and that was never
+  true of payloads they build themselves** — three already set `op`, and the worker forwards
+  `{type, payload}` verbatim. It nearly cost `level: 'notice'` on `menu_left_open`, which
+  depends on a field surviving that hop. `picker-containment.test.js` pins the verbatim relay,
+  because a worker that rebuilt the payload would drop every field silently.
 - **The ChatGPT bridge's image path** — *fixed, then deleted with the bridge.* Kept as a
   record of the failure mode: it matched the `<image_data>` block and **deleted** it, then
   pasted the remaining text, so `/image` sent a prompt discussing a screenshot nobody had been

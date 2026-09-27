@@ -148,6 +148,49 @@ per-change history below.
   background poll it tells the reader to fix a thing that is not broken. A row
   nobody can act on is how a log stops being read.
 
+- **The picker had a veto and no containment, and now it has both.** CLAUDE.md
+  had recorded this as an open rule violation: *"a structural fallback needs a
+  veto and containment… the mode picker's fallback still has only the veto."*
+  A veto works only while every path that could leave a menu open is known, and
+  eight selector ladders against a page Google redesigns without telling anyone
+  means that assumption expires without warning.
+
+  An open menu puts an overlay across the composer. The send button is behind
+  it, `waitForSendButton` finds a control it cannot click and burns its whole
+  budget, and the turn is lost — two turns away from the picker operation that
+  caused it. So **every inject now clears a stuck menu before typing**
+  (`dismissStuckMenu`), and the turn stops trusting the picker to have cleaned
+  up. It is synchronous and unbudgeted — with no menu open it is two DOM reads,
+  which is every turn — it cannot throw, and it tries **Escape as well as the
+  trigger**, because they fail differently: Escape needs no selector at all, so
+  it still closes a menu whose trigger selector is the thing that changed. It
+  reports `menu_left_open` as a notice, because a silent repair is how the
+  microphone click went unnoticed.
+
+  Tested against a DOM, with every function *and* `SELECTORS` lifted from the
+  shipped source. The first fixture had a trigger that could only close, and
+  against it an unconditional `trigger.click()` after Escape looked harmless —
+  on the real page that toggle **re-opens the menu Escape has just shut**. Found
+  by mutating the source and watching the suite stay green; the fixture toggles
+  now.
+
+- **`switch_model` refuses to open a menu over a live composer.** `discover_models`
+  has had that guard since 1.30.0 and `switch_model` never did, which is the one
+  that matters more: a discovery over a live composer costs a read, a switch over
+  one costs the turn. The server defers a *main lane* switch while the lane is
+  busy, but a **subagent** switch goes out with no lane check — its tab is its
+  own, and its tab is precisely the one about to be typed into. Deferred, never
+  dropped, and it remembers the *label*: unlike a discovery, a switch is not
+  idempotent. When both are pending the switch drains first, because it changes
+  the very thing a discovery would report.
+
+  Verified end to end with the picker forced to fail on every call: **20 of 20
+  turns completed**, all five tool rounds and one subagent included, with two
+  picker failures landing mid-turn. A `/effort` typed one second into a
+  deliberately slow turn was held for four seconds and dispatched **4ms after**
+  that turn's reply — the original report, *"/effort during a turn killed it"*,
+  no longer reproduces.
+
 ### 1.40.0 — 2026-09-27
 
 - **A menu that opened *enough* is not a menu that opened.** `openModelMenu`

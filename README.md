@@ -704,7 +704,7 @@ missing one**, since the model reaches for it and concludes the code is not ther
 
 ---
 
-### v4.0 — 2026-09-27 · `v4.0/honest-log`
+### v4.0 — 2026-09-27 · `v4.0/honest-log` · extension 1.41.0
 
 **A new series, because the last one ended by measuring itself.** v3 was 34 PRs
 in six days and did not feel like progress; the reason turned out to be
@@ -761,13 +761,42 @@ v3's picker bug was exactly this kind of row; a log that discards what is merely
   cleared when the next turn starts, because a reason with no clock is a flag
   that ages into a lie.
 
+#### The picker can fail without costing a turn
+
+Everything the model picker had was a *veto* — don't open a menu over a live
+composer, don't act on a half-read list. A veto only works while every path that
+could leave a menu open is known, and eight selector ladders against a page Google
+redesigns without warning means that assumption expires without notice. An open
+menu puts an overlay across the composer: the send lands on its backdrop and the
+turn is lost, two turns away from whatever left it open.
+
+So the turn stops trusting the picker. **Every prompt now clears a stuck menu
+before typing** — synchronously, in two DOM reads when nothing is open, which is
+every turn. It tries Escape before the menu's own button, and the order matters:
+the button *toggles*, so pressing it after Escape has already closed the menu
+opens it again. The first test page modelled a button that could only close and
+could not see that; the one that ships toggles, like Gemini's.
+
+And `switch_model` now refuses to open a menu while a prompt is going in, which
+`discover_models` has done since 1.30.0. A subagent's switch is sent with no lane
+check — its tab is its own, and its tab is exactly the one about to be typed into.
+
+**Verified with the picker forced to fail on every call:** 20 of 20 turns
+completed, five tool round trips and a subagent included, with two picker
+failures landing in the middle of a turn. An `/effort` typed a second into a
+deliberately slow turn was held for four seconds and sent **4ms after** that
+turn's reply — the report that started this, *"/effort during a turn killed it"*,
+no longer reproduces.
+
 #### What the exit criterion actually measures
 
-The goal was *fewer than five rows on a normal working day*. Re-scoring 09-27
-under the new rules: **8 failures, 12 notices**, down from 20 undifferentiated
-rows — and **four of the remaining eight are the model picker**, which is the
-next piece of work rather than this one. The claim this release makes is only
-that the number means something now.
+The log's goal was *fewer than five rows on a normal working day*. Re-scoring
+09-27 under the new rules: **8 failures, 12 notices**, down from 20
+undifferentiated rows — and **four of the remaining eight are the model picker**.
+The picker work above stops those failures costing turns; it does not stop them
+happening, because the selectors are the architecture. Whether a normal day now
+reads under five is a reading to take after a few days of use, not a number to
+write down today.
 
 #### Found by trying to break the tests
 
