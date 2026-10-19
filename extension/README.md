@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.42.0**
+## Current version: **1.43.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,22 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.43.0 — 2026-10-19
+
+- **A global shortcut for the floating window.** `Ctrl+Shift+1` (`⌘⇧1` on a Mac)
+  opens the Agent CLI floating window from any app while Chrome is running, or
+  focuses it if it is already open, so it never stacks a second one. It is the
+  nearest an extension can get to Chrome's own Gemini panel (the `Ctrl+G` one),
+  which no extension API can open or read. Remap it at
+  `chrome://extensions/shortcuts`; Chrome only *suggests* `Ctrl+Shift+0–9` for
+  global commands.
+- **The diff Accept / Reject buttons work.** They were inline `onclick`
+  attributes, which MV3's default CSP for extension pages refuses, so they had
+  never done anything and a diff could not be answered from the panel. The
+  tool-row expander had the same fault. Both are listeners now.
+- The side panel's page is also the VS Code companion's chat panel (1.8.0),
+  behind a `chrome.runtime` shim. Nothing in this extension changed for that.
 
 ### 1.42.0 — 2026-09-27
 

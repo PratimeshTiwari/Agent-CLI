@@ -836,7 +836,35 @@
     }
   }
 
+  // src/background/floating.js
+  var FLOATING_COMMAND = "open-floating-panel";
+  var PANEL_PATH = "side-panel/panel.html";
+  var floatingUrl = () => chrome.runtime.getURL(`${PANEL_PATH}?window=1`);
+  async function openFloatingPanel() {
+    const prefix = chrome.runtime.getURL(PANEL_PATH);
+    try {
+      const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["popup"] });
+      const existing = windows.find((w) => (w.tabs || []).some((t) => (t.url || "").startsWith(prefix)));
+      if (existing) {
+        await chrome.windows.update(existing.id, { focused: true, drawAttention: true });
+        return "focused";
+      }
+      await chrome.windows.create({ url: floatingUrl(), type: "popup", width: 460, height: 760, focused: true });
+      return "created";
+    } catch (err) {
+      console.warn("[Agent CLI] could not open the floating window:", err?.message);
+      return "failed";
+    }
+  }
+  function handleCommand(command) {
+    if (command === FLOATING_COMMAND) return openFloatingPanel();
+    return null;
+  }
+
   // src/background/main.js
+  chrome.commands?.onCommand.addListener((command) => {
+    handleCommand(command);
+  });
   chrome.tabs.onRemoved.addListener((tabId) => {
     forgetTab(tabId);
     broadcastTabStatus();
