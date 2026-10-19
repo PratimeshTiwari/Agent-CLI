@@ -23,8 +23,13 @@ import { readFileSync } from 'fs';
  */
 export function loadFunction(file, name, globals = {}) {
   const src = readFileSync(file, 'utf8');
-  const start = src.indexOf(`function ${name}(`);
-  if (start === -1) throw new Error(`${name} not found in ${file}`);
+  const bare = src.indexOf(`function ${name}(`);
+  if (bare === -1) throw new Error(`${name} not found in ${file}`);
+  // Keep `async`. Lifting from `function` alone dropped it, so an async
+  // function's first `await` became a SyntaxError at lift time. CLAUDE.md lists
+  // exactly this among the ways the harness has lied; it never bit here only
+  // because nothing lifted an async function until `confirmSend`.
+  const start = src.slice(Math.max(0, bare - 6), bare) === 'async ' ? bare - 6 : bare;
 
   // Walk to the matching close brace. Good enough for these functions and it
   // fails loudly rather than silently truncating, which an index-of-the-next-

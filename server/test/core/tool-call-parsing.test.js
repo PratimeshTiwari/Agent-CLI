@@ -227,3 +227,67 @@ test('a block that is not a call stays in the reply', async (t) => {
     assert.doesNotMatch(cleanContent, /```/);
   });
 });
+
+/**
+ * A call inside a fence that sits on the same line as the prose.
+ *
+ * Reported with a screenshot of a reply that read, in full, "json". Every
+ * tool-call reply in that session's history ended the same way:
+ *
+ *     <thought> Let's see how `executionPromises` are awaited. </thought> ```json  ```
+ *
+ * The block pattern needs the fence on its own line and missed it; the unfenced
+ * fallback took the `{…}` and left the fence, which markdown draws as an inline
+ * code span reading `json`. The call itself was executed correctly every time —
+ * only the leftovers reached the screen.
+ */
+test('a fence on the same line as the prose', async (t) => {
+  const call = '{"name": "read_file", "args": {"path": "server/src/core/agent-loop.js"}}';
+
+  await t.test('the shape from the stored history cleans to the prose alone', () => {
+    const { toolCalls, cleanContent } = parse(
+      `<thought> Let's see how \`executionPromises\` are awaited. </thought> \`\`\`json ${call} \`\`\``,
+    );
+    assert.equal(toolCalls.length, 1, 'and the call is still found');
+    assert.equal(cleanContent, "<thought> Let's see how `executionPromises` are awaited. </thought>");
+    assert.doesNotMatch(cleanContent, /```/, 'fence fragments are what drew as "json"');
+  });
+
+  await t.test('untagged and tool_call-tagged fences too', () => {
+    for (const open of ['```', '```tool_call']) {
+      const { cleanContent } = parse(`Checking. ${open} ${call} \`\`\``);
+      assert.equal(cleanContent, 'Checking.');
+    }
+  });
+
+  await t.test('two calls on one line both go, with both fences', () => {
+    const { toolCalls, cleanContent } = parse(`Both: \`\`\`json ${call} \`\`\` \`\`\`json ${call} \`\`\``);
+    assert.equal(toolCalls.length, 2);
+    assert.equal(cleanContent, 'Both:');
+  });
+
+  /*
+   * The negative controls. Removing a fence is only safe when it is *this
+   * call's* fence — both ends, adjacent. A lone fence beside a call belongs to
+   * something else, and taking half of it would corrupt a correct reply.
+   */
+  await t.test('an adjacent opening fence with no close is left, and the call still goes', () => {
+    /*
+     * The first fixture here put a ```yaml block *near* the call, where neither
+     * end of the check could match — so the test never reached the branch it
+     * was named for, and a mutation that broke that branch passed it.
+     * Adjacent, and unclosed, is the case: the model forgot its closing fence.
+     * Both-or-neither leaves the opener, which is the conservative error; what
+     * must not happen is the call's raw JSON staying in the visible reply.
+     */
+    const { toolCalls, cleanContent } = parse(`Result: \`\`\`json ${call} and then some prose`);
+    assert.equal(toolCalls.length, 1);
+    assert.doesNotMatch(cleanContent, /read_file/, 'the call itself was left in the reply');
+    assert.match(cleanContent, /and then some prose/);
+  });
+
+  await t.test('a real code block after the call survives intact', () => {
+    const { cleanContent } = parse(`${call}\n\nThen run:\n\n\`\`\`bash\nnpm test\n\`\`\``);
+    assert.match(cleanContent, /```bash\nnpm test\n```/);
+  });
+});

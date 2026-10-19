@@ -72,19 +72,35 @@ describe('the paste is checked against the composer, not against preventDefault'
       'preventDefault means a handler ran, not that the text arrived');
   });
 
-  test('it reads the composer, and polls rather than reading once', () => {
+  test('it reads the composer, and waits rather than reading once', () => {
     assert.match(src, /const composerText = \(\) =>/,
       'the composer contents are what the send button is keyed on');
-    assert.match(src, /for \(let i = 0; i < PASTE_SETTLE_TRIES && !landed; i \+= 1\)/,
+    /*
+     * This used to pin the loop itself — `for (…PASTE_SETTLE_TRIES…)` over
+     * `setTimeout(…, 50)` — which is the mechanism, not the requirement. In a
+     * hidden tab that "50ms" was about a second, on every round of every turn:
+     * the `type` stage went from 27ms median to 994ms. The requirement was only
+     * ever "do not read once", and a test that pins the mechanism defends the
+     * bug (CLAUDE.md: "a test can pin the bug").
+     */
+    assert.match(src, /await waitForDom\(\(\) => \(composerText\(\) \? true : null\), PASTE_LAND_BUDGET_MS\)/,
       'Quill inserts on a later tick — reading once would paste a second copy');
     assert.match(src, /document\.execCommand\('insertText', false, text\)/,
       'and there is still a fallback when it really did not land');
   });
 
+  test('and no page timer is its clock', () => {
+    const start = src.indexOf('const composerText = () =>');
+    const settle = src.slice(start, src.indexOf("execCommand('insertText'", start));
+    assert.doesNotMatch(settle.replace(/\/\*[\s\S]*?\*\//g, ''), /setTimeout/,
+      'a sleep between looks is throttled to ~1s in a hidden tab');
+  });
+
   // An image with no text legitimately leaves the composer empty and the
   // button enabled by the attachment. Re-inserting there would be a bug.
   test('the image-only path is left alone', () => {
-    assert.match(src, /let landed = !text;/,
+    // `!text` first, so an image-only send is landed before anything is read.
+    assert.match(src, /let landed = !text(;| \|\|)/,
       'no text to land means nothing to verify');
   });
 });
@@ -96,10 +112,27 @@ describe('waitForSendButton', () => {
     assert.match(body, /\n\s*check\(\);/, 'the first check should be a direct call');
   });
 
-  test('and polls faster than the old 200ms', () => {
-    const poll = body.match(/setTimeout\(check,\s*(\d+)\)/);
-    assert.ok(poll, 'it still polls');
-    assert.ok(Number(poll[1]) <= 100, `poll interval ${poll[1]}ms should be <= 100ms`);
+  /*
+   * This asserted `setTimeout(check, N)` with N <= 100 — "polls fast". In a
+   * hidden tab no page timer is fast: CLAUDE.md measured them collapsing to
+   * about one tick a minute. The first check ran before the button rendered,
+   * the next arrived after the 30s deadline, and it gave up with the button on
+   * screen. The requirement was "notice the button promptly", and the only
+   * clock that does that in a hidden tab is the DOM's own.
+   */
+  test('it is driven by the page changing, not by a timer', () => {
+    assert.match(body, /new MutationObserver\(check\)/,
+      'the button rendering and enabling are mutations; nothing else notices them promptly when hidden');
+    const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.doesNotMatch(code, /setTimeout\(check,\s*\d{1,3}\)/,
+      'a short page-timer poll is throttled to ~1 tick a minute in a hidden tab');
+  });
+
+  test('and it stops watching once it has an answer', () => {
+    // An observer left on a busy page runs `check` on every mutation for the
+    // rest of the tab's life.
+    assert.match(body, /observer\?\.disconnect\(\)/);
+    assert.match(body, /if \(settled\) return;/);
   });
 
   /*

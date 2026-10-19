@@ -711,6 +711,46 @@ missing one**, since the model reaches for it and concludes the code is not ther
 
 ---
 
+### v4.2 — 2026-09-27 · `v4.2/fixes-from-use` · extension 1.42.0
+
+**Six reports from one session, two of them caused by v4.0.** Everything here was
+found by using the product, and each fix was checked against the report rather
+than reasoned towards.
+
+- **A prompt pasted and never sent.** Gemini renders its send button only once the
+  composer holds text, and the extension looked for it on a page timer — which in
+  a background tab runs about once a minute. It looked once too early, then again
+  after its deadline, and gave up with the button on screen. It now watches the
+  page change instead. It also now **checks that a send happened**: Gemini clears
+  the composer the moment it takes a prompt, so text still sitting there proves it
+  didn't, and the extension clicks again. It never retries on uncertainty, and
+  never once Gemini has started answering, so it cannot send twice.
+- **Every round trip was about a second slower** than it used to be, for the same
+  reason — a "50ms" pause that is a second long in a background tab. Typing went
+  from a 27ms median to 994ms; it is back on the page's own clock.
+- **A subagent ran on the wrong model,** and **a notice ended the turn.** v4.0's
+  menu cleanup closed a model switch's menu while the switch was still using it,
+  and the notice it sent was treated as fatal. The cleanup now waits for a running
+  switch, and a notice can never end a turn.
+- **A reply that read, in full, "json".** A tool call written on the same line as
+  the model's reasoning left its code fence behind when the call was removed. The
+  call itself always ran; only the leftovers reached the screen.
+- **"Worked for ⠋ Thinking…"** read like a turn that had stopped. While a turn
+  runs, the row now shows only the spinner and what it is doing.
+- **Searching `a|b|c` found nothing.** The search tool matched that literally,
+  pipes included, so the model concluded the code wasn't there and read whole
+  files instead. Alternatives like that are searched separately now.
+
+Two things are recorded rather than guessed at, because their cause isn't known:
+a reply held for exactly twelve seconds after Gemini had finished, and a model
+that lost the conversation after `/effort`. Both now leave a row in `/logs
+notices` saying what happened, so the next occurrence settles them.
+
+**After updating:** reload the extension *and* restart the agent — one of the
+fixes is on the server side.
+
+---
+
 ### v4.0 — 2026-09-27 · `v4.0/honest-log` · extension 1.41.0
 
 **A new series, because the last one ended by measuring itself.** v3 was 34 PRs

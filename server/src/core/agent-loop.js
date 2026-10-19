@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeCodeQuestion } from './drift-detector.js';
-import { logError } from './error-log.js';
+import { logError, logNotice } from './error-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
 import { logCommand } from './command-log.js';
 
@@ -1259,7 +1259,32 @@ export class AgentLoop {
      * turn 0's own conversation, which already carried the full prompt, and
      * resetting there would send it twice.
      */
-    if (previous?.id) this.promptBuilder?.resetPromptState?.();
+    if (previous?.id) {
+      this.promptBuilder?.resetPromptState?.();
+      /*
+       * Written down, because it is the one event that explains "the model
+       * forgot what we were talking about", and it was invisible.
+       *
+       * Reported from use: after `/effort` moved the browser from Flash to Pro,
+       * *"can you verify this above analysis?"* was answered with *"you didn't
+       * include the analysis"*. `session-meta.json` keeps only the latest
+       * thread id, so nothing could say whether the conversation had changed
+       * underneath it — and the reset above resends the system prompt and the
+       * tools, **not the conversation**, so a changed thread would produce
+       * exactly that reply. Whether Gemini's picker starts a new chat when the
+       * model is switched is not something this code can see; this row is
+       * what will say so, the next time it happens.
+       *
+       * A notice: nothing failed, and the prompt state is already repaired.
+       * What it cannot repair is the history, which is why it is worth a row.
+       */
+      logNotice(this.workspace, {
+        flow: 'agent',
+        op: 'thread_changed',
+        message: 'The browser moved to a different Gemini conversation; the model no longer has this one',
+        meta: { from: previous.id, to: thread.id, effort: this.modelConfig?.effort || null },
+      });
+    }
   }
 
   /**
@@ -2754,8 +2779,41 @@ export class AgentLoop {
           const parsed = JSON.parse(cleaned);
           if (parsed.name && parsed.args) {
             calls.push(parsed);
-            cleanContent = cleanContent.substring(0, startIndex) + cleanContent.substring(endIndex + 1);
-            continue; // startIndex is now at the character after the removed JSON
+            /*
+             * Take the fence with it, when there is one around it.
+             *
+             * This path took only the `{…}`, so a call written inside a fence the
+             * block pattern above could not see left the fence behind:
+             * `</thought> \`\`\`json  \`\`\`` — which markdown then drew as an
+             * inline code span reading `json`. Reported with a screenshot as a
+             * reply consisting of the single word "json"; it was in **every**
+             * tool-call reply of that session's history.
+             *
+             * The block pattern misses it because it needs the fence on its own
+             * line, and here it is not. The stored replies show why: the bullets
+             * inside the `<thought>` were flattened onto one line as well, which
+             * is what a CommonMark HTML block does to everything after an
+             * unknown tag like `<thought>` up to the next blank line — so a call
+             * written straight after `</thought>` arrives as one run of text.
+             * That is inference about Gemini's renderer; this does not depend on
+             * it being right, only on the fence being adjacent.
+             *
+             * **Both ends or neither.** A lone opening or closing fence next to a
+             * call belongs to something else — a block the model is still
+             * writing, or one that follows — and deleting half of it would
+             * corrupt a reply that was correct.
+             */
+            const before = cleanContent.substring(0, startIndex);
+            const after = cleanContent.substring(endIndex + 1);
+            const open = /```(?:json|tool_call)?\s*$/i.exec(before);
+            const close = /^\s*```/.exec(after);
+            if (open && close) {
+              cleanContent = before.substring(0, open.index) + after.substring(close[0].length);
+              startIndex = open.index;
+            } else {
+              cleanContent = before + after;
+            }
+            continue; // startIndex is now at the character after the removed call
           }
         } catch (e) {}
       }

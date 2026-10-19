@@ -72,14 +72,12 @@ const NO_RESPONSE_TIMEOUT = 45000;
 // ── DOM Selectors ────────────────────────────────────────────────────
 // Centralized selectors — update these when Google changes the UI
 /**
- * How long to let a paste settle before deciding it never landed.
- *
- * Quill inserts on a later tick, so the check has to poll rather than read
- * once. 600ms total: long enough that a normal paste is never second-guessed,
- * short enough that the failure path does not eat the send budget.
+ * How long a paste may take to land before the text is inserted directly.
+ * Observer-clocked, so it costs nothing when the paste arrives. The foreground
+ * maximum measured over 265 turns was 2,450ms for a full 26k-character turn-0
+ * prompt; this outlasts it, because giving up early double-inserts.
  */
-const PASTE_SETTLE_MS = 50;
-const PASTE_SETTLE_TRIES = 12;
+const PASTE_LAND_BUDGET_MS = 5000;
 
 const SELECTORS = {
   // The control that opens the picker. Ordered by what actually matched on
@@ -207,6 +205,27 @@ let pendingSwitch = null;
  */
 let lastTypedPrefix = '';
 const TYPED_PREFIX_CHARS = 120;
+
+/**
+ * Is Gemini generating right now — is its Stop button on screen?
+ *
+ * Lifted out of the completion check so the send confirmation can ask the same
+ * question the same way. Two copies of "is it generating" would be two chances
+ * to disagree about a turn, and the completion check is the one that decides
+ * when a turn ends. Visibility rather than presence: the button is kept in the
+ * DOM and hidden, and layout is sound in a hidden tab (CLAUDE.md, the table of
+ * what is and is not throttled).
+ */
+function stopButtonVisible() {
+  const stopBtn = findElement([
+    'button[aria-label*="stop" i]',
+    'button.stop-generating-button',
+  ]);
+  if (!stopBtn) return false;
+  const rect = stopBtn.getBoundingClientRect();
+  const style = window.getComputedStyle(stopBtn);
+  return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+}
 
 /** Is the composer still holding the prompt we typed? null when unknowable. */
 function composerStillHoldsPrompt() {
@@ -604,6 +623,17 @@ async function injectPrompt(text) {
 
   isInjecting = true;
   /*
+   * A switch still running owns its menu, so let it finish first.
+   *
+   * Otherwise the cleanup below takes the switch's open menu for an abandoned
+   * one and closes it mid-switch — which is how a subagent came to run on Pro.
+   * `isInjecting` is already set, so nothing *new* can start while we wait;
+   * this only lets what was already running land. See `trackPicker`.
+   */
+  const pickerWaitStart = Date.now();
+  const waitedForPicker = await waitForPickerIdle();
+  const pickerWaitMs = Date.now() - pickerWaitStart;
+  /*
    * Before `traceStart`, so a stuck menu is not charged to `find_input`.
    *
    * Set `isInjecting` first: dismissing dispatches a key event, and a
@@ -612,6 +642,10 @@ async function injectPrompt(text) {
    */
   dismissStuckMenu();
   traceStart();
+  // Its own stage, only when it happened: a subagent turn waiting on its
+  // model switch is normal, and folding the wait into `find_input` would send
+  // the next reader after a selector that is fine.
+  if (waitedForPicker && turnTrace) turnTrace.stages.picker_wait = pickerWaitMs;
   lastTypedPrefix = String(text || '').replace(/\s+/g, ' ').trim().slice(0, TYPED_PREFIX_CHARS);
 
   // What was clickable before the prompt had anything in it. Send is whatever is
@@ -715,10 +749,26 @@ async function injectPrompt(text) {
      * attachment.
      */
     const composerText = () => String(input.value ?? input.innerText ?? input.textContent ?? '').trim();
-    let landed = !text;
-    for (let i = 0; i < PASTE_SETTLE_TRIES && !landed; i += 1) {
-      if (composerText()) landed = true;
-      else await new Promise(r => setTimeout(r, PASTE_SETTLE_MS));
+    /*
+     * Waited for on the DOM's clock, not a page timer's.
+     *
+     * This was twelve `setTimeout(…, 50)` sleeps — 600ms nominal. Gemini inserts
+     * a paste on a later tick, so the first look almost always finds the
+     * composer empty and sleeps, and in a hidden tab a page timer delivers about
+     * **2%** of its ticks (CLAUDE.md's measured table). So "50ms" was roughly a
+     * second: the `type` stage went from a **27ms** median over 376 turns to
+     * **994ms** on 09-27, one second added to every round trip of every turn,
+     * and one turn-0 paste took **22 seconds** to be noticed.
+     *
+     * The paste landing is a DOM mutation, so a MutationObserver sees it the
+     * moment it happens. The budget can therefore be generous at no cost: it is
+     * only ever spent when the paste really did not land, and giving up too
+     * early is the worse error — the fallback below inserts the text a second
+     * time, and a paste that then lands late leaves two copies of the prompt.
+     */
+    let landed = !text || Boolean(composerText());
+    if (!landed) {
+      landed = Boolean(await waitForDom(() => (composerText() ? true : null), PASTE_LAND_BUDGET_MS));
     }
 
     if (!landed && text) {
@@ -748,6 +798,9 @@ async function injectPrompt(text) {
       sendBtn.click();
       traceMark('send');
       console.log('[Gemini Bridge] Send button clicked');
+      // A click is a claim; the composer clearing is the observation.
+      await confirmSend(sendBtn);
+      traceMark('accepted');
     } else {
       // Fallback 1: Try submitting the closest form
       const form = input.closest('form');
@@ -806,12 +859,108 @@ async function injectPrompt(text) {
 }
 
 /**
+ * Did Gemini take the prompt? Evidence, not the click.
+ *
+ * `sendBtn.click()` was followed by `traceMark('send')` and nothing else — so a
+ * click that did not submit was recorded as a send, and the turn then waited on
+ * a reply to a prompt still sitting in the composer. Reported with a
+ * screenshot: tool results pasted, the send button lit, nothing sent, and no
+ * retry until the prompt was sent by hand.
+ *
+ * Why a click is swallowed is **not established**, and this is written so that
+ * it does not need to be. The traces cannot tell a swallowed click from a slow
+ * model: both are a fast `send` followed by a long silence, and 09-17 had 18 of
+ * those before the change most likely to blame was made. What *is* observable
+ * is the outcome. Gemini clears the composer the moment it accepts a prompt, so
+ * our text still sitting there proves the submit did not happen, whatever the
+ * reason — and the Stop button, or a new response block, proves it did.
+ *
+ * Three rules keep this from becoming the double-send it guards against:
+ *
+ *   - **Retry only on proof it was not sent.** `composerStillHoldsPrompt()`
+ *     answers null when it cannot tell — the composer re-mounted, say — and
+ *     null counts as accepted. Uncertainty never earns a second click.
+ *   - **Any sign of generation ends it.** A Stop button or a new response block
+ *     means the prompt is in, even if the composer has not cleared yet.
+ *   - **Bounded.** Two retries, then an honest failure (`[send_unconfirmed]`),
+ *     which the worker's repair ladder answers by typing the prompt again into
+ *     a cleared composer — correct precisely because it never went.
+ *
+ * Clocked by `waitForDom`, not a page timer: the composer clearing, the Stop
+ * button appearing and a response block arriving are all DOM mutations, and a
+ * MutationObserver runs at full rate in a hidden tab where `setTimeout` does
+ * not. Every retry is logged, because how often this fires is the number that
+ * says whether the swallowed click is real and how common — the thing nobody
+ * could measure before.
+ */
+const SEND_CONFIRM_MS = 2500;
+const SEND_RETRIES = 2;
+
+function sendAccepted() {
+  return composerStillHoldsPrompt() !== true
+    || stopButtonVisible()
+    || getResponseCount() > initialResponseCount;
+}
+
+async function confirmSend(clicked) {
+  for (let attempt = 0; attempt <= SEND_RETRIES; attempt += 1) {
+    if (await waitForDom(() => (sendAccepted() ? true : null), SEND_CONFIRM_MS)) {
+      if (attempt > 0) {
+        safeSend({
+          type: 'error',
+          payload: {
+            op: 'send_retried',
+            stage: 'send',
+            // The turn went ahead, so there is nothing to act on now; the rate
+            // over days is what is worth reading.
+            level: 'notice',
+            message: `[send_retried] the first click did not submit; retry ${attempt} did`,
+          },
+        });
+      }
+      return attempt;
+    }
+    if (attempt === SEND_RETRIES) break;
+
+    // The element can be replaced between renders, so find it again rather than
+    // clicking a node that may no longer be in the page. The ladder only — never
+    // the structural fallback, which is the path that once found the microphone.
+    const again = findElement(SELECTORS.sendButton) || (clicked?.isConnected ? clicked : null);
+    const enabled = again && !(again.disabled || again.getAttribute('aria-disabled') === 'true');
+    if (enabled) {
+      again.click();
+    } else {
+      const input = findInputResilient();
+      if (input) {
+        input.focus();
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true,
+        }));
+      }
+    }
+  }
+  throw new Error(`[send_unconfirmed] clicked send ${SEND_RETRIES + 1} times and the prompt is still in the composer`);
+}
+
+/**
  * Wait for the send button to appear and become enabled.
  * Polls every 200ms up to maxWait ms.
  */
 function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
-  return new Promise((resolve) => {
+  return new Promise((done) => {
     const startTime = Date.now();
+    let settled = false;
+    let observer = null;
+    let graceTimer = null;
+    let backstop = null;
+    const resolve = (value) => {
+      if (settled) return;
+      settled = true;
+      observer?.disconnect();
+      clearTimeout(graceTimer);
+      clearTimeout(backstop);
+      done(value);
+    };
 
     /*
      * Has the composer ever actually held our text?
@@ -829,6 +978,7 @@ function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
     let sawText = false;
 
     function check() {
+      if (settled) return;
       const empty = !input || input.textContent.trim().length === 0;
       if (!empty) sawText = true;
       // If the user manually clicked send, the input clears! We can stop waiting.
@@ -886,22 +1036,36 @@ function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
         resolve(null);
         return;
       }
-
-      setTimeout(check, 60);
     }
 
     /*
-     * Start immediately, and poll fast.
+     * Driven by the page changing, not by a timer.
      *
-     * This was `setTimeout(check, 500)` with a 200ms poll — a fixed 500ms on
-     * every round of every turn, spent waiting for a button that is usually
-     * already there. Measured over 237 recorded turns, the `send` stage was
-     * 698ms median and 1,383ms p90, and roughly 500ms of that was this line.
+     * This polled with `setTimeout(check, 60)` against a 30s wall-clock
+     * deadline — and in a hidden tab a page timer collapses to about one tick
+     * a minute (CLAUDE.md's measured table). The first check runs before Gemini
+     * has rendered the send button, which only appears once the composer holds
+     * text; the *next* check arrived after the deadline had passed and gave up,
+     * with the button sitting right there. That is one way a prompt ends up
+     * pasted and never sent.
      *
-     * The delay was guarding the empty-composer race, which `sawText` now
-     * answers directly; nothing else needed it. The button either exists and is
-     * enabled or it does not, and asking costs a DOM query.
+     * Everything this waits for — the button rendering, its `disabled` or
+     * `aria-disabled` flipping, the composer emptying on a manual send — is a
+     * DOM mutation, and a MutationObserver is not throttled. Two timers remain,
+     * each for something no mutation announces: the structural fallback only
+     * becomes eligible after `SEND_LADDER_GRACE_MS`, which a quiet page would
+     * otherwise never re-check after; and the backstop, which only settles the
+     * promise when the answer is already "no".
+     *
+     * The first check is still a direct call, so a button that is already there
+     * costs nothing — the reason the old 500ms sleep went on 2026-09-20.
      */
+    observer = new MutationObserver(check);
+    observer.observe(document.body, {
+      childList: true, subtree: true, attributes: true, characterData: true,
+    });
+    graceTimer = setTimeout(check, SEND_LADDER_GRACE_MS);
+    backstop = setTimeout(() => { check(); resolve(null); }, maxWait);
     check();
   });
 }
@@ -1027,16 +1191,7 @@ function startResponseObserver() {
     }
 
     // Check if the "Stop Generating" button exists in the DOM and is visible
-    const stopBtn = findElement([
-      'button[aria-label*="stop" i]',
-      'button.stop-generating-button',
-    ]);
-    let isGenerating = false;
-    if (stopBtn) {
-      const rect = stopBtn.getBoundingClientRect();
-      const style = window.getComputedStyle(stopBtn);
-      isGenerating = rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    }
+    let isGenerating = stopButtonVisible();
     /*
      * The two moments the Stop button marks, recorded rather than only reasoned
      * about.
@@ -1083,6 +1238,32 @@ function startResponseObserver() {
       if (unfinishedHolds <= UNFINISHED_GRACE_CHECKS) {
         console.log(`[Gemini Bridge] Quiet, but the reply ends mid-construct — waiting (${unfinishedHolds}/${UNFINISHED_GRACE_CHECKS})`);
         quietStreak = 0;
+      } else if (unfinishedHolds === UNFINISHED_GRACE_CHECKS + 1) {
+        /*
+         * Every hold was spent and the reply never changed: the wait bought
+         * nothing, and it is roughly **12 seconds** on the confirming cadence.
+         * Three turns on 2026-09-27 ended exactly that way — `complete` at
+         * 12000, 12001 and 11998ms — after Gemini had already stopped.
+         *
+         * The cause is not known. The one hold ever diagnosed (a lone inline
+         * backtick after a closing fence) is fixed and tested, and the real
+         * extractor over a tool-call block clears the check. The handover's
+         * "0 of 62 stored replies held" cannot speak to it either: stored
+         * replies have their tool calls stripped, which is exactly the
+         * construct this check is about. So this records the one thing that
+         * would settle it — the text the check actually saw — instead of
+         * guessing at a third fix.
+         */
+        safeSend({
+          type: 'error',
+          payload: {
+            op: 'unfinished_hold_expired',
+            stage: 'complete',
+            level: 'notice',
+            message: `[unfinished_hold_expired] held ${UNFINISHED_GRACE_CHECKS} checks for a reply that never changed`,
+            detail: String(lastResponseText).slice(-240),
+          },
+        });
       }
     }
 
@@ -1585,6 +1766,89 @@ async function closeModelMenu(trigger) {
     );
     if (open) trigger.click();
   } catch { /* cleanup, and nobody is waiting on it */ }
+}
+
+/**
+ * Which picker operations are still running in this page.
+ *
+ * `dismissStuckMenu` (1.41.0) closed any menu it found open before typing, on
+ * the assumption that a menu open at that moment was *stuck*. It was not always:
+ * a subagent's tab is switched to its model and then typed into, the worker
+ * gives that switch **5 seconds**, and in a freshly opened tab the switch's own
+ * waits add up to about **14** — 8 for the picker to mount, 3 to open, 3 for the
+ * retry. So the inject arrived mid-switch, found the switch's own menu open, and
+ * closed it. The switch failed and the subagent ran on whatever the tab had
+ * defaulted to. Reported with a screenshot: a subagent on **Pro**, and the
+ * `menu_left_open` notice that proved the collision.
+ *
+ * The page is the one place that knows when a switch has finished; the worker's
+ * 5s is a guess about it. So operations register here, and an inject waits for
+ * them (`waitForPickerIdle`) before deciding that an open menu is abandoned.
+ *
+ * `closeModelMenu` is registered too, although nobody awaits it. It is
+ * fire-and-forget by design — the list returns before cleanup — so without it
+ * the count reaches zero while a close is still pending, and the inject then
+ * races a close that is about to click the trigger: a toggle, which would
+ * re-open the menu the cleanup had just shut.
+ */
+let pickerInFlight = 0;
+let pickerIdle = Promise.resolve();
+
+function trackPicker(op) {
+  pickerInFlight += 1;
+  const done = Promise.resolve(op).finally(() => { pickerInFlight -= 1; });
+  // Settled, never rejected: this is something to wait *for*, not an answer.
+  pickerIdle = Promise.allSettled([pickerIdle, done]);
+  return done;
+}
+
+/*
+ * Wrapped once, here, rather than at every call site — there are six, two of
+ * them are deferred drains, and a seventh added later would slip past a list.
+ * The declarations above are left exactly as they are: every internal call
+ * (`selectModelByLabel` → `closeModelMenu`) resolves through these bindings at
+ * call time, so nested operations are counted as well.
+ */
+{
+  const read = readModelOptions;
+  const select = selectModelByLabel;
+  const close = closeModelMenu;
+  readModelOptions = (...args) => trackPicker(read(...args));
+  selectModelByLabel = (...args) => trackPicker(select(...args));
+  closeModelMenu = (...args) => trackPicker(close(...args));
+}
+
+/**
+ * How long an inject may wait for a running picker operation.
+ *
+ * Derived, never typed: the rule is that a timeout must outlast the work it
+ * waits on, and the one it replaces (the worker's 5s) is what broke that rule.
+ * The longest an operation can take is the picker mounting, the menu opening,
+ * one close-and-reopen retry, and the close.
+ */
+const PICKER_YIELD_BUDGET_MS = PICKER_READY_BUDGET_MS + 2 * MENU_OPEN_BUDGET_MS
+  + MENU_CLOSE_BUDGET_MS;
+
+/**
+ * Wait until no picker operation is running, or the budget is spent.
+ *
+ * A loop, not one await: an operation that finishes can start its tracked
+ * close *after* the promise we were holding settled, and that close is exactly
+ * the one that matters. Returns whether it waited at all, so the trace can say.
+ *
+ * The timer here is a page timer and is throttled in a hidden tab, which is
+ * acceptable for once: the worker activates the tab before every inject, and
+ * the picker operations themselves are clocked by `waitForDom`, so this only
+ * bounds how long we are prepared to wait, never how soon we notice.
+ */
+async function waitForPickerIdle(budgetMs = PICKER_YIELD_BUDGET_MS) {
+  if (pickerInFlight === 0) return false;
+  const deadline = performance.now() + budgetMs;
+  while (pickerInFlight > 0 && performance.now() < deadline) {
+    const left = Math.max(0, deadline - performance.now());
+    await Promise.race([pickerIdle, new Promise((r) => setTimeout(r, left))]);
+  }
+  return true;
 }
 
 /**

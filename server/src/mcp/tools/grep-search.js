@@ -55,8 +55,36 @@ export async function grepSearch(args, context) {
   const { pattern, isRegex = false, includes = [], maxResults = 50, contextLines = 0 } = args;
   const { workspace } = context;
 
+  /*
+   * `a|b|c` means alternatives, whatever `isRegex` says.
+   *
+   * `isRegex` defaults to false, which is `--fixed-strings` — so
+   * `parseToolCall|tool_call|extractToolCalls|handleToolCall` searched for that
+   * literal string, pipes and all, and answered **0 matches**. The same search
+   * as a regex, or as the array this tool already accepts, finds **26**.
+   * Writing alternation with `|` is the most ingrained grep habit there is, and
+   * a model told "0 matches" does not suspect the tool: it concludes the code is
+   * not there. Measured in one session on 2026-09-27 — three alternation
+   * searches came back empty and the model read a 131 KB file three times to
+   * find what the first search should have returned. That is the failure
+   * `semantic_search` was deleted for: a broken tool is worse than a missing one.
+   *
+   * Narrow on purpose: only identifier-like alternatives with no spaces, so a
+   * literal `a || b`, a shell pipe, or a markdown table row is still searched
+   * exactly as written. The result says it happened, so the model learns the
+   * array form rather than depending on the rescue.
+   */
+  const ALTERNATION = /^[\w.$:-]+(?:\|[\w.$:-]+)+$/;
+  let splitAlternation = false;
   const patterns = (Array.isArray(pattern) ? pattern : [pattern])
-    .map((p) => String(p ?? '').trim())
+    .flatMap((p) => {
+      const text = String(p ?? '').trim();
+      if (!isRegex && ALTERNATION.test(text)) {
+        splitAlternation = true;
+        return text.split('|');
+      }
+      return [text];
+    })
     .filter(Boolean);
 
   if (patterns.length === 0) {
@@ -118,7 +146,13 @@ export async function grepSearch(args, context) {
     }
     matches = await nodeSearch(patterns, workspace, probe);
   }
-  return groupByFile(patterns, matches, limit);
+  const result = groupByFile(patterns, matches, limit);
+  // Its own field rather than `note`, which already carries truncation.
+  if (splitAlternation) {
+    result.alternation = `Searched ${patterns.length} alternatives separately. `
+      + 'Pass an array — ["a", "b"] — or isRegex: true to say so directly.';
+  }
+  return result;
 }
 
 /**
