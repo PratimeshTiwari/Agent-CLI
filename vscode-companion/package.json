@@ -1,8 +1,8 @@
 {
   "name": "cli-agent-companion",
   "displayName": "Agent CLI Companion",
-  "description": "Editor state, diagnostics, Add to Agent Chat, and plan review for the local Agent CLI.",
-  "version": "1.7.0",
+  "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
+  "version": "1.8.0",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"
@@ -50,6 +50,28 @@
         "command": "agentCli.commentOnPlan",
         "title": "Comment on Plan Section",
         "category": "Agent CLI"
+      },
+      {
+        "command": "agentCli.focusChat",
+        "title": "Focus Chat",
+        "category": "Agent CLI"
+      },
+      {
+        "command": "agentCli.startAgent",
+        "title": "Start Agent",
+        "category": "Agent CLI"
+      },
+      {
+        "command": "agentCli.acceptDiff",
+        "title": "Accept Agent Edit",
+        "category": "Agent CLI",
+        "icon": "$(check)"
+      },
+      {
+        "command": "agentCli.rejectDiff",
+        "title": "Reject Agent Edit",
+        "category": "Agent CLI",
+        "icon": "$(close)"
       }
     ],
     "keybindings": [
@@ -58,6 +80,11 @@
         "key": "ctrl+alt+l",
         "mac": "cmd+alt+l",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "agentCli.focusChat",
+        "key": "ctrl+alt+j",
+        "mac": "cmd+alt+j"
       }
     ],
     "menus": {
@@ -72,6 +99,14 @@
         {
           "command": "agentCli.commentOnPlan",
           "when": "false"
+        },
+        {
+          "command": "agentCli.acceptDiff",
+          "when": "resourceScheme == agent-cli-proposed"
+        },
+        {
+          "command": "agentCli.rejectDiff",
+          "when": "resourceScheme == agent-cli-proposed"
         }
       ],
       "editor/title": [
@@ -79,6 +114,16 @@
           "command": "agentCli.addToChat",
           "group": "navigation@1",
           "when": "editorTextFocus"
+        },
+        {
+          "command": "agentCli.acceptDiff",
+          "group": "navigation@1",
+          "when": "resourceScheme == agent-cli-proposed"
+        },
+        {
+          "command": "agentCli.rejectDiff",
+          "group": "navigation@2",
+          "when": "resourceScheme == agent-cli-proposed"
         }
       ],
       "editor/lineNumber/context": [
@@ -87,10 +132,31 @@
           "group": "navigation@1"
         }
       ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentCli",
+          "title": "Agent CLI",
+          "icon": "media/agent.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentCli": [
+        {
+          "type": "webview",
+          "id": "agentCli.chat",
+          "name": "Chat"
+        }
+      ]
     }
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/PratimeshTiwari/Agent-CLI"
+  },
+  "scripts": {
+    "vscode:prepublish": "node scripts/sync-panel.js"
   }
 }

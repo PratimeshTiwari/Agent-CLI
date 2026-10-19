@@ -15,7 +15,10 @@
  */
 
 import { WebSocketServer as WS } from 'ws';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import * as paths from '../core/paths.js';
 import { logTrace } from '../core/trace-log.js';
 import { resolveEffort } from '../core/effort.js';
 import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/restart.js';
@@ -70,10 +73,76 @@ const EXTENSION_ORIGIN = /^(chrome-extension|moz-extension|safari-web-extension)
  */
 const NON_FATAL_EXTENSION_OPS = new Set(['discover_models', 'switch_model', 'focus_tab']);
 
+/**
+ * A VS Code webview — the companion's chat panel (v5.2).
+ *
+ * Browser-enforced like the extension's: a website cannot claim this scheme.
+ * Unlike the extension it is admitted **with the bridge token**, because any
+ * installed VS Code extension can open a webview, and a webview is a far
+ * cheaper thing to get running than a Chrome extension with the bridge's id.
+ */
+const EDITOR_ORIGIN = /^vscode-webview:\/\//i;
+
 export function isAllowedOrigin(origin) {
   if (!origin) return true;              // not a browser page
-  return EXTENSION_ORIGIN.test(origin);
+  return EXTENSION_ORIGIN.test(origin) || EDITOR_ORIGIN.test(origin);
 }
+
+/**
+ * May this connection in, given its Origin and the token it presented?
+ *
+ * The Chrome extension is admitted on its Origin alone, as since P0: browsers
+ * cannot forge it, and an extension has no way to read a file on disk to learn
+ * a token. Everything else that `isAllowedOrigin` lets through — a local
+ * process sending no Origin, or a VS Code webview — must present the token
+ * written to `.agent/state/bridge.json`.
+ *
+ * That closes the gap P0 left open ("another process running as the same user
+ * can still connect … needs a shared secret the extension can read, which needs
+ * a setup step"): the secret is one the *companion* can read, and the extension
+ * never needed it. A process that can read the user's files can still read the
+ * token — this stops a stray local client, not a hostile user account.
+ *
+ * @param {{origin?: string, token?: string|null, expected?: string|null}} args
+ */
+export function admitClient({ origin, token = null, expected = null } = {}) {
+  if (!isAllowedOrigin(origin)) return false;
+  if (origin && EXTENSION_ORIGIN.test(origin)) return true;
+  if (!expected) return true; // no token issued (tests, a server not started through start())
+  if (typeof token !== 'string' || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
+
+/** The token a client put on its URL: `ws://127.0.0.1:7777/?token=…`. */
+export function tokenFromUrl(url) {
+  try {
+    return new URL(url || '/', 'ws://127.0.0.1').searchParams.get('token');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Message types the extension's worker handles itself and never shows a panel.
+ *
+ * Everything else sent to the extension is passed straight to the side panel
+ * by the worker's `default:` branch — and is therefore also what an editor
+ * panel needs. Mirrors `handleServerMessage` in
+ * `extension/src/background/socket.js`; `editor-routing.test.js` reads that
+ * switch and fails if the two disagree.
+ *
+ * A denylist, deliberately. An allowlist of panel types would silently starve
+ * the editor of the next request type someone adds, and a front-end that never
+ * receives a *request* deadlocks the turn waiting on it. The cost of the
+ * denylist is the other direction — a new worker-only type reaching an editor
+ * that ignores it — except for `inject_prompt`, which is on this list and
+ * pinned by a test, because a panel that received one would be handed the
+ * user's prompt to type into nothing.
+ */
+export const WORKER_ONLY_TYPES = new Set([
+  'inject_prompt', 'new_chat', 'open_thread', 'end_session', 'focus_tab',
+  'discover_models', 'switch_model', 'heartbeat_ack', 'stop_generation',
+]);
 
 export class WebSocketServer {
   constructor({ port, agentLoop }) {
@@ -132,19 +201,27 @@ export class WebSocketServer {
    * needs a setup step — noted in CLAUDE.md → What's next rather than guessed at.
    */
   async start() {
+    // One per launch. Issued before the socket exists so no connection can
+    // arrive in a window where there is no token to check against.
+    this.token = randomBytes(24).toString('hex');
     return new Promise((resolve, reject) => {
       this.wss = new WS({
         port: this.port,
         host: LOOPBACK,
         verifyClient: ({ origin, req }, done) => {
-          if (isAllowedOrigin(origin)) return done(true);
+          if (admitClient({ origin, token: tokenFromUrl(req?.url), expected: this.token })) return done(true);
+          const badOrigin = !isAllowedOrigin(origin);
           logError(this.agentLoop?.workspace, {
             flow: 'bridge',
-            op: 'rejected_origin',
-            message: `Refused a connection from origin ${origin || '(none)'}`,
+            op: badOrigin ? 'rejected_origin' : 'rejected_token',
+            message: badOrigin
+              ? `Refused a connection from origin ${origin || '(none)'}`
+              : `Refused a connection from ${origin || 'a local process'} without the bridge token`,
           });
           // 403, and say why: a silent drop here reads as "the bridge is down".
-          done(false, 403, 'Only the Agent CLI browser extension may connect');
+          done(false, 403, badOrigin
+            ? 'Only the Agent CLI browser extension may connect'
+            : 'Read the token from .agent/state/bridge.json');
         },
       });
 
@@ -156,6 +233,7 @@ export class WebSocketServer {
         // When the socket opened, so the extension's arrival can be timed
         // against it. See `extensionConnectMs` below.
         this.listeningAt = Date.now();
+        this._writeBridgeFile();
         resolve();
       });
 
@@ -165,7 +243,46 @@ export class WebSocketServer {
     });
   }
 
+  /**
+   * Where a local client — the VS Code companion's panel — finds this bridge.
+   *
+   * The port is 7777 unless `--port` says otherwise, and the panel has no other
+   * way to learn it. The pid lets a reader recognise a file left by a run that
+   * crashed before `stop()`. Several agents on one workspace overwrite each
+   * other; the newest wins, which is the one most likely to be in front of you.
+   * 0600, because it carries the token.
+   */
+  _writeBridgeFile() {
+    const workspace = this.agentLoop?.workspace;
+    if (!workspace) return;
+    try {
+      const file = paths.statePath(workspace, 'bridge.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const body = JSON.stringify({
+        port: this.wss?.address?.()?.port ?? this.port,
+        pid: process.pid,
+        token: this.token,
+        startedAt: new Date().toISOString(),
+      }, null, 2);
+      fs.writeFileSync(file, `${body}\n`, { mode: 0o600 });
+      fs.chmodSync(file, 0o600); // writeFileSync's mode only applies on create
+      this.bridgeFile = file;
+    } catch (err) {
+      logError(workspace, { flow: 'bridge', op: 'bridge_file', message: err.message });
+    }
+  }
+
+  /** Remove `bridge.json` — but only if it is still ours. Another agent may have replaced it. */
+  _removeBridgeFile() {
+    if (!this.bridgeFile) return;
+    try {
+      const current = JSON.parse(fs.readFileSync(this.bridgeFile, 'utf8'));
+      if (current.pid === process.pid && current.token === this.token) fs.unlinkSync(this.bridgeFile);
+    } catch { /* gone already, or unreadable: nothing to clean */ }
+  }
+
   async stop() {
+    this._removeBridgeFile();
     if (this.wss) {
       for (const [id, client] of this.clients) {
         client.ws.close(1000, 'Server shutting down');
@@ -912,8 +1029,13 @@ export class WebSocketServer {
 
   broadcast(clientType, message) {
     let sentCount = 0;
+    // What the worker would show its side panel, an editor panel gets too —
+    // and never what the worker handles itself, whoever the message was for.
+    const editorMay = !WORKER_ONLY_TYPES.has(message?.type);
     for (const [id, client] of this.clients) {
-      if (client.type === clientType || clientType === 'all') {
+      if (client.type === 'editor' && !editorMay) continue;
+      if (client.type === clientType || clientType === 'all'
+        || (clientType === 'extension' && client.type === 'editor')) {
         this._send(client.ws, message);
         sentCount++;
       }

@@ -622,13 +622,19 @@ function appendToolCall(name, args) {
     : preview(args);
 
   div.innerHTML = `
-    <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('expanded')">
+    <div class="tool-header">
       <span class="tool-icon">⚙️</span>
       <span class="tool-name">${escapeHtml(name)}</span>
       <span class="tool-args">${escapeHtml(argsPreview)}</span>
     </div>
     <div class="tool-details">${escapeHtml(JSON.stringify(args, null, 2))}</div>
   `;
+  // A listener, not an `onclick` attribute: an extension page's default CSP
+  // refuses inline handlers, so the attribute never ran — the row could not
+  // be expanded. Same reason as the diff buttons below.
+  div.querySelector('.tool-header').addEventListener('click', (e) => {
+    e.currentTarget.nextElementSibling.classList.toggle('expanded');
+  });
 
   messageStream.appendChild(div);
   scrollToBottom();
@@ -670,14 +676,25 @@ function appendDiff(diffData) {
     </div>
     <div class="diff-content">${diffLines}</div>
     <div class="diff-actions">
-      <button class="diff-btn accept" onclick="respondToDiff('${diffId}', 'accept')">
+      <button class="diff-btn accept" data-action="accept">
         ✅ Accept
       </button>
-      <button class="diff-btn reject" onclick="respondToDiff('${diffId}', 'reject')">
+      <button class="diff-btn reject" data-action="reject">
         ❌ Reject
       </button>
     </div>
   `;
+  /*
+   * Listeners, not `onclick="respondToDiff(…)"`. MV3's default CSP for
+   * extension pages is `script-src 'self'`, which refuses inline handlers —
+   * so Accept and Reject were buttons that did nothing, and a turn parked on
+   * a diff approval could not be answered from the panel at all. The VS Code
+   * webview's CSP refuses them for the same reason. The attribute also
+   * interpolated `diffId` into script, which a closure does not.
+   */
+  div.querySelectorAll('.diff-btn').forEach((btn) => {
+    btn.addEventListener('click', () => window.respondToDiff(diffId, btn.dataset.action));
+  });
 
   messageStream.appendChild(div);
   scrollToBottom();
@@ -1020,7 +1037,7 @@ function clearStreamPartial() {
 }
 
 // ── Diff Actions ────────────────────────────────────────────────────
-// Exposed globally for onclick handlers
+// Global so the diff buttons' listeners and the editor shim can reach it.
 window.respondToDiff = function(diffId, action) {
   chrome.runtime.sendMessage({
     type: 'diff_response',

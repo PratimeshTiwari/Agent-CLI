@@ -116,3 +116,28 @@ describe('no approval UI wired', () => {
     assert.match(resultTurn.result, /REJECTED/);
   });
 });
+
+describe('the approval request carries the proposed file', () => {
+  // The editor panel opens VS Code's own diff view, which needs whole files.
+  test('absPath, isNewFile and newContent come from the engine, not the tool result', async () => {
+    let asked = null;
+    const loop = loopWith({
+      diffEngine: {
+        acceptDiff() {},
+        rejectDiff() {},
+        pendingDiffs: new Map([['d1', { absPath: '/w/src/x.js', isNewFile: false, newContent: 'NEW' }]]),
+      },
+    });
+    loop.callbacks.requestDiffApproval = (d) => {
+      asked = d;
+      setImmediate(() => loop.pendingDiffResolve({ action: 'reject' }));
+    };
+    await resolveDiff(loop, {
+      call: { name: 'edit_file' }, diffResult: DIFF, needsApproval: true, risk, resultTurn: {},
+    });
+    assert.equal(asked.absPath, '/w/src/x.js');
+    assert.equal(asked.isNewFile, false);
+    assert.equal(asked.newContent, 'NEW');
+    assert.equal(asked.patch, '@@', 'the patch still goes, for the panels that draw it');
+  });
+});

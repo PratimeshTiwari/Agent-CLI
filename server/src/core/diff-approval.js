@@ -77,6 +77,11 @@ export async function resolveDiff(loop, { call, diffResult, needsApproval, risk,
     ? { action: 'reject' } // no UI wired: never block forever
     : await new Promise((resolve) => {
       loop.pendingDiffResolve = resolve;
+      // The engine's own record carries the whole proposed file, which the
+      // tool result does not. The editor panel opens it in VS Code's diff view
+      // (v5.2) — a patch alone would mean re-implementing patch application in
+      // an extension with no dependencies. Other front-ends ignore the fields.
+      const pending = loop.diffEngine?.pendingDiffs?.get?.(diffResult.diffId);
       loop.callbacks.requestDiffApproval({
         diffId: diffResult.diffId,
         filePath: diffResult.filePath,
@@ -84,6 +89,9 @@ export async function resolveDiff(loop, { call, diffResult, needsApproval, risk,
         hunks: diffResult.hunks,
         riskLevel: risk.level,
         riskReason: risk.reason,
+        absPath: pending?.absPath,
+        isNewFile: pending?.isNewFile,
+        newContent: pending?.newContent,
       });
     });
 

@@ -1,10 +1,12 @@
 # Agent CLI Companion
 
-A small VS Code extension that lets the CLI agent see what you are looking at, and lets
-you review its plans where you review everything else.
+A VS Code extension that lets the CLI agent see what you are looking at, lets you review
+its plans where you review everything else, and — since 1.8.0 — lets you talk to it from
+the sidebar.
 
-It is **not** a chat panel. The agent lives in your terminal; this is the half of the
-conversation your editor already knows about.
+The agent still lives in your terminal. The chat panel is a second window onto **that**
+agent — one conversation, one browser tab — not a second agent. Until 1.8.0 this README
+said "it is **not** a chat panel"; what changed is in the 1.8.0 entry below.
 
 ## What it does
 
@@ -14,6 +16,7 @@ conversation your editor already knows about.
 | **Editor state** | The active file and cursor position, so `get_editor_state` can answer "what am I looking at?". |
 | **Diagnostics** | The Problems panel, so `get_diagnostics` can check whether an edit compiled. |
 | **Plan review** | Comment on a plan section by section and approve, request changes, or reject — the shape of a PR review, on `implementation_plan.md`. |
+| **Chat** | The Agent CLI icon in the activity bar. `cmd+alt+j` focuses it. Type `@` to attach a file or your selection; edits open in VS Code's diff view with ✓ / ✕ in the title bar. **Agent CLI: Start Agent** opens one in a terminal if none is running. |
 
 ## How it talks to the CLI
 
@@ -54,6 +57,32 @@ is how someone installs the wrong one.
 `server/`. Changing `AGENT_DIR` in `server/src/core/paths.js` means changing it here too.
 
 ## Version history
+
+### 1.8.0 — 2026-10-19
+
+**A chat panel in the sidebar.** Reversing "it is not a chat panel" needs a reason, and it
+is this: the agent's two front-ends were the terminal and a Chrome side panel, and the
+person using it lives in the editor. The thing only an editor panel can do is open the
+agent's edits in the editor's own diff view, and attach the file or selection you are
+looking at with `@`.
+
+- **One renderer.** The page is the Chrome side panel's own (`panel.html`, `panel.js`,
+  `panel.css`, copied in by `scripts/sync-panel.js` at package time), with
+  `media/vscode-shim.js` answering its `chrome.runtime` calls over the agent's WebSocket.
+  A request the side panel handles — a question, a command approval — is handled here by
+  the same code, so it cannot be forgotten in one of them. A panel that ignores a request
+  deadlocks the turn waiting on it.
+- **The socket lives in the webview**, because the extension host is Node without a
+  WebSocket client and this extension has no dependencies. It identifies as `editor`,
+  never `extension` — an extension is sent `inject_prompt`.
+- **It finds the agent through `.agent/state/bridge.json`**, which the agent writes when
+  it starts listening: port, pid (to recognise a file left by a crash), and a per-launch
+  token the panel must present. The Chrome extension still connects on its Origin alone.
+- **A turn started here** runs in the same conversation; the terminal draws it on its next
+  turn. A turn started in the terminal streams here live.
+
+Not done, deliberately: checkpoints/rewind, several parallel sessions, per-hunk decisions
+in the diff view (the panel's card still has the patch).
 
 ### 1.7.0 — 2026-09-26
 
