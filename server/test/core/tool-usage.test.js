@@ -113,3 +113,30 @@ test('a corrupt line does not take the rest of the file with it', () => {
   const u = summariseToolUsage(w, CATALOG);
   assert.equal(u.turns, 2, 'one unparseable line discarded every row after it');
 });
+
+/*
+ * Rounds per turn — the latency lever. Every tool round is a full browser
+ * round trip, so this is what a turn costs; and "faster" is uncheckable
+ * without it.
+ */
+test('rounds per turn are recorded and summarised as median and p90', () => {
+  const w = ws();
+  for (const rounds of [1, 2, 2, 3, 9]) logToolUsage(w, new Map([['read_file', 1]]), { rounds });
+  const u = summariseToolUsage(w, CATALOG);
+  assert.deepEqual(u.rounds, { samples: 5, median: 2, p90: 9 });
+});
+
+test('rows written before rounds existed are unknown, not zero', () => {
+  const w = ws();
+  logToolUsage(w, new Map([['read_file', 1]]));            // an old-style row
+  logToolUsage(w, new Map([['read_file', 1]]), { rounds: 4 });
+  const u = summariseToolUsage(w, CATALOG);
+  assert.equal(u.turns, 2, 'both turns still count as turns');
+  assert.deepEqual(u.rounds, { samples: 1, median: 4, p90: 4 }, 'only the row that recorded it');
+});
+
+test('no rounds recorded anywhere means null, not a zero median', () => {
+  const w = ws();
+  logToolUsage(w, new Map([['read_file', 1]]));
+  assert.equal(summariseToolUsage(w, CATALOG).rounds, null);
+});

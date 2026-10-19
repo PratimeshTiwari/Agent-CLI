@@ -224,6 +224,34 @@ export function looksLikeProviderError(text) {
 }
 
 /**
+ * Did Gemini answer with its usage limit instead of a reply?
+ *
+ * Checked *before* `looksLikeProviderError`, because a limit notice can say
+ * "try again later" and that detector matches it — so a rate limit used to be
+ * re-asked twice, straight into the same wall. A limit is not transient on the
+ * scale of a retry; it resets in hours.
+ *
+ * The wording is a guess: `errors.jsonl` has never held one. That is why the
+ * only response is a `quota_reached` notice and showing the text, which says
+ * when the limit lifts. What to *do* — drop a rung to Flash, wait — is decided
+ * once a real row shows what Gemini says. Short replies only, for the same
+ * reason as the provider detector: an answer that discusses rate limits is
+ * long, a limit notice is not.
+ */
+export function looksLikeQuotaReached(text) {
+  if (typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length > 400) return false;
+
+  return [
+    /\b(?:you'?ve|you have) reached (?:your|the) (?:[\w.-]+ ){0,4}limit\b/i,
+    /\b(?:your|the) (?:[\w.-]+ ){0,3}limit (?:will )?resets?\b/i,
+    /\bupgrade\b.{0,40}\b(?:higher|more) (?:limits|usage)\b/i,
+    /\busage limit\b/i,
+  ].some((re) => re.test(trimmed));
+}
+
+/**
  * Is this request about the code in front of us?
  *
  * The fourth detector, and the only one that reads the **user's** words rather

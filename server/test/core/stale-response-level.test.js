@@ -37,6 +37,8 @@ function loop() {
     released: 0,
     _recordThread() {},
     _releaseExtension() { this.released++; },
+    // The stale branch lives in its own method since the reply-recovery split.
+    _discardStaleReply: AgentLoop.prototype._discardStaleReply,
   };
 }
 

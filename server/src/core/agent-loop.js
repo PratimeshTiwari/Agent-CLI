@@ -9,26 +9,14 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeCodeQuestion } from './drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCodeQuestion } from './drift-detector.js';
+import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
 import { logError, logNotice } from './error-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
 import { logCommand } from './command-log.js';
 
-/**
- * How many times to re-ask when the *provider* errors rather than the model.
- * These are transient by nature, so a couple of attempts clears almost all of
- * them; more than that and something is actually wrong with the tab.
- */
-const MAX_PROVIDER_RETRIES = 2;
-/**
- * How many times to ask the model to fix its own tool-call JSON.
- *
- * Every other retry path here is capped — provider errors above, the
- * unsubmitted-prompt resend and tool redeclaration at one shot each. This one
- * was not, so a model stuck on a formatting habit re-asked forever, a full
- * browser turn each round, and only the user could stop it.
- */
-const MAX_PARSE_RETRIES = 2;
+// MAX_PROVIDER_RETRIES and MAX_PARSE_RETRIES live in reply-recovery.js with
+// the rest of what a failed reply is allowed to cost.
 
 /**
  * How many consecutive rounds may end with a failing tool call before the loop
@@ -532,6 +520,7 @@ export class AgentLoop {
       this._failedRounds = 0;
       this._roundsThisTurn = 0;
       this._providerRetries = 0;
+      this._cancelScheduledRetry();
 
       // Build the full prompt
       const prompt = this.promptBuilder.buildPrompt({
@@ -576,37 +565,7 @@ export class AgentLoop {
     // Allow subagent responses through even when main agent isn't processing —
     // background GitHub tasks use _executeSubagent without setting isProcessing.
     if (!this.isProcessing && !isSubagent) {
-      /*
-       * Two different things wear this one name, and only one is a fault.
-       *
-       * The browser was already generating when the turn ended, so the reply
-       * comes back to a loop that no longer wants it and is correctly thrown
-       * away. *Why* the turn ended is the whole question. If **you** pressed
-       * esc or typed `:stop`, discarding the reply is the feature working —
-       * that is precisely what was asked for, and there is nothing to act on.
-       * If the turn ended because a watchdog gave up, the same row means the
-       * deadline was shorter than the work, which is a real signal and the one
-       * `stale_response` is worth reading for.
-       *
-       * Undifferentiated it was 8 rows saying one of two opposite things. The
-       * discriminator is recorded by `noteUserStop`, because only the front-end
-       * knows a keypress happened.
-       */
-      const stopped = this._userStoppedAt;
-      logError(this.workspace, {
-        flow: 'agent',
-        op: 'stale_response',
-        level: stopped ? 'notice' : 'error',
-        message: stopped
-          ? 'Reply arrived after you stopped the turn, and was discarded'
-          : 'Response arrived after the turn had stopped',
-        detail: stopped
-          ? undefined
-          : 'Nothing asked for this turn to end, so something gave up on it before '
-            + 'the browser had finished — check /logs agent for a timeout or stall '
-            + 'in the seconds before this.',
-      });
-      this._releaseExtension();
+      this._discardStaleReply();
       return;
     }
 
@@ -633,63 +592,7 @@ export class AgentLoop {
     }
 
     if (!complete) {
-      if (payload.timedOut) {
-        /**
-         * The one timeout it is *safe* to retry: the prompt was never sent.
-         *
-         * The content script can tell the difference, and the difference is
-         * the whole question. If it saw Gemini generating, the model has an
-         * answer we failed to read — resending would ask it twice and the
-         * second answer would arrive into a conversation that already
-         * contains the first. If it never saw generation start and scraped
-         * nothing, the submit itself did not happen: the model has no idea
-         * this turn exists, so sending it is not a repeat, it is the first
-         * attempt actually landing.
-         *
-         * Once, and only for the user's own turn. If the submit fails twice
-         * the composer or the send button has changed, and the diagnosis
-         * `describeScrapeFailure` writes is more use than a third try.
-         */
-        if (payload.neverSubmitted && !this._resentUnsubmittedOnce && this._lastMainPrompt) {
-          this._resentUnsubmittedOnce = true;
-          logError(this.workspace, {
-            flow: 'agent', op: 'resend_unsubmitted',
-            message: 'The prompt never reached the composer; sending it again',
-            detail: String(payload.content || '').slice(0, 300),
-          });
-          this.callbacks.sendToPanel({
-            id: randomUUID(),
-            type: 'status',
-            payload: { message: '↻ The prompt never reached the tab — sending it again...' },
-            timestamp: Date.now(),
-          });
-          // Straight back onto the lane, not through `_sendToGemini`: the
-          // characters were counted when it was first built, and the tab
-          // never received them, so counting them twice would overstate the
-          // browser thread by a whole prompt.
-          this._releaseExtension();
-          this.pendingGeminiResponse = true;
-          this._enqueueExtensionRequest({
-            prompt: this._lastMainPrompt,
-            expectResponse: true,
-            targetModel: this.modelConfig.main || 'gemini',
-          });
-          return;
-        }
-
-        logError(this.workspace, {
-          flow: 'agent', op: 'response_timeout',
-          message: 'The browser tab stopped streaming before the reply finished',
-        });
-        this.callbacks.sendToPanel({
-          id: randomUUID(),
-          type: 'agent_response',
-          payload: { content: payload.content || '❌ Agent timed out waiting for Gemini response.' },
-          timestamp: Date.now(),
-        });
-        this.isProcessing = false;
-        this._releaseExtension();
-      }
+      this._onIncompleteReply(payload);
       return;
     }
 
@@ -725,144 +628,11 @@ export class AgentLoop {
         this.promptBuilder.noteDrift();
       }
     } catch (err) {
-      this._parseRetries = (this._parseRetries || 0) + 1;
-      logError(this.workspace, {
-        flow: 'agent', op: 'parse_tool_calls',
-        message: `Malformed tool call: ${err.message}`,
-        detail: content?.slice(0, 1500),
-        // The attempt number is what turns "this happens" into "this happens
-        // and the model never recovers", which are different problems.
-        meta: { attempt: this._parseRetries },
-      });
-
-      /**
-       * Give up asking, and hand the reply over instead.
-       *
-       * The raw text almost always contains the answer in prose — the model
-       * knew what to do and could not wrap it in JSON. Re-asking a third time
-       * costs another full browser turn to get the same malformed reply, and
-       * the turn is already lost; showing the text is the only thing left that
-       * can still be useful to the person waiting.
-       */
-      if (this._parseRetries > MAX_PARSE_RETRIES) {
-        this._parseRetries = 0;
-        this.isProcessing = false;
-        this._releaseExtension();
-        const answer = (cleanContent || content || '').trim();
-        this.callbacks.sendToPanel({
-          id: randomUUID(),
-          type: 'agent_response',
-          payload: {
-            message: '⚠️ **The model could not format a tool call** after '
-              + `${MAX_PARSE_RETRIES + 1} attempts. Its reply is below, unchanged — `
-              + 'it usually contains the answer in prose.\n\n'
-              + (answer || '_It returned nothing readable._'),
-          },
-          timestamp: Date.now(),
-        });
-        return;
-      }
-      // A tool call the model could not format is the clearest signal its grip
-      // on the instructions has slipped. Bring the reminder forward.
-      this.promptBuilder.noteDrift();
-      
-      this.callbacks.sendToPanel({
-        id: randomUUID(),
-        type: 'status',
-        payload: {
-          message: `⚠️ Invalid JSON detected. Self-correcting (${this._parseRetries}/${MAX_PARSE_RETRIES})…`,
-        },
-        timestamp: Date.now(),
-      });
-
-      const errorPrompt = `ERROR PARSING TOOL CALLS:\n${err.message}\n\nPlease fix the JSON formatting of your tool calls and output them again. Ensure you close all tags properly and escape newlines in strings.`;
-      
-      const agentTurn = {
-        role: 'agent',
-        content: content,
-        timestamp: Date.now(),
-      };
-      
-      const systemErrorTurn = {
-        role: 'system',
-        content: errorPrompt,
-        timestamp: Date.now(),
-      };
-      
-      this.conversationHistory.push(agentTurn, systemErrorTurn);
-      this.sessionStore.appendTurn(agentTurn);
-      this.sessionStore.appendTurn(systemErrorTurn);
-      
-      this._sendToGemini('Please correct the previous JSON formatting error.', this.callbacks);
+      this._onUnparseableReply(err, content, cleanContent);
       return;
     }
 
-    // The provider errored rather than the model answering. Re-ask: this is a
-    // transient failure of the tab, and the user should not have to notice it.
-    if (toolCalls.length === 0 && looksLikeProviderError(cleanContent)) {
-      this._providerRetries = (this._providerRetries || 0) + 1;
-      logError(this.workspace, {
-        flow: 'agent', op: 'provider_error',
-        message: cleanContent.trim().slice(0, 200),
-        meta: { attempt: this._providerRetries },
-      });
-      if (this._providerRetries <= MAX_PROVIDER_RETRIES && this.currentObjective) {
-        this._notify(`⚠️ Gemini returned an error — retrying (${this._providerRetries}/${MAX_PROVIDER_RETRIES})…`);
-        this._sendToGemini(this.promptBuilder.buildPrompt({
-          userMessage: this.currentObjective,
-          mode: this.mode,
-          subagents: this.subagentsEnabled,
-          modelConfig: this.modelConfig,
-          objective: this.currentObjective,
-        }), this.callbacks);
-        return;
-      }
-    }
-
-    // The model has forgotten it has tools and refused the task outright. This
-    // is the cost of only sending the system prompt every Nth turn: usually it
-    // remembers, and when it does not the whole turn is wasted on a confident
-    // refusal. Re-send the full prompt and retry the request instead of handing
-    // the user a dead end to retype.
-    //
-    // Once per turn. If it denies its tools again with the definitions right
-    // there in front of it, retrying will not help and the reply is the honest
-    // thing to show.
-    if (toolCalls.length === 0 && looksLikeCapabilityDenial(cleanContent)) {
-      if (!this._deniedToolsOnce && this.currentObjective) {
-        this._deniedToolsOnce = true;
-        logError(this.workspace, {
-          flow: 'agent', op: 'tool_amnesia',
-          message: 'Model denied having tools; re-sent the definitions',
-          detail: cleanContent.slice(0, 400),
-        });
-        this.promptBuilder.requestToolRedeclaration(); // definitions only, not a whole turn-0 prompt
-
-        this.callbacks.sendToPanel({
-          id: randomUUID(),
-          type: 'status',
-          payload: { message: '🧰 Model forgot its tools — resending the tool definitions...' },
-          timestamp: Date.now(),
-        });
-
-        const note = {
-          role: 'system',
-          content: '[System: the model denied having tools; the full tool definitions were re-sent and the request retried.]',
-          timestamp: Date.now(),
-        };
-        this.conversationHistory.push(note);
-        this.sessionStore.appendTurn(note);
-
-        this._sendToGemini(this.promptBuilder.buildPrompt({
-          userMessage: this.currentObjective,
-          mode: this.mode,
-          subagents: this.subagentsEnabled,
-          modelConfig: this.modelConfig,
-          objective: this.currentObjective,
-        }), this.callbacks);
-        return;
-      }
-    }
+    if (this._recoverFromReply(toolCalls, cleanContent)) return;
 
     /**
      * A conclusion written before its own evidence is not shown.
@@ -955,119 +725,368 @@ export class AgentLoop {
     if (toolCalls.length > 0) {
       await this._executeToolCalls(toolCalls);
     } else {
-      // The turn is over, so its handover block can be checked against what it
-      // actually did. Only here: mid-turn there is still work to come, and a
-      // claim made in passing is not the closing report.
-      /*
-       * Turn 0 answered a question about the code without opening anything.
-       *
-       * The failure reported most often from use — *"on the very first prompt
-       * Gemini hallucinates and does not act as an agent"* — and it was recorded
-       * nowhere. `looksLikeCapabilityDenial` catches an *explicit* refusal and
-       * sits at 0.38%; a model that simply answers from priors, denying nothing
-       * and opening nothing, produced no log line at all. So the complaint could
-       * not be told from noise, and any change to turn 0 was a guess.
-       *
-       * Both halves are needed and neither is sufficient. "Answered with no
-       * tools" is correct and common — "what does MVC mean" deserves no
-       * `read_file`. "Asked about the code" is fine if it then went and looked.
-       * It is the pair that is the failure.
-       *
-       * Recorded, never acted on. A first answer from memory is sometimes right,
-       * and re-asking on suspicion would spend a turn to second-guess the model.
-       * This exists to produce a number; what to do about the number is a
-       * decision to make once it exists.
-       */
-      /*
-       * **`_turnEvidence`, not "this reply had no tool calls".**
-       *
-       * Found by running the real agent against the real browser, 2026-09-24.
-       * The prompt was "can you tell me about ui and watcher" — the one that
-       * produced seventeen invented file references in September. This time it
-       * did everything right: `search_files watcher`, `read_file
-       * file-watcher.js`, `search_files ui`, `read_file cli-ui.jsx`, then an
-       * accurate answer. Every claim in it checks out against the source.
-       *
-       * And it logged `turn0_no_tools` — *"answered without opening anything"*
-       * — about a turn that opened four files.
-       *
-       * `isFirstReply` asks whether `conversationHistory` holds an `agent` or
-       * `assistant` turn. A tool round pushes `role: 'system'` and nothing
-       * else, so it stays **true** for every round of turn 0, however many
-       * files get read. The final prose reply then has no tool calls of its
-       * own, and the pair fires.
-       *
-       * So it fired on the *best* outcome available — investigate, then answer
-       * — which is the most common shape of a good turn 0. Left alone it would
-       * have inflated the very rate the turn-0 work is gated on, in the
-       * opposite direction from the blindness fixed in #26, and the gate would
-       * have been wrong twice for opposite reasons.
-       *
-       * The comment below already said what it meant: *"'Asked about the code'
-       * is fine if it then went and looked."* Nothing checked whether it went
-       * and looked. `_turnEvidence` is that check — reset once per user turn in
-       * `handleUserMessage`, counting every tool the turn ran — and it was
-       * already there.
-       */
-      const openedNothing = !this._turnEvidence?.size;
+      this._finishTurn(cleanContent, { isFirstReply, premature });
+    }
+  }
 
-      if (isFirstReply && !premature && openedNothing
-        && looksLikeCodeQuestion(this.currentObjective)) {
-        logError(this.workspace, {
-          flow: 'agent',
-          op: 'turn0_no_tools',
-          message: 'Turn 0 asked about the code and answered without opening anything',
-          detail: `asked: ${String(this.currentObjective || '').slice(0, 200)}`,
-          meta: { effort: this.modelConfig?.effort || null },
-        });
-      }
+  /** A main-lane reply that arrived after its turn ended. Logged, released, dropped. */
+  _discardStaleReply() {
+    /*
+     * Two different things wear this one name, and only one is a fault.
+     *
+     * The browser was already generating when the turn ended, so the reply
+     * comes back to a loop that no longer wants it and is correctly thrown
+     * away. *Why* the turn ended is the whole question. If **you** pressed
+     * esc or typed `:stop`, discarding the reply is the feature working —
+     * that is precisely what was asked for, and there is nothing to act on.
+     * If the turn ended because a watchdog gave up, the same row means the
+     * deadline was shorter than the work, which is a real signal and the one
+     * `stale_response` is worth reading for.
+     *
+     * Undifferentiated it was 8 rows saying one of two opposite things. The
+     * discriminator is recorded by `noteUserStop`, because only the front-end
+     * knows a keypress happened.
+     */
+    const stopped = this._userStoppedAt;
+    logError(this.workspace, {
+      flow: 'agent',
+      op: 'stale_response',
+      level: stopped ? 'notice' : 'error',
+      message: stopped
+        ? 'Reply arrived after you stopped the turn, and was discarded'
+        : 'Response arrived after the turn had stopped',
+      detail: stopped
+        ? undefined
+        : 'Nothing asked for this turn to end, so something gave up on it before '
+          + 'the browser had finished — check /logs agent for a timeout or stall '
+          + 'in the seconds before this.',
+    });
+    this._releaseExtension();
+  }
 
-      this._auditHandover(cleanContent);
-      /*
-       * Re-read the picker, because the user can change it and we would never know.
-       *
-       * `modelMismatch` compares the rung against `modelOptions`, and that list
-       * was requested **once**, 1.5s after the extension identified, and never
-       * again. So the one case the warning exists for — the person switching the
-       * browser to Flash while the agent is on `pro`, which is the documented
-       * worst pairing: a long prompt to the model that handles long prompts worst
-       * — is the case it could not see. The stale list still said Pro was
-       * selected, `planModelSwitch` answered `none`, and `modelMismatch` returned
-       * null. Reported from use, with the tab on Flash and the status bar on PRO.
-       *
-       * At the end of a turn, not during one: this is a message to the extension
-       * rather than a prompt, so it does not take the lane, but a discovery
-       * racing an inject is a tab doing two things at once.
-       *
-       * Throttled, because a turn can be seconds long and the picker changes at
-       * human speed. The cost of being a minute out of date is one late warning;
-       * the cost of asking every turn is a message per turn forever.
-       */
-      const now = Date.now();
-      if (!this._lastModelPoll || now - this._lastModelPoll > MODEL_POLL_INTERVAL_MS) {
-        this._lastModelPoll = now;
-        this.requestModelOptions();
-      }
+  /** A reply that did not complete: a stream chunk, a resendable miss, or a timeout. */
+  _onIncompleteReply(payload) {
+    const verdict = classifyIncomplete(payload, {
+      resentUnsubmittedOnce: this._resentUnsubmittedOnce,
+      hasLastPrompt: Boolean(this._lastMainPrompt),
+    });
 
-      /*
-       * The turn's tool calls, written down.
-       *
-       * Here rather than at dispatch, because a turn is the unit every other
-       * rate in `/logs` uses and per-call rows would make this the busiest
-       * file in `.agent/`. `_turnEvidence` is already the exact tally — kept
-       * for the handover audit — so this costs one append.
-       *
-       * A turn with no tool calls is recorded too: that is not an absence of
-       * data, it is the thing `turn0_no_tools` is about.
-       */
-      logToolUsage(this.workspace, this._turnEvidence || new Map());
+    if (verdict.action === 'resend_unsubmitted') {
+      this._resentUnsubmittedOnce = true;
+      logError(this.workspace, {
+        flow: 'agent', op: 'resend_unsubmitted',
+        message: 'The prompt never reached the composer; sending it again',
+        detail: String(payload.content || '').slice(0, 300),
+      });
+      this.callbacks.sendToPanel({
+        id: randomUUID(),
+        type: 'status',
+        payload: { message: '↻ The prompt never reached the tab — sending it again...' },
+        timestamp: Date.now(),
+      });
+      // Straight back onto the lane, not through `_sendToGemini`: the
+      // characters were counted when it was first built, and the tab
+      // never received them, so counting them twice would overstate the
+      // browser thread by a whole prompt. The image stays in: the tab never
+      // received that either.
+      this._releaseExtension();
+      this.pendingGeminiResponse = true;
+      this._enqueueExtensionRequest({
+        prompt: this._lastMainPrompt,
+        expectResponse: true,
+        targetModel: this.modelConfig.main || 'gemini',
+      });
+      return;
+    }
 
-      // No tool calls — agent is done
+    if (verdict.action === 'give_up_timeout') {
+      logError(this.workspace, {
+        flow: 'agent', op: 'response_timeout',
+        message: 'The browser tab stopped streaming before the reply finished',
+      });
+      this.callbacks.sendToPanel({
+        id: randomUUID(),
+        type: 'agent_response',
+        payload: { content: payload.content || '❌ Agent timed out waiting for Gemini response.' },
+        timestamp: Date.now(),
+      });
       this.isProcessing = false;
-      // Restore background callbacks so GitHub tasks still work
-      if (this._backgroundCallbacks) {
-        this.callbacks = this._backgroundCallbacks;
-      }
+      this._releaseExtension();
+    }
+  }
+
+  /** Tool calls that would not parse: ask for a repair, or hand the prose over. */
+  _onUnparseableReply(err, content, cleanContent) {
+    this._parseRetries = (this._parseRetries || 0) + 1;
+    logError(this.workspace, {
+      flow: 'agent', op: 'parse_tool_calls',
+      message: `Malformed tool call: ${err.message}`,
+      detail: content?.slice(0, 1500),
+      // The attempt number is what turns "this happens" into "this happens
+      // and the model never recovers", which are different problems.
+      meta: { attempt: this._parseRetries },
+    });
+
+    if (classifyParseFailure(this._parseRetries).action === 'hand_over_unparsed') {
+      this._parseRetries = 0;
+      this.isProcessing = false;
+      this._releaseExtension();
+      const answer = (cleanContent || content || '').trim();
+      this.callbacks.sendToPanel({
+        id: randomUUID(),
+        type: 'agent_response',
+        payload: {
+          message: '⚠️ **The model could not format a tool call** after '
+            + `${MAX_PARSE_RETRIES + 1} attempts. Its reply is below, unchanged — `
+            + 'it usually contains the answer in prose.\n\n'
+            + (answer || '_It returned nothing readable._'),
+        },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+    // A tool call the model could not format is the clearest signal its grip
+    // on the instructions has slipped. Bring the reminder forward.
+    this.promptBuilder.noteDrift();
+
+    this.callbacks.sendToPanel({
+      id: randomUUID(),
+      type: 'status',
+      payload: {
+        message: `⚠️ Invalid JSON detected. Self-correcting (${this._parseRetries}/${MAX_PARSE_RETRIES})…`,
+      },
+      timestamp: Date.now(),
+    });
+
+    const errorPrompt = `ERROR PARSING TOOL CALLS:\n${err.message}\n\nPlease fix the JSON formatting of your tool calls and output them again. Ensure you close all tags properly and escape newlines in strings.`;
+
+    const agentTurn = {
+      role: 'agent',
+      content: content,
+      timestamp: Date.now(),
+    };
+
+    const systemErrorTurn = {
+      role: 'system',
+      content: errorPrompt,
+      timestamp: Date.now(),
+    };
+
+    this.conversationHistory.push(agentTurn, systemErrorTurn);
+    this.sessionStore.appendTurn(agentTurn);
+    this.sessionStore.appendTurn(systemErrorTurn);
+
+    this._sendToGemini('Please correct the previous JSON formatting error.', this.callbacks);
+  }
+
+  /**
+   * Recover from a complete reply that is not a usable answer.
+   *
+   * @returns {boolean} true when recovery took the turn over — a retry is
+   *   scheduled or sent — and the reply must not be shown or acted on.
+   */
+  _recoverFromReply(toolCalls, cleanContent) {
+  const verdict = classifyReply({ toolCalls, cleanContent }, {
+    providerRetries: this._providerRetries,
+    deniedToolsOnce: this._deniedToolsOnce,
+    hasObjective: Boolean(this.currentObjective),
+    hasLastPrompt: Boolean(this._lastMainPrompt),
+  });
+
+  if (verdict.kind === 'quota') {
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'quota_reached',
+      message: cleanContent.trim().slice(0, 300),
+      detail: 'Recorded, not retried. Gemini\'s wording here is what decides the eventual response.',
+    });
+  }
+
+  if (verdict.kind === 'provider_error') {
+    this._providerRetries = verdict.attempt;
+    logError(this.workspace, {
+      flow: 'agent', op: 'provider_error',
+      message: cleanContent.trim().slice(0, 200),
+      meta: { attempt: verdict.attempt, delayMs: verdict.delayMs ?? null },
+    });
+  }
+
+  if (verdict.action === 'reask_provider') {
+    const secs = Math.round(verdict.delayMs / 1000);
+    this._notify(`⚠️ Gemini returned an error — retrying in ${secs}s (${verdict.attempt}/${MAX_PROVIDER_RETRIES})…`);
+    /*
+     * The prompt that failed, verbatim — not a rebuild from the objective.
+     *
+     * It was rebuilt from `currentObjective`, which is the user's original
+     * question. When the error came after a tool round, that threw away the
+     * `<tool_results>` the model had asked for and sent it back to the start
+     * of the task with nothing to show for the rounds already run. And
+     * `buildPrompt` is not a pure read: rebuilding marks prompt state as sent
+     * a second time. The unsubmitted resend above learned both of these first.
+     *
+     * Image data is stripped: the tab accepted the upload before it errored,
+     * and pasting it again would attach it twice.
+     */
+    const prompt = stripImageData(this._lastMainPrompt);
+    this._scheduleRetry(verdict.delayMs, () => this._sendToGemini(prompt, this.callbacks));
+    return true;
+  }
+
+  if (verdict.action === 'redeclare_tools') {
+    this._deniedToolsOnce = true;
+    logError(this.workspace, {
+      flow: 'agent', op: 'tool_amnesia',
+      message: 'Model denied having tools; re-sent the definitions',
+      detail: cleanContent.slice(0, 400),
+    });
+    this.promptBuilder.requestToolRedeclaration(); // definitions only, not a whole turn-0 prompt
+
+    this.callbacks.sendToPanel({
+      id: randomUUID(),
+      type: 'status',
+      payload: { message: '🧰 Model forgot its tools — resending the tool definitions...' },
+      timestamp: Date.now(),
+    });
+
+    const note = {
+      role: 'system',
+      content: '[System: the model denied having tools; the full tool definitions were re-sent and the request retried.]',
+      timestamp: Date.now(),
+    };
+    this.conversationHistory.push(note);
+    this.sessionStore.appendTurn(note);
+
+    this._sendToGemini(this.promptBuilder.buildPrompt({
+      userMessage: this.currentObjective,
+      mode: this.mode,
+      subagents: this.subagentsEnabled,
+      modelConfig: this.modelConfig,
+      objective: this.currentObjective,
+    }), this.callbacks);
+    return true;
+  }
+
+    return false;
+  }
+
+  /**
+   * The turn ended with a reply and no tool calls: record it and stand down.
+   *
+   * @param {string} cleanContent
+   * @param {{isFirstReply: boolean, premature: boolean}} facts - captured before the reply was pushed
+   */
+  _finishTurn(cleanContent, { isFirstReply, premature }) {
+    // The turn is over, so its handover block can be checked against what it
+    // actually did. Only here: mid-turn there is still work to come, and a
+    // claim made in passing is not the closing report.
+    /*
+     * Turn 0 answered a question about the code without opening anything.
+     *
+     * The failure reported most often from use — *"on the very first prompt
+     * Gemini hallucinates and does not act as an agent"* — and it was recorded
+     * nowhere. `looksLikeCapabilityDenial` catches an *explicit* refusal and
+     * sits at 0.38%; a model that simply answers from priors, denying nothing
+     * and opening nothing, produced no log line at all. So the complaint could
+     * not be told from noise, and any change to turn 0 was a guess.
+     *
+     * Both halves are needed and neither is sufficient. "Answered with no
+     * tools" is correct and common — "what does MVC mean" deserves no
+     * `read_file`. "Asked about the code" is fine if it then went and looked.
+     * It is the pair that is the failure.
+     *
+     * Recorded, never acted on. A first answer from memory is sometimes right,
+     * and re-asking on suspicion would spend a turn to second-guess the model.
+     * This exists to produce a number; what to do about the number is a
+     * decision to make once it exists.
+     */
+    /*
+     * **`_turnEvidence`, not "this reply had no tool calls".**
+     *
+     * Found by running the real agent against the real browser, 2026-09-24.
+     * The prompt was "can you tell me about ui and watcher" — the one that
+     * produced seventeen invented file references in September. This time it
+     * did everything right: `search_files watcher`, `read_file
+     * file-watcher.js`, `search_files ui`, `read_file cli-ui.jsx`, then an
+     * accurate answer. Every claim in it checks out against the source.
+     *
+     * And it logged `turn0_no_tools` — *"answered without opening anything"*
+     * — about a turn that opened four files.
+     *
+     * `isFirstReply` asks whether `conversationHistory` holds an `agent` or
+     * `assistant` turn. A tool round pushes `role: 'system'` and nothing
+     * else, so it stays **true** for every round of turn 0, however many
+     * files get read. The final prose reply then has no tool calls of its
+     * own, and the pair fires.
+     *
+     * So it fired on the *best* outcome available — investigate, then answer
+     * — which is the most common shape of a good turn 0. Left alone it would
+     * have inflated the very rate the turn-0 work is gated on, in the
+     * opposite direction from the blindness fixed in #26, and the gate would
+     * have been wrong twice for opposite reasons.
+     *
+     * The comment below already said what it meant: *"'Asked about the code'
+     * is fine if it then went and looked."* Nothing checked whether it went
+     * and looked. `_turnEvidence` is that check — reset once per user turn in
+     * `handleUserMessage`, counting every tool the turn ran — and it was
+     * already there.
+     */
+    const openedNothing = !this._turnEvidence?.size;
+
+    if (isFirstReply && !premature && openedNothing
+      && looksLikeCodeQuestion(this.currentObjective)) {
+      logError(this.workspace, {
+        flow: 'agent',
+        op: 'turn0_no_tools',
+        message: 'Turn 0 asked about the code and answered without opening anything',
+        detail: `asked: ${String(this.currentObjective || '').slice(0, 200)}`,
+        meta: { effort: this.modelConfig?.effort || null },
+      });
+    }
+
+    this._auditHandover(cleanContent);
+    /*
+     * Re-read the picker, because the user can change it and we would never know.
+     *
+     * `modelMismatch` compares the rung against `modelOptions`, and that list
+     * was requested **once**, 1.5s after the extension identified, and never
+     * again. So the one case the warning exists for — the person switching the
+     * browser to Flash while the agent is on `pro`, which is the documented
+     * worst pairing: a long prompt to the model that handles long prompts worst
+     * — is the case it could not see. The stale list still said Pro was
+     * selected, `planModelSwitch` answered `none`, and `modelMismatch` returned
+     * null. Reported from use, with the tab on Flash and the status bar on PRO.
+     *
+     * At the end of a turn, not during one: this is a message to the extension
+     * rather than a prompt, so it does not take the lane, but a discovery
+     * racing an inject is a tab doing two things at once.
+     *
+     * Throttled, because a turn can be seconds long and the picker changes at
+     * human speed. The cost of being a minute out of date is one late warning;
+     * the cost of asking every turn is a message per turn forever.
+     */
+    const now = Date.now();
+    if (!this._lastModelPoll || now - this._lastModelPoll > MODEL_POLL_INTERVAL_MS) {
+      this._lastModelPoll = now;
+      this.requestModelOptions();
+    }
+
+    /*
+     * The turn's tool calls, written down.
+     *
+     * Here rather than at dispatch, because a turn is the unit every other
+     * rate in `/logs` uses and per-call rows would make this the busiest
+     * file in `.agent/`. `_turnEvidence` is already the exact tally — kept
+     * for the handover audit — so this costs one append.
+     *
+     * A turn with no tool calls is recorded too: that is not an absence of
+     * data, it is the thing `turn0_no_tools` is about.
+     */
+    logToolUsage(this.workspace, this._turnEvidence || new Map(), { rounds: this._roundsThisTurn || 0 });
+
+    // No tool calls — agent is done
+    this.isProcessing = false;
+    // Restore background callbacks so GitHub tasks still work
+    if (this._backgroundCallbacks) {
+      this.callbacks = this._backgroundCallbacks;
     }
   }
 
@@ -2149,8 +2168,36 @@ export class AgentLoop {
    * that dead turn, so replaying them would be wrong.
    */
   abortExtensionWork() {
+    this._cancelScheduledRetry();
     this.extensionLock.abortAll();
     this.pendingGeminiResponse = null;
+  }
+
+  /**
+   * Run `fn` after `delayMs`, unless the turn dies first.
+   *
+   * The provider retry waits before re-asking, and during that wait the turn
+   * belongs to nobody: the lane is free and no prompt is in flight. So a stop
+   * pressed in those seconds would find nothing to abort, and the retry would
+   * fire into a turn the person had already ended. Every way a turn dies goes
+   * through `abortExtensionWork`, which cancels it; the `isProcessing` check is
+   * the second lock on the same door.
+   */
+  _scheduleRetry(delayMs, fn) {
+    this._cancelScheduledRetry();
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      if (!this.isProcessing) return;
+      fn();
+    }, delayMs);
+    this._retryTimer.unref?.();
+  }
+
+  _cancelScheduledRetry() {
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
   }
 
   /**
