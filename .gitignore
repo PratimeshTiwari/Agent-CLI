@@ -35,3 +35,4 @@ HANDOFF.md
 
 # Claude Code personal settings (never committed)
 .claude/settings.local.json
+vscode-companion/media/panel/

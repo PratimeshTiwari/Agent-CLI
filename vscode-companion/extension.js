@@ -1,9 +1,8 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
-
-// Must match AGENT_DIR in server/src/core/paths.js
-const AGENT_DIR = '.agent';
+const { registerChatPanel } = require('./chat-panel.js');
+const { AGENT_DIR, agentStateDir } = require('./chat-panel-html.js');
 
 /** The workspace root, or null when no folder is open. */
 function workspaceRoot() {
@@ -11,11 +10,17 @@ function workspaceRoot() {
     return folders && folders.length > 0 ? folders[0].uri.fsPath : null;
 }
 
-/** Absolute path to a file in `.agent/state/`, creating the directory. */
+/**
+ * Absolute path to a file in the agent's state directory, creating it.
+ *
+ * Resolved the way the CLI resolves it (`agentStateDir`), so in a monorepo the
+ * files land in `/base/.agent/repo-1/state` where the CLI reads them, not in a
+ * `.agent` of the repo's own that nothing looks at.
+ */
 function statePath(name) {
     const root = workspaceRoot();
     if (!root) return null;
-    const dir = path.join(root, AGENT_DIR, 'state');
+    const dir = agentStateDir(root);
     try {
         fs.mkdirSync(dir, { recursive: true });
     } catch (e) { /* the write below will report it */ }
@@ -336,6 +341,13 @@ function activate(context) {
             planLenses.fire();  // repaint the counts
         }),
     );
+
+    // ── Chat panel ────────────────────────────────────────────────────
+    //
+    // A second front-end on the agent running in the terminal — see
+    // chat-panel.js. Everything above talks to the agent through files; the
+    // panel needs a live stream, so it alone uses the agent's socket.
+    registerChatPanel(context, { workspaceRoot, AGENT_DIR });
 
     // The plan is opened by the CLI, but a user who closes it should be able to
     // get back without hunting through .agent/.
