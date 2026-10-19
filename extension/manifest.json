@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Agent CLI Bridge",
-  "version": "1.42.0",
+  "version": "1.43.0",
   "description": "Connects the local Agent CLI to your gemini.google.com session.",
   "permissions": [
     "tabs",
@@ -33,5 +33,15 @@
   "action": {
     "default_title": "Agent CLI Bridge",
     "default_popup": "side-panel/panel.html?popup=1"
+  },
+  "commands": {
+    "open-floating-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+1",
+        "mac": "Command+Shift+1"
+      },
+      "description": "Open the Agent CLI floating window",
+      "global": true
+    }
   }
 }

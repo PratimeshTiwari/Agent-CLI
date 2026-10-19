@@ -2,6 +2,10 @@ import { connectWebSocket, isSocketOpen, ensureWatchdogAlarm } from './socket.js
 import { sendToServer } from './messaging.js';
 import { getState } from './state.js';
 import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, endSession, stopCompletionTicks } from './content.js';
+import { handleCommand } from './floating.js';
+
+// Keyboard shortcuts from the manifest's `commands` — the global one included.
+chrome.commands?.onCommand.addListener((command) => { handleCommand(command); });
 
 // The toolbar icon opens the popup declared in the manifest, so the
 // open-on-click behaviour this used to set is now ignored by Chrome — a popup
