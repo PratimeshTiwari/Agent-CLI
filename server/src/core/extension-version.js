@@ -49,11 +49,6 @@ export function expectedExtensionVersion() {
   return cached;
 }
 
-/** Test seam — the read is cached for the life of the process. */
-export function resetExtensionVersionCache() {
-  cached = undefined;
-}
-
 /**
  * What to say about the version the extension just reported, or null.
  *

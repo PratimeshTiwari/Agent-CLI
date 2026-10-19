@@ -77,9 +77,23 @@ export function hasClipboardImage() {
  * @returns {{path: string, base64: string, mime: string, sizeKB: number} | null}
  */
 export function readClipboardImage(workspace) {
-  const format = hasClipboardImage();
-  if (!format) return null;
+  const advertised = hasClipboardImage();
+  if (!advertised) return null;
 
+  // PNG first, whatever was advertised: macOS converts a TIFF clipboard on
+  // request, and PNG is what the browser's upload path reliably takes. The
+  // inline reader `/image` used to carry did exactly this and it worked; the
+  // advertised flavour is only the fallback when the conversion yields nothing.
+  const tries = advertised === FORMATS[0] ? [advertised] : [FORMATS[0], advertised];
+  for (const format of tries) {
+    const got = writeClipboardAs(workspace, format);
+    if (got) return got;
+  }
+  return null;
+}
+
+/** One attempt at copying the clipboard out as `format`. Null when it yields nothing. */
+function writeClipboardAs(workspace, format) {
   const file = join(paths.ensureDir(paths.tmpDir(workspace)), `clipboard-${Date.now()}${format.ext}`);
   const wrote = osascript(
     `set theFile to (open for access POSIX file "${file}" with write permission)\n`
@@ -89,10 +103,10 @@ export function readClipboardImage(workspace) {
   if (wrote === null) return null;
 
   try {
-    const bytes = readFileSync(file);
     // `open for access` creates the file whether or not the write succeeded, so
     // an empty one means the clipboard did not give us what it advertised.
     if (statSync(file).size === 0) return null;
+    const bytes = readFileSync(file);
     return {
       path: file,
       base64: bytes.toString('base64'),

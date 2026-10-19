@@ -109,4 +109,3 @@ export async function diagnosticsAfterEdit(workspace, relPath, editedAt, opts = 
   return `<diagnostics path="${relPath}">\n${lines.join('\n')}${more}\n</diagnostics>`;
 }
 
-export { sameFile as _sameFile, REPORTABLE as _REPORTABLE, normalise as _normalise };
