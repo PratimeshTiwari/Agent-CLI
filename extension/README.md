@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.43.0**
+## Current version: **1.44.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,16 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.44.0 — 2026-10-19
+
+- **The shortcut says when it has no key.** Reported the day 1.43.0 shipped: ⌘⇧1
+  did nothing. Chrome applies a manifest's `suggested_key` only on **first
+  install**, so reloading an unpacked extension adds the command with no key
+  bound, silently. The worker now reports the binding (`chrome.commands.getAll`)
+  when it connects, and the agent says how to fix it: set it at
+  `chrome://extensions/shortcuts` and choose **Global**. The separate `mac` key
+  was dropped: `Ctrl` already means ⌘ on a Mac.
 
 ### 1.43.0 — 2026-10-19
 

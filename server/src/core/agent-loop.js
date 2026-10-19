@@ -287,7 +287,12 @@ export class AgentLoop {
      * here, because there is no WebSocket server yet and nothing to send
      * `open_thread` to — hence the flag, drained when an extension identifies.
      */
-    if (resumeSessionId) {
+    if (resumeSessionId && resumeSessionId === this.sessionStore.peekLiveId()) {
+      // The id the last exit printed, for a conversation not filed yet: it is
+      // still the live history, so resuming it is exactly `--continue`.
+      // `resumeSession` would look for an archive that does not exist.
+      this._resumeOnConnect = true;
+    } else if (resumeSessionId) {
       // Named explicitly, so it becomes the current conversation.
       this.sessionStore.resumeSession(resumeSessionId);
       this._resumeOnConnect = true;

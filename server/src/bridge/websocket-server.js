@@ -25,7 +25,7 @@ import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../cor
 import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
 import { logError, logNotice } from '../core/error-log.js';
-import { extensionVersionNotice } from '../core/extension-version.js';
+import { extensionVersionNotice, shortcutNotice } from '../core/extension-version.js';
 
 /**
  * Loopback only. Not `localhost`, which resolves through the hosts file and has
@@ -416,6 +416,16 @@ export class WebSocketServer {
          */
         client.extensionVersion = payload.version || null;
         if (this.agentLoop) this.agentLoop.extensionVersion = client.extensionVersion;
+        const unbound = shortcutNotice(payload.floatingShortcut);
+        if (unbound) {
+          this.broadcast('extension', { id: randomUUID(), type: 'status', payload: { message: unbound }, timestamp: Date.now() });
+          this.agentLoop?._notify?.(unbound);
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'extension', op: 'shortcut_unbound',
+            message: 'The global floating-window shortcut has no key bound',
+            detail: 'Set it at chrome://extensions/shortcuts and choose Global.',
+          });
+        }
         const stale = extensionVersionNotice(client.extensionVersion);
         if (stale) {
           this.broadcast('extension', {

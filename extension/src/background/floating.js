@@ -40,6 +40,20 @@ export async function openFloatingPanel() {
   }
 }
 
+/**
+ * The key the global command is bound to: `'⌘⇧1'`, `''` if none, `null` if
+ * it cannot be read. Never throws — it rides on the identify message.
+ */
+export async function floatingShortcut() {
+  try {
+    const commands = await chrome.commands.getAll();
+    const ours = commands.find((c) => c.name === FLOATING_COMMAND);
+    return ours ? (ours.shortcut || '') : '';
+  } catch {
+    return null;
+  }
+}
+
 export function handleCommand(command) {
   if (command === FLOATING_COMMAND) return openFloatingPanel();
   return null;

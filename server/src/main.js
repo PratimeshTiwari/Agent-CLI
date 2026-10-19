@@ -21,6 +21,7 @@ import { hostEditor } from './core/host-editor.js';
 import { rememberWorkspace } from './core/workspaces.js';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { exitWithFarewell } from './ui/farewell.js';
 import { WebSocketServer } from './bridge/websocket-server.js';
 import { MCPServer } from './mcp/mcp-server.js';
 import { AgentLoop } from './core/agent-loop.js';
@@ -395,12 +396,12 @@ async function main() {
   });
 
   // Graceful shutdown
+  // SIGINT reaches here only when the terminal is not in raw mode (ctrl+c in
+  // the app is a keypress, handled in cli-ui); SIGTERM is someone stopping us.
+  // Either way: the same farewell as /exit and a double ctrl+c.
   const shutdown = async () => {
-    console.log('\n🛑 Shutting down...');
     fileWatcher.stop();
-    taskManager.cleanup();
-    await wsServer.stop();
-    process.exit(0);
+    await exitWithFarewell({ agentLoop, wsServer });
   };
 
   process.on('SIGINT', shutdown);

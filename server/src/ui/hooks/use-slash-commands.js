@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import * as paths from '../../core/paths.js';
 import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../core/restart.js';
+import { exitWithFarewell } from '../farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
 import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
@@ -156,9 +157,10 @@ export async function handleSlashCommand(query, {
     }
 
     if (command === 'exit') {
-      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: '👋 Goodbye! Agent shutting down.', isLocal: true }]);
+      // The screen is cleared and the resume command printed — see farewell.js.
+      // A goodbye row would be wiped before anyone could read it.
       setIsProcessing(false);
-      leave(0, { wsServer, agentLoop, delay: 100 });
+      exitWithFarewell({ agentLoop, wsServer });
       return;
     }
 

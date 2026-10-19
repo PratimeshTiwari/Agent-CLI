@@ -65,9 +65,27 @@ test('the manifest declares it global, on a key Chrome allows for global command
   assert.equal(cmd.global, true);
   // Chrome only suggests Ctrl+Shift+[0-9] for global commands; anything else is silently dropped.
   assert.match(cmd.suggested_key.default, /^Ctrl\+Shift\+[0-9]$/);
+  assert.equal(cmd.suggested_key.mac, undefined, "Ctrl already means ⌘ on a Mac; a separate mac key is one more string to get wrong");
 });
 
 test('the worker routes commands to it', () => {
   const main = readFileSync(resolve(ROOT, 'src/background/main.js'), 'utf8');
   assert.match(main, /chrome\.commands\?\.onCommand\.addListener\(\(command\) => \{ handleCommand\(command\); \}\)/);
+});
+
+test('the binding is reported: the key, empty when unbound, null when unreadable', async () => {
+  const { floatingShortcut, FLOATING_COMMAND } = await load();
+  stubChrome();
+  globalThis.chrome.commands = { getAll: async () => [{ name: FLOATING_COMMAND, shortcut: '⌘⇧1' }] };
+  assert.equal(await floatingShortcut(), '⌘⇧1');
+  // Chrome's state after a reload of an already-installed unpacked extension.
+  globalThis.chrome.commands = { getAll: async () => [{ name: FLOATING_COMMAND, shortcut: '' }] };
+  assert.equal(await floatingShortcut(), '');
+  globalThis.chrome.commands = { getAll: async () => { throw new Error('no commands API'); } };
+  assert.equal(await floatingShortcut(), null);
+});
+
+test('identify carries the binding', () => {
+  const socket = readFileSync(resolve(ROOT, 'src/background/socket.js'), 'utf8');
+  assert.match(socket, /floatingShortcut: await floatingShortcut\(\)/);
 });

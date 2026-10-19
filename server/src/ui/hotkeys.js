@@ -13,8 +13,12 @@
  * That is what keeps typed characters — and only typed characters — in the
  * writing area.
  *
- * ctrl+c is deliberately absent: Ink owns it, and exiting must keep working
- * even if this module has a bug.
+ * ctrl+c is `interrupt` since v5.4, and Ink no longer owns it (`exitOnCtrlC:
+ * false`). Ink's handler unmounted the app and left the process running behind
+ * a dead prompt, so leaving took two presses with a frozen screen between them.
+ * Exiting must keep working even if the UI has a bug, so the *decision* to exit
+ * is not made in React at all: cli-ui counts the presses on the raw stream and
+ * exits on the second within `EXIT_WINDOW_MS`. React only draws the first.
  */
 
 import { EventEmitter } from 'node:events';
@@ -29,7 +33,25 @@ export const HOTKEYS = {
   '\x19': 'copy-code',    // ctrl+y — the last code block in the transcript
   '\x07': 'artifacts',    // ctrl+g — the task list, on its own key and its own state
   '\x02': 'focus-browser', // ctrl+b — bring the Gemini tab to the front
+  '\x03': 'interrupt',    // ctrl+c — clear the prompt; twice to exit (cli-ui decides)
 };
+
+/** Two ctrl+c presses inside this window exit, as in Claude Code. */
+export const EXIT_WINDOW_MS = 2000;
+
+/**
+ * The double-press rule, as a function cli-ui can call and a test can drive.
+ *
+ * @returns {(now?: number) => 'first' | 'exit'}
+ */
+export function interruptGate(windowMs = EXIT_WINDOW_MS) {
+  let last = -Infinity;
+  return (now = Date.now()) => {
+    if (now - last < windowMs) return 'exit';
+    last = now;
+    return 'first';
+  };
+}
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';

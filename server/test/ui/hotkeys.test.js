@@ -35,9 +35,16 @@ test('extractHotkeys', async (t) => {
     assert.deepEqual(r.hotkeys, ['terminal', 'expand']);
   });
 
-  await t.test('leaves ctrl+c alone — Ink owns exiting', () => {
+  // v5.4: ctrl+c is ours. Ink's handler unmounted the app and left the
+  // process alive behind a frozen prompt (measured under the pty).
+  await t.test('takes ctrl+c as interrupt, so Ink never sees it', () => {
     const r = extractHotkeys('\x03');
-    assert.equal(r.text, '\x03');
+    assert.equal(r.text, '');
+    assert.deepEqual(r.hotkeys, ['interrupt']);
+  });
+
+  await t.test('but a pasted 0x03 is text, not an exit', () => {
+    const r = extractHotkeys('\x1b[200~a\x03b\x1b[201~');
     assert.deepEqual(r.hotkeys, []);
   });
 
@@ -88,4 +95,16 @@ test('ctrl+b is a hotkey and does not reach the prompt', () => {
 test('no two hotkeys share a byte', () => {
   const bytes = Object.keys(HOTKEYS);
   assert.equal(new Set(bytes).size, bytes.length);
+});
+
+test('interruptGate: two presses inside the window exit, one does not', async () => {
+  const { interruptGate, EXIT_WINDOW_MS } = await import('../../src/ui/hotkeys.js');
+  const gate = interruptGate();
+  assert.equal(gate(1000), 'first');
+  assert.equal(gate(1000 + EXIT_WINDOW_MS - 1), 'exit');
+
+  const slow = interruptGate();
+  assert.equal(slow(1000), 'first');
+  assert.equal(slow(1000 + EXIT_WINDOW_MS), 'first', 'a press after the window starts over');
+  assert.equal(slow(1000 + EXIT_WINDOW_MS + 10), 'exit');
 });

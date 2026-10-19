@@ -1149,6 +1149,23 @@ A turn started in the panel runs on the server's callbacks, so the terminal draw
 next turn rather than live — the same as the Chrome side panel always has. A turn started in
 the terminal reaches the panel live, through the mirror.
 
+**Chrome assigns a command's `suggested_key` only on first install** — reloading an unpacked
+extension adds the command with nothing bound, and the shortcut silently does nothing. Reported
+the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
+unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
+
+**Exit clears the screen and prints `agent --resume <id>` (v5.4, `ui/farewell.js`).** Every way
+out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — unmounts Ink first (an unmount after the
+clear repaints the last frame over it), clears like `clear`, then prints the command. The id is
+`SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
+`rollover`, so the id at exit is the id in `/history`; `--resume <live id>` before it is filed
+behaves as `--continue`, and a resumed conversation keeps its id (`listSessions` keeps the
+newest row per id). **ctrl+c is no longer Ink's** (`exitOnCtrlC: false`): Ink's handler
+unmounted the app and left the process alive behind a frozen prompt, measured under the pty.
+The second press is decided in cli-ui on the raw stream (`interruptGate`), below React, so a
+broken render cannot trap anyone; App only clears the prompt and shows the hint where `/help`
+sits.
+
 **Two shortcuts reach the panels (v5.3).** `cmd+alt+j` in the editor focuses the chat view —
 next to `cmd+alt+l` (Add to Agent Chat), and deliberately not `cmd+esc`, which the Claude Code
 extension owns, nor `Ctrl+G`, which Chrome grabs globally for its own Gemini panel before the
