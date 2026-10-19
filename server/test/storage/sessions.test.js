@@ -18,13 +18,17 @@ import { join } from 'path';
 import { SessionStore } from '../../src/storage/session-store.js';
 import { AgentLoop } from '../../src/core/agent-loop.js';
 
-let dir;
+let dir, savedHome;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'sess-'));
+  savedHome = process.env.AGENT_CLI_HOME;
   process.env.AGENT_CLI_HOME = join(dir, 'home');
 });
 afterEach(() => {
-  delete process.env.AGENT_CLI_HOME;
+  // Restore, never delete: test/setup-home.js points the home at a temp dir,
+  // and deleting it sends every later test in this file to the real ~/.agent.
+  if (savedHome === undefined) delete process.env.AGENT_CLI_HOME;
+  else process.env.AGENT_CLI_HOME = savedHome;
   rmSync(dir, { recursive: true, force: true });
 });
 

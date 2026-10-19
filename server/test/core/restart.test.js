@@ -16,14 +16,18 @@ import { join } from 'path';
 import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../../src/core/restart.js';
 import { nextWorkspacePath } from '../../src/core/paths.js';
 
-let home, target;
+let home, target, savedHome;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'rst-home-'));
   target = mkdtempSync(join(tmpdir(), 'rst-ws-'));
+  savedHome = process.env.AGENT_CLI_HOME;
   process.env.AGENT_CLI_HOME = home;
 });
 afterEach(() => {
-  delete process.env.AGENT_CLI_HOME;
+  // Restore, never delete: test/setup-home.js points the home at a temp dir,
+  // and deleting it sends every later test in this file to the real ~/.agent.
+  if (savedHome === undefined) delete process.env.AGENT_CLI_HOME;
+  else process.env.AGENT_CLI_HOME = savedHome;
   for (const d of [home, target]) rmSync(d, { recursive: true, force: true });
 });
 
