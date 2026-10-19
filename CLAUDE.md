@@ -490,6 +490,37 @@ real multiplier is **round trips**: every tool call is another full
 inject → think → scrape cycle, so tail latency is paid once per round, not
 once per turn.
 
+**Rounds per turn are recorded since v5.1** (`rounds` on each `tool-usage.jsonl` row; `/logs
+tools` prints median and p90), because nothing did, and "faster" was uncheckable. The same
+release fixed the line most likely inflating them: turn 0 says *"You can make MULTIPLE tool
+calls in a single response"*, but every tool-result turn ended *"Reply once, with exactly one
+of: the next tool call"* — singular, and the line the model reads last and most often. It now
+asks for independent reads and searches in one reply. **Judge it from `/logs tools` after a
+few days of use, not from the argument.**
+
+**One recovery table (`core/reply-recovery.js`, v5.1).** `handleGeminiResponse` was 510 lines
+holding five retry policies inline; the decisions are pure functions now, in the shape of
+`tool-policy.js`, and the handler is under 200 lines. Three behaviours changed, each from the
+log rather than from taste:
+
+- **A provider error re-sends the prompt that failed, verbatim.** It rebuilt one from
+  `currentObjective` — the user's original question — so an error after a tool round threw
+  away the `<tool_results>` the model had asked for and restarted the task. The unsubmitted
+  resend had already learned that a resend cannot be a rebuild; the branch beside it had not.
+  Inline image data is stripped first, because the tab took the upload before it errored.
+- **It waits first: 3s, then 8s, ±20%.** The immediate retry was measured failing — on 09-22
+  the identical error came back six seconds later, and on 09-24 the retry hit a timeout. The
+  timer is Node's, so hidden-tab throttling does not apply. `abortExtensionWork` cancels it,
+  because during the wait the lane is free and a stop would otherwise find nothing to abort.
+- **A usage limit is never retried.** Its wording ("try again later") matches the provider
+  detector, so a limit was re-asked twice into the same wall. `looksLikeQuotaReached` runs
+  first and logs a `quota_reached` notice. The wording is a guess — the log had never held one
+  — so the *response* (drop to Flash? wait?) is deliberately undecided until a row exists.
+
+Verified end to end under the pty harness with a scripted provider error after a tool round:
+the resent prompt was byte-identical to the failed one (622 characters, tool results intact),
+sent 3,381ms later, with `retrying in 3s` on screen and the final answer drawn.
+
 **And the confirming look leaked, once per turn, compounding.** It was scheduled with a bare
 `setTimeout` nobody held, and `stopCompletionTicks` cleared only the interval. Stopping a turn
 from outside — the tab closing, the session ending, the next turn starting — therefore left a

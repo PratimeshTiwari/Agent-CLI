@@ -414,8 +414,17 @@ export class PromptBuilder {
         + 'you need, correct the file, or try the next approach. Only stop and tell the user if '
         + 'the fix needs a decision that is theirs to make, or if you have already tried and it '
         + 'failed the same way. Reply once, with either the next tool call or your final answer.'
-      : 'Reply once, with exactly one of: the next tool call, or your final answer to the '
-        + 'user. To change a file, use edit_file or create_file — do not paste code at them.';
+      /*
+       * "the next tool call", singular, on every round — while turn 0 says
+       * "You can make MULTIPLE tool calls in a single response". The per-round
+       * line is the one the model reads last and most often, so it won, and
+       * independent reads went out one round trip (~8.5s median) at a time.
+       * `/logs tools` reports rounds per turn, which is how this gets judged.
+       */
+      : 'Reply once, with exactly one of: the next tool calls, or your final answer to the '
+        + 'user. Reads and searches that do not depend on each other go in this same reply, '
+        + 'each in its own block — every reply is a full round trip. '
+        + 'To change a file, use edit_file or create_file — do not paste code at them.';
 
     /**
      * The turn's own record, handed back before it reports on itself.

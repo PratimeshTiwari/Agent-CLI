@@ -377,6 +377,16 @@ describe('PromptBuilder — tool results ride in one envelope', () => {
       'three instructions to give one response is both repetitive and self-contradictory');
   });
 
+  test('the trailer invites independent calls in one reply, not one per round trip', () => {
+    // Turn 0 says several calls may share a reply; the per-round line used to
+    // say "the next tool call", singular, and it is the line read last.
+    const pb = new PromptBuilder(ws, ws);
+    const batch = pb.buildToolResultBatch(results);
+    assert.match(batch, /the next tool calls/);
+    assert.match(batch, /do not depend on each other go in this same reply/);
+    assert.doesNotMatch(batch, /the next tool call,/);
+  });
+
   test('every result is still present and attributed to its tool', () => {
     const pb = new PromptBuilder(ws, ws);
     const batch = pb.buildToolResultBatch(results);

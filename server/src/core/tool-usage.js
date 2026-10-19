@@ -24,6 +24,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as paths from './paths.js';
+import { percentile } from './trace-log.js';
 
 const usagePath = (workspace) => path.join(paths.logsDir(workspace), 'tool-usage.jsonl');
 
@@ -33,7 +34,7 @@ const usagePath = (workspace) => path.join(paths.logsDir(workspace), 'tool-usage
  * @param {string} workspace
  * @param {Map<string, number>|Record<string, number>} counts name -> times called
  */
-export function logToolUsage(workspace, counts) {
+export function logToolUsage(workspace, counts, { rounds } = {}) {
   try {
     const entries = counts instanceof Map ? [...counts.entries()] : Object.entries(counts || {});
     const tools = {};
@@ -47,7 +48,15 @@ export function logToolUsage(workspace, counts) {
     // `turn0_no_tools` is about — so it is recorded rather than skipped.
     const file = usagePath(workspace);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, `${JSON.stringify({ time: new Date().toISOString(), tools })}\n`);
+    const row = { time: new Date().toISOString(), tools };
+    /*
+     * Browser round trips this turn took. Each tool round is a full
+     * inject → think → scrape cycle (~8.5s median), so this — not prompt size —
+     * is what a turn costs, and nothing recorded it. "Make it faster" claims
+     * were uncheckable without it. Absent on rows written before it existed.
+     */
+    if (Number.isFinite(rounds) && rounds >= 0) row.rounds = Math.round(rounds);
+    fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
   } catch {
     /* never fail a turn for a counter */
   }
@@ -71,17 +80,19 @@ export function summariseToolUsage(workspace, catalog = []) {
     // Sorted here too: the empty case is the one a fresh workspace hits, and a
     // list that changes order depending on whether anything was logged is a
     // list somebody will eventually diff.
-    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort() };
+    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort(), rounds: null };
   }
 
   const totals = new Map();
   let turns = 0;
   let calls = 0;
   let turnsWithNoTools = 0;
+  const roundSamples = [];
   for (const line of lines) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
     turns += 1;
+    if (Number.isFinite(row.rounds)) roundSamples.push(row.rounds);
     const tools = row.tools && typeof row.tools === 'object' ? row.tools : {};
     const names = Object.keys(tools);
     if (names.length === 0) turnsWithNoTools += 1;
@@ -102,5 +113,9 @@ export function summariseToolUsage(workspace, catalog = []) {
     turnsWithNoTools,
     rows,
     neverCalled: catalog.filter((name) => !totals.has(name)).sort(),
+    // Only over rows that recorded it — older rows are unknown, not zero.
+    rounds: roundSamples.length
+      ? { samples: roundSamples.length, median: percentile(roundSamples, 50), p90: percentile(roundSamples, 90) }
+      : null,
   };
 }

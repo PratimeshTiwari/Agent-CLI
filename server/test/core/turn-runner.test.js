@@ -200,6 +200,16 @@ describe('a provider error is not an answer', () => {
     await s.run();
     assert.match(s.prompts[1], /provider error, not an answer/);
   });
+
+  test('a usage limit ends the task instead of being retried into the same wall', async () => {
+    // It says "try again later", which the provider detector matches.
+    const QUOTA = "You've reached your limit for 2.5 Pro. Try again later.";
+    const s = scripted([reply(QUOTA), reply('never reached')]);
+    const out = await s.run();
+    assert.equal(out.success, false);
+    assert.match(out.error, /usage limit/);
+    assert.equal(s.prompts.length, 1, 'not one retry');
+  });
 });
 
 describe('a bad tool call is repaired, not fatal', () => {

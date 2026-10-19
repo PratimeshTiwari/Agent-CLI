@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeCodeQuestion } from '../../src/core/drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeQuotaReached, looksLikeCodeQuestion } from '../../src/core/drift-detector.js';
 
 describe('looksLikeMultipleDrafts', () => {
   test('catches a reply offering two drafts', () => {
@@ -221,5 +221,33 @@ describe('looksLikeCodeQuestion', () => {
     assert.equal(looksLikeCodeQuestion(null), false);
     assert.equal(looksLikeCodeQuestion(undefined), false);
     assert.equal(looksLikeCodeQuestion('   '), false);
+  });
+});
+
+describe('looksLikeQuotaReached — a usage limit, not an answer and not a glitch', () => {
+  test('catches the plausible shapes of a limit notice', () => {
+    for (const text of [
+      "You've reached your limit for 2.5 Pro until 4:00 PM.",
+      'You have reached your daily usage limit. Upgrade for higher limits.',
+      'Your limit resets at 11:30 PM. Try again later.',
+      "You've reached the Pro model limit",
+    ]) assert.equal(looksLikeQuotaReached(text), true, text);
+  });
+
+  test('an answer that talks about rate limits is not one', () => {
+    for (const text of [
+      'The API has a rate limiter in core/throttle.js that caps requests at 10/s.',
+      'Raise the limit in config.json if uploads are being rejected.',
+      'The loop stops when it reaches MAX_ROUNDS_PER_TURN.',
+      'I updated the retry limit from 2 to 3 in reply-recovery.js.',
+    ]) assert.equal(looksLikeQuotaReached(text), false, text);
+  });
+
+  test('long replies are never a limit notice', () => {
+    assert.equal(looksLikeQuotaReached('x'.repeat(500) + " You've reached your limit."), false);
+  });
+
+  test('a plain provider error is not a quota', () => {
+    assert.equal(looksLikeQuotaReached('Sorry, something went wrong. Please try your request again.'), false);
   });
 });

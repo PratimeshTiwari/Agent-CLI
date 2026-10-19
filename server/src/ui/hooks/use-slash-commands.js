@@ -690,10 +690,15 @@ export async function handleSlashCommand(query, {
             + 'one it needs reminding of — it needs a trigger where it is relevant._'
           : '\n\nEvery tool in the catalog has been called at least once.';
         const quiet = u.turnsWithNoTools;
+        // Rounds are the latency lever: each one is a full browser round trip.
+        const rounds = u.rounds
+          ? `\n\n**Rounds per turn:** median ${u.rounds.median} · p90 ${u.rounds.p90}`
+            + ` _(over ${u.rounds.samples} turn${u.rounds.samples === 1 ? '' : 's'} that recorded it)_`
+          : '';
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
           content: `### 🔧 Tool usage\n\n**${u.calls}** calls over **${u.turns}** turns`
-            + ` — ${quiet} of them used no tools at all.\n\n${used}${never}`,
+            + ` — ${quiet} of them used no tools at all.${rounds}\n\n${used}${never}`,
         }]);
         setIsProcessing(false);
         return;

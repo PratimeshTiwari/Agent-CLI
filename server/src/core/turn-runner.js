@@ -46,7 +46,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { looksLikeProviderError } from './drift-detector.js';
+import { looksLikeProviderError, looksLikeQuotaReached } from './drift-detector.js';
 
 /** Turns before a batch task gives up and returns what it has. */
 export const MAX_BATCH_TURNS = 10;
@@ -151,6 +151,13 @@ export async function runBatchTask({
      * finished answer. Left alone it became the final output and was written to
      * disk as the PR plan.
      */
+    // A usage limit can read "try again later", which the provider detector
+    // matches — and retrying a limit three times only walks into it three
+    // times. Checked first, and the notice is the task's honest result.
+    if (toolCalls.length === 0 && looksLikeQuotaReached(cleanContent)) {
+      return { success: false, error: `Gemini usage limit reached: ${cleanContent.trim()}`, turns };
+    }
+
     if (toolCalls.length === 0 && looksLikeProviderError(cleanContent)) {
       providerRetries += 1;
       if (providerRetries <= maxProviderRetries) {
