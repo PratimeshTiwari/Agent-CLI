@@ -5,6 +5,7 @@ import * as paths from '../../core/paths.js';
 import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../core/restart.js';
 import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
+import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
 import { listCommandDays, readCommands } from '../../core/command-log.js';
@@ -1044,27 +1045,21 @@ export async function handleSlashCommand(query, {
       // `/paste-image` survives only as the name people already learned.
       const fromClipboard = command === 'paste-image' || args.length === 0;
       if (fromClipboard) {
-        if (process.platform !== 'darwin') {
+        if (!canReadClipboardImage()) {
            setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ Clipboard image paste is only supported on macOS.' }]);
            setIsProcessing(false); return;
         }
-        const { execSync } = await import('child_process');
-        const { resolve } = await import('path');
-        const { existsSync, mkdirSync } = await import('fs');
-        
-        try {
-          const clipboardCheck = execSync(`osascript -e 'clipboard info'`, { encoding: 'utf-8', timeout: 5000 }).trim();
-          if (!clipboardCheck.includes('«class PNGf»') && !clipboardCheck.includes('«class TIFF»') && !clipboardCheck.includes('JPEG')) {
-            setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ No image found in clipboard.' }]);
-            setIsProcessing(false); return;
-          }
-          finalFilePath = resolve(paths.ensureDir(paths.tmpDir(agentLoop.workspace)), 'clipboard-image.png');
-          execSync(`osascript -e 'set theFile to (open for access POSIX file "${finalFilePath}" with write permission)\n try\n write (the clipboard as «class PNGf») to theFile\n end try\n close access theFile'`, { timeout: 10000 });
-          ext = '.png';
-        } catch (e) {
-          setHistory(prev => [...prev, { role: 'assistant', content: `❌ Failed to paste image: ${e.message}` }]);
+        // The module, not a copy of it. The copy that lived here wrote every
+        // paste to one fixed `clipboard-image.png`, so a second screenshot
+        // overwrote the first while it was still attached to an unsent prompt
+        // — the exact bug `readClipboardImage`'s per-copy name exists to stop.
+        const image = readClipboardImage(agentLoop.workspace);
+        if (!image) {
+          setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ No image found in clipboard.' }]);
           setIsProcessing(false); return;
         }
+        finalFilePath = image.path;
+        ext = path.extname(image.path).toLowerCase();
       } else {
         const { resolve, extname } = await import('path');
         const { existsSync } = await import('fs');
@@ -1079,7 +1074,7 @@ export async function handleSlashCommand(query, {
       try {
         const { readFileSync } = await import('fs');
         const imageBuffer = readFileSync(finalFilePath);
-        const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' };
+        const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.tiff': 'image/tiff' };
         const mime = mimeTypes[ext] || 'image/png';
         setPendingImage({
           base64: imageBuffer.toString('base64'),

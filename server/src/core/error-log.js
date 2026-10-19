@@ -230,11 +230,6 @@ export function logNotice(workspace, entry) {
   return logError(workspace, { ...entry, level: 'notice' });
 }
 
-/** A logger bound to one workspace and flow, for call sites that log a lot. */
-export function flowLogger(workspace, flow) {
-  return (op, message, detail, meta) => logError(workspace, { flow, op, message, detail, meta });
-}
-
 /**
  * The level of a record, for lines written before the field existed.
  *

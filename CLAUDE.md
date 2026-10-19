@@ -52,6 +52,15 @@ The quoted glob is still what makes the script work under `sh`, which has no glo
 A test that needs a path into the source tree must compute it relative to `src/`, not to itself
 (`prompt-loader.test.js` reads `../../src/prompts`).
 
+**The suite runs against a throwaway home.** `test/setup-home.js` is preloaded by the `test`
+script and points `AGENT_CLI_HOME` at a temp dir. Without it every test that built an
+`AgentLoop` against a temp workspace wrote that workspace's durable history into the real
+`~/.agent/workspaces/` — 3,238 folders by 2026-10-19, twelve more per run, failing nothing. A
+test that sets its own home must **restore** the previous value on teardown, never `delete`
+it, or every later test in that file falls back to the real one; `test-home.test.js` names
+any file that does. Running a single file with bare `node --test` skips the preload — use
+`node --import ./test/setup-home.js --test <file>` for anything that touches sessions.
+
 **Expected state: all tests pass.** They used to be 34/10/24 red: the tests described designs
 the code had replaced — `plan-generator` writes one file per comment under `PR-<n>/` rather than
 one `PR-<n>.md` per PR, and `comment-classifier` stopped categorising by keyword once the AI
@@ -1173,11 +1182,13 @@ The branches in this repo are deliberate: they are the history. `beta-v1` … `b
 `fix/bridge-lock-and-cli`, `v1-stable` are kept on purpose, not left behind. Do not delete
 them, and do not squash their history away.
 
-- Branch from `main`, named `vN.M/short-description`. The series reached **v3.27** and
-  **v4 opens with `v4.0/honest-log`** — v3 was 34 PRs in six days that did not feel like
+- Branch from `main`, named `vN.M/short-description`. The series reached **v3.27**;
+  **v4 opened with `v4.0/honest-log`** — v3 was 34 PRs in six days that did not feel like
   progress, and the reason only became legible once the failure log stopped counting expected
-  states as failures. v4 is the production-readiness plan in
-  `.agent/artifacts/plans/2026-09-27-production-readiness.md`, worked in order.
+  states as failures. v4 was the production-readiness plan in
+  `.agent/artifacts/plans/2026-09-27-production-readiness.md` and closed with #62
+  (`v4.2/fixes-from-use`). **v5 opens with `v5.0/clean-slate`**: cleanup, one recovery policy
+  for the reply path, then an editor chat panel in the VS Code companion.
 - Open a PR into `main`. That is the only way work reaches `main`.
 - A force-push to `main` is not a merge and is not covered by this: it is a repair, it needs
   the owner to ask for it explicitly, and it breaks every open PR targeting `main` plus every
@@ -1277,6 +1288,25 @@ And two traps that were only written down there:
   the bug.
 - **Do not write a derived number into a document here.** Commit counts and test
   counts both drifted within a day. Print the command instead.
+
+### Removed as dead, 2026-10-19
+
+Same method as the audit below — every export, grep for a caller.
+
+- **What the GitHub removal left behind.** `ui/components/KeyHints.jsx` (its only user was
+  `GithubTab`), and `formatTokenExpiry` / `formatPollTime` in `format.js`, which drew the
+  tab's token chip and poll time. Both formatters had green tests and no caller — tests that
+  pin a dead function make it look alive to anyone counting coverage.
+- **`flowLogger`**, a bound-logger convenience nothing ever adopted, and two unused test
+  seams: `edit-diagnostics.js`'s underscore exports and `resetExtensionVersionCache`.
+- **Not dead but duplicated:** `/image` carried its own inline clipboard reader beside the
+  unused `readClipboardImage()`, and the copy wrote every paste to one fixed
+  `clipboard-image.png` — a second screenshot overwrote the first while it was still attached.
+  It calls the module now, which asks for PNG first (macOS converts a TIFF clipboard on
+  request, as the inline copy relied on) and falls back to the advertised flavour.
+
+Left alone on purpose: exports used only inside their own file. Dropping the keyword is churn
+with no behaviour behind it.
 
 ### Removed as dead, 2026-09-16
 
@@ -1759,9 +1789,8 @@ dispatch paths still want scaffolding and are left for the split in P3.
   picker. macOS, zenity, kdialog or PowerShell, and offered **only** where one exists: a menu row
   that silently does nothing is worse than no row, because people press it twice and conclude the
   tool is broken.
-- **Restructure the GitHub PR agent** — 1,649 lines, the largest single feature here. Not
-  deleted, and **not started**: the owner asked for it to be planned on its own once everything
-  else had landed. It now is. This is the next thing to plan.
+- **Restructure the GitHub PR agent** — overtaken: the agent was deleted on 2026-09-19
+  instead. See "GitHub agent — removed 2026-09-19" for what to keep if it is rebuilt.
 - Split `agent-loop.js` — *done.* The sixteen-case slash-command switch moved to
   `core/slash-commands.js` as a function taking the loop, so the dependency reads in the
   signature instead of as seventeen implicit `this.` references. 1,910 → 1,594 lines, interface

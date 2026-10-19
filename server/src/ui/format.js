@@ -510,52 +510,6 @@ export function clampForDisplay(value, maxLines = 15, maxChars = 1200) {
 }
 
 /**
- * The state of the GitHub token, as one short chip.
- *
- * "Is my token still good?" is the question the dashboard could not answer.
- * A lapsed personal access token and a revoked one both surface as the same
- * 401, and by then the poller has already stopped — so the useful moment to
- * say something is while the token still works and the expiry date is known.
- *
- * @param {string|null} expiry - ISO date GitHub reported, or null for no expiry
- * @param {boolean} rejected - the token has already been refused
- * @returns {{ label: string, tone: 'green'|'yellow'|'red' }}
- */
-export function formatTokenExpiry(expiry, rejected = false, now = Date.now()) {
-  if (rejected) return { label: 'token rejected', tone: 'red' };
-  if (!expiry) return { label: 'token ok', tone: 'green' };
-
-  const when = expiry instanceof Date ? expiry.getTime() : new Date(expiry).getTime();
-  if (Number.isNaN(when)) return { label: 'token ok', tone: 'green' };
-
-  const days = Math.floor((when - now) / 86400000);
-  if (days < 0) return { label: 'token expired', tone: 'red' };
-  if (days === 0) return { label: 'token expires today', tone: 'red' };
-  // A week is the point where it becomes something to do rather than something
-  // to know; before that, "ok" is the whole answer and the date is noise.
-  if (days <= 7) return { label: `token expires in ${days}d`, tone: 'yellow' };
-  return { label: 'token ok', tone: 'green' };
-}
-
-/**
- * A poll timestamp as something a person reads at a glance.
- *
- * The dashboard was printing the raw ISO string, which is both unreadable and
- * wide enough to collide with the status text beside it.
- */
-export function formatPollTime(value, now = Date.now()) {
-  if (!value) return 'never';
-  const then = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  if (Number.isNaN(then)) return String(value);
-
-  const secondsAgo = Math.max(0, Math.round((now - then) / 1000));
-  if (secondsAgo < 10) return 'just now';
-  if (secondsAgo < 90) return `${secondsAgo}s ago`;
-  if (secondsAgo < 3600) return `${Math.round(secondsAgo / 60)}m ago`;
-  return new Date(then).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-/**
  * A shell result as a terminal block rather than a JSON dump.
  *
  * `run_command` returns `{exitCode, stdout, stderr, command, cwd}`, and the

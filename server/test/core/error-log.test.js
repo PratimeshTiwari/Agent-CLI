@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { logError, flowLogger, readErrors, summarizeErrors, clearErrors, FLOWS } from '../../src/core/error-log.js';
+import { logError, readErrors, summarizeErrors, clearErrors, FLOWS } from '../../src/core/error-log.js';
 
 const fresh = () => fs.mkdtempSync(path.join(os.tmpdir(), 'errlog-'));
 
@@ -104,13 +104,5 @@ test('readErrors and clearErrors', async (t) => {
     logError(ws, { flow: 'agent', message: 'two' });
     assert.equal(clearErrors(ws), 2);
     assert.deepEqual(readErrors(ws), []);
-  });
-
-  await t.test('a bound flowLogger writes the same shape', () => {
-    const ws = fresh();
-    flowLogger(ws, 'context')('index', 'madge blew up');
-    const [entry] = readErrors(ws);
-    assert.equal(entry.flow, 'context');
-    assert.equal(entry.op, 'index');
   });
 });
