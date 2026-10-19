@@ -77,3 +77,24 @@ export function extensionVersionNotice(reported, expected = expectedExtensionVer
   return `⚠ Extension is **${reported}**, this checkout is **${expected}** — reload it at `
     + 'chrome://extensions. Until then the browser is running different code from the server.';
 }
+
+/**
+ * What to say when the extension's global shortcut has no key, or null.
+ *
+ * Chrome applies a manifest's `suggested_key` only on **first install**. An
+ * unpacked extension that is reloaded — every update here — gains the command
+ * with nothing bound, and pressing ⌘⇧1 does nothing with no error anywhere.
+ * Reported from use the day it shipped. Only the browser can see it, so the
+ * extension reports `floatingShortcut` on identify: `''` means unbound, `null`
+ * means it could not tell (an older build sends nothing at all) and says
+ * nothing rather than guess.
+ *
+ * @param {string|null|undefined} shortcut
+ */
+export function shortcutNotice(shortcut) {
+  if (shortcut !== '') return null;
+  return '⌨ The floating-window shortcut has no key. Chrome only assigns suggested '
+    + 'shortcuts when an extension is first installed, not on reload. Set it at '
+    + 'chrome://extensions/shortcuts → "Open the Agent CLI floating window" '
+    + '(e.g. ⌘⇧1), and choose **Global** so it works from other apps.';
+}

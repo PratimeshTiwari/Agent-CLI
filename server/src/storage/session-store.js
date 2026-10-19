@@ -24,6 +24,18 @@ import {
   ensureParent,
 } from '../core/paths.js';
 
+/**
+ * Sortable, filename-safe, and readable — the id doubles as the date.
+ *
+ * To the millisecond, so the id is readable as a date without opening
+ * anything. It is **not** the sort key: two sessions in the same millisecond
+ * fall back to the random suffix. The index is append-only and its order is
+ * the true one — the only scheme that stays correct across processes.
+ */
+export function newSessionId(now = new Date()) {
+  return `${now.toISOString().replace(/[:.]/g, '-').slice(0, 23)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export class SessionStore {
   constructor(workspacePath) {
     this.workspacePath = workspacePath;
@@ -196,6 +208,35 @@ export class SessionStore {
   }
 
   /**
+   * The id this live conversation will be filed under — and the one printed
+   * when the CLI exits, as `agent --resume <id>`.
+   *
+   * A conversation used to get its id only when the *next* launch filed it,
+   * so at exit there was nothing to print: the answer to "how do I get back
+   * to this?" did not exist yet. Asked for directly: show the resume id on
+   * exit, as Claude Code does. Allocated on first ask and kept in
+   * `session-meta.json` until `rollover` files under it, so the id at exit,
+   * the id in `/history` and the id `--resume` accepts are one id.
+   */
+  liveId() {
+    const existing = this._threadMeta().liveId;
+    if (existing) return existing;
+    const id = newSessionId();
+    this._writeThreadMeta({ liveId: id });
+    return id;
+  }
+
+  /** The live id if one was ever handed out, without allocating one. */
+  peekLiveId() {
+    return this._threadMeta().liveId || null;
+  }
+
+  /** Is there a conversation worth resuming — one the user actually spoke in? */
+  hasUserTurn() {
+    return this.loadHistory().some((t) => t.role === 'user' && typeof t.content === 'string');
+  }
+
+  /**
    * The conversation this session was in before a handover, or `null`.
    *
    * Only meaningful when `getThread()` is null: together they are the third
@@ -241,7 +282,11 @@ export class SessionStore {
         .filter((l) => l.trim())
         .map((l) => { try { return JSON.parse(l); } catch { return null; } })
         .filter(Boolean)
-        .reverse();
+        .reverse()
+        // Newest record per id. A resumed conversation keeps its id (see
+        // `resumeSession`), so filing it again appends a second record for
+        // the same conversation, now longer — one row, the latest.
+        .filter((r, i, all) => all.findIndex((o) => o.id === r.id) === i);
     } catch {
       return []; // no sessions yet is the ordinary first-run case
     }
@@ -299,15 +344,8 @@ export class SessionStore {
     const title = (firstUser.content || 'Untitled')
       .replace(/\s+/g, ' ').trim().slice(0, 72);
 
-    // Sortable, filename-safe, and readable — the id doubles as the date.
-    //
-    // To the millisecond, so the id is readable as a date without opening
-    // anything. It is **not** the sort key: two sessions filed in the same
-    // millisecond fall back to the random suffix, which a test caught by
-    // failing. The index is append-only and its order is the true one — which
-    // is also the only scheme that stays correct across processes.
-    const id = `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23)}-${
-      Math.random().toString(36).slice(2, 6)}`;
+    // The id printed at exit, if one was; see `liveId`.
+    const id = this.peekLiveId() || newSessionId();
 
     const record = {
       id,
@@ -342,6 +380,8 @@ export class SessionStore {
         fs.writeFileSync(this._archivedFile(file, id), body, 'utf-8');
         fs.appendFileSync(this._indexFile(file), JSON.stringify(record) + '\n', 'utf-8');
       }
+      // Filed: the next conversation is a new one with a new id.
+      this._writeThreadMeta({ liveId: null });
     } catch (err) {
       logError(this.workspacePath, {
         flow: 'storage', op: 'rollover',
@@ -432,6 +472,9 @@ export class SessionStore {
         .filter((l) => l.trim())
         .map((l) => JSON.parse(l));
       this.saveHistory(turns);
+      // It goes on being that conversation: exit prints the same id, and
+      // filing it again updates its row rather than adding a copy.
+      this._writeThreadMeta({ liveId: id });
       const record = this.listSessions().find((r) => r.id === id);
       if (record?.thread) this.setThread(record.thread);
       // Its plan and its walkthrough come back with it, or the conversation is
@@ -449,6 +492,8 @@ export class SessionStore {
 
   /** Clear both copies. */
   clear() {
+    // Cleared without filing (`/clear`) is the end of that conversation too.
+    if (this.peekLiveId()) this._writeThreadMeta({ liveId: null });
     for (const file of this._targets) {
       try {
         if (fs.existsSync(file)) fs.unlinkSync(file);

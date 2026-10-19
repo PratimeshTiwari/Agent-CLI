@@ -15,6 +15,7 @@ import { expandPastes, attachedPastes } from './paste.js';
 import { drainChatQueue } from './chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
+import { hotkeys, EXIT_WINDOW_MS } from './hotkeys.js';
 import { canCopy, copyToClipboard } from './clipboard.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
@@ -974,6 +975,28 @@ export function App({ agentLoop, wsServer }) {
     setDiffRequest(null);
   };
 
+  /*
+   * ctrl+c, first press: clear the prompt and say what a second press does.
+   * The second press is not handled here — cli-ui exits on it below React, so
+   * nothing in this component can trap anyone in the app. Subscribed directly
+   * rather than through `useHotkeys`, which goes inert under a menu or a diff:
+   * the way out must not.
+   */
+  const [exitArmed, setExitArmed] = useState(false);
+  useEffect(() => {
+    let timer = null;
+    const onInterrupt = () => {
+      setInput('');
+      setPastes([]);
+      setHistoryIdx(-1);
+      setExitArmed(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setExitArmed(false), EXIT_WINDOW_MS);
+    };
+    hotkeys.on('interrupt', onInterrupt);
+    return () => { hotkeys.off('interrupt', onInterrupt); clearTimeout(timer); };
+  }, []);
+
   // The ctrl+ chords never reach Ink — see ui/hotkeys.js. They are inert while a
   // diff or a menu is up, so nothing can act behind a question the user has not
   // answered yet.
@@ -1373,7 +1396,10 @@ export function App({ agentLoop, wsServer }) {
                 {extensionConnected ? '●' : '○'} agent
               </Text>}
           {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
-          <Text dimColor>{'  ·  '}/help</Text>
+          {/* Where `/help` sits, so the hint costs no row of its own. */}
+          {exitArmed
+            ? <Text color="yellow">{'  ·  '}Press Ctrl+C again to exit</Text>
+            : <Text dimColor>{'  ·  '}/help</Text>}
         </Text>
         </Box>
         <Box flexShrink={0}>

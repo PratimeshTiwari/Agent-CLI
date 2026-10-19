@@ -70,3 +70,17 @@ describe('extensionVersionNotice', () => {
     assert.equal(extensionVersionNotice(1.26, '1.26'), null);
   });
 });
+
+describe('shortcutNotice — the global shortcut nobody bound', async () => {
+  const { shortcutNotice } = await import('../../src/core/extension-version.js');
+  test('an empty binding is explained, with where to fix it', () => {
+    const n = shortcutNotice('');
+    assert.match(n, /chrome:\/\/extensions\/shortcuts/);
+    assert.match(n, /Global/);
+  });
+  test('a bound key, or an older build that reports nothing, says nothing', () => {
+    assert.equal(shortcutNotice('⌘⇧1'), null);
+    assert.equal(shortcutNotice(undefined), null);
+    assert.equal(shortcutNotice(null), null, 'could not read it is not the same as unbound');
+  });
+});

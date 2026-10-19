@@ -2,7 +2,8 @@ import React from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
 import { splitTrailingEnter } from './enter-splitter.js';
-import { extractHotkeys, hotkeys } from './hotkeys.js';
+import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
+import { registerInk, exitWithFarewell } from './farewell.js';
 import { App } from './App.jsx';
 
 /**
@@ -56,6 +57,7 @@ export class CliUI {
 
     const inkStdin = createInkStdin();
     let pasteState = { inPaste: false };
+    const interrupt = interruptGate();
 
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (chunk) => {
@@ -65,7 +67,15 @@ export class CliUI {
       // behind on its way to toggling the transcript.
       const stripped = extractHotkeys(String(chunk), pasteState);
       pasteState = stripped.state;
-      for (const name of stripped.hotkeys) hotkeys.emit(name);
+      for (const name of stripped.hotkeys) {
+        // The second ctrl+c exits from here, below React, so a broken render
+        // can never trap someone in the app. The first is React's to draw.
+        if (name === 'interrupt' && interrupt() === 'exit') {
+          exitWithFarewell({ agentLoop: this.agentLoop, wsServer: this.wsServer });
+          continue;
+        }
+        hotkeys.emit(name);
+      }
       if (!stripped.text) return;
 
       const [text, enter] = splitTrailingEnter(stripped.text);
@@ -76,13 +86,17 @@ export class CliUI {
       if (enter) setImmediate(() => inkStdin.write(enter));
     });
 
-    render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} />, {
+    const instance = render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} />, {
       stdin: inkStdin,
+      // ctrl+c is ours — see hotkeys.js. Ink's default unmounted the app and
+      // left the process alive behind a frozen prompt.
+      exitOnCtrlC: false,
       // Terminals report Shift+Enter as a plain Enter unless the kitty
       // keyboard protocol is negotiated. Ink's auto mode asks (CSI ? u) and
       // only enables it if the terminal answers, so terminals that don't
       // support it are unaffected — they can still send Esc+Enter instead.
       kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] },
     });
+    registerInk(instance);
   }
 }

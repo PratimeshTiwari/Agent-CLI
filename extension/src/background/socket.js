@@ -1,3 +1,4 @@
+import { floatingShortcut } from './floating.js';
 import { getState, setState } from './state.js';
 import { retryDelay, resolvePort, socketUrlFor } from './policy.js';
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
@@ -151,6 +152,12 @@ export async function connectWebSocket() {
       payload: {
         clientType: 'extension',
         version: chrome.runtime.getManifest().version,
+        // What the global shortcut is actually bound to — '' when nothing.
+        // Chrome applies a manifest's `suggested_key` only on first install,
+        // so a reloaded unpacked extension gains the command with no key, and
+        // the shortcut silently does nothing. Only the browser knows; the
+        // server says so in words. See floating.js.
+        floatingShortcut: await floatingShortcut(),
       },
       timestamp: Date.now(),
     }));
