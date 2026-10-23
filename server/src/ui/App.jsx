@@ -973,6 +973,10 @@ export function App({ agentLoop, wsServer }) {
     const resolved = action === 'accept-auto' ? 'accept' : action;
     agentLoop.handleDiffResponse(Date.now().toString(), { diffId: diffRequest.diffId, action: resolved });
     setDiffRequest(null);
+    // `requestDiffApproval` lowered the busy flag to draw this prompt; the
+    // turn carries on after the answer, so raise it again or the rest of the
+    // turn runs with an idle status bar.
+    if (agentLoop.isProcessing) setIsProcessing(true);
   };
 
   /*

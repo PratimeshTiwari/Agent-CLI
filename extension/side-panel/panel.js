@@ -1097,12 +1097,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'agent_response': {
       removeThinking();
       clearStreamPartial();
-      isWaitingForResponse = false;
-      sendBtn.disabled = false;
-      reflectSendState();
       const { body, review } = splitReview(payload.content);
       if (body) appendMessage('agent', body);
       if (review) appendReview(review);
+      // Prose that came with tool calls: the turn goes on, so stay busy and
+      // keep the indicator below what was just drawn.
+      if (payload.continuing) {
+        showThinking();
+        break;
+      }
+      isWaitingForResponse = false;
+      sendBtn.disabled = false;
+      reflectSendState();
       break;
     }
 
