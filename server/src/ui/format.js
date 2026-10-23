@@ -467,9 +467,14 @@ export function summarizeResult(toolName, result) {
           if (/REJECTED/.test(r)) return 'rejected — nothing written';
           if (/APPROVED/.test(r)) return 'approved — written to disk';
         }
-        // { diffId, filePath, hunkCount, status }
+        // { diffId, filePath, hunkCount, patch, status }
         if (r?.filePath) {
           const name = String(r.filePath).split('/').pop();
+          // Lines, like Claude Code's "3 additions and 1 removal": what a
+          // reader wants to know about an edit is how big it is, and a hunk
+          // count says nothing about that.
+          const delta = lineDelta(r.patch);
+          if (delta) return `${name} · +${delta.added} −${delta.removed}`;
           return r.hunkCount ? `${plural(r.hunkCount, 'hunk')} in ${name}` : name;
         }
         break;
@@ -483,6 +488,22 @@ export function summarizeResult(toolName, result) {
   // Generic fallback: compact, single line. clampForDisplay is not usable here —
   // it appends a newline marker, which would break the row.
   return oneLine(result);
+}
+
+/**
+ * Lines added and removed in a unified diff, or null without one. The `+++`
+ * and `---` file headers are not lines of the file.
+ */
+export function lineDelta(patch) {
+  if (typeof patch !== 'string' || !patch) return null;
+  let added = 0;
+  let removed = 0;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) added += 1;
+    else if (line.startsWith('-')) removed += 1;
+  }
+  return { added, removed };
 }
 
 /**

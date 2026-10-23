@@ -10,7 +10,7 @@ import { resolve } from 'path';
 import { displayPath } from '../../core/paths.js';
 
 export async function editFile(args, context) {
-  const { path: filePath, edits } = args;
+  const { path: filePath, edits, append } = args;
   const { workspace, diffEngine } = context;
 
   const absPath = filePath.startsWith('/') ? filePath : resolve(workspace, filePath);
@@ -23,12 +23,13 @@ export async function editFile(args, context) {
     throw new Error(`File not found: ${relPath}. Use create_file to create a new file.`);
   }
 
-  if (!edits || !Array.isArray(edits) || edits.length === 0) {
-    throw new Error('edits must be a non-empty array of { oldText, newText } objects');
+  const appending = typeof append === 'string' && append.length > 0;
+  if (!appending && (!edits || !Array.isArray(edits) || edits.length === 0)) {
+    throw new Error('Give `edits` (a non-empty array of { oldText, newText }) or `append` (text to add at the end)');
   }
 
   // Validate each edit has required fields
-  for (let i = 0; i < edits.length; i++) {
+  for (let i = 0; i < (edits || []).length; i++) {
     const edit = edits[i];
     if (typeof edit.oldText !== 'string') {
       throw new Error(`Edit ${i}: 'oldText' must be a string`);
@@ -39,7 +40,7 @@ export async function editFile(args, context) {
   }
 
   // Generate diff
-  const diff = diffEngine.generateDiff(relPath, edits);
+  const diff = diffEngine.generateDiff(relPath, edits || [], { append: appending ? append : undefined });
 
   return {
     diffId: diff.id,
@@ -53,6 +54,6 @@ export async function editFile(args, context) {
       newStart: h.newStart,
       preview: h.lines.slice(0, 10).join('\n') + (h.lines.length > 10 ? '\n...' : ''),
     })),
-    message: `Proposed ${edits.length} edit(s) to ${relPath}. Waiting for approval.`,
+    message: `Proposed ${appending ? 'an append' : `${edits.length} edit(s)`} to ${relPath}. Waiting for approval.`,
   };
 }

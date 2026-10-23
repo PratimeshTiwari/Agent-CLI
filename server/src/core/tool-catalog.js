@@ -149,15 +149,18 @@ Parameters:
     name: 'edit_file',
     dispatch: 'mcp',
     mutates: true,
-    flash: ` — Edit a file. Args: path (string), edits ([{oldText, newText}])
+    flash: ` — Edit a file. Args: path (string), edits? ([{oldText, newText}]), append? (string: text added at the end)
 `,
     pro: `
 Propose edits to an existing file; the user sees a diff and approves or rejects it per hunk.
 \`oldText\` must match the file exactly, so read it first — on a mismatch, re-read and retry
-rather than guessing.
+rather than guessing. Copy text without read_file's line numbers.
+Building a document from several sources? Create it once, then add each section with \`append\` —
+never rewrite the whole file to add to it.
 Parameters:
   - path (string, required)
-  - edits (array, required): [{ oldText, newText }] — oldText is found, newText replaces it
+  - edits (array): [{ oldText, newText }] — oldText is found, newText replaces it
+  - append (string): text added at the end of the file, no matching. Give edits, append, or both.
 
 `,
   },

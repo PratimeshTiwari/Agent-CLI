@@ -35,6 +35,46 @@ function countOccurrences(haystack, needle) {
   return n;
 }
 
+/**
+ * `oldText` with read_file's `  12: ` prefixes removed, or null when not every
+ * non-blank line has one (then it is not a copied block, and is left alone).
+ */
+export function stripLineNumbers(text) {
+  if (typeof text !== 'string') return null;
+  const lines = text.split('\n');
+  const prefixed = /^\s*\d+: ?/;
+  const nonBlank = lines.filter((l) => l.trim());
+  if (nonBlank.length === 0 || !nonBlank.every((l) => prefixed.test(l))) return null;
+  return lines.map((l) => (l.trim() ? l.replace(/^\s*\d+: ?/, '') : l)).join('\n');
+}
+
+/**
+ * Where the missing text most likely is: the line that best matches oldText's
+ * first non-blank line, shown with its neighbours and numbers. '' when nothing
+ * is close enough to be worth naming.
+ */
+export function nearestMatchNote(content, oldText) {
+  const want = (stripLineNumbers(oldText) ?? oldText).split('\n').map((l) => l.trim()).find(Boolean);
+  if (!want) return '';
+  const lines = content.split('\n');
+  const words = new Set(want.split(/\W+/).filter((w) => w.length > 2));
+  let best = -1;
+  let bestScore = 0;
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (!t) return;
+    let score = t === want ? 1000 : t.includes(want) || want.includes(t) ? 500 : 0;
+    if (!score) for (const w of t.split(/\W+/)) if (words.has(w)) score += 1;
+    if (score > bestScore) { bestScore = score; best = i; }
+  });
+  if (best < 0 || (bestScore < 500 && bestScore < Math.max(2, words.size / 2))) return '';
+  const from = Math.max(0, best - 2);
+  const to = Math.min(lines.length, best + 3);
+  const shown = lines.slice(from, to).map((l, k) => `${String(from + k + 1).padStart(6)}: ${l}`).join('\n');
+  return `\n  Closest match, at line ${best + 1}:\n${shown}\n`
+    + `  Read lines ${Math.max(1, best - 9)}–${best + 11} and copy oldText from there exactly (without the line numbers).`;
+}
+
 export class DiffEngine {
   constructor(workspace) {
     this.workspace = workspace;
@@ -47,7 +87,7 @@ export class DiffEngine {
    * Generate a unified diff for proposed edits to a file.
    * Returns the diff object with metadata for approval.
    */
-  generateDiff(filePath, edits) {
+  generateDiff(filePath, edits, { append } = {}) {
     const absPath = this._resolvePath(filePath);
     const relPath = relative(this.workspace, absPath);
 
@@ -90,9 +130,29 @@ export class DiffEngine {
            >= (originalContent.match(/(?<!\r)\n/g) || []).length;
 
       // Apply search-and-replace edits
-      for (const edit of edits) {
+      for (const raw of edits || []) {
+        let edit = raw;
         if (edit.oldText && edit.newText !== undefined) {
-          const match = this._findMatch(newContent, edit.oldText);
+          let match = this._findMatch(newContent, edit.oldText);
+          /*
+           * The model copied `read_file`'s line numbers into oldText.
+           *
+           * read_file returns `  12: code`, and copying a block from it
+           * verbatim — the obvious move on a large file — brings the
+           * numbers along, so the text never matches. Retried once with
+           * the prefixes stripped, from newText too, and only when *every*
+           * non-blank line carries one: a single `12: ` is ordinary text.
+           */
+          if (!match) {
+            const bare = stripLineNumbers(edit.oldText);
+            if (bare !== null) {
+              const retry = this._findMatch(newContent, bare);
+              if (retry) {
+                match = retry;
+                edit = { oldText: bare, newText: stripLineNumbers(edit.newText) ?? edit.newText };
+              }
+            }
+          }
           if (match && match.ambiguous) {
             // Named, with the count and what to do about it — the standard
             // the rest of the tool errors hold themselves to. "Not found"
@@ -104,9 +164,12 @@ export class DiffEngine {
             );
           }
           if (!match) {
+            // Point at the nearest thing, with line numbers, so the retry
+            // reads twenty lines instead of the whole file again.
             throw new Error(
               `Edit target not found in ${relPath} (even with fuzzy matching):\n` +
-              `  Looking for: ${edit.oldText.substring(0, 80)}...`
+              `  Looking for: ${edit.oldText.substring(0, 80)}...` +
+              nearestMatchNote(newContent, edit.oldText)
             );
           }
           const replacement = crlf
@@ -118,6 +181,19 @@ export class DiffEngine {
             newContent.substring(match.index + match.length);
         }
       }
+    }
+
+    /*
+     * Append: add to the end without matching anything.
+     *
+     * Building a document a piece at a time — read a file, write a section,
+     * read the next — had two ways to add a section, both bad: `create_file`
+     * with the *whole* document again, retyped into the browser and growing
+     * every round; or an exact-match edit against the file's last lines.
+     */
+    if (typeof append === 'string' && append.length > 0) {
+      const sep = newContent && !newContent.endsWith('\n') ? '\n' : '';
+      newContent = `${newContent}${sep}${append}`;
     }
 
     // Generate unified diff

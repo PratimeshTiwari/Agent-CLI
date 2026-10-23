@@ -126,7 +126,13 @@ export class RiskClassifier {
   }
 
   _classifyEdit(args) {
-    const { path: filePath, edits } = args;
+    const { path: filePath, append } = args;
+    // An append removes nothing: it is the addition-only edit below, and was
+    // classed "Could not determine edit safety" — so in auto mode every
+    // section of a document built by appending stopped for approval.
+    const edits = typeof append === 'string' && append.length > 0
+      ? [...(Array.isArray(args.edits) ? args.edits : []), { newText: append }]
+      : args.edits;
 
     // Sensitive files always risky
     if (this._isSensitiveFile(filePath)) {
