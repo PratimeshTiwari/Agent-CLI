@@ -779,7 +779,8 @@ with the exact `read_file` call (`fitReadResult`). `edit_file` retries an `oldTe
 line carries a copied `  12: ` prefix with the prefixes stripped; a miss names the nearest line
 with its neighbours and the range to re-read; and `append` adds to the end without matching, so a
 document is built a section at a time instead of rewriting the whole file each round (classified
-addition-only, so auto mode does not stop on every section). Edit rows read `doc.md · +3 −0`.
+addition-only, so auto mode does not stop on every section). Edit rows read `edit_file doc.md · +3 −0`
+(v5.12 dropped the repeated file name the result first carried).
 
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure

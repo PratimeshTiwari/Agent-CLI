@@ -525,8 +525,10 @@ export function summarizeResult(toolName, result) {
           // Lines, like Claude Code's "3 additions and 1 removal": what a
           // reader wants to know about an edit is how big it is, and a hunk
           // count says nothing about that.
+          // Just the counts: the row already names the file it edited, and
+          // `docs/billing.md · billing.md · +6 −0` said it twice.
           const delta = lineDelta(r.patch);
-          if (delta) return `${name} · +${delta.added} −${delta.removed}`;
+          if (delta) return `+${delta.added} −${delta.removed}`;
           return r.hunkCount ? `${plural(r.hunkCount, 'hunk')} in ${name}` : name;
         }
         break;
