@@ -1,5 +1,5 @@
 /**
- * An edit row says how big the edit is: `big.rb · +3 −1`, like Claude Code's
+ * An edit row says how big the edit is: `edit_file big.rb · +3 −1`, like Claude Code's
  * "3 additions and 1 removal". It said `1 hunk in big.rb`, which is the same
  * row for a one-character fix and a rewritten function.
  */
@@ -17,8 +17,9 @@ test('added and removed lines are counted, file headers are not', () => {
 });
 
 test('the row carries them', () => {
-  assert.equal(summarizeResult('edit_file', { filePath: 'app/big.rb', hunkCount: 1, patch: PATCH }), 'big.rb · +3 −1');
-  assert.equal(summarizeResult('create_file', { filePath: 'doc.md', hunkCount: 1, patch: PATCH }), 'doc.md · +3 −1');
+  // Counts only — the row's subject already names the file.
+  assert.equal(summarizeResult('edit_file', { filePath: 'app/big.rb', hunkCount: 1, patch: PATCH }), '+3 −1');
+  assert.equal(summarizeResult('create_file', { filePath: 'doc.md', hunkCount: 1, patch: PATCH }), '+3 −1');
 });
 
 test('control: no patch, the old wording; a decision still reads as the decision', () => {

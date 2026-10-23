@@ -411,9 +411,61 @@ export function subjectOf(toolName, args, max = 44) {
   const flat = raw.replace(/\s+/g, ' ').trim();
   if (flat.length <= max) return flat;
 
-  // A path keeps its tail; anything else keeps its head, because a command or
-  // a pattern is read left to right and its start is what identifies it.
-  return isPath ? `…${flat.slice(-(max - 1))}` : `${flat.slice(0, max - 1)}…`;
+  // A path keeps its file name and as much of the front as fits; anything
+  // else keeps its head, because a command or a pattern is read left to right
+  // and its start is what identifies it.
+  return isPath ? shortenPath(flat, max) : `${flat.slice(0, max - 1)}…`;
+}
+
+/**
+ * `app/models/billing/invoice.rb` in `max` characters as `app/…/invoice.rb`.
+ *
+ * It was the last `max - 1` characters with `…` in front, which in a monorepo
+ * is `…ling/invoices/line_item.rb` — the first directory, which says *which*
+ * part of the repo, was always the part removed. Keeps the first segment and
+ * the most trailing segments that fit; falls back to the tail when even the
+ * file name does not fit.
+ */
+export function shortenPath(p, max) {
+  if (p.length <= max) return p;
+  const parts = p.split('/');
+  if (parts.length < 3) return `…${p.slice(-(max - 1))}`;
+  const head = parts[0] || '/';
+  let tail = parts[parts.length - 1];
+  for (let i = parts.length - 2; i > 0; i--) {
+    const next = `${parts[i]}/${tail}`;
+    if (`${head}/…/${next}`.length > max) break;
+    tail = next;
+  }
+  const out = `${head}/…/${tail}`;
+  return out.length <= max ? out : `…${p.slice(-(max - 1))}`;
+}
+
+const READ_TOOLS = new Set(['read_file', 'grep_search', 'search_files', 'list_directory', 'find_symbol',
+  'find_references', 'recall_history', 'get_diagnostics', 'get_editor_state']);
+const EDIT_TOOLS = new Set(['edit_file', 'create_file', 'undo_edit']);
+const RUN_TOOLS = new Set(['run_command', 'run_background']);
+
+/**
+ * What a turn did, by kind: `6 reads · 2 edits · 1 command`.
+ *
+ * The summary said `9 actions`, which is the same line for a turn that read
+ * nine files and one that rewrote nine — the difference a reader scrolls back
+ * to find. Empty when the turn ran nothing.
+ */
+export function workBreakdown(actions = []) {
+  let reads = 0; let edits = 0; let runs = 0; let other = 0;
+  for (const a of actions) {
+    if (a.type !== 'tool') continue;
+    const name = a.toolName;
+    if (READ_TOOLS.has(name)) reads += 1;
+    else if (EDIT_TOOLS.has(name)) edits += 1;
+    else if (RUN_TOOLS.has(name)) runs += 1;
+    else other += 1;
+  }
+  const n = (count, one, many) => (count ? [`${count} ${count === 1 ? one : many}`] : []);
+  return [...n(reads, 'read', 'reads'), ...n(edits, 'edit', 'edits'), ...n(runs, 'command', 'commands'),
+    ...n(other, 'other', 'other')].join(' · ');
 }
 
 export function summarizeResult(toolName, result) {
@@ -473,8 +525,10 @@ export function summarizeResult(toolName, result) {
           // Lines, like Claude Code's "3 additions and 1 removal": what a
           // reader wants to know about an edit is how big it is, and a hunk
           // count says nothing about that.
+          // Just the counts: the row already names the file it edited, and
+          // `docs/billing.md · billing.md · +6 −0` said it twice.
           const delta = lineDelta(r.patch);
-          if (delta) return `${name} · +${delta.added} −${delta.removed}`;
+          if (delta) return `+${delta.added} −${delta.removed}`;
           return r.hunkCount ? `${plural(r.hunkCount, 'hunk')} in ${name}` : name;
         }
         break;

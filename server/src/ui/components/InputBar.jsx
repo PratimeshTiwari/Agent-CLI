@@ -202,13 +202,16 @@ export function InputBar({
           */}
           {queued.length > 0 && (
             <Box flexDirection="column" marginBottom={1}>
-              {queued.slice(0, 3).map((q, i) => (
+              {queued.slice(0, 3).map((q, i, shown) => (
                 <Text key={i} dimColor wrap="truncate">
                   {'  ⏸ queued  '}{oneLine(q, 64)}
+                  {/* The take-back had no affordance. On the last row, where
+                      truncation reaches it first and the text survives. */}
+                  {i === shown.length - 1 && queued.length <= 3 ? '  · ↑ to take back' : ''}
                 </Text>
               ))}
               {queued.length > 3 && (
-                <Text dimColor>{'  ⏸ '}… {queued.length - 3} more queued</Text>
+                <Text dimColor wrap="truncate">{'  ⏸ '}… {queued.length - 3} more queued  · ↑ takes back the last</Text>
               )}
             </Box>
           )}

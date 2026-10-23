@@ -215,13 +215,23 @@ describe('subjectOf', () => {
    * the end is the informative half, and `…/ui/transcript.js` beats
    * `server/src/main/java/com/…`.
    */
-  test('a long path is truncated from the left', () => {
+  // v5.12: the middle goes, not the front. Cutting from the left always
+  // removed the first directory — in a monorepo, the part that says which
+  // project — while the file name survived either way.
+  test('a long path keeps its first directory and its file name', () => {
     const long = 'server/src/main/java/com/example/deeply/nested/Thing.java';
-    const out = subjectOf('read_file', { path: long }, 24);
+    const out = subjectOf('read_file', { path: long }, 32);
 
-    assert.ok(out.length <= 24, `${out.length} characters`);
-    assert.ok(out.startsWith('…'));
+    assert.ok(out.length <= 32, `${out.length} characters`);
+    assert.match(out, /^server\/…\//, 'the first directory was dropped');
     assert.match(out, /Thing\.java$/, 'the basename is what identifies it');
+  });
+
+  test('control: too narrow for that, it still ends in the file name', () => {
+    const out = subjectOf('read_file', { path: 'server/src/main/java/VeryLongClassNameHere.java' }, 20);
+    assert.ok(out.length <= 20);
+    assert.match(out, /^…/);
+    assert.ok('VeryLongClassNameHere.java'.endsWith(out.slice(1)) || out.endsWith('.java'));
   });
 
   test('a long command is truncated from the right', () => {
@@ -271,12 +281,14 @@ describe('subjectOf fits the row it is drawn in', () => {
    * `transcript.js` does not fit whole, so "keeps the basename" is not the
    * invariant. "Keeps the tail" is, and it holds at every width.
    */
-  test('whatever survives is the end of the path, at any width', () => {
+  test('whatever survives ends in the file name and fits, at any width', () => {
     const path = 'server/src/ui/transcript.js';
     for (const width of [40, 60, 80, 120]) {
-      const out = subjectOf('read_file', { path }, room(width, 'read_file'));
+      const max = room(width, 'read_file');
+      const out = subjectOf('read_file', { path }, max);
       assert.ok(out.length > 0, `nothing at ${width}`);
-      assert.ok(path.endsWith(out.replace(/^…/, '')), `${out} is not the tail of the path`);
+      assert.ok(out.length <= max, `${out} is wider than its ${max}`);
+      assert.ok(out.endsWith('transcript.js') || path.endsWith(out.replace(/^…/, '')), `${out} lost the file name`);
     }
   });
 });

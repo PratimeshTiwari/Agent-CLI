@@ -9,7 +9,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { clampForDisplay, extractCodeBlocks } from './format.js';
+import { clampForDisplay, extractCodeBlocks, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -297,10 +297,14 @@ export function App({ agentLoop, wsServer }) {
   const slashOpen = slashMatches.length > 0;
   const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
 
+  // The `⇥` beside the mode teaches the key; once it has been used, it has
+  // taught it, and the status bar is the most crowded row on screen.
+  const [modeSwitched, setModeSwitched] = useState(false);
   const cycleMode = React.useCallback(() => {
     const next = nextMode(agentLoop.mode || 'plan');
     agentLoop.mode = next;
     setMode(next);
+    setModeSwitched(true);
   }, [agentLoop]);
 
   // Drives the "(12s · ↑ 1.2k tokens)" counter. One timer, one small state
@@ -473,6 +477,7 @@ export function App({ agentLoop, wsServer }) {
         duration: timed ? ((turn.endTime - turn.startTime) / 1000).toFixed(1) : null,
         worked: parsed.actions.filter((a) => a.type !== 'fs_event').length,
         touched: parsed.actions.reduce((n, a) => (a.type === 'fs_event' ? n + a.paths.length : n), 0),
+        breakdown: workBreakdown(parsed.actions),
       });
       seen.summary = true;
     }
@@ -606,7 +611,15 @@ export function App({ agentLoop, wsServer }) {
    * subtraction already yields more than 3. The floor only ever bound in the
    * case where binding it was wrong.
    */
+  /*
+   * The queued prompts are drawn above the input box — up to three rows, a
+   * "… more" row and a margin — and were never charged here. At 13 rows a
+   * single queued prompt put the frame over the viewport: 28 full clears in
+   * one harness run, on `main`, before v5.12.
+   */
+  const queuedRows = queued.length === 0 ? 0 : Math.min(queued.length, 3) + (queued.length > 3 ? 1 : 0) + 1;
   const liveBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
+    - queuedRows
     - promptExtraRows
     - (slashOpen ? slashMatches.length : 0)
     - (extensionConnected ? 0 : 1)
@@ -1234,6 +1247,7 @@ export function App({ agentLoop, wsServer }) {
                   duration={row.duration}
                   worked={row.worked}
                   touched={row.touched}
+                  breakdown={row.breakdown}
                 />
               </Box>
             );
@@ -1457,7 +1471,7 @@ export function App({ agentLoop, wsServer }) {
           {pendingImage ? <Text color="yellow">{'1 image  ·  '}</Text> : ''}
           {runningTasks > 0 ? <Text color="yellow">{runningTasks} bg{'  ·  '}</Text> : ''}
           <Text color={modeColor(mode)}>{mode}</Text>
-          <Text dimColor> ⇥{'  ·  '}</Text>
+          <Text dimColor>{modeSwitched ? '' : ' ⇥'}{'  ·  '}</Text>
           {/*
             Two different facts, and the row says which one it has.
 

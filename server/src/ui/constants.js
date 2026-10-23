@@ -44,6 +44,7 @@ const SLASH_COMMANDS = [
   { name: 'new', desc: 'Fresh session, and a fresh chat in the browser too', group: 'chat' },
   { name: 'reset', desc: 'Start this repo fresh — its .agent state goes to the trash', group: 'chat' },
   { name: 'undo', desc: 'Undo the last step/action', group: 'work' },
+  { name: 'diff', desc: 'Show the last edit\'s diff', group: 'work' },
   { name: 'skills', desc: 'List, create and open skills the agent can load', group: 'project' },
   { name: 'image', desc: 'Attach an image — a path, bare for the clipboard, remove to drop it', group: 'work' },
   { name: 'plans', desc: 'Past plans, newest first', group: 'project' },
