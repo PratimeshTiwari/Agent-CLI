@@ -54,6 +54,19 @@ export function buildAgentCallbacks({
   setWalkthroughReady,
   wsServer,
 }) {
+  /*
+   * Work is still being reported, so the turn is still running.
+   *
+   * The backstop for every path that lowers the busy flag mid-turn and has no
+   * matching raise — a diff approval lowers it to draw the prompt, and nothing
+   * raised it again when the loop carried on. Read from the loop, never from
+   * React's copy: after `:stop` the loop says idle, and a late status must not
+   * resurrect a spinner for a turn that was stopped.
+   */
+  const reassertBusy = () => {
+    if (agentLoop.isProcessing) setIsProcessing(true);
+  };
+
   return {
     sendToPanel: (msg) => {
       /*
@@ -68,7 +81,11 @@ export function buildAgentCallbacks({
         // replacing dropped every UI-only message and took a real turn off the
         // screen with it, because <Static> counts what it has printed by index.
         setHistory((prev) => mergeLoopHistory(prev, agentLoop.conversationHistory));
-        setIsProcessing(false);
+        // Prose that arrives with tool calls is not the end of the turn. Clearing
+        // here is what dropped the spinner while tools ran and the next round
+        // was written — and, because the task panel draws only when idle, what
+        // put the checklist under the prompt in the middle of a turn.
+        if (!msg.payload?.continuing) setIsProcessing(false);
         setActiveToolCalls([]);
       } else if (msg.type === 'ask_question') {
         setActiveMenu({ type: 'ask_question', payload: msg.payload });
@@ -79,8 +96,10 @@ export function buildAgentCallbacks({
       } else if (msg.type === 'status') {
         setStatus(msg.payload.message || 'Processing...');
         isToolRunningRef.current = false;
+        reassertBusy();
       } else if (msg.type === 'tool_call') {
         setStatus(`Running ${msg.payload.name}...`);
+        reassertBusy();
         isToolRunningRef.current = true;
         setActiveToolCalls(prev => [...prev, { id: nextToolCallId(), type: 'call', name: msg.payload.name, args: msg.payload.args }]);
       } else if (msg.type === 'tool_result') {

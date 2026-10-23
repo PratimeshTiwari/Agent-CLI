@@ -58,6 +58,13 @@ is how someone installs the wrong one.
 
 ## Version history
 
+### 1.8.1 — 2026-10-23
+
+**The panel stays busy for the whole turn.** A reply like "I'll read the file first" plus a
+tool call re-enabled Send and removed "Thinking..." while the tools ran and Gemini wrote the
+next round. The agent now marks that prose `continuing`, and the shared panel page keeps its
+busy state for it. Only the copied-in panel changed.
+
 ### 1.8.0 — 2026-10-19
 
 **A chat panel in the sidebar.** Reversing "it is not a chat panel" needs a reason, and it

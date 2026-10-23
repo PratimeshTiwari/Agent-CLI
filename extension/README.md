@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.44.0**
+## Current version: **1.45.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,14 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.45.0 — 2026-10-23
+
+- **The side panel stays busy for the whole turn.** A reply like "I'll read the
+  file first" plus a tool call re-enabled Send and removed "Thinking..." while
+  the tools ran and Gemini wrote the next round. The agent marks that prose
+  `continuing` now, and the panel keeps its busy state for it. The editor panel
+  is the same page, so it is fixed too (companion 1.8.1).
 
 ### 1.44.0 — 2026-10-19
 

@@ -717,10 +717,20 @@ export class AgentLoop {
       this.conversationHistory.push(agentTurn);
       this.sessionStore.appendTurn(agentTurn);
 
+      /*
+       * `continuing`: this prose came with tool calls, so the turn is not over.
+       *
+       * Every front-end read `agent_response` as "the turn has ended" and
+       * dropped its busy state — so a reply like "I'll read the notes first"
+       * plus a tool call put the terminal back to `● agent` and hid the
+       * `esc to stop` line while the tools ran and Gemini wrote the next
+       * round. Reported from use as "the agent running indicator stops but
+       * gemini runs, executes some command and output updates".
+       */
       this.callbacks.sendToPanel({
         id: randomUUID(),
         type: 'agent_response',
-        payload: { content: cleanContent.trim() },
+        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 },
         timestamp: Date.now(),
       });
       this._sendTaskList();

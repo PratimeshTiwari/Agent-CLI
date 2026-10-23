@@ -574,6 +574,17 @@ Measured across three runs: **18.2–18.5KB, 0 clears, reply present** — again
 baseline where the reply never appeared. A remount reprints without clearing, so it is cheaper
 than the one clear `ctrl+e` pays.
 
+**`agent_response` is not "the turn ended" (v5.5).** It is sent for any reply with prose,
+including prose that comes *with* tool calls, and every front-end treated it as the end: the
+status bar went back to `● agent`, `esc to stop` vanished, and — because the task panel draws
+only when idle — the checklist appeared under the prompt mid-turn. Reported as "the indicator
+stops but gemini runs, executes some command and output updates"; reproduced under the pty. The
+payload carries `continuing` now, and a `tool_call` or `status` re-raises the flag while
+`agentLoop.isProcessing` says the loop is busy, which also covers the diff prompt, which lowers it
+with nothing to raise it again. Keeping React's flag up for the whole turn was the catastrophic
+experiment described above; it is safe now only because rows are committed one at a time — measured at
+0 clears.
+
 Two traps, both of which produced confident wrong numbers first:
 
 - **The harness was measuring nothing repeatable.** `drive2.py` waited a fixed number of
