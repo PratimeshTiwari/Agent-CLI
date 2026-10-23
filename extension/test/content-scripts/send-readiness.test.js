@@ -105,6 +105,29 @@ describe('the paste is checked against the composer, not against preventDefault'
   });
 });
 
+/**
+ * A paste nobody claimed is inserted at once, not waited for.
+ *
+ * A browser does nothing by default with an untrusted paste, so an unclaimed
+ * one can never land on its own — and waiting `PASTE_LAND_BUDGET_MS` for it
+ * cost 5 s on every round trip once Gemini's composer stopped claiming pastes
+ * (~09-25; the `type` stage went from ~30 ms to a 6.5 s median on the work
+ * laptop). A claimed paste still waits: claimed is not landed (above).
+ */
+describe('an unclaimed paste is not waited for', () => {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  test('whether anyone claimed the paste is recorded', () => {
+    assert.match(code, /const pasteClaimed = !input\.dispatchEvent\(pasteEvent\)/);
+  });
+  test('the wait runs only for a claimed paste or an image', () => {
+    assert.match(code, /if \(!landed && \(pasteClaimed \|\| hasImage\)\) \{\s*landed = Boolean\(await waitForDom/,
+      'an unclaimed text paste waits out the whole budget before the fallback');
+  });
+  test('control: the fallback still inserts whenever the text has not landed', () => {
+    assert.match(code, /if \(!landed && text\) \{[\s\S]{0,200}document\.execCommand\('insertText', false, text\)/);
+  });
+});
+
 describe('waitForSendButton', () => {
   test('checks immediately rather than sleeping first', () => {
     assert.doesNotMatch(body, /setTimeout\(check,\s*500\)/,

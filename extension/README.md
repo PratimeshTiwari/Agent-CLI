@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.45.0**
+## Current version: **1.46.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,20 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.46.0 — 2026-10-24
+
+- **Prompts go in without a 5-second wait.** Gemini's composer stopped accepting
+  the synthetic paste around 2026-09-25 — it no longer claims the event and the
+  text never lands — so every prompt waited out the full paste budget before the
+  `insertText` fallback ran. The `type` stage went from ~30 ms to a 6.5 s median
+  on the work laptop, on every round trip. A paste nobody claimed can never land
+  later, so the fallback now runs at once; a claimed paste or an image still
+  waits. Checked on the live page: 34,615 characters inserted exactly in 1.2 s.
+- **"Expand input to Fullscreen" is never clicked as send.** It appears exactly
+  when a long prompt goes in, so it looked like the send button to the shape
+  fallback. A `<textarea>` composer (the work account's) is also read by its
+  value when checking whether the prompt left.
 
 ### 1.45.0 — 2026-10-23
 
