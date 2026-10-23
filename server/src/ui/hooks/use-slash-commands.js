@@ -144,7 +144,7 @@ export async function handleSlashCommand(query, {
         isLocal: true,
         content: [
           '### ⌨️  Keys',
-          '  shift+tab   plan ⇄ auto',
+          '  shift+tab   plan → auto → strict',
           '  ctrl+e      expand or collapse every step',
           '  ctrl+t      shell',
           '  ctrl+b      bring the Gemini tab to the front',

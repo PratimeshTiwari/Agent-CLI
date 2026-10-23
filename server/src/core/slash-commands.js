@@ -55,7 +55,7 @@ export const MAX_AGENT_NAME = 20;
  * so adding one and forgetting the other fails the build rather than the user.
  */
 export const AGENT_COMMANDS = new Set([
-  'plan', 'strict', 'auto', 'memory', 'mode', 'config', 'name', 'clear', 'context', 'new',
+  'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
   'workspace',
 ]);
@@ -117,6 +117,21 @@ export async function handleSlashCommand(loop, command, args) {
     case 'plan':
       loop.mode = 'plan';
       return { message: '🔒 Plan Mode — every edit and command asks first, except Markdown files in this repo (AGENT.md and CLAUDE.md still ask). `/strict` makes Markdown ask too.' };
+
+    /*
+     * The last edit's diff, whatever happened to it. An edit row says
+     * `invoice.rb · +3 −1`; the change itself had scrolled away with the
+     * prompt, and `ctrl+e` expands the whole transcript to find one row.
+     */
+    case 'diff': {
+      const last = loop.diffEngine?.lastDiff;
+      if (!last) return { message: 'No edit yet this session.' };
+      const lines = String(last.patch || '').split('\n').filter((l) => !/^(Index:|={3,})/.test(l));
+      const MAX = 120;
+      const shown = lines.length > MAX ? [...lines.slice(0, MAX), `… ${lines.length - MAX} more lines`] : lines;
+      const state = { accepted: 'written', rejected: 'rejected — not written', proposed: 'waiting for approval' }[last.status] || last.status;
+      return { message: `**${last.filePath}** — ${state}\n\n\`\`\`diff\n${shown.join('\n')}\n\`\`\`` };
+    }
 
     case 'strict':
       loop.mode = 'strict';

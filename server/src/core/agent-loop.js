@@ -3323,7 +3323,11 @@ export class AgentLoop {
       if (result?.message && this.callbacks) {
         const note = {
           role: 'assistant',
-          content: `🗜️ **${auto ? 'Context was auto-compacted' : 'Compacted'}.**\n\n${result.message}`,
+          // One line when it worked — it is a notice, not a report. The long
+          // text is only for the cases that need the reader to do something.
+          content: result.handedOver
+            ? `🗜 ${auto ? 'Context compacted' : 'Compacted'} — ${result.message.replace(/^✓ /, '')}`
+            : `🗜️ **${auto ? 'Context was auto-compacted' : 'Compacted'}.**\n\n${result.message}`,
           timestamp: Date.now(),
         };
         this.conversationHistory.push(note);

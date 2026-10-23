@@ -241,6 +241,8 @@ export class DiffEngine {
     };
 
     this.pendingDiffs.set(diffId, diffObj);
+    // `/diff` shows the latest; the pending map forgets a diff once it is answered.
+    this.lastDiff = { id: diffId, filePath: relPath, patch, status: 'proposed', at: Date.now() };
     return diffObj;
   }
 
@@ -255,6 +257,7 @@ export class DiffEngine {
    * Accept a diff (all hunks) and apply it to disk.
    */
   acceptDiff(diffId) {
+    if (this.lastDiff?.id === diffId) this.lastDiff.status = 'accepted';
     const diff = this.pendingDiffs.get(diffId);
     if (!diff) throw new Error(`Diff not found: ${diffId}`);
     if (diff.status !== 'pending' && diff.status !== 'partial') {
@@ -315,6 +318,7 @@ export class DiffEngine {
    * Reject a diff entirely.
    */
   rejectDiff(diffId) {
+    if (this.lastDiff?.id === diffId) this.lastDiff.status = 'rejected';
     const diff = this.pendingDiffs.get(diffId);
     if (!diff) throw new Error(`Diff not found: ${diffId}`);
 

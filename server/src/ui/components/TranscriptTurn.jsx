@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
 import { Dots } from './RunningLine.jsx';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 
 /**
@@ -133,6 +133,7 @@ export function TranscriptTurn({ turn, isLive, verbose, status, liveBudget, tick
           touched={touched}
           status={status}
           tick={tick}
+          breakdown={workBreakdown(actions)}
         />
       )}
     </Box>
@@ -217,9 +218,11 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
  * While the turn runs it is the spinner, which now sits directly above the
  * input box rather than four rows up.
  */
-export function TurnSummary({ isLive, duration, worked, touched, status, tick = 0 }) {
+export function TurnSummary({ isLive, duration, worked, touched, status, tick = 0, breakdown = '' }) {
+  // `wrap="truncate"`: in the live frame a row that wraps is charged as one
+  // and drawn as two, and the breakdown made this row long enough to.
   return (
-    <Text color="gray">
+    <Text color="gray" wrap="truncate">
       {isLive ? (
         /*
          * No "Worked for" while the turn is running. It is past tense, and
@@ -235,7 +238,7 @@ export function TurnSummary({ isLive, duration, worked, touched, status, tick = 
       ) : (
         <>{'  '}{duration === null ? 'Worked' : `Worked for ${duration}s`}</>
       )}
-      {worked > 0 && (
+      {breakdown ? <Text dimColor> · {breakdown}</Text> : worked > 0 && (
         <Text dimColor> · {worked} action{worked === 1 ? '' : 's'}</Text>
       )}
       {touched > 0 && (
