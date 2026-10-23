@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text, usePaste } from 'ink';
 import { PromptInput } from './PromptInput.jsx';
 import { RunningLine } from './RunningLine.jsx';
-import { FOCUS_INPUT } from '../constants.js';
+import { FOCUS_INPUT, modeColor } from '../constants.js';
 import { applyPaste, nextPasteId } from '../paste.js';
 import { oneLine } from '../format.js';
 import { hasClipboardImage } from '../clipboard-image.js';
@@ -266,11 +266,11 @@ export function InputBar({
           <Box
             flexDirection="row"
             borderStyle="round"
-            borderColor={focus === FOCUS_INPUT ? (mode === 'plan' ? 'yellow' : 'cyan') : 'gray'}
+            borderColor={focus === FOCUS_INPUT ? modeColor(mode) : 'gray'}
             paddingX={1}
             width="100%"
           >
-            <Text bold color={focus === FOCUS_INPUT ? (mode === 'plan' ? 'yellow' : 'cyan') : 'gray'}>{'> '}</Text>
+            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : 'gray'}>{'> '}</Text>
             <PromptInput
               focus={focus === FOCUS_INPUT}
               value={input}

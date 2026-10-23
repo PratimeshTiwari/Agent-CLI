@@ -47,9 +47,10 @@ test('describeSettings', async (t) => {
     // The direction, not the bare command: `/memory` alone prints the facts,
     // which is not what pressing Enter on a switch should do.
     assert.equal(row(rows, 'Memory').run, '/memory off');
-    // Plan mode offers the switch to auto, not a no-op back to plan.
+    // The next mode in Tab's order (plan → auto → strict), never a no-op.
     assert.equal(row(rows, 'Edit approval').run, '/auto');
-    assert.equal(row(loop({ mode: 'auto' }) && describeSettings(loop({ mode: 'auto' })), 'Edit approval').run, '/plan');
+    assert.equal(row(describeSettings(loop({ mode: 'auto' })), 'Edit approval').run, '/strict');
+    assert.equal(row(describeSettings(loop({ mode: 'strict' })), 'Edit approval').run, '/plan');
   });
 
   // A settings page that throws is worse than one with a gap in it.

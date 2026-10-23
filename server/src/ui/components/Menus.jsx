@@ -1135,7 +1135,7 @@ export function DiffApproval({
      * A choice that widens permissions never sits between the two people
      * press without looking.
      */
-    ...(mode === 'plan'
+    ...(mode === 'plan' || mode === 'strict'
       ? [{ label: 'Approve, and stop asking — switch to auto mode', value: 'accept-auto' }]
       : []),
   ];

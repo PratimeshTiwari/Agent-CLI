@@ -55,7 +55,7 @@ export const MAX_AGENT_NAME = 20;
  * so adding one and forgetting the other fails the build rather than the user.
  */
 export const AGENT_COMMANDS = new Set([
-  'plan', 'auto', 'memory', 'mode', 'config', 'name', 'clear', 'context', 'new',
+  'plan', 'strict', 'auto', 'memory', 'mode', 'config', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
   'workspace',
 ]);
@@ -116,7 +116,11 @@ export async function handleSlashCommand(loop, command, args) {
   switch (command) {
     case 'plan':
       loop.mode = 'plan';
-      return { message: '🔒 Switched to Plan Mode. All edits require approval.' };
+      return { message: '🔒 Plan Mode — every edit and command asks first, except Markdown files in this repo (AGENT.md and CLAUDE.md still ask). `/strict` makes Markdown ask too.' };
+
+    case 'strict':
+      loop.mode = 'strict';
+      return { message: '🔐 Strict Plan Mode — every edit, Markdown included, and every command asks first.' };
 
     case 'auto':
       loop.mode = 'auto';

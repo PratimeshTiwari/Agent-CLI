@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.46.0**
+## Current version: **1.47.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,13 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.47.0 — 2026-10-24
+
+- **Three modes in the panel's toggle: Plan, Auto, Strict.** The agent gained a
+  third mode — `plan` now writes Markdown inside the repo without asking (except
+  AGENT.md, CLAUDE.md and GEMINI.md), and `strict` is what plan used to be, every
+  edit asking. The toggle cycles all three in the CLI's order, `◎` marks strict.
 
 ### 1.46.0 — 2026-10-24
 
