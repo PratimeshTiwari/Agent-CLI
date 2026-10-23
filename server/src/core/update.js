@@ -45,6 +45,25 @@ async function git(dir, args, { timeout = 5000 } = {}) {
 }
 
 /**
+ * Run git, and say whether it could be run at all.
+ *
+ * A non-zero exit carries a numeric `code` and means git answered "no". A
+ * string code (`ENOENT`, `EBADF`, `ETIMEDOUT`…) means the question was never
+ * asked, and the caller has to say so rather than report git's "no".
+ *
+ * @returns {Promise<{stdout: string|null, cannotRun: string|null}>}
+ */
+export async function gitOrError(dir, args, { timeout = 5000, runner = run } = {}) {
+  try {
+    const { stdout } = await runner('git', args, { cwd: dir, timeout, windowsHide: true });
+    return { stdout: stdout.trim(), cannotRun: null };
+  } catch (err) {
+    if (typeof err?.code === 'number') return { stdout: null, cannotRun: null };
+    return { stdout: null, cannotRun: String(err?.code || err?.message || 'unknown error') };
+  }
+}
+
+/**
  * Run git for its **exit code**, not its output.
  *
  * `git()` above collapses "failed" and "printed nothing" into the same `null`,
@@ -92,8 +111,15 @@ export async function checkForUpdate(dir) {
   const none = { available: false, behind: 0, branch: null, upstream: null };
   if (!dir) return { ...none, reason: 'no source directory' };
 
-  const inRepo = await git(dir, ['rev-parse', '--is-inside-work-tree']);
-  if (inRepo !== 'true') return { ...none, reason: 'not a git checkout' };
+  /*
+   * "git could not run" is not "not a git checkout". `git()` folds every
+   * failure into null, so on the work laptop — where every spawn failed with
+   * EBADF — `/update` told a git checkout it was not one. The first call is
+   * the one that tells them apart; the rest can stay quiet.
+   */
+  const probe = await gitOrError(dir, ['rev-parse', '--is-inside-work-tree']);
+  if (probe.cannotRun) return { ...none, reason: `git could not run (${probe.cannotRun})` };
+  if (probe.stdout !== 'true') return { ...none, reason: 'not a git checkout' };
 
   const branch = await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
 

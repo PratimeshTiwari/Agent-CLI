@@ -231,6 +231,14 @@ export async function handleSlashCommand(query, {
        */
       if (args[0] !== 'pull' && args[0] !== 'now') {
         const state = await checkForUpdate(agentLoop.agentSourceDir);
+        if (state.reason?.startsWith('git could not run')) {
+          say(`Could not run \`git\` to check for updates — ${state.reason.replace('git could not run ', '')}. `
+            + (state.reason.includes('EBADF')
+              ? 'That means the agent process holds too many open files, not that git is broken — '
+                + 'restart the agent, and run `/logs` if it comes back.'
+              : 'Check that git is installed and on the PATH.'));
+          return;
+        }
         if (state.reason === 'not a git checkout' || state.reason === 'no source directory') {
           say('The agent is not running from a git checkout, so there is nothing to update from.');
           return;

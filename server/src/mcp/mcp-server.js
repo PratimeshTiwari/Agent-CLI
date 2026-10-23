@@ -280,6 +280,14 @@ export class MCPServer {
       errorMsg = `The file is currently busy/locked by another process (like a dev server). Please try again or ask the user.`;
     } else if (lastErr.code === 'ENOENT') {
       errorMsg = `The file or directory does not exist. Double-check the path.`;
+    } else if (lastErr.code === 'EBADF' && lastErr.syscall === 'spawn') {
+      // The command never started: macOS refuses to spawn once the agent holds
+      // a descriptor past OPEN_MAX. Retrying cannot help and neither can a
+      // different command — without this the model retried with variations
+      // and then reported the user's script as broken.
+      errorMsg = 'The agent could not start any process (spawn EBADF: it holds too many open '
+        + 'files). This is not a problem with the command. Do not retry or try variations — tell '
+        + 'the user to restart the agent, and continue with what does not need a shell.';
     }
 
     return {

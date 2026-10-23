@@ -912,7 +912,21 @@ and plain acorn cannot parse the `.jsx` files at all), and `SkillRegistry` was a
 way to declare a tool that competed with `mcp/mcp-server.js`'s `TOOL_DEFINITIONS` — which is the
 one described above and the one that actually runs. A per-symbol read tool is still a real gap;
 it wants `acorn-walk` plus `acorn-jsx`, not that file.
-`watcher/file-watcher.js` (chokidar) invalidates context on external edits. `semantic_search`
+`watcher/file-watcher.js` reports external edits into the history.
+
+**The watcher took the shell down on a large repo (fixed v5.6).** On the work laptop, 2026-10-23,
+*every* spawn failed with `spawn EBADF` — nine `run_command`s, `run_background`, the browser-open
+at launch, `/update`'s git — so approved Ruby scripts never started and `/update` claimed the
+checkout was not one. macOS refuses `posix_spawn` once a process holds a descriptor numbered at or
+above `OPEN_MAX` (10,240 — bisected to the descriptor), and chokidar 4 dropped fsevents, so it
+holds about one descriptor per watched *file* (852 for 131 directories here). A big repo crossed
+the line at startup. On macOS and Windows the watcher is now Node's recursive `fs.watch` —
+FSEvents, **zero** extra descriptors on the same tree — with chokidar kept for Linux. Ignores are
+by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and add `vendor`,
+`tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
+started, do not retry", and `/update` says git could not run instead of "not a git checkout".
+Verified end to end on a 15,000-file tree under the pty: `main` hands the model `EBADF`, this
+hands it the command's output. **Any new long-lived resource per file is the same bug.** `semantic_search`
 is backed by a local TF-IDF index.
 
 ### GitHub agent — removed 2026-09-19, documented to be rebuilt
