@@ -1119,6 +1119,33 @@ history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/reset.
 (a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
 because the loop would write the old conversation back.
 
+**Compaction never handed anything over, and ran beside the turn (fixed v5.9).** Found under
+the pty by logging every prompt the fake extension received: the first prompt in the fresh chat
+had the system prompt and the next message and **no summary**. The summary was a `system` turn,
+`pendingRecap` skips those, and nothing else read it — the write-only trap a third time, on the
+mechanism that runs exactly when a session is longest. It also fired at the *start* of a turn,
+alongside it, and `startNewChat` had no lane check, so the tab could move to an empty chat
+mid-round. And the summary came from re-pasting every older turn, results replaced by
+placeholders, into a cold tab. Now (`core/compaction.js`):
+
+- **Asked of the current chat** (`_askThread`, a side question on the main lane whose reply is
+  consumed whole and never run): 465 characters out, where the paste was the largest prompt in the
+  system.
+- **Between turns** (`_finishTurn`, loop still busy so typed prompts queue) **or between rounds**
+  (`_compactAndResume`: pause at the tool-result boundary, compact, send the results to the fresh
+  chat with the system prompt and the summary — the turn carries on). `startNewChat` refuses while
+  the main lane is busy.
+- **Handed over once** as `<compacted_context>`: summary, the archive pointer naming
+  `recall_history`, and the kept turns capped (1.5k each, 6k total). The count restarts at **zero**
+  — counting the kept turns in full re-triggered it on the next turn (a 335k-character reply).
+- **The screen survives the rewrite.** `historyOffset` records how far the front moved;
+  `mergeLoopHistory` positions are absolute, or the kept turns are drawn twice. The turn commits
+  while compaction runs (`turnInFlight` excludes `isCompacting`): holding a long final reply live
+  under the progress row was 8 full clears and 3.1 MB for one compaction; now 0.
+- A three-stage progress row (`Compacting ▰▰▱ opening a fresh chat…`, esc cancels with nothing
+  changed); the status bar says `N% to auto-compact` within 20 points; every compaction writes a
+  `compaction` notice with which path ran.
+
 **Session history is written to both copies on every turn** (`storage/session-store.js`). The
 workspace copy sits next to the code; the home copy survives a clean checkout or a wiped
 `.agent/`. On startup the two are reconciled — more turns wins, the other is rebuilt from it.

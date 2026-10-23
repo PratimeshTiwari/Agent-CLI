@@ -245,6 +245,27 @@ export class PromptBuilder {
      * because the whole prompt strategy exists to avoid large repeated payloads
      * typed into a browser.
      */
+    /*
+     * What compaction hands to the fresh chat (v5.9).
+     *
+     * Nothing read the summary for as long as compaction existed: it was a
+     * `system` turn, `pendingRecap` skips system turns, and compaction never
+     * set it anyway. Measured under the pty: the first prompt in the fresh chat
+     * carried the system prompt and the next message, and no summary — so every
+     * compaction started the model over with no memory of the task, which is
+     * worse than not compacting. One turn only, like the recap; bounded, so a
+     * huge recent message does not refill the new thread on arrival.
+     */
+    if (this.pendingCompactedContext) {
+      const { summary, recent } = this.pendingCompactedContext;
+      parts.push('<compacted_context note="You are continuing work from an earlier chat in this same '
+        + 'conversation. This is the summary you wrote there, and the last few messages.">\n'
+        + `${summary}`
+        + (recent ? `\n\n<recent_messages>\n${recent}\n</recent_messages>` : '')
+        + '\n</compacted_context>');
+      this.pendingCompactedContext = null;
+    }
+
     if (this.pendingRecap?.length) {
       const RECAP_TURNS = 12;
       const RECAP_CHARS = 4000;

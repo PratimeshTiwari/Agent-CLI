@@ -8,6 +8,9 @@
  * reached a prompt, and neither did a single memory. Both were removed with the
  * retrieval subsystem; what is left is the one thing that is actually wired up.
  */
+/** The share of the rung's budget past which a turn's end compacts. The status bar reads it too. */
+export const COMPACT_AT = 0.8;
+
 export class ContextManager {
   constructor(workspacePath, memoryManager) {
     this.workspacePath = workspacePath;
@@ -66,6 +69,6 @@ export class ContextManager {
     }
 
     // Compact past 80% of budget, so there is room left to do the compacting.
-    return count > budget * 0.8;
+    return count > budget * COMPACT_AT;
   }
 }

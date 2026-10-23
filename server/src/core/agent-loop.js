@@ -464,49 +464,12 @@ export class AgentLoop {
      */
     this._userStoppedAt = null;
 
-    // Check Context Size Warning and Auto-Compact
-    // `contextTokens`, not `conversationHistory`. This read the history array
-    // for as long as it existed; `Number([…])` is NaN, `NaN > x` is false, and
-    // so auto-compaction never once ran. The count is what the browser tab is
-    // actually carrying — the system prompt and every tool result included —
-    // which is what `needsCompaction`'s own doc asks for.
-    if (!this.isCompacting && this.contextManager.needsCompaction(this.contextTokens, this.contextLimit)) {
-      this.callbacks.sendToPanel({
-        id: randomUUID(),
-        type: 'status',
-        payload: { message: '⏳ Context limit reached. Auto-compacting older history in background...' },
-        timestamp: Date.now(),
-      });
-      // Runs alongside the turn, but its report is not thrown away.
-      //
-      // This was fire-and-forget, and `_compactHistory` *returns* the account
-      // of what it did — how many turns went, whether the model summarised them
-      // or the local fallback did, and the before/after size. Discarding it left
-      // auto-compaction entirely silent: the notice above is a transient status
-      // that the thinking-message cycle overwrites before it paints, so the
-      // user's history would be rewritten underneath them with no trace at all.
-      // Which is the same silence as it never running, and is why nobody
-      // noticed that it never ran.
-      this._compactHistory()
-        .then((result) => {
-          if (!result?.message) return;
-          const note = {
-            role: 'assistant',
-            content: `🗜️ **Context was auto-compacted.**\n\n${result.message}`,
-            timestamp: Date.now(),
-          };
-          this.conversationHistory.push(note);
-          this.sessionStore.appendTurn(note);
-        })
-        .catch(err => {
-          logError(this.workspace, {
-            flow: 'agent', op: 'auto_compact',
-            message: `Auto-compaction failed: ${err.message}`, detail: err.stack,
-          });
-          this._notify(`⚠️ Auto-compaction failed: ${err.message}`);
-        });
-    }
-
+    /*
+     * Auto-compaction used to start here, alongside the turn — and its last
+     * step switched the tab to a new chat while this turn was still writing
+     * to it, so the turn's next prompt landed in a conversation that had never
+     * seen the task. It runs at the end of a turn now (`_finishTurn`).
+     */
     try {
       // The image goes to the bridge, never into the record. `/image` inlines
       // the whole file as a base64 data URL so the content script can rebuild
@@ -625,6 +588,18 @@ export class AgentLoop {
         this.handleSubagentResponse(requestId, content, payload.subagentUrl);
         this._releaseExtension(subLane(requestId));
       }
+      return;
+    }
+
+    // A side question on the main thread (compaction's summary). Its reply is
+    // the asker's, whole, and is never a turn — even after the asker gave up.
+    if (this._threadAsk) {
+      if (!complete && !payload.timedOut) return; // a stream chunk
+      const ask = this._threadAsk;
+      this._threadAsk = null;
+      this.contextChars += (content || '').length;
+      this._releaseExtension();
+      ask.settle?.(complete ? { ok: true, text: content || '' } : { ok: false, timedOut: true });
       return;
     }
 
@@ -1128,6 +1103,16 @@ export class AgentLoop {
      * data, it is the thing `turn0_no_tools` is about.
      */
     logToolUsage(this.workspace, this._turnEvidence || new Map(), { rounds: this._roundsThisTurn || 0 });
+
+    /*
+     * Compact between turns, never during one. The loop stays busy while it
+     * runs, so a prompt typed meanwhile queues and is sent when it is done —
+     * the idle edge that releases the queue is the one at the end of this.
+     */
+    if (this._wantsCompaction()) {
+      this._compactThenIdle();
+      return;
+    }
 
     // No tool calls — agent is done
     this.isProcessing = false;
@@ -1866,6 +1851,14 @@ export class AgentLoop {
    * @returns {Promise<boolean>} whether a tab was told to start one
    */
   startNewChat({ timeoutMs = 5000 } = {}) {
+    /*
+     * Never under a prompt in flight. Compaction used to call this while the
+     * turn beside it was mid-round, so the tab moved to an empty chat and the
+     * turn's next prompt landed in a conversation that had never seen the
+     * task. Refused rather than queued: every caller already handles `false`
+     * by keeping the old thread and saying so.
+     */
+    if (this.extensionLock?.isBusy?.(mainLane(this.mainModel))) return Promise.resolve(false);
     const previous = this.chatThread;
     this.chatThread = null;
 
@@ -2216,6 +2209,11 @@ export class AgentLoop {
    */
   abortExtensionWork() {
     this._cancelScheduledRetry();
+    if (this._threadAsk) {
+      const ask = this._threadAsk;
+      this._threadAsk = null;
+      ask.settle?.({ ok: false, cancelled: true });
+    }
     this.extensionLock.abortAll();
     this.pendingGeminiResponse = null;
   }
@@ -2409,7 +2407,47 @@ export class AgentLoop {
     return 'recap';
   }
 
+  /**
+   * Ask the main thread one question and get the reply text back, outside
+   * the turn machinery.
+   *
+   * For compaction (v5.9): the thread already holds the whole conversation, so
+   * asking it to summarise costs a few hundred characters, where re-pasting the
+   * history into a cold tab cost the largest prompt in the system and a summary
+   * built from placeholders. The reply is consumed here, never parsed for tool
+   * calls and never appended to history.
+   *
+   * Resolves `{ ok, text }`, `{ ok: false, timedOut }` or `{ ok: false,
+   * cancelled }` — never rejects, because every caller has a fallback.
+   */
+  _askThread(prompt, { timeoutMs = 90_000 } = {}) {
+    return new Promise((resolve) => {
+      const ask = { settle: null };
+      const timer = setTimeout(() => {
+        // A reply may still come. The ask stays registered with no one to
+        // settle, so that reply is swallowed rather than read as the answer
+        // to whatever is sent next; `_sendToGemini` retires it.
+        ask.settle = null;
+        resolve({ ok: false, timedOut: true });
+      }, timeoutMs);
+      timer.unref?.();
+      ask.settle = (result) => {
+        clearTimeout(timer);
+        ask.settle = null;
+        resolve(result);
+      };
+      this._threadAsk = ask;
+      this.contextChars += prompt.length;
+      this._enqueueExtensionRequest({
+        prompt,
+        expectResponse: true,
+        targetModel: this.modelConfig.main || 'gemini',
+      });
+    });
+  }
+
   async _sendToGemini(prompt, callbacks) {
+    this._threadAsk = null; // anything still owed to a side question is not this
     // Create a promise that will be resolved when we get the Gemini response
     this.pendingGeminiResponse = true;
     this.contextChars += prompt.length;
@@ -2760,12 +2798,57 @@ export class AgentLoop {
       : '';
     this._withheldConclusion = false;
 
-    this._sendToGemini(
-      this.promptBuilder.buildToolResultBatch(
-        toolResults, this.turnEvidence, this._dueHandover(), withheld,
-      ),
-      this.callbacks,
+    const batch = this.promptBuilder.buildToolResultBatch(
+      toolResults, this.turnEvidence, this._dueHandover(), withheld,
     );
+
+    /*
+     * Full mid-turn: pause, compact, resume — the way Claude Code does.
+     *
+     * Compacting only at a turn's end leaves the long turn uncovered, and the
+     * long turn is the one that fills the thread: a document built from a
+     * dozen files is a dozen read rounds. Here the results are in hand and not
+     * yet sent, so the thread summarises everything up to them, the tab moves
+     * to a fresh chat, and the results go there with the summary — the turn
+     * carries on where it was.
+     */
+    if (this._wantsCompaction()) {
+      await this._compactAndResume(batch);
+      return;
+    }
+
+    this._sendToGemini(batch, this.callbacks);
+  }
+
+  /** Mid-turn compaction, then the paused round's results into the fresh chat. */
+  async _compactAndResume(batch) {
+    this._compactAfterTurn = false;
+    let result = null;
+    try {
+      result = await this._compactHistory(undefined, { auto: true });
+    } catch (err) {
+      logError(this.workspace, {
+        flow: 'agent', op: 'auto_compact',
+        message: `Mid-turn compaction failed: ${err.message}`, detail: err.stack,
+      });
+    }
+    // esc during the summary: the turn was stopped, and stays stopped.
+    if (!this.isProcessing) return;
+
+    const prompt = result?.handedOver
+      ? this.promptBuilder.buildPrompt({
+        userMessage: 'The conversation was compacted while you were working. Continue the task '
+          + 'from where you were — these are the results of the tool calls you made just before:'
+          + `\n\n${batch}`,
+        mode: this.mode,
+        subagents: this.subagentsEnabled,
+        modelConfig: this.modelConfig,
+        objective: this.currentObjective,
+      })
+      : batch; // same thread as before: the results are all it needs
+    this._notify(result?.handedOver ? '🗜 Compacted — continuing the task in a fresh chat'
+      : '🗜 Could not move to a fresh chat — continuing here');
+    this._sendToGemini(prompt, this.callbacks);
   }
 
   _extractToolCalls(content) {
@@ -3216,9 +3299,51 @@ export class AgentLoop {
     if (!this.isProcessing) this._noticeSink?.(message);
   }
 
+  /** Past the threshold, or `/compact` asked during a turn. */
+  _wantsCompaction() {
+    if (this.isCompacting) return false;
+    if (this._compactAfterTurn) return true;
+    // A handover that failed is not retried every turn — each try is a round
+    // trip — only once the thread has grown a tenth past where it failed.
+    if (this._compactFailedAt && this.contextTokens < this._compactFailedAt * 1.1) return false;
+    try {
+      return this.contextManager.needsCompaction(this.contextTokens, this.contextLimit);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Compact, report it, then end the turn the way `_finishTurn` would have. */
+  async _compactThenIdle() {
+    const auto = !this._compactAfterTurn;
+    this._compactAfterTurn = false;
+    try {
+      const result = await this._compactHistory(undefined, { auto });
+      if (result?.message && this.callbacks) {
+        const note = {
+          role: 'assistant',
+          content: `🗜️ **${auto ? 'Context was auto-compacted' : 'Compacted'}.**\n\n${result.message}`,
+          timestamp: Date.now(),
+        };
+        this.conversationHistory.push(note);
+        this.sessionStore.appendTurn(note);
+        this.callbacks.sendToPanel({ id: randomUUID(), type: 'agent_response', payload: { content: note.content }, timestamp: Date.now() });
+      }
+    } catch (err) {
+      logError(this.workspace, {
+        flow: 'agent', op: 'auto_compact',
+        message: `Compaction failed: ${err.message}`, detail: err.stack,
+      });
+      this._notify(`⚠️ Compaction failed: ${err.message}`);
+    } finally {
+      this.isProcessing = false;
+      if (this._backgroundCallbacks) this.callbacks = this._backgroundCallbacks;
+    }
+  }
+
   /** @see core/compaction.js — summarise the older turns and hand the thread over. */
-  async _compactHistory(focus) {
-    return compactHistory(this, focus);
+  async _compactHistory(focus, opts) {
+    return compactHistory(this, focus, opts);
   }
 
 }

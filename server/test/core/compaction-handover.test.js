@@ -44,7 +44,8 @@ function loopWith(browser) {
     content: `turn ${i} `.repeat(200),
     timestamp: Date.now(),
   }));
-  l._executeSubagent = async () => ({ success: true, result: 'A short summary.' });
+  // The thread's own summary (v5.9), long enough to pass `usableSummary`.
+  l._askThread = async () => ({ ok: true, text: 'A short summary of where the task stands and what is left.' });
 
   const sent = [];
   l.callbacks = {

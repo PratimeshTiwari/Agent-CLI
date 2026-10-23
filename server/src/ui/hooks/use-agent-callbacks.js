@@ -80,7 +80,7 @@ export function buildAgentCallbacks({
         // Append what the loop has gained; never replace. See mergeLoopHistory —
         // replacing dropped every UI-only message and took a real turn off the
         // screen with it, because <Static> counts what it has printed by index.
-        setHistory((prev) => mergeLoopHistory(prev, agentLoop.conversationHistory));
+        setHistory((prev) => mergeLoopHistory(prev, agentLoop.conversationHistory, agentLoop.historyOffset || 0));
         // Prose that arrives with tool calls is not the end of the turn. Clearing
         // here is what dropped the spinner while tools ran and the next round
         // was written — and, because the task panel draws only when idle, what
@@ -95,7 +95,9 @@ export function buildAgentCallbacks({
         setFocus(FOCUS_INPUT);
       } else if (msg.type === 'status') {
         setStatus(msg.payload.message || 'Processing...');
-        isToolRunningRef.current = false;
+        // A progress status (compaction's bar) is the line to show, not one the
+        // thinking cycle may paint over — the same switch a running tool uses.
+        isToolRunningRef.current = Boolean(msg.payload?.progress);
         reassertBusy();
       } else if (msg.type === 'tool_call') {
         setStatus(`Running ${msg.payload.name}...`);
