@@ -88,7 +88,12 @@ const TOOL_DEFINITIONS = [
       edits: {
         type: 'array',
         description: 'Array of edits. Each edit has { oldText: string, newText: string }',
-        required: true,
+        required: false,
+      },
+      append: {
+        type: 'string',
+        description: 'Text to add at the end of the file, with no matching. For building a document section by section.',
+        required: false,
       },
     },
     handler: editFile,

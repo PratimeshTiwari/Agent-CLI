@@ -172,3 +172,52 @@ export function planSpoolPruning(fileNames = [], { keep = KEEP_SPOOLS } = {}) {
   ours.sort((a, b) => b.stamp - a.stamp);
   return ours.slice(keep).map((e) => e.name).reverse();
 }
+
+/**
+ * A `read_file` result as the model should see it: one header line, then the
+ * numbered lines as they are.
+ *
+ * It went in as minified JSON — 800 lines as one string of `\n` and `\"`
+ * escapes — from which the model then had to reproduce `oldText` byte for
+ * byte. Every escape is a character typed into the browser, too.
+ *
+ * @returns {string|null} null when `result` is not a read_file result
+ */
+export function formatReadResult(result) {
+  if (!result || typeof result !== 'object' || typeof result.content !== 'string' || !result.range) return null;
+  const { path, language, totalLines, range } = result;
+  return `${path} · lines ${range.start}–${range.end} of ${totalLines}${language ? ` · ${language}` : ''}\n${result.content}`;
+}
+
+/**
+ * Fit a read into its share of the batch by whole lines, and say exactly
+ * which lines were left out.
+ *
+ * `headAndTail` cuts characters out of the middle. On a read that removed the
+ * middle of the file while the result still claimed `lines 1–800`, so the model
+ * edited code it had never been shown, the match failed, and it read again.
+ * Two 800-line reads in one reply — which the tool-result prompt asks for —
+ * were ~86k characters against a 48k budget, so each lost its middle.
+ */
+export function fitReadResult(result, allowance) {
+  const text = formatReadResult(result);
+  if (text === null || text.length <= allowance) return text;
+  const { path, range } = result;
+  const lines = text.split('\n');
+  const header = lines[0];
+  const noteFor = (from) => `\n… lines ${from}–${range.end} were not shown (prompt size limit). `
+    + `Call read_file with path "${path}", startLine ${from}, endLine ${range.end} to see them.`;
+  const kept = [header];
+  let used = header.length;
+  let lastShown = range.start - 1;
+  for (const line of lines.slice(1)) {
+    const m = /^\s*(\d+): /.exec(line);
+    const cost = line.length + 1;
+    if (used + cost + noteFor(range.end).length > allowance) break;
+    kept.push(line);
+    used += cost;
+    if (m) lastShown = Number(m[1]);
+  }
+  if (lastShown >= range.end) return kept.join('\n');
+  return `${kept.join('\n')}${noteFor(lastShown + 1)}`;
+}

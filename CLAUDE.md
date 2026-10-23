@@ -768,6 +768,19 @@ pipes included. On this repo `parseToolCall|tool_call|extractToolCalls|handleToo
 131 KB file three times. Identifier-only alternation is searched as alternatives now, and says so
 in the result; a literal `a || b` or a shell pipe is still searched as written.
 
+**Large files and documents (v5.10).** Reported from the work laptop: simple edits in
+1,000–2,000-line files went badly, and building a Confluence document from several files
+struggled at the highest effort. Measured on this repo: two 800-line reads in one reply (~86k
+characters against the 48k batch budget) were cut **by characters in the middle** — App.jsx lost
+lines 289–641 while the result still claimed `range: 1–800` — inside minified JSON where every
+line break was a `\n` escape. Now: a read goes into the prompt as plain numbered text
+(`formatReadResult`); one that does not fit is cut **by whole lines** and names the missing range
+with the exact `read_file` call (`fitReadResult`). `edit_file` retries an `oldText` whose every
+line carries a copied `  12: ` prefix with the prefixes stripped; a miss names the nearest line
+with its neighbours and the range to re-read; and `append` adds to the end without matching, so a
+document is built a section at a time instead of rewriting the whole file each round (classified
+addition-only, so auto mode does not stop on every section). Edit rows read `doc.md · +3 −0`.
+
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
 that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the walker, so a `.jsx`

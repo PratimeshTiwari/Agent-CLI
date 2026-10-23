@@ -18,7 +18,7 @@ import { randomUUID } from 'crypto';
 import os from 'os';
 import { resolve, relative, join, dirname } from 'path';
 import { CodeMinifier } from '../context/code-minifier.js';
-import { allocate, headAndTail, planSpoolPruning } from './result-budget.js';
+import { allocate, headAndTail, planSpoolPruning, formatReadResult, fitReadResult } from './result-budget.js';
 import { skillCatalogue } from './skills.js';
 import { resolveEffort } from './effort.js';
 import { renderToolDefinitions } from './tool-catalog.js';
@@ -403,25 +403,32 @@ export class PromptBuilder {
      * Serialised first, because the budget is about what is *typed*, and a
      * minified object is a different size from the object.
      */
-    const serialised = results.map(({ name, result, failed }) => ({
-      name,
-      // `status="failed"` is the point: a non-zero exit code inside minified
-      // JSON is easy to skim past, and the model would summarise a failed
-      // command back to the user as though it had worked.
-      failed,
-      // Minified, not pretty-printed. Every tool result goes into the prompt,
-      // and indentation is the single largest avoidable cost there — a plain
-      // list_directory result is 40% smaller without it. The model does not
-      // read the whitespace; the token budget does.
-      text: typeof result === 'string' ? result : CodeMinifier.minifyJson(result),
-    }));
+    const serialised = results.map(({ name, result, failed }) => {
+      // A file read goes in as text, not JSON (see formatReadResult).
+      const read = name === 'read_file' && !failed ? formatReadResult(result) : null;
+      return {
+        name,
+        read: read === null ? null : result,
+        // `status="failed"` is the point: a non-zero exit code inside minified
+        // JSON is easy to skim past, and the model would summarise a failed
+        // command back to the user as though it had worked.
+        failed,
+        // Minified, not pretty-printed. Every tool result goes into the prompt,
+        // and indentation is the single largest avoidable cost there — a plain
+        // list_directory result is 40% smaller without it. The model does not
+        // read the whitespace; the token budget does.
+        text: read ?? (typeof result === 'string' ? result : CodeMinifier.minifyJson(result)),
+      };
+    });
     const allowances = allocate(serialised.map((r) => r.text.length), RESULT_BUDGET_CHARS);
 
-    const body = serialised.map(({ name, text, failed }, i) => [
+    const body = serialised.map(({ name, text, failed, read }, i) => [
       failed ? `<result tool="${name}" status="failed">` : `<result tool="${name}">`,
       allowances[i] >= text.length
         ? text
-        : headAndTail(text, allowances[i], this._spool(name, text)),
+        // A read is cut by whole lines and names what it left out; anything
+        // else keeps its head and tail.
+        : read ? fitReadResult(read, allowances[i]) : headAndTail(text, allowances[i], this._spool(name, text)),
       `</result>`,
     ].join('\n'));
 
