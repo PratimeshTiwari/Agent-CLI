@@ -484,7 +484,10 @@ function enabledButtons() {
  * Matched on the label because that is what the page gives us; a send button
  * has never been called any of these.
  */
-const NOT_THE_SEND_BUTTON = /dictate|microphone|\bmic\b|voice|speech|listen|attach|upload|file|image|photo|camera|canvas|research|settings|menu|more|close|open|toggle|sidebar|cancel|stop/i;
+// `expand` / `fullscreen`: "Expand input to Fullscreen" appears exactly when
+// a long prompt goes in, so it passes "appeared after the text" — picked on
+// 09-27 and on the work laptop 10-23.
+const NOT_THE_SEND_BUTTON = /dictate|microphone|\bmic\b|voice|speech|listen|attach|upload|file|image|photo|camera|canvas|research|settings|menu|more|close|open|toggle|sidebar|cancel|stop|expand|collapse|full\s*screen|minimi[sz]e|maximi[sz]e/i;
 
 /**
  * @param {Set<Element>} before  enabled buttons as they were before typing
@@ -708,7 +711,7 @@ async function injectPrompt(text) {
     
     // Focus before pasting
     input.focus();
-    input.dispatchEvent(pasteEvent);
+    const pasteClaimed = !input.dispatchEvent(pasteEvent);
 
     // If we pasted an image, wait for it to process
     if (hasImage) {
@@ -766,8 +769,28 @@ async function injectPrompt(text) {
      * early is the worse error — the fallback below inserts the text a second
      * time, and a paste that then lands late leaves two copies of the prompt.
      */
+    /*
+     * **But a paste nobody claimed will never land, so do not wait for it.**
+     *
+     * The comment above is right that a claim is not evidence of arrival. The
+     * converse is a fact, not a guess: a browser does nothing by default with
+     * an untrusted paste event, so if no handler called `preventDefault`, no
+     * code is going to insert this text later — and inserting now cannot leave
+     * a second copy.
+     *
+     * Gemini's composer stopped claiming the paste around 2026-09-25 (checked
+     * on the live page 10-24: `defaultPrevented` false, nothing lands, and
+     * `insertText` puts 34,615 characters in exactly, one paragraph per line,
+     * in 1.2 s). The work account's composer is a `<textarea>`, which never
+     * claimed it. Either way every prompt waited out the whole 5 s budget
+     * first: the `type` stage went from ~30 ms to a 6.5 s median, every round
+     * trip of every turn.
+     *
+     * Images still wait: an attachment is uploaded on the page's own schedule
+     * and the composer may legitimately stay empty meanwhile.
+     */
     let landed = !text || Boolean(composerText());
-    if (!landed) {
+    if (!landed && (pasteClaimed || hasImage)) {
       landed = Boolean(await waitForDom(() => (composerText() ? true : null), PASTE_LAND_BUDGET_MS));
     }
 
@@ -979,7 +1002,9 @@ function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
 
     function check() {
       if (settled) return;
-      const empty = !input || input.textContent.trim().length === 0;
+      // `.value` first: a <textarea> composer (the work account's) keeps its
+      // text there, and its textContent is always empty.
+      const empty = !input || String(input.value ?? input.textContent).trim().length === 0;
       if (!empty) sawText = true;
       // If the user manually clicked send, the input clears! We can stop waiting.
       if (sawText && empty) {

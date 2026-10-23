@@ -344,6 +344,17 @@ composer.
 subagent, two failures landing mid-turn. A `/effort` typed a second into a deliberately slow turn
 was held and dispatched **4ms after** that turn's reply.
 
+**The composer stopped claiming our paste, and every prompt waited 5 s for it (fixed v5.7).**
+The `type` stage was ~30 ms median here until 09-24, then 1–6 s; on the work laptop 6.5 s median,
+113 s max. Checked on the live page 10-24: the synthetic paste is no longer `preventDefault`ed and
+never lands, so every turn waited out `PASTE_LAND_BUDGET_MS` before the `insertText` fallback —
+which puts 34,615 characters in exactly, one paragraph per line, in 1.2 s. The work account's
+composer is a `<textarea>`, which never claimed it. An **unclaimed** paste cannot land later (a
+browser does nothing by default with an untrusted one), so the wait now runs only for a claimed
+paste or an image. That is the converse of the earlier lesson — claimed is not landed — and
+does not undo it. The shape fallback also vetoes `Expand input to Fullscreen`, which appears
+exactly when a long prompt goes in and was clicked instead of send.
+
 **Chrome also discards background tabs**, which looks identical to a hang: the tab stays in
 the strip with its title intact while the page and content script are gone.
 `prepareTabForTurn` sets `autoDiscardable: false` on a tab about to hold a turn, and

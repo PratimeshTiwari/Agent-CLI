@@ -106,6 +106,16 @@ test('the microphone is never the send button', () => {
     'it returned the control that starts voice dictation and loses the turn');
 });
 
+/*
+ * The second control that appears *because* of the text: Gemini shows it once
+ * the prompt is long. Picked by shape on 09-27 here and on the work laptop on
+ * 10-23, where it opened the composer full-screen instead of sending.
+ */
+test('the full-screen toggle is never the send button', () => {
+  assert.equal(pick([{ label: 'Expand input to Fullscreen' }]), null);
+  assert.equal(pick([{ label: 'Collapse input' }]), null);
+});
+
 test('and the real send button still is', () => {
   assert.equal(
     pick([{ label: 'Send message', icon: 'arrow_upward' }]),
