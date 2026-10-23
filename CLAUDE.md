@@ -1100,6 +1100,14 @@ watcher noise, in a picker whose only job is choosing. Dropped rather than title
 because a better title is still a row offering to restore a transcript of file
 notifications.
 
+**`/reset` starts a repo fresh, and moves rather than deletes (v5.6).** Both copies go — the
+repo's `.agent/` and `~/.agent/workspaces/<slug>/`, or the reconcile on the next start brings the
+history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/reset.js`'s
+`STATE_ENTRIES` move: a monorepo root holds every sibling's scope folder, and this repo's own
+`.agent/` held a stray `server/` scope, so an unknown entry is listed and left. `skills/` stays
+(a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
+because the loop would write the old conversation back.
+
 **Session history is written to both copies on every turn** (`storage/session-store.js`). The
 workspace copy sits next to the code; the home copy survives a clean checkout or a wiped
 `.agent/`. On startup the two are reconciled — more turns wins, the other is rebuilt from it.

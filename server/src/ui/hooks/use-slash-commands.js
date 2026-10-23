@@ -6,6 +6,7 @@ import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from 
 import { exitWithFarewell } from '../farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
+import { planReset, applyReset } from '../../core/reset.js';
 import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
@@ -55,6 +56,12 @@ import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
 import { checkForUpdate, isDirty, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
+
+/** For the confirm prompt: a plan that cannot be made is described as none. */
+function safePlanReset(workspace, args = []) {
+  try { return planReset(workspace, { keepSettings: args.includes('--keep-settings') }); }
+  catch { return null; }
+}
 
 
 /**
@@ -109,6 +116,7 @@ export async function handleSlashCommand(query, {
         allowCount: rules.allow?.length || 0,
         blockCount: rules.block?.length || 0,
         turnCount: agentLoop.conversationHistory?.length || 0,
+        resetPlan: command === 'reset' ? safePlanReset(agentLoop.workspace, args) : null,
       });
       if (warning) {
         setActiveMenu({
@@ -168,6 +176,50 @@ export async function handleSlashCommand(query, {
     // old version touched index.js's mtime, which does something only under
     // `tsx --watch` and nothing under `agent-cli` — where it printed
     // "Restarting server..." and stayed exactly where it was.
+    /**
+     * `/reset` — start this repo fresh. See core/reset.js for what moves and
+     * why nothing is deleted. Confirmed above; refused mid-turn, because the
+     * turn would go on writing into the folders being moved.
+     */
+    if (command === 'reset') {
+      const say = (content) => {
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+          { role: 'assistant', isLocal: true, content }]);
+        setIsProcessing(false);
+      };
+      if (agentLoop.isProcessing) {
+        say('A turn is running — stop it with `esc` first, then `/reset`.');
+        return;
+      }
+      let plan;
+      try {
+        plan = planReset(agentLoop.workspace, { keepSettings: args.includes('--keep-settings') });
+      } catch (err) {
+        say(`Nothing was moved: ${err.message}`);
+        return;
+      }
+      if (plan.moves.length === 0) {
+        say('Nothing to reset — this repo has no agent state yet.');
+        return;
+      }
+      const { moved, failed } = applyReset(plan);
+      if (failed) {
+        say(`⚠️ Stopped partway: could not move ${failed.name} (${failed.error}).\n\n`
+          + (moved.length ? `Already moved to \`${plan.trashDir}\`: ${moved.join(', ')}. ` : '')
+          + 'Nothing was deleted; move them back from there if you want the old state.');
+        return;
+      }
+      // The loop still holds the old conversation and would write it back.
+      agentLoop.conversationHistory = [];
+      const supervised = Boolean(process.env.AGENT_CLI_SUPERVISED);
+      say(`✓ Started fresh. Moved ${moved.join(', ')} to \`${plan.trashDir}\`.`
+        + (plan.kept.length ? `\n\nLeft in place: ${plan.kept.join(', ')}.` : '')
+        + (supervised ? '\n\n⟳ Restarting…' : '\n\nQuit with `/exit` and start the agent again — '
+          + 'it still holds the old state in memory.'));
+      if (supervised) leaveWhenIdle(RESTART_EXIT_CODE, { wsServer, agentLoop });
+      return;
+    }
+
     if (command === 'restart') {
       if (!process.env.AGENT_CLI_SUPERVISED) {
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
