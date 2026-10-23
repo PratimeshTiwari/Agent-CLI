@@ -132,7 +132,13 @@ test('outside edits are reported once each, worded by what is on disk', { skip: 
   writeFileSync(join(root, 'app', 'new.rb'), 'x');
   unlinkSync(join(root, 'app', 'gone.rb'));
   writeFileSync(join(root, 'node_modules', 'pkg.js'), 'x');
-  await new Promise((r) => setTimeout(r, 1200));
+  // Wait for the events, not for a fixed time: FSEvents delivery under a
+  // loaded machine (the whole suite in parallel) took longer than the 1.2s
+  // this used to sleep, and the test failed about one run in four. Then a
+  // quiet period, so an extra report would still be caught.
+  const deadline = Date.now() + 10_000;
+  while (events().length < 3 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  await new Promise((r) => setTimeout(r, 500));
 
   const got = events().sort();
   assert.deepEqual(got, [

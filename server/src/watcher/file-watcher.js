@@ -142,8 +142,16 @@ export class FileWatcher {
     // FSEvents can deliver writes from just before the watch began. A file
     // untouched since then has nothing to report — chokidar's `ignoreInitial`.
     if (st.mtimeMs < this._startedAt && st.birthtimeMs < this._startedAt) return;
-    // Born after the first event of this burst: it did not exist before.
-    const added = entry.sawRename && st.birthtimeMs >= entry.firstAt - 50;
+    /*
+     * New if it was born after the watch began and written as it was born.
+     * Compared against the event's *arrival* this was a race: under load
+     * FSEvents delivers late, and a brand-new file was reported "modified"
+     * (one run in thirteen of the full suite). The file's own timestamps do
+     * not depend on when we heard about it.
+     */
+    const added = entry.sawRename
+      && st.birthtimeMs >= this._startedAt
+      && st.mtimeMs - st.birthtimeMs <= Math.max(2000, this.settleMs * 2);
     this._handleChange(added ? 'added' : 'modified', abs);
   }
 
