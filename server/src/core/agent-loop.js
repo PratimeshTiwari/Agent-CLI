@@ -251,6 +251,38 @@ You have access to a local MCP tool server. You MUST use tools to explore the co
 6. When done, output ONLY the final plan. Do not include any tool call blocks in the final turn.`;
 
 export class AgentLoop {
+  /**
+   * Busy, as a property that says when it stops being true.
+   *
+   * The terminal's queue drained only when React re-rendered *after* the loop
+   * went idle, and nothing made it re-render: a turn whose screen had already
+   * gone idle mid-turn (a diff prompt, prose with tool calls) ended with a
+   * state change to the value React already had. The queued prompt sat at
+   * "queued" until ↑ changed the queue and the effect looked again. Reported
+   * twice from use. Eleven places write this flag — the loop, the bridge, the
+   * UI — so the edge is caught here, where all of them pass, rather than at
+   * each one, where the next writer would be the one that forgets.
+   */
+  get isProcessing() {
+    return this._isProcessing === true;
+  }
+
+  set isProcessing(value) {
+    const was = this._isProcessing === true;
+    this._isProcessing = Boolean(value);
+    if (was && !this._isProcessing) {
+      for (const fn of this._idleListeners || []) {
+        try { fn(); } catch { /* a listener must not break the turn's ending */ }
+      }
+    }
+  }
+
+  /** Called on every busy → idle edge. Returns the unsubscribe. */
+  onIdle(fn) {
+    (this._idleListeners ||= new Set()).add(fn);
+    return () => this._idleListeners.delete(fn);
+  }
+
   constructor({ workspace, mcpServer, promptBuilder, diffEngine, riskClassifier, editor, configHome, continueSession = false, resumeSessionId = null, agentSourceDir, taskManager }) {
     this.workspace = workspace;
     this.mcpServer = mcpServer;
