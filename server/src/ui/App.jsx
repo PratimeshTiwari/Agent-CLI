@@ -939,13 +939,28 @@ export function App({ agentLoop, wsServer }) {
    * two disagree during a diff approval, and draining then would inject a
    * prompt into a turn that is parked on a decision.
    */
+  /*
+   * And woken by the loop itself when it goes idle.
+   *
+   * `agentLoop.isProcessing` is not React state, so its turning false caused
+   * no render, and the effect below never looked again: the queued prompt sat
+   * at "queued" until ↑ changed `queued` and it did. `onIdle` fires on the
+   * loop's busy → idle edge, wherever it is written from. The busy flag comes
+   * down with it — the turn is over, and a spinner must not outlive it.
+   */
+  const [idleTick, setIdleTick] = useState(0);
+  useEffect(() => agentLoop.onIdle?.(() => {
+    setIsProcessing(false);
+    setIdleTick((n) => n + 1);
+  }), [agentLoop]);
+
   useEffect(() => {
     if (queued.length === 0) return;
     if (isProcessing || agentLoop.isProcessing || diffRequest || activeMenu) return;
     const [next, ...rest] = queued;
     setQueued(rest);
     handleSubmit(next);
-  }, [queued, isProcessing, diffRequest, activeMenu]);
+  }, [queued, isProcessing, diffRequest, activeMenu, idleTick]);
 
   /**
    * Answer the diff prompt — and, on one of the three answers, stop asking.

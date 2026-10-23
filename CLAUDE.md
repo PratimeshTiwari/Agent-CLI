@@ -2074,6 +2074,15 @@ gated on the loop being idle *and* no diff prompt or menu being open, because th
 disagree during an approval and draining then injects a prompt into a turn parked on a
 decision. `:stop` empties the queue, or stopping is followed instantly by the next prompt.
 
+**And the drain is woken by the loop, not by a render (v5.8).** Reported twice: a queued prompt
+sat at "queued" until ↑ brought it back. `agentLoop.isProcessing` is not React state, so its
+turning false caused no render, and when React's copy was already false (a diff prompt, or prose
+with tool calls — v5.5) the turn ended with no state change at all. `isProcessing` is an accessor
+now and `onIdle` fires on its busy → idle edge from any of its eleven writers; App drains on it and
+lowers its own flag. Pty: a prompt queued during a diff turn is sent unprompted; on `main` it
+never is. v5.5 alone already fixes that scenario — this makes it independent of every path
+getting the React flag right.
+
 **Up-arrow takes a queued prompt back** when the box is empty — press enter and it rejoins the
 queue, press nothing and it is gone, which is the cancel nobody had to invent a key for. Only
 when the box is empty: half a typed sentence must not be replaced by something queued a minute

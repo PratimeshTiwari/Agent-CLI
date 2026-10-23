@@ -38,9 +38,12 @@ test('busy is read from the loop, not from React state', () => {
 test('draining waits for the loop, a closed diff prompt and no open menu', () => {
   // The two isProcessing flags disagree during an approval; draining then
   // would inject a prompt into a turn parked on a decision.
-  const drain = app.slice(app.indexOf('Send the next queued prompt'));
+  // The effect itself, not a fixed window after its comment: a longer comment
+  // pushed the guards out of a 900-character window once already.
+  const end = app.indexOf('handleSubmit(next);');
+  const drain = app.slice(app.lastIndexOf('useEffect(() => {', end), end);
   for (const guard of ['agentLoop.isProcessing', 'diffRequest', 'activeMenu']) {
-    assert.ok(drain.slice(0, 900).includes(guard), `drain must be gated on ${guard}`);
+    assert.ok(drain.includes(guard), `drain must be gated on ${guard}`);
   }
 });
 
@@ -60,4 +63,16 @@ test('reclaiming removes it from the queue', () => {
   // Otherwise the prompt is both in the box and still due to be sent.
   const block = keys.slice(keys.indexOf("queued.length > 0 && input === ''"));
   assert.match(block.slice(0, 400), /setQueued\(\(q\) => q\.slice\(0, -1\)\)/);
+});
+
+/*
+ * Reported twice from use: a queued prompt stuck at "queued" until ↑ brought
+ * it back and it was sent again. The loop's flag is not React state, so the
+ * loop going idle caused no render and the drain never looked again.
+ */
+test('the drain is woken by the loop going idle, not by a render that may not come', () => {
+  const end = app.indexOf('handleSubmit(next);');
+  const deps = app.slice(end, app.indexOf(']);', end));
+  assert.match(deps, /idleTick/, 'the drain does not re-run when the loop goes idle');
+  assert.match(app, /agentLoop\.onIdle\?\.\(\(\) => \{[\s\S]{0,120}setIdleTick/, 'nothing subscribes to the idle edge');
 });
