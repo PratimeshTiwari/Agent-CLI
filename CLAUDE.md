@@ -912,7 +912,21 @@ and plain acorn cannot parse the `.jsx` files at all), and `SkillRegistry` was a
 way to declare a tool that competed with `mcp/mcp-server.js`'s `TOOL_DEFINITIONS` — which is the
 one described above and the one that actually runs. A per-symbol read tool is still a real gap;
 it wants `acorn-walk` plus `acorn-jsx`, not that file.
-`watcher/file-watcher.js` (chokidar) invalidates context on external edits. `semantic_search`
+`watcher/file-watcher.js` reports external edits into the history.
+
+**The watcher took the shell down on a large repo (fixed v5.6).** On the work laptop, 2026-10-23,
+*every* spawn failed with `spawn EBADF` — nine `run_command`s, `run_background`, the browser-open
+at launch, `/update`'s git — so approved Ruby scripts never started and `/update` claimed the
+checkout was not one. macOS refuses `posix_spawn` once a process holds a descriptor numbered at or
+above `OPEN_MAX` (10,240 — bisected to the descriptor), and chokidar 4 dropped fsevents, so it
+holds about one descriptor per watched *file* (852 for 131 directories here). A big repo crossed
+the line at startup. On macOS and Windows the watcher is now Node's recursive `fs.watch` —
+FSEvents, **zero** extra descriptors on the same tree — with chokidar kept for Linux. Ignores are
+by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and add `vendor`,
+`tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
+started, do not retry", and `/update` says git could not run instead of "not a git checkout".
+Verified end to end on a 15,000-file tree under the pty: `main` hands the model `EBADF`, this
+hands it the command's output. **Any new long-lived resource per file is the same bug.** `semantic_search`
 is backed by a local TF-IDF index.
 
 ### GitHub agent — removed 2026-09-19, documented to be rebuilt
@@ -1085,6 +1099,14 @@ Filing those put **6 of 19** rows into a real `/history` picker, every one readi
 watcher noise, in a picker whose only job is choosing. Dropped rather than titled better,
 because a better title is still a row offering to restore a transcript of file
 notifications.
+
+**`/reset` starts a repo fresh, and moves rather than deletes (v5.6).** Both copies go — the
+repo's `.agent/` and `~/.agent/workspaces/<slug>/`, or the reconcile on the next start brings the
+history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/reset.js`'s
+`STATE_ENTRIES` move: a monorepo root holds every sibling's scope folder, and this repo's own
+`.agent/` held a stray `server/` scope, so an unknown entry is listed and left. `skills/` stays
+(a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
+because the loop would write the old conversation back.
 
 **Session history is written to both copies on every turn** (`storage/session-store.js`). The
 workspace copy sits next to the code; the home copy survives a clean checkout or a wiped

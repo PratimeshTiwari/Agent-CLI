@@ -56,5 +56,18 @@ export function describeDestructive(command, args = [], ctx = {}) {
     };
   }
 
+  if (command === 'reset') {
+    const plan = ctx.resetPlan;
+    if (!plan || plan.moves.length === 0) return null; // the handler says "nothing to reset"
+    const names = plan.moves.map((m) => m.name).join(', ');
+    return {
+      title: 'Start this repo fresh?',
+      detail: `Moves ${names} to \`${plan.trashDir}\` — nothing is deleted. `
+        + (plan.kept.length ? `Left in place: ${plan.kept.join(', ')}. ` : '')
+        + 'Your code and AGENT.md are not touched. The agent restarts afterwards.',
+      confirmLabel: 'Yes, start fresh',
+    };
+  }
+
   return null;
 }
