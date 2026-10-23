@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="430" viewBox="0 0 940 430" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9ca3af"/></marker>
+  </defs>
+  <rect width="940" height="430" rx="10" fill="#ffffff"/>
+
+  <!-- Editor (illustration) -->
+  <rect x="16" y="16" width="560" height="200" rx="10" fill="#1f1f1f"/>
+  <rect x="16" y="16" width="560" height="30" rx="10" fill="#2b2b2b"/>
+  <rect x="16" y="36" width="560" height="10" fill="#2b2b2b"/>
+  <circle cx="36" cy="31" r="5" fill="#ff5f56"/><circle cx="52" cy="31" r="5" fill="#ffbd2e"/><circle cx="68" cy="31" r="5" fill="#27c93f"/>
+  <rect x="90" y="20" width="150" height="26" fill="#1f1f1f"/>
+  <text x="104" y="38" fill="#e5e5e5" font-size="12">invoice.rb</text>
+  <text x="300" y="36" fill="#8a8a8a" font-size="12" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">VS Code · Antigravity</text>
+  <!-- selection highlight on lines 2-3 -->
+  <rect x="58" y="92" width="380" height="44" fill="#264f78"/>
+  <text x="30" y="84" fill="#6e7681">1</text><text x="62" y="84" fill="#569cd6">class</text><text x="112" y="84" fill="#4ec9b0">Invoice</text><text x="182" y="84" fill="#d4d4d4">&lt; ApplicationRecord</text>
+  <text x="30" y="106" fill="#6e7681">2</text><text x="78" y="106" fill="#dcdcaa">has_many</text><text x="158" y="106" fill="#9cdcfe">:line_items</text>
+  <text x="30" y="128" fill="#6e7681">3</text><text x="78" y="128" fill="#569cd6">def</text><text x="112" y="128" fill="#dcdcaa">total</text><text x="166" y="128" fill="#d4d4d4">= line_items.sum(&amp;:amount)</text>
+  <text x="30" y="150" fill="#6e7681">4</text><text x="62" y="150" fill="#569cd6">end</text>
+  <!-- context menu -->
+  <rect x="330" y="118" width="232" height="84" rx="6" fill="#252526" stroke="#454545"/>
+  <text x="346" y="140" fill="#cccccc" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">Copy</text>
+  <rect x="334" y="150" width="224" height="24" rx="4" fill="#04395e"/>
+  <text x="346" y="167" fill="#ffffff" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">Add to Agent Chat</text>
+  <text x="548" y="167" fill="#cccccc" font-size="12" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">⌥⌘L</text>
+  <text x="346" y="192" fill="#cccccc" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">Go to Definition</text>
+
+  <!-- Caption -->
+  <text x="600" y="70" fill="#111827" font-size="15" font-weight="600" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">Select code, send it to the agent</text>
+  <text x="600" y="96" fill="#4b5563" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">⌥⌘L, right-click, the ⌘. lightbulb,</text>
+  <text x="600" y="116" fill="#4b5563" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">or the button on the editor tab bar.</text>
+  <text x="600" y="146" fill="#4b5563" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">It lands in the prompt as a short marker;</text>
+  <text x="600" y="166" fill="#4b5563" font-size="13" font-family="-apple-system,Segoe UI,Helvetica,sans-serif">the code itself goes to the model on send.</text>
+  <path d="M296 220 C 296 250, 296 250, 296 262" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#a)"/>
+
+  <!-- Terminal (real capture) -->
+  <rect x="16" y="270" width="908" height="144" rx="10" fill="#1e1e1e"/>
+  <circle cx="36" cy="286" r="6" fill="#ff5f56"/><circle cx="56" cy="286" r="6" fill="#ffbd2e"/><circle cx="76" cy="286" r="6" fill="#27c93f"/>
+  <text x="470" y="290" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — the selection arrives as a marker</text>
+  <rect x="32" y="310" width="876" height="40" rx="2" fill="none" stroke="#e5e5e5"/>
+  <text x="46" y="335" xml:space="preserve"><tspan fill="#e5e5e5" font-weight="bold">&gt; </tspan><tspan fill="#e5e5e5">@invoice.rb:2-3</tspan><tspan fill="#e5e5e5">  should refunds count?</tspan></text>
+  <text x="40" y="392" xml:space="preserve"><tspan fill="#29b8db" font-weight="bold">● agent</tspan><tspan fill="#d4d4d4">  ·  /help</tspan></text>
+  <text x="904" y="392" text-anchor="end" xml:space="preserve"><tspan fill="#9ca3af">1 paste</tspan><tspan fill="#d4d4d4">  ·  plan ⇥  ·  effort: high  ·  </tspan><tspan fill="#29b8db">0% of 96k</tspan></text>
+</svg>

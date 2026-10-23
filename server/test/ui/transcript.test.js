@@ -641,3 +641,16 @@ describe('the transcript after a /compact', () => {
     assert.equal(after.filter((r) => r.content === 'q3').length, 2);
   });
 });
+
+// A prompt with a paste or editor-selection marker: the echo shows the marker,
+// the loop records the expanded text. They are one message, drawn once — and as
+// the marker, which is the point of collapsing a paste.
+it('a prompt with a marker is drawn once, as the marker', () => {
+  const echo = { role: 'user', content: '@invoice.rb:2-3 should refunds count?', __echo: true,
+    __sent: 'app/models/invoice.rb (lines 2-3):\n```ruby\ndef total\n```\nshould refunds count?' };
+  const loop = [{ role: 'user', content: echo.__sent }];
+  const merged = mergeLoopHistory([echo], loop);
+  assert.equal(merged.length, 1, 'the prompt was drawn twice');
+  assert.equal(merged[0].content, echo.content);
+  assert.equal(merged[0].__loopIndex, 0);
+});

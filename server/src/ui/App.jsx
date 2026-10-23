@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { COMPACT_AT } from '../context/context-manager.js';
 import { nextMode } from '../core/modes.js';
+import { stripImageData } from '../core/prompt-builder.js';
 import { modeColor } from './constants.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
@@ -934,7 +935,11 @@ export function App({ agentLoop, wsServer }) {
     // `__echo` marks this as the optimistic copy of a prompt the loop is about
     // to record too. `mergeLoopHistory` claims it when the loop's own copy
     // arrives, instead of drawing the prompt twice.
-    setHistory(prev => [...prev, { role: 'user', content: query, timestamp: Date.now(), __echo: true }]);
+    // `__sent`: what the loop will record — the expanded paste or selection,
+    // image data stripped as the loop strips it. The echo shows the marker; the
+    // merge needs the sent form to know the two are one message (see
+    // mergeLoopHistory), or a prompt with a marker is drawn twice.
+    setHistory(prev => [...prev, { role: 'user', content: query, timestamp: Date.now(), __echo: true, __sent: stripImageData(messageContent) }]);
 
     const callbacks = buildAgentCallbacks({
       agentLoop,
