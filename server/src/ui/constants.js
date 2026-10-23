@@ -33,7 +33,8 @@ const SLASH_COMMANDS = [
   { name: 'effort', desc: 'How hard to work, and which browser tab it expects', group: 'config' },
   { name: 'allowlist', desc: 'Manage auto-approved/blocked command rules', group: 'config' },
   { name: 'config', desc: 'Which model implements, and which one reviews it', group: 'config' },
-  { name: 'plan', desc: 'Plan Mode — every edit needs approval', group: 'work' },
+  { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not', group: 'work' },
+  { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },
   { name: 'auto', desc: 'Auto Mode — safe edits apply automatically', group: 'work' },
   { name: 'workspace', desc: 'Where the agent works — and switch, which restarts', group: 'project' },
   { name: 'memory', desc: 'What the agent has learned about this project', group: 'chat' },
@@ -54,6 +55,17 @@ const SLASH_COMMANDS = [
   { name: 'restart', desc: 'Restart the server', group: 'agent' },
   { name: 'exit', desc: 'Quit the agent', group: 'agent' },
 ];
+
+/**
+ * The mode's colour, used by the input border and the status bar — the border
+ * *means* the mode, so the three modes need three colours. Strict is magenta:
+ * it asks most, and must not be mistaken for plan at a glance.
+ */
+export function modeColor(mode) {
+  if (mode === 'auto') return 'cyan';
+  if (mode === 'strict') return 'magenta';
+  return 'yellow';
+}
 
 /** Where typed input goes. */
 export const FOCUS_INPUT = 'input';

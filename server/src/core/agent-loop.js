@@ -156,6 +156,7 @@ import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory } from './compaction.js';
+import { describeMode } from './modes.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig } from './effort.js';
@@ -352,7 +353,7 @@ export class AgentLoop {
     }
 
     // State defaults
-    this.mode = 'plan'; // 'plan' | 'auto'
+    this.mode = 'plan'; // 'plan' | 'strict' | 'auto' — see core/modes.js
     this.modelConfig = {
       main: 'gemini',
       /*
@@ -3189,7 +3190,7 @@ export class AgentLoop {
     const applied = this.diffEngine.appliedDiffs.length;
 
     const rows = [
-      ['Mode', this.mode === 'plan' ? 'plan — every edit needs approval' : 'auto — safe edits apply on their own'],
+      ['Mode', describeMode(this.mode)],
       ['Turns', `${turns}`],
       ['Tokens', `~${used.toLocaleString()} / ${limit.toLocaleString()}  (${pct}%)`
         + '   — everything sent to the tab, not just these turns'],

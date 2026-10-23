@@ -58,6 +58,11 @@ is how someone installs the wrong one.
 
 ## Version history
 
+### 1.8.2 — 2026-10-24
+
+**The panel's mode toggle cycles Plan, Auto and Strict**, matching the agent's three modes. Only
+the copied-in panel changed.
+
 ### 1.8.1 — 2026-10-23
 
 **The panel stays busy for the whole turn.** A reply like "I'll read the file first" plus a

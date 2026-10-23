@@ -60,16 +60,19 @@ describe('plan mode', () => {
    */
   test('every mutating tool is gated', () => {
     const ws = workspace();
-    for (const name of MUTATING_TOOLS) {
-      // A shell tool the classifier calls `safe` is read-only, which is the one
-      // documented exemption; give the others a path outside the artifacts dir.
-      const risk = SHELL_TOOLS.has(name) ? risky : safe;
-      assert.equal(
-        requiresApproval({ name, args: { path: join(ws, 'README.md'), command: 'rm -rf x' } },
-          { mode: 'plan', risk, workspace: ws }),
-        true,
-        `${name} mutates and was not gated`,
-      );
+    for (const mode of ['plan', 'strict']) {
+      for (const name of MUTATING_TOOLS) {
+        // A shell tool the classifier calls `safe` is read-only, which is the one
+        // documented exemption; give the others a source file — Markdown in the
+        // repo is plan mode's other exemption (v5.11).
+        const risk = SHELL_TOOLS.has(name) ? risky : safe;
+        assert.equal(
+          requiresApproval({ name, args: { path: join(ws, 'src', 'app.rb'), command: 'rm -rf x' } },
+            { mode, risk, workspace: ws }),
+          true,
+          `${name} mutates and was not gated in ${mode}`,
+        );
+      }
     }
     rmSync(ws, { recursive: true, force: true });
   });
@@ -89,10 +92,11 @@ describe('plan mode', () => {
    * needs a keystroke. `README.md` is the case the old `endsWith('.md')` test
    * let through silently.
    */
-  test('the agent ticks its own checklist, and nothing else', () => {
+  // Strict is what plan mode was before v5.11, so this is that test, unchanged.
+  test('in strict mode the agent ticks its own checklist, and nothing else', () => {
     const ws = workspace();
     const ask = (path) =>
-      requiresApproval({ name: 'edit_file', args: { path } }, { mode: 'plan', risk: safe, workspace: ws });
+      requiresApproval({ name: 'edit_file', args: { path } }, { mode: 'strict', risk: safe, workspace: ws });
 
     assert.equal(ask(paths.artifactPath(ws, 'task.md')), false, 'ticking task.md needed approval');
     assert.equal(ask('.agent/artifacts/plan.md'), false, 'writing plan.md needed approval');
@@ -198,6 +202,47 @@ describe('it fails closed on nonsense', () => {
       true,
     );
     assert.equal(isBlockedOutright({ name: 'run_command' }, undefined), false);
+    rmSync(ws, { recursive: true, force: true });
+  });
+});
+
+/*
+ * Plan mode (v5.11): the repo's own Markdown is written without asking — asked
+ * for because a document built section by section asked for every section.
+ * Decided by location, never by extension alone, and never for the files that
+ * say what a person wants an agent to do. Each exemption has its control.
+ */
+describe('plan mode lets the repo\'s Markdown through, and nothing more', () => {
+  const ask = (ws, path, name = 'edit_file') =>
+    requiresApproval({ name, args: { path } }, { mode: 'plan', risk: safe, workspace: ws });
+
+  test('a document, notes or a README in the repo are written straight away', () => {
+    const ws = workspace();
+    for (const p of ['README.md', 'docs/design.md', join(ws, 'notes', 'confluence.md'), 'x.markdown']) {
+      assert.equal(ask(ws, p), false, `${p} asked`);
+      assert.equal(ask(ws, p, 'create_file'), false, `creating ${p} asked`);
+    }
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('control: instruction files still ask', () => {
+    const ws = workspace();
+    for (const p of ['AGENT.md', 'CLAUDE.md', 'GEMINI.md', 'sub/agent.md']) assert.equal(ask(ws, p), true, `${p} was written silently`);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('control: Markdown outside the repo still asks', () => {
+    const ws = workspace();
+    for (const p of ['../outside.md', '/tmp/x.md', 'docs/../../escape.md', '.git/info.md']) {
+      assert.equal(ask(ws, p), true, `${p} escaped plan mode`);
+    }
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('control: everything else still asks, and strict asks for Markdown too', () => {
+    const ws = workspace();
+    assert.equal(ask(ws, 'src/app.rb'), true);
+    assert.equal(requiresApproval({ name: 'edit_file', args: { path: 'README.md' } }, { mode: 'strict', risk: safe, workspace: ws }), true);
     rmSync(ws, { recursive: true, force: true });
   });
 });

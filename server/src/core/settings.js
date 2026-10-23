@@ -18,6 +18,7 @@
  * @property {string} [run]   slash command to run when picked; absent = read-only
  */
 
+import { MODES, nextMode, describeMode } from './modes.js';
 import fs from 'fs';
 import { resolveEffort } from './effort.js';
 import { browserModelPin } from './model-match.js';
@@ -111,9 +112,9 @@ export function describeSettings(agentLoop) {
     {
       group: 'Settings',
       label: 'Edit approval',
-      value: agentLoop?.mode === 'auto' ? 'auto' : 'plan',
-      hint: agentLoop?.mode === 'auto' ? 'safe edits apply on their own' : 'every edit shows a diff first',
-      run: agentLoop?.mode === 'auto' ? '/plan' : '/auto',
+      value: MODES.includes(agentLoop?.mode) ? agentLoop.mode : 'plan',
+      hint: describeMode(agentLoop?.mode).split(' — ')[1],
+      run: `/${nextMode(agentLoop?.mode)}`,
       restore: (value) => `/${value}`,
     },
     {

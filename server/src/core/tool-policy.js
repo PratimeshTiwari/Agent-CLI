@@ -16,6 +16,7 @@
  */
 import { MUTATING_TOOLS, SHELL_TOOLS, DETACHED_TOOLS } from './tool-catalog.js';
 import { isAgentArtifact } from './artifact-guard.js';
+import { asksForEdits, isProjectMarkdown } from './modes.js';
 
 /**
  * Refused without asking, because asking would be the wrong question.
@@ -40,7 +41,7 @@ export function isBlockedOutright(call, risk) {
 export function requiresApproval(call, { mode, risk, workspace } = {}) {
   const name = call?.name;
 
-  if (mode !== 'plan') {
+  if (!asksForEdits(mode)) {
     // Auto mode asks only about what the classifier is unsure of. `safe` runs
     // unattended — which is the whole of what auto mode buys — and `critical`
     // never reaches an approval prompt because `isBlockedOutright` has it.
@@ -69,6 +70,14 @@ export function requiresApproval(call, { mode, risk, workspace } = {}) {
    */
   if (name === 'create_file' || name === 'edit_file') {
     if (isAgentArtifact(workspace, call?.args?.path)) return false;
+    /*
+     * And in `plan` (not `strict`), the repo's own Markdown — asked for on
+     * 2026-10-24, because a document built section by section asked for every
+     * section. Unlike the exemption described above, this one is decided by
+     * location (inside the workspace) and never covers the instruction files
+     * (AGENT.md, CLAUDE.md, GEMINI.md). See core/modes.js.
+     */
+    if (mode === 'plan' && isProjectMarkdown(workspace, call?.args?.path)) return false;
   }
 
   /*

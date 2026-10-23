@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { COMPACT_AT } from '../context/context-manager.js';
+import { nextMode } from '../core/modes.js';
+import { modeColor } from './constants.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
@@ -296,7 +298,7 @@ export function App({ agentLoop, wsServer }) {
   const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
 
   const cycleMode = React.useCallback(() => {
-    const next = (agentLoop.mode || 'plan') === 'plan' ? 'auto' : 'plan';
+    const next = nextMode(agentLoop.mode || 'plan');
     agentLoop.mode = next;
     setMode(next);
   }, [agentLoop]);
@@ -1454,7 +1456,7 @@ export function App({ agentLoop, wsServer }) {
           */}
           {pendingImage ? <Text color="yellow">{'1 image  ·  '}</Text> : ''}
           {runningTasks > 0 ? <Text color="yellow">{runningTasks} bg{'  ·  '}</Text> : ''}
-          <Text color={mode === 'plan' ? 'yellow' : 'cyan'}>{mode}</Text>
+          <Text color={modeColor(mode)}>{mode}</Text>
           <Text dimColor> ⇥{'  ·  '}</Text>
           {/*
             Two different facts, and the row says which one it has.

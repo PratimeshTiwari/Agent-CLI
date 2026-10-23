@@ -415,8 +415,11 @@ function updateConnectionUI(connected) {
 }
 
 // ── Mode Toggle ─────────────────────────────────────────────────────
+// The CLI's order (server/src/core/modes.js): plan → auto → strict.
+const MODE_ORDER = ['plan', 'auto', 'strict'];
+
 function toggleMode() {
-  currentMode = currentMode === 'plan' ? 'auto' : 'plan';
+  currentMode = MODE_ORDER[(MODE_ORDER.indexOf(currentMode) + 1) % MODE_ORDER.length];
   updateModeUI();
 
   // Send slash command to server
@@ -429,13 +432,15 @@ function toggleMode() {
 function updateModeUI() {
   // `●` / `○`, the same two glyphs the CLI's status bar uses for connected and
   // not. Filled means it acts on its own; hollow means it asks first.
+  // Strict asks for everything, Markdown included; plan lets the repo's own
+  // Markdown through. `◎` so the two plan-like modes are not one glyph.
   if (currentMode === 'auto') {
     modeIcon.textContent = '●';
     modeText.textContent = 'Auto';
     modeToggle.classList.add('auto-mode');
   } else {
-    modeIcon.textContent = '○';
-    modeText.textContent = 'Plan';
+    modeIcon.textContent = currentMode === 'strict' ? '◎' : '○';
+    modeText.textContent = currentMode === 'strict' ? 'Strict' : 'Plan';
     modeToggle.classList.remove('auto-mode');
   }
 }
@@ -526,7 +531,7 @@ function handleSlashCommand(input) {
   const args = parts.slice(1);
 
   // Handle local commands
-  if (command === 'plan' || command === 'auto') {
+  if (MODE_ORDER.includes(command)) {
     currentMode = command;
     updateModeUI();
   }

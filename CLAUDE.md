@@ -857,7 +857,15 @@ goes on reporting "Remembered:" for facts the model will never see. Written by h
 and `loop-tools.test.js` asserts the reset on both paths and its *absence* on a rejected action,
 which would otherwise spend a full turn-0 payload to change nothing.
 
-**Plan mode exempts the agent's own artifacts, and nothing else.** The check was
+**Three modes since v5.11 (`core/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24,
+because building a document section by section in plan mode asked for every section. `strict` is
+the old plan mode, described below unchanged. `plan` additionally writes Markdown **inside the
+workspace** without asking — decided by location, never by extension alone — except the
+instruction files (`AGENT.md`, `CLAUDE.md`, `GEMINI.md`), which is the line the paragraph below
+was written to hold. The prompt states the exception in plan and not in strict, because the two
+disagreeing is the failure recorded below. Tab cycles plan → auto → strict.
+
+**Plan mode exempts the agent's own artifacts, and nothing else.** *(Now true of `strict`.)* The check was
 `path.endsWith('.md')`, beside a comment reading "Creating/Editing Markdown files (like plans)
 is harmless". The intent was real — `task.md` and `plan.md` are files the system prompt *tells*
 the model to keep current, and it cannot do that if every tick needs a keystroke. But the test

@@ -135,7 +135,7 @@ export class PromptBuilder {
    *
    * @param {object} options
    * @param {string} options.userMessage - The user's current message
-   * @param {string} options.mode - 'plan' or 'auto'
+   * @param {string} options.mode - 'plan', 'strict' or 'auto' (core/modes.js)
    * @returns {string} The complete prompt to inject
    */
   buildPrompt({ userMessage, mode = 'plan', subagents = true, modelConfig = {}, objective = '' }) {
@@ -577,10 +577,17 @@ export class PromptBuilder {
       // keypress. The tool catalog already forbids that in as many words; it
       // was being contradicted by this line. Saying what actually happens
       // costs nothing and removes the reason to ask.
-      : 'You are in PLAN MODE. Call edit_file, create_file and run_command exactly as you '
+      // The two plan-like modes differ only in Markdown, and the prompt has to
+      // say so: a model told "every edit needs approval" while its .md writes
+      // apply at once reports them as pending — the disagreement CLAUDE.md
+      // records from the last time the prompt and the policy differed.
+      : `You are in ${mode === 'strict' ? 'STRICT PLAN MODE' : 'PLAN MODE'}. Call edit_file, create_file and run_command exactly as you `
         + 'normally would — the user is shown the diff or the command and approves or rejects '
         + 'it before anything happens. Do not ask in prose for permission to proceed or to '
-        + 'change mode; propose the change and let them answer it.';
+        + 'change mode; propose the change and let them answer it.'
+        + (mode === 'strict' ? ''
+          : ' Exception: Markdown files inside the project (.md — plans, notes, documents) are '
+            + 'written straight away, except AGENT.md, CLAUDE.md and GEMINI.md, which also ask.');
 
     // One setting decides both. They used to be stored separately and could
     // disagree — "flash tier, deep reasoning" was representable and meant
@@ -1167,7 +1174,9 @@ Full parameter schemas were given earlier in this chat — scroll back to them r
    * Much smaller than the full prompt — just the essential rules and tool format.
    */
   _buildCondensedReminder(mode, objective = '', modelConfig = {}) {
-    const modeStr = mode === 'auto' ? 'AUTO MODE (safe ops auto-applied)' : 'PLAN MODE (all edits need approval)';
+    const modeStr = mode === 'auto' ? 'AUTO MODE (safe ops auto-applied)'
+      : mode === 'strict' ? 'STRICT PLAN MODE (all edits need approval)'
+        : 'PLAN MODE (edits need approval; project .md files are written straight away)';
     const tier = resolveEffort(modelConfig.effort).tier;
 
     if (tier === 'lite') {
