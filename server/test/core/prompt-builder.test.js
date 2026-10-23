@@ -626,7 +626,9 @@ describe('every rung asks for a list, checks it, and reviews before finishing', 
   test('every rung is told to keep a checklist, and to check it at the end', () => {
     for (const effort of LADDER) {
       const p = handoverFor(effort);
-      assert.match(p, /proactively create/, `${effort}: never asked for a list`);
+      // Pro asks in STEP 1 (pro-plan-first.md); lite and flash in the role
+      // bullets — the pro copy was a duplicate and went on 2026-10-24.
+      assert.match(p, /proactively create|write the checklist to/, `${effort}: never asked for a list`);
       assert.match(p, /Checklist:|<task_checklist>/, `${effort}: never checks it`);
     }
   });

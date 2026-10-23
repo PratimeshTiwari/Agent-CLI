@@ -13,7 +13,8 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 
 | Release | PR | What changed |
 | --- | --- | --- |
-| v5.12 | — | UI polish: `6 reads · 2 edits · 1 command` turn summaries, `/diff`, paths that keep their first directory, `↑ to take back` on queued prompts, queued rows charged to the frame budget |
+| v5.13 | — | Prompt fixes from a review (pro's duplicate bullets, numbered headings, no ceremony for a greeting); a prompt with a paste or selection marker is drawn once; README feature tour |
+| v5.12 | #76 | UI polish: `6 reads · 2 edits · 1 command` turn summaries, `/diff`, paths that keep their first directory, `↑ to take back` on queued prompts, queued rows charged to the frame budget |
 | v5.11 | #75 | Three modes — `plan` writes the repo's Markdown without asking (not AGENT.md/CLAUDE.md), `strict` asks for everything, `auto` unchanged. Extension 1.47.0, companion 1.8.2 |
 | v5.10 | #74 | Large files: reads cut by whole lines and naming what they left out, plain-text file content, edits that survive copied line numbers, `append` for documents, `+N −M` on edit rows |
 | v5.9 | #73 | Compaction finally hands its summary to the fresh chat; asked of the same chat; between turns or paused mid-turn and resumed; progress row. Task list moves to ctrl+o |

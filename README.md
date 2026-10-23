@@ -13,6 +13,30 @@ types it in and streams the reply back, and the agent reads, edits and runs thin
 - **Built for real repos.** Large files, long sessions that compact themselves, background tasks,
   and an editor panel for VS Code.
 
+## A quick tour
+
+**Every edit is a diff you approve** — in plan mode, the change is shown before anything is
+written. Approve, reject, or approve and switch to auto mode.
+
+![A diff approval prompt](docs/images/diff-approval.svg)
+
+**Send code from your editor** — with the VS Code companion, select lines and press `⌥⌘L`.
+
+![Selecting code in the editor and sending it to the agent](docs/images/add-to-chat.svg)
+
+**Keep typing while it works** — new messages queue and go out when the turn ends; `↑` takes one
+back.
+
+![A queued message under a running turn](docs/images/queued.svg)
+
+**Long sessions look after themselves** — near the limit the agent summarises the conversation in
+the same chat, moves to a fresh one, and carries on. The status bar warns you first.
+
+![The compaction progress bar](docs/images/compaction.svg)
+
+*Screenshots are real terminal frames from the project's test harness, replayed through a terminal
+emulator; the editor in the second one is an illustration.*
+
 ## How it works
 
 ![Architecture: terminal agent, Chrome extension, Gemini tab](docs/images/architecture.svg)

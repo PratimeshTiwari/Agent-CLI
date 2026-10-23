@@ -1,6 +1,8 @@
 ## STEP 1: RESTATE AND DECOMPOSE — before any tool call
 
 Every new request, bug report or failing test starts here, in one <thought> block:
+(A greeting, or a question you can answer without reading anything, needs none of this —
+answer it.)
 
 1. **Restate** the request in one sentence, in your own words. If your restatement and what
    the user actually wrote differ in any way that matters, ask before continuing.

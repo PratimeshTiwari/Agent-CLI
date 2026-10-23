@@ -346,9 +346,16 @@ export function mergeLoopHistory(shownHistory, loopHistory, offset = 0) {
     const turn = loopHistory[i];
     const at = i + offset;
     if (turn.role === 'user') {
+      /*
+       * The loop records what was *sent* — a paste or an editor selection
+       * expanded, image data stripped — while the echo shows the marker. So a
+       * prompt with `@invoice.rb:2-3` in it never matched its own echo and was
+       * drawn twice: once as typed, once with the code inlined. Seen in a
+       * screenshot for the README, 2026-10-24.
+       */
       const echo = out.find((m) => m.__echo === true
         && !Number.isInteger(m.__loopIndex)
-        && m.content === turn.content);
+        && (m.content === turn.content || m.__sent === turn.content));
       if (echo) {
         echo.__loopIndex = at;
         continue;
