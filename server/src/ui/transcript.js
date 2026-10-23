@@ -295,7 +295,7 @@ export function parseTurnActions(turn) {
  * @returns {Array} `shownHistory` itself when there is nothing new, so React
  *                  can skip the render
  */
-export function mergeLoopHistory(shownHistory, loopHistory) {
+export function mergeLoopHistory(shownHistory, loopHistory, offset = 0) {
   /**
    * How far into the loop's history the screen has already been drawn.
    *
@@ -326,7 +326,14 @@ export function mergeLoopHistory(shownHistory, loopHistory) {
     if (Number.isInteger(m.__loopIndex)) consumed = Math.max(consumed, m.__loopIndex + 1);
   }
 
-  if (loopHistory.length <= consumed) return shownHistory;
+  /*
+   * `offset`: entries compaction has removed from the front of the loop's
+   * history. Positions on the rows are absolute, so a rewrite does not renumber
+   * what was already drawn — before this, the first merge after a compaction
+   * read the kept turns as new and drew them a second time (a 335k-character
+   * reply printed twice, under the pty).
+   */
+  if (loopHistory.length + offset <= consumed) return shownHistory;
 
   // The optimistic echo and the loop's own copy of the prompt are the same
   // message. Reconciled by claiming the echo rather than appending beside it,
@@ -335,18 +342,19 @@ export function mergeLoopHistory(shownHistory, loopHistory) {
   const out = shownHistory.map((m) => ({ ...m }));
   const appended = [];
 
-  for (let i = consumed; i < loopHistory.length; i += 1) {
+  for (let i = Math.max(0, consumed - offset); i < loopHistory.length; i += 1) {
     const turn = loopHistory[i];
+    const at = i + offset;
     if (turn.role === 'user') {
       const echo = out.find((m) => m.__echo === true
         && !Number.isInteger(m.__loopIndex)
         && m.content === turn.content);
       if (echo) {
-        echo.__loopIndex = i;
+        echo.__loopIndex = at;
         continue;
       }
     }
-    appended.push({ ...turn, __loopIndex: i });
+    appended.push({ ...turn, __loopIndex: at });
   }
 
   if (appended.length === 0 && out.every((m, i) => m === shownHistory[i])) return shownHistory;

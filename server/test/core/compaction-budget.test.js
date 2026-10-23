@@ -25,21 +25,22 @@ const rows = (n, len) => Array.from({ length: n }, (_, i) => ({
   content: 'x'.repeat(len),
 }));
 
-function stubLoop(history) {
-  const seen = { subagentOpts: null, calls: 0, notices: [] };
+function stubLoop(history, answer = { ok: false, timedOut: true }) {
+  const seen = { askOpts: null, prompt: null, calls: 0, statuses: [], newChat: 0 };
   const loop = {
     conversationHistory: history,
     workspace: process.cwd(),
     contextTokens: 1234,
     sessionStore: { saveHistory() {}, appendTurn() {} },
     promptBuilder: { resetPromptState() {} },
-    _notify: (m) => seen.notices.push(m),
+    callbacks: { sendToPanel: (m) => { if (m.type === 'status') seen.statuses.push(m.payload); } },
     _resetContextCount() {},
-    async startNewChat() { return false; },
-    async _executeSubagent(model, prompt, opts) {
+    async startNewChat() { seen.newChat += 1; return false; },
+    async _askThread(prompt, opts) {
       seen.calls += 1;
-      seen.subagentOpts = opts;
-      return { success: false, error: 'no extension' };
+      seen.prompt = prompt;
+      seen.askOpts = opts;
+      return answer;
     },
   };
   return { loop, seen };
@@ -75,30 +76,30 @@ test('what /compact refuses to do', async (t) => {
 });
 
 test('what it does do', async (t) => {
-  await t.test('real history is summarised, with a deadline a person will wait out', async () => {
+  await t.test('it asks this chat for the summary, with a short prompt and a bound', async () => {
     const { loop, seen } = stubLoop(rows(12, 400));
     const r = await compactHistory(loop);
     assert.equal(seen.calls, 1);
-    assert.ok(seen.subagentOpts?.timeoutMs, 'inherited the five-minute watchdog again');
-    assert.ok(seen.subagentOpts.timeoutMs <= 60000,
-      `a person is watching a spinner for ${seen.subagentOpts.timeoutMs}ms`);
+    assert.ok(seen.askOpts?.timeoutMs <= 120_000, `a person is watching for ${seen.askOpts?.timeoutMs}ms`);
+    // The point of asking the thread: the history is not pasted back into it.
+    assert.ok(seen.prompt.length < 1000, `the summary prompt is ${seen.prompt.length} characters`);
+    assert.ok(!seen.prompt.includes('x'.repeat(400)), 'the history was re-sent');
     assert.match(r.message, /Compacted \d+ turns/);
   });
 
-  // The short deadline is only safe because the fallback always exists: the
-  // worst case is a blunter summary, never a lost turn.
-  await t.test('a model that never answers still produces a compaction', async () => {
+  // The fallback is what makes any deadline safe: the worst case is a blunter
+  // summary, never a lost turn.
+  await t.test('a chat that never answers still produces a compaction', async () => {
     const { loop } = stubLoop(rows(12, 400));
     const r = await compactHistory(loop);
     assert.match(r.message, /condensed locally/);
   });
 
-  await t.test('the wait is announced with its own bound', async () => {
+  await t.test('the wait is shown as a progress bar, stage by stage', async () => {
     const { loop, seen } = stubLoop(rows(12, 400));
     await compactHistory(loop);
-    const said = seen.notices.join(' ');
-    assert.match(said, /Summarising \d+ older turns/);
-    assert.match(said, /30s/, 'the notice promises no bound, so silence looks like a hang');
+    assert.deepEqual(seen.statuses.map((p) => p.progress?.step), [1, 2, 3]);
+    assert.match(seen.statuses[0].message, /Compacting ▰▱▱ summarising in this chat/);
   });
 });
 

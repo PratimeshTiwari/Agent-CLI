@@ -8,25 +8,28 @@
  * compaction, model switching and the handover audit; nearly every bug found on
  * 2026-09-19 lived in it or one call away.
  *
- * Nothing about the behaviour changed in the move. The one thing worth knowing
- * before touching it: **compaction is a handover, not a truncation.** It
- * summarises, opens a *new* browser chat, and only resets `contextChars` if the
- * browser confirms — because that counter is "everything ever typed into the
- * tab", and resetting it against a thread that never changed is what made the
- * agent believe it had room it did not have.
+ * The one thing worth knowing before touching it: **compaction is a handover,
+ * not a truncation.** Since v5.9 it asks the *current* chat for the summary
+ * (it holds everything), opens a new chat, and hands the summary to the next
+ * prompt as `<compacted_context>` — which, until v5.9, nothing did: the summary
+ * was written to history and never sent, so every compaction left the model
+ * with no memory of the task. It runs between turns or between rounds, never
+ * beside a running prompt, and the count restarts only if the browser confirms
+ * the new chat.
  */
 import { randomUUID } from 'crypto';
 import { archiveTurns } from './session-recall.js';
+import { logNotice } from './error-log.js';
 
 /**
- * How long to wait for the model's summary before condensing locally.
+ * How long to wait for the thread's summary before condensing locally.
  *
- * A person typed `/compact` and is watching a spinner, so this is a UX budget
- * rather than a watchdog. The fallback below is deterministic and always
- * available, which is what makes a short deadline safe: the worst case is a
- * blunter summary, not a lost turn.
+ * Longer than the 30 s the cold-tab summary had, because this is a reply the
+ * model writes from a long thread, and the person is watching a progress bar
+ * with `esc` on it rather than an unexplained spinner. The local fallback is
+ * still there, so the worst case is a blunter summary, never a lost turn.
  */
-const SUMMARY_TIMEOUT_MS = 30000;
+const SUMMARY_TIMEOUT_MS = 90_000;
 
 /** Rows, not exchanges — three short Q&A pairs is already eight rows. */
 const MIN_ROWS = 6;
@@ -47,14 +50,87 @@ const MIN_COMPACT_CHARS = 2000;
 
 const charsOf = (turns) => turns.reduce((n, t) => n + (t.content?.length || 0), 0);
 
-export async function compactHistory(loop, focus) {
-  if (loop.conversationHistory.length < MIN_ROWS) {
+/** The question asked of the thread. Short: the thread already has everything. */
+export function summaryPrompt(focus) {
+  return [
+    '[Compaction request — not a task. Do not call any tools and do not continue the work.]',
+    'This conversation is about to move to a fresh chat that will see only what you write now plus',
+    'the last few messages. Write the handover for that session: the goal and where the task stands;',
+    'every file read or changed, by path, and what was learned or changed in it; decisions made and',
+    'why; errors hit and their causes; what is left to do. Plain prose and lists, under 600 words.',
+    focus ? `Pay particular attention to: ${focus}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+/** A summary is unusable if it is empty or the model answered with tool calls. */
+export function usableSummary(text) {
+  const t = String(text || '').trim();
+  if (t.length < 40) return false;
+  return !/```(json)?\s*[\[{][\s\S]*?"name"\s*:/.test(t);
+}
+
+/** What tells the fresh chat where the rest is. `recall_history` has had no calls, so say *when*. */
+export const HANDOVER_POINTER = 'The full earlier conversation is saved on disk. When you need a detail this '
+  + 'summary does not have — an exact error, a path, the reason for a decision — call recall_history '
+  + 'with a literal search term before guessing or asking the user to repeat it.';
+
+/**
+ * The kept turns, as the fresh chat sees them: conversation only, each one
+ * capped head-and-tail, the lot capped too. The full text is in history.jsonl
+ * and reachable through `recall_history`.
+ */
+export function recentMessages(turns, { perTurn = 1500, total = 6000 } = {}) {
+  const lines = turns
+    .filter((t) => ['user', 'assistant', 'agent'].includes(t.role) && typeof t.content === 'string' && t.content.trim())
+    .map((t) => {
+      const c = t.content.trim();
+      const body = c.length > perTurn
+        ? `${c.slice(0, perTurn * 0.7)}\n… ${(c.length - perTurn).toLocaleString()} characters trimmed …\n${c.slice(-perTurn * 0.3)}`
+        : c;
+      return `[${t.role === 'agent' ? 'assistant' : t.role}] ${body}`;
+    });
+  let out = lines.join('\n\n');
+  if (out.length > total) out = `…\n${out.slice(-total)}`;
+  return out;
+}
+
+const STAGES = ['summarising in this chat', 'opening a fresh chat', 'handing over'];
+
+/** One row in the live frame: `Compacting ▰▰▱ opening a fresh chat`. */
+export function progressText(step) {
+  const n = STAGES.length;
+  return `🗜 Compacting ${'▰'.repeat(step)}${'▱'.repeat(n - step)} ${STAGES[step - 1]}…`;
+}
+
+function progress(loop, step) {
+  loop.callbacks?.sendToPanel?.({
+    id: randomUUID(),
+    type: 'status',
+    payload: { message: progressText(step), progress: { step, of: STAGES.length } },
+    timestamp: Date.now(),
+  });
+}
+
+export async function compactHistory(loop, focus, { auto = false } = {}) {
+  /*
+   * Asked for during a turn: run when it ends. Compacting under a running
+   * turn is the bug this module was rewritten for (v5.9).
+   */
+  if (!auto && loop.isProcessing) {
+    loop._compactAfterTurn = true;
+    return { message: 'A turn is running — compaction will run as soon as it finishes.' };
+  }
+
+  // Auto-compaction skips the size guards: it fires because the *browser
+  // thread* is full, and a few huge tool results fill it as surely as many
+  // turns. The guards are about whether a person's `/compact` is worth a trip.
+  if (!auto && loop.conversationHistory.length < MIN_ROWS) {
     return { message: 'Conversation is too short to compact.' };
   }
 
   const pending = loop.conversationHistory.slice(0, -5);
   const pendingChars = charsOf(pending);
-  if (pendingChars < MIN_COMPACT_CHARS) {
+  if (!auto && pendingChars < MIN_COMPACT_CHARS) {
     // The two numbers here measure different things, and side by side they
     // used to read as the tool contradicting itself — "only 114 characters"
     // next to "~23,248 tokens" with nothing saying why. This one is
@@ -78,14 +154,18 @@ export async function compactHistory(loop, focus) {
   }
 
   loop.isCompacting = true;
+  // The ask needs the loop busy (an idle loop discards main-lane replies as
+  // stale), and busy is also what makes prompts typed meanwhile queue.
+  const ownsBusy = !loop.isProcessing;
+  if (ownsBusy) loop.isProcessing = true;
 
   try {
-    // Keep the last 5 turns exactly as they are
-    const toCompact = loop.conversationHistory.slice(0, -5);
-    const toKeep = loop.conversationHistory.slice(-5);
+    const keep = Math.min(5, loop.conversationHistory.length);
+    const toCompact = loop.conversationHistory.slice(0, loop.conversationHistory.length - keep);
+    const toKeep = loop.conversationHistory.slice(loop.conversationHistory.length - keep);
 
-    // Deterministic lightweight truncation (fallback)
-    let compactedSummary = toCompact.map(turn => {
+    // Deterministic condensation — the fallback when the thread does not answer.
+    const localSummary = toCompact.map((turn) => {
       if (turn.role === 'system' && turn.content) {
         if (turn.content.includes('**Command Output:**')) return '[System: Command executed. Output truncated for context compaction.]';
         if (turn.content.includes('**File Contents:**') || turn.content.includes('**Search Results:**')) return '[System: File/Search data truncated for context compaction.]';
@@ -94,131 +174,91 @@ export async function compactHistory(loop, focus) {
       return `[${turn.role.toUpperCase()}]: ${turn.content}`;
     }).join('\n\n');
 
-    loop._notify(
-      `🧠 Summarising ${toCompact.length} older turns in a browser tab — `
-      + `up to ${SUMMARY_TIMEOUT_MS / 1000}s, then it condenses them locally instead.`,
-    );
-
-    const summaryPrompt = `You are a context compactor for an AI coding agent.
-Your job is to read the following conversation history and summarize it into a tight, dense block of text.
-CRITICAL RULES:
-1. Preserve ALL file paths that were explored.
-2. Preserve ALL technical conclusions, bugs found, or decisions made.
-3. Preserve the exact current state of the user's task.
-4. Do NOT output markdown formatting like \`\`\`json, just pure dense text.
-
-HISTORY TO SUMMARIZE:
-${compactedSummary}`;
-
     /*
-     * A deadline the user is actually willing to wait out.
-     *
-     * This inherited `_executeSubagent`'s five-minute watchdog, and nothing else
-     * could settle the promise — so with no extension answering, `/compact` sat
-     * silent for five minutes before the fallback ran. Nothing threw, so the
-     * UI's try/catch never fired and it read as a hang.
+     * Step 1: ask the thread. It holds the whole conversation, tool results
+     * included, so this is a few hundred characters out and a summary built
+     * from the real thing — where the old way pasted every older turn, with
+     * the results replaced by placeholders, into a cold tab.
      */
-    const llmResponse = await loop._executeSubagent('gemini', summaryPrompt, {
-      timeoutMs: SUMMARY_TIMEOUT_MS,
-    });
-    let finalSummaryText = compactedSummary;
-    
-    if (llmResponse.success && llmResponse.result) {
-      finalSummaryText = llmResponse.result;
-    } else if (llmResponse.success && llmResponse.content) {
-      finalSummaryText = llmResponse.content;
+    progress(loop, 1);
+    const startedAt = Date.now();
+    const asked = await loop._askThread(summaryPrompt(focus), { timeoutMs: SUMMARY_TIMEOUT_MS });
+    if (asked.cancelled) {
+      return { message: 'Compaction cancelled — nothing changed; this chat carries on as it was.' };
     }
+    const fromThread = asked.ok && usableSummary(asked.text);
+    const summary = fromThread ? asked.text.trim() : localSummary;
+
+    logNotice(loop.workspace, {
+      flow: 'agent', op: 'compaction',
+      message: fromThread ? 'Compacted from the thread\'s own summary'
+        : `Compacted locally — the thread ${asked.timedOut ? 'did not answer in time' : 'gave no usable summary'}`,
+      meta: { auto, path: fromThread ? 'thread' : 'local', ms: Date.now() - startedAt,
+        summaryChars: summary.length, turns: toCompact.length },
+    });
 
     const compactedTurn = {
       role: 'system',
       type: 'compaction_summary',
-      content: `[Context Summary of older turns]\n${finalSummaryText}`,
+      content: `[Context Summary of older turns]\n${summary}\n\n${HANDOVER_POINTER}`,
       timestamp: Date.now(),
     };
 
-    // Mutate the history safely
-    // Archive before the rewrite, not after: `saveHistory` overwrites both
-    // copies of history.jsonl, so without this the turns being summarised are
-    // gone from disk and not merely from the thread. `recall` searches what
-    // lands here, which is the whole reason it can answer anything.
+    // Archive before the rewrite: `saveHistory` overwrites both copies of
+    // history.jsonl, and `recall_history` searches what lands here.
     archiveTurns(loop.workspace, toCompact);
-
+    // The screen counts what it has drawn by absolute position; tell it how far
+    // the front moved (mergeLoopHistory's `offset`).
+    loop.historyOffset = (loop.historyOffset || 0) + toCompact.length - 1;
     loop.conversationHistory = [compactedTurn, ...toKeep];
     loop.sessionStore.saveHistory(loop.conversationHistory);
-    loop.promptBuilder.resetPromptState();
+    // No resetPromptState here: `startNewChat` resets it when the chat really
+    // changes, and a full turn-0 payload into the *old* thread — which already
+    // has it — is the repetition-filter risk recorded in that function.
 
-    /**
-     * Compaction is a **handover**, and it used not to hand anything over.
-     *
-     * It rewrote `conversationHistory`, reset the prompt state and reset the
-     * counter — and sent nothing to the browser. The tab stayed on the thread
-     * that still held every turn just summarised, so:
-     *
-     * - the model's memory was unchanged; it still had all of it;
-     * - `resetPromptState` then sent a full turn-0 payload **plus** a summary
-     *   of those turns *into the thread that contains them* — the largest
-     *   prompt in the system, at the moment a large repeated payload is most
-     *   likely to trip Gemini's repetition filter;
-     * - and `contextChars`, documented as "everything ever typed into the
-     *   browser tab", was reset to the summary's length while the tab kept
-     *   the lot. It feeds the auto-compaction threshold, the status bar and
-     *   `/context`, so after one compaction the agent believed it had room it
-     *   did not have, in all three at once.
-     *
-     * `_resetContextCount`'s own comment already said compaction "throws that
-     * thread away and starts a new one from the summary". That was the
-     * intent; nothing implemented it. It does now, and the count is only
-     * reset **if the new chat actually happened** — a counter reset against a
-     * thread that never changed is the bug above, written deliberately.
-     */
+    // Steps 2 and 3: the fresh chat, and the count reset only if it happened —
+    // resetting against a thread that never changed is the bug recorded in
+    // `startNewChat`'s history.
+    progress(loop, 2);
     const handedOver = await loop.startNewChat();
+    progress(loop, 3);
     if (handedOver) {
-      loop._resetContextCount(
-        loop.conversationHistory.reduce((n, t) => n + (t.content?.length || 0), 0),
-      );
+      // The next prompt carries the summary; it is the only thing the fresh
+      // chat will know. And the count restarts at zero rather than at the
+      // history's size: `_sendToGemini` adds what is actually typed, and the
+      // kept turns are bounded below — counting them in full re-triggered
+      // compaction on the very next turn (a 335k-character reply, measured).
+      if (loop.promptBuilder) {
+        loop.promptBuilder.pendingCompactedContext = {
+          summary: `${summary}\n\n${HANDOVER_POINTER}`,
+          recent: recentMessages(toKeep),
+        };
+      }
+      loop._resetContextCount(0);
+      loop._compactFailedAt = null;
+    } else {
+      // Do not try again every turn: wait until the thread has grown further.
+      loop._compactFailedAt = loop.contextTokens;
     }
 
-    // Say what actually happened. "✅ History compacted." told the user
-    // nothing — not how much went, not whether the model summarised it or the
-    // deterministic fallback did, and not where the summary went.
-    const approxTokens = (turns) => Math.round(
-      turns.reduce((sum, t) => sum + ((t.content?.length || 0) / 4), 0),
-    );
-    const before = approxTokens([...toCompact, ...toKeep]);
-    const after = loop.contextTokens;
-    const how = llmResponse.success
-      ? 'summarised by the model'
-      : 'condensed locally (the model did not answer, so the deterministic fallback ran)';
-
-    // Say which half happened. The old message claimed the tab was "scratch
-    // space; nothing is left there" — true of the *summariser's* tab, which
-    // is a subagent's own, and read by everyone as the one they are looking
-    // at. When the handover fails, the honest thing is to say the old thread
-    // is still in front of them, because it is.
-    /*
-     * Do not send them to `/new`. It clears `conversationHistory`, which is
-     * where the summary that was just made now lives — so the one command
-     * that looks like the fix is the one that destroys the work. Ask for the
-     * thing only they can do: start a chat in the tab itself.
-     */
+    const how = fromThread
+      ? 'summarised by this chat'
+      : `condensed locally (the chat ${asked.timedOut ? 'did not answer in time' : 'gave no usable summary'})`;
     const where = handedOver
-      ? 'The tab has been handed over to a fresh conversation, and the summary goes into it '
-        + 'with your next message.'
-      : '⚠️ **The browser did not start a new conversation**, so the tab is still on the old '
-        + 'one — which already remembers every turn just summarised.\n\n'
+      ? 'The tab has moved to a fresh conversation; the summary goes into it with your next message, '
+        + 'and the full history stays searchable on disk.'
+      : '⚠️ **The browser did not start a new conversation**, so the tab is still on the old one.\n\n'
         + '**Please open a new chat in the Gemini tab yourself** (the ✚ / *New chat* button). '
         + 'The next message will pick it up automatically.\n\n'
         + '_Not `/new` — that clears the conversation here, and this summary with it._';
 
     return {
-      message: `✓ Compacted ${toCompact.length} turn${toCompact.length === 1 ? '' : 's'} into one summary, `
-        + `${how}.\n\n`
-        + `Kept the last ${toKeep.length} turns as they were. `
-        + `Context is roughly ${before.toLocaleString()} → ${after.toLocaleString()} tokens.\n\n`
-        + 'The summary is now the first turn of this conversation — it is in the transcript above '
-        + `and saved to \`.agent/sessions/history.jsonl\`. ${where}`,
+      handedOver,
+      message: `✓ Compacted ${toCompact.length} turn${toCompact.length === 1 ? '' : 's'}, ${how}. `
+        + `Kept the last ${toKeep.length} as they were.\n\n${where}`,
     };
   } finally {
     loop.isCompacting = false;
+    if (ownsBusy) loop.isProcessing = false;
   }
 }

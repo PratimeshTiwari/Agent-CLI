@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { COMPACT_AT } from '../context/context-manager.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
@@ -426,7 +427,14 @@ export function App({ agentLoop, wsServer }) {
    * can still change: a `tool` item is created by its call and rewritten when
    * its result arrives, and nothing follows it in between.
    */
-  const turnInFlight = isProcessing || !!agentLoop?.isProcessing;
+  /*
+   * Compaction is not part of the turn's output. It runs after the reply is
+   * final (or between rounds, when the results are in), so the rows commit;
+   * holding a long final reply live under the progress row overflowed the
+   * viewport — 8 full clears and 3.1 MB for one compaction under the pty,
+   * against 0 with the turn committed.
+   */
+  const turnInFlight = (isProcessing || !!agentLoop?.isProcessing) && !agentLoop?.isCompacting;
   const emittedRef = useRef(new Map());
   const staticRowsRef = useRef([{ id: 'app-banner', isBanner: true }]);
 
@@ -1162,6 +1170,13 @@ export function App({ agentLoop, wsServer }) {
   const tokenLimit = agentLoop.contextLimit || 50000;
   const tokenPct = Math.round((syncTokenEstimate / tokenLimit) * 100);
   const tokenColor = tokenPct > 80 ? 'red' : tokenPct > 50 ? 'yellow' : 'cyan';
+  /*
+   * How far to auto-compaction, once it is close — so it is never a surprise.
+   * Same threshold the loop uses (COMPACT_AT), read rather than restated.
+   */
+  const compactAtPct = Math.round(COMPACT_AT * 100);
+  const toCompact = compactAtPct - tokenPct;
+  const compactHint = toCompact <= 20 ? (toCompact > 0 ? ` · ${toCompact}% to auto-compact` : ' · compacts after this turn') : '';
   const runningTasks = tasks.filter(t => t.status === 'running').length;
   // Which repo of a group we are on. Empty for an ordinary single-repo
   // workspace, where showing it would be noise.
@@ -1459,7 +1474,7 @@ export function App({ agentLoop, wsServer }) {
             ? <Text color="cyan">{browserModelLabel}</Text>
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
-          <Text color={tokenColor}>{tokenPct}% of {tokenLimit >= 1000 ? `${Math.round(tokenLimit / 1000)}k` : tokenLimit}</Text>
+          <Text color={tokenColor}>{tokenPct}% of {tokenLimit >= 1000 ? `${Math.round(tokenLimit / 1000)}k` : tokenLimit}{compactHint}</Text>
         </Text>
         </Box>
       </Box>

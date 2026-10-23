@@ -31,7 +31,9 @@ export const HOTKEYS = {
   '\x15': 'clear-input',  // ctrl+u — wipe the prompt, as readline has always done
   '\x17': 'delete-word',  // ctrl+w — delete the word behind the cursor
   '\x19': 'copy-code',    // ctrl+y — the last code block in the transcript
-  '\x07': 'artifacts',    // ctrl+g — the task list, on its own key and its own state
+  // ctrl+o — the task list. Was ctrl+g, which Chrome takes system-wide on macOS
+  // for its own Gemini panel: pressing it in the terminal opened Chrome instead.
+  '\x0f': 'artifacts',
   '\x02': 'focus-browser', // ctrl+b — bring the Gemini tab to the front
   '\x03': 'interrupt',    // ctrl+c — clear the prompt; twice to exit (cli-ui decides)
 };

@@ -220,7 +220,7 @@ export function InputBar({
                 {[artifacts.task && 'task.md', artifacts.review && 'review.md',
                   artifacts.walkthrough && 'walkthrough.md'].filter(Boolean).join(' · ')}
                 {progress ? <Text dimColor>{'  '}{progress}</Text> : null}
-                <Text dimColor>{artifactsOpen ? ' — ctrl+g to collapse' : ' — ctrl+g to expand'}</Text>
+                <Text dimColor>{artifactsOpen ? ' — ctrl+o to collapse' : ' — ctrl+o to expand'}</Text>
               </Text>
               {/*
                 Bounded, because this is the live frame. Unbudgeted it cost

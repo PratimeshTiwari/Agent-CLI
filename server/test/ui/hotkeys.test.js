@@ -108,3 +108,14 @@ test('interruptGate: two presses inside the window exit, one does not', async ()
   assert.equal(slow(1000 + EXIT_WINDOW_MS), 'first', 'a press after the window starts over');
   assert.equal(slow(1000 + EXIT_WINDOW_MS + 10), 'exit');
 });
+
+/*
+ * Reported from use: ctrl+g opened Chrome's Gemini panel instead of the task
+ * list. Chrome registers Ctrl+G system-wide on macOS, so the terminal never
+ * saw it. A chord another app owns globally is not ours to bind.
+ */
+test('the task list is on ctrl+o, and nothing is bound to ctrl+g', async () => {
+  const { HOTKEYS } = await import('../../src/ui/hotkeys.js');
+  assert.equal(HOTKEYS['\x0f'], 'artifacts');
+  assert.equal(HOTKEYS['\x07'], undefined);
+});
