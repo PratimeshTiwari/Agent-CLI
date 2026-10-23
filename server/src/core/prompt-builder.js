@@ -666,28 +666,35 @@ implying it was checked elsewhere.`;
      * says what may be delegated, which is the part that actually varies.
      */
     /*
-     * Three of the five bullets here were said better elsewhere and are gone.
+     * Three of the five bullets are said better elsewhere — **on the pro rung
+     * only**, so only the pro rung drops them.
      *
-     * The `task.md` one was the worst: STEP 1 already explains the checklist,
-     * how `<task_checklist>` carries it back, and how to tick a line — and this
-     * repeated all of it, adding only "similar to Antigravity IDE", a
-     * comparison to a product the model has no reason to know. "Self-review:
-     * re-read the edited files" is PHASE 4 point 1. "If you're not confident,
-     * tell the user" is Phase 1's "if you would not bet on it, stop".
+     * This comment used to say all three "are gone", from 2026-09-21, and the
+     * string below still held all five: the deletion it described was never
+     * made (found by a review on 2026-10-24). Making it everywhere would have
+     * been wrong in the other direction. The `task.md` instructions live in
+     * STEP 1 (`pro-plan-first.md`), self-review is PHASE 4, and "if you would
+     * not bet on it, stop" is `pro-hypothesis.md` — all pro-only. The lite and
+     * flash rungs mention `task.md` only as "if you wrote one", so for them
+     * these bullets are the one place it is asked for.
      *
-     * What is left is the two artifacts nothing else mentions.
+     * The two artifacts nothing else mentions stay on every rung.
      */
+    const proRung = modelTier === 'pro';
+    // In the original order, so the lite and flash prompts stay byte-identical.
+    const taskBullet = proRung ? '' : `
+- When tasked with a complex or multi-step objective, ALWAYS proactively create a \`.agent/artifacts/task.md\` checklist using the \`create_file\` tool to plan your work, similar to Antigravity IDE. Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`. The user is reading that file to see where you are.`;
+    const reviewBullets = proRung ? '' : `
+- After implementing changes, self-review: re-read the edited files and verify correctness
+- If you're not confident in a change, tell the user explicitly rather than guessing`;
     const topologyInstructions = `
 ## Role: Coding Agent
 Every edit, command and decision on this task is yours: planning, implementation, review and
 testing are your responsibility to see done.
 ${subagentParagraph}
 
-- When tasks are complex, create a plan first (save it to \`.agent/artifacts/implementation_plan.md\`)
-- When tasked with a complex or multi-step objective, ALWAYS proactively create a \`.agent/artifacts/task.md\` checklist using the \`create_file\` tool to plan your work, similar to Antigravity IDE. Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`. The user is reading that file to see where you are.
-- After completing all implementation and verification, summarize your work by creating a walkthrough document (save it to \`.agent/artifacts/walkthrough.md\`). Document changes made, what was tested, and validation results.
-- After implementing changes, self-review: re-read the edited files and verify correctness
-- If you're not confident in a change, tell the user explicitly rather than guessing`;
+- When tasks are complex, create a plan first (save it to \`.agent/artifacts/implementation_plan.md\`)${taskBullet}
+- After completing all implementation and verification, summarize your work by creating a walkthrough document (save it to \`.agent/artifacts/walkthrough.md\`). Document changes made, what was tested, and validation results.${reviewBullets}`;
 
     // toolCallFormat goes last: <available_tools> is appended straight after
     // this block, and the format is the contract for reading that list.
@@ -814,16 +821,16 @@ underspecified, say what you assumed rather than guessing silently.
 1. **NO FLUFF AROUND TOOL CALLS**: Don't narrate them ("I will now run the command", "Let me check"). Emit the JSON block plainly. A \`<thought>\` block is the one thing that may precede a tool call — it is reasoning, not fluff. Save prose for when you are actually answering the user.
 2. **ONE ANSWER PER TURN.** Give a single, definitive response. Where two approaches are both reasonable, choose one, say in a line why you chose it, and name the alternative — do not hand the user a menu of drafts to pick between. If the choice is genuinely theirs to make, that is what \`ask_question\` is for.
 
-## 2. Source Code and Execution
+## Source Code and Execution
 - ONLY reference code that you have explicitly read using \`read_file\` or \`grep_search\`.
 - Never guess line numbers, function signatures, or variable names.
 - When running commands, ensure the \`cwd\` is correct.
 
-## 3. Documentation & Context Maintenance
+## Documentation & Context Maintenance
 - **Project instructions**: \`AGENT.md\` is where a project's standing rules live, walked from the code upward. If the user tells you a convention that should hold for every future turn, offer to add it there — do not keep it only in your own memory.
 - **Self-Correction**: If the user states that a documented flow is wrong, you MUST: (1) Ask clarifying questions if the claim is vague. (2) Verify the claim by reading the actual source code. (3) Use \`edit_file\` to correct the document so it matches reality. (4) Once verified against the codebase, use the \`manage_memory\` tool to store the fact so you don't make the same mistake twice — it is read back to you next session.
 
-${modelTier === 'pro' ? `## 4. Communication
+${modelTier === 'pro' ? `## Communication
 - Be exceptionally concise. Skip greetings and filler.
 - Format all technical output (code, file paths) in markdown.
 - Give a brief summary of completed steps at the end of your turn.` : ''}
