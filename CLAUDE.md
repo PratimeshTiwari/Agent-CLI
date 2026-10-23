@@ -2300,7 +2300,9 @@ ago.
   handler running, and the text field's is registered first (child effects run before the
   parent's). So the chords never reach Ink at all: `cli-ui.jsx` pulls them out of the stdin
   chunk via `hotkeys.js` and dispatches them through `use-hotkeys.js`. Adding a new ctrl+ binding
-  means adding it to `HOTKEYS`, not to `useKeyBindings`.
+  means adding it to `HOTKEYS`, not to `useKeyBindings`. **Never a chord another app owns system-wide:** the task
+  list was on ctrl+g until 10-24, and Chrome's Gemini panel takes Ctrl+G on macOS before the
+  terminal sees it — pressing it opened Chrome. It is ctrl+o now.
 - **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
   bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
   forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps
