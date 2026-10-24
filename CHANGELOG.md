@@ -9,28 +9,216 @@ git log main --merges --format="%h %ad %s" --date=short
 
 Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 
-## v5 — 2026-10-19 … 2026-10-24
+## Every release
 
-| Release | PR | What changed |
-| --- | --- | --- |
-| v5.17 | — | Redesign phase 3: finished tools on two lines with a `⎿` result (red when it failed); your message with an accent edge; the mode on the input border; a context meter; rounds in the turn summary; tinted diffs with line numbers |
-| v5.16 | #80 | Themes: `/theme` with a live preview — Dark, Light, two colour-blind palettes, Terminal (the classic look, still the default) and Mono (also `NO_COLOR`); saved per person in `~/.agent/settings.json`. Regression test for issue #68 |
-| v5.15 | #79 | Colour by role (`ui/theme.js`), no visible change; extension 1.48.0 stops logging `Still in CONNECTING state` |
-| v5.14 | #78 | Finished tools no longer listed twice, and 0 full redraws at 10–40 rows; compaction as one transcript row; the disconnected row names its fix; `tasks 3/5` while a turn runs |
-| v5.13 | #77 | Prompt fixes from a review (pro's duplicate bullets, numbered headings, no ceremony for a greeting); a prompt with a paste or selection marker is drawn once; README feature tour |
-| v5.12 | #76 | UI polish: `6 reads · 2 edits · 1 command` turn summaries, `/diff`, paths that keep their first directory, `↑ to take back` on queued prompts, queued rows charged to the frame budget |
-| v5.11 | #75 | Three modes — `plan` writes the repo's Markdown without asking (not AGENT.md/CLAUDE.md), `strict` asks for everything, `auto` unchanged. Extension 1.47.0, companion 1.8.2 |
-| v5.10 | #74 | Large files: reads cut by whole lines and naming what they left out, plain-text file content, edits that survive copied line numbers, `append` for documents, `+N −M` on edit rows |
-| v5.9 | #73 | Compaction finally hands its summary to the fresh chat; asked of the same chat; between turns or paused mid-turn and resumed; progress row. Task list moves to ctrl+o |
-| v5.8 | #72 | A queued prompt is sent when the turn ends, not when ↑ is pressed |
-| v5.7 | #71 | Prompts go in without the 5-second paste wait (Gemini's composer changed). Extension 1.46.0 |
-| v5.6 | #70 | Commands run again on large repos (`spawn EBADF` from the file watcher); `/reset` |
-| v5.5 | #69 | The busy indicator lasts as long as the turn. Extension 1.45.0, companion 1.8.1 |
-| v5.4 | #67 | Exit clears the screen and prints the resume id; ⌘⇧1 says when it has no key |
-| v5.3 | #66 | Global ⌘⇧1 for the floating window; `cmd+alt+j` for the editor panel |
-| v5.2 | #65 | A chat panel in the VS Code companion (1.8.0) |
-| v5.1 | #64 | One recovery policy: provider errors re-ask the failed prompt after a backoff; quota is never retried |
-| v5.0 | #63 | Clean slate: tests stop writing into `~/.agent`; dead code removed |
+Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
+without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
+
+### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v5.19 | 2026-10-25 | `v5.19/release-history` | [#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | v5.19: release history with dates, branches and PR links; current README screenshots |
+| v5.18 | 2026-10-24 | `v5.18/thinking-waits` | [#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) | v5.18: replies no longer dropped while Gemini thinks; interrupted tool calls salvaged |
+| v5.17 | 2026-10-24 | `v5.17/rows` | [#81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) | v5.17: redesign phase 3 — tool rows, message edge, mode on the border, meter, rounds, tinted diffs |
+| v5.16 | 2026-10-24 | `v5.16/themes` | [#80](https://github.com/PratimeshTiwari/Agent-CLI/pull/80) | v5.16: themes (/theme), issue #68 regression test |
+| v5.15 | 2026-10-24 | `v5.15/theme-tokens` | [#79](https://github.com/PratimeshTiwari/Agent-CLI/pull/79) | v5.15: colour by role (redesign phase 1); extension CONNECTING-state fix |
+| v5.14 | 2026-10-24 | `v5.14/fixes-and-ui` | [#78](https://github.com/PratimeshTiwari/Agent-CLI/pull/78) | v5.14: live-frame fixes, compaction row, disconnected hints, task progress |
+| v5.13 | 2026-10-23 | `v5.13/prompt-and-readme` | [#77](https://github.com/PratimeshTiwari/Agent-CLI/pull/77) | v5.13: prompt fixes, README feature tour, marker prompts drawn once |
+| v5.12 | 2026-10-23 | `v5.12/ui-polish` | [#76](https://github.com/PratimeshTiwari/Agent-CLI/pull/76) | v5.12: UI polish, and a short README with pictures |
+| v5.11 | 2026-10-23 | `v5.11/three-modes` | [#75](https://github.com/PratimeshTiwari/Agent-CLI/pull/75) | v5.11: three modes — plan, auto, strict |
+| v5.10 | 2026-10-23 | `v5.10/large-files` | [#74](https://github.com/PratimeshTiwari/Agent-CLI/pull/74) | v5.10: large files and documents |
+| v5.9 | 2026-10-23 | `v5.9/compact-in-thread` | [#73](https://github.com/PratimeshTiwari/Agent-CLI/pull/73) | v5.9: compaction hands the summary over, from the same chat, between turns |
+| v5.8 | 2026-10-23 | `v5.8/queue-drain` | [#72](https://github.com/PratimeshTiwari/Agent-CLI/pull/72) | v5.8: a queued prompt is sent when the turn ends |
+| v5.7 | 2026-10-23 | `v5.7/composer` | [#71](https://github.com/PratimeshTiwari/Agent-CLI/pull/71) | v5.7: prompts go in without a 5-second wait |
+| v5.6 | 2026-10-23 | `v5.6/spawn-ebadf` | [#70](https://github.com/PratimeshTiwari/Agent-CLI/pull/70) | v5.6: commands run again on large repos (spawn EBADF), and /reset |
+| v5.5 | 2026-10-23 | `v5.5/honest-busy` | [#69](https://github.com/PratimeshTiwari/Agent-CLI/pull/69) | v5.5: the busy indicator lasts as long as the turn |
+| v5.4 | 2026-10-19 | `v5.4/exit-and-shortcut` | [#67](https://github.com/PratimeshTiwari/Agent-CLI/pull/67) | v5.4 — exit clears and prints the resume id; ⌘⇧1 reports a missing key (extension 1.44.0) |
+| v5.3 | 2026-10-19 | `v5.3/hotkeys` | [#66](https://github.com/PratimeshTiwari/Agent-CLI/pull/66) | v5.3 — global shortcut for the floating window (extension 1.43.0) |
+| v5.2 | 2026-10-19 | `v5.2/editor-panel` | [#65](https://github.com/PratimeshTiwari/Agent-CLI/pull/65) | v5.2 — a chat panel in the editor sidebar (companion 1.8.0) |
+| v5.1 | 2026-10-19 | `v5.1/one-recovery-policy` | [#64](https://github.com/PratimeshTiwari/Agent-CLI/pull/64) | v5.1 — one recovery table; provider retry re-asks the right question, after a wait |
+| v5.0 | 2026-10-19 | `v5.0/clean-slate` | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63) | v5.0 — clean slate: tests stop writing to ~/.agent, GitHub leftovers removed |
+
+### v4 — 2026-09-27 … 2026-10-19 · PRs [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60)–[#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v4.2 | 2026-10-19 | `v4.2/fixes-from-use` | [#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) | v4.2 — six fixes from one session of use (extension 1.42.0) |
+| v4.1 | 2026-09-27 | `v4.1/rename-agent-cli` | [#61](https://github.com/PratimeshTiwari/Agent-CLI/pull/61) | v4.1 — follow the rename to Agent-CLI, without breaking existing installs |
+| v4.0 | 2026-09-27 | `v4.0/honest-log` | [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60) | v4.0 — the log counts failures, and the picker can fail without costing a turn |
+
+### v3 — 2026-09-22 … 2026-09-27 · PRs [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26)–[#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v3.27 | 2026-09-27 | `v3.27/backspace-after-recall` | [#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59) | Backspace stopped working after recalling history into an empty prompt |
+| v3.26 | 2026-09-27 | `v3.26/new-chat-resends-the-prompt` | [#58](https://github.com/PratimeshTiwari/Agent-CLI/pull/58) | /new resends the base prompt, and a half-built picker is retried |
+| v3.25 | 2026-09-27 | `v3.25/dont-expand-reads` | [#57](https://github.com/PratimeshTiwari/Agent-CLI/pull/57) | ctrl+e no longer expands a file read into the transcript |
+| v3.24 | 2026-09-27 | `v3.24/stall-reaches-the-screen` | [#56](https://github.com/PratimeshTiwari/Agent-CLI/pull/56) | A stalled turn now ends on screen, instead of spinning for hours |
+| v3.23 | 2026-09-26 | `v3.23/subagent-picker-race` | [#55](https://github.com/PratimeshTiwari/Agent-CLI/pull/55) | Extension 1.39.0: subagents were silently running on the main model |
+| v3.22 | 2026-09-26 | `v3.22/never-click-the-mic` | [#54](https://github.com/PratimeshTiwari/Agent-CLI/pull/54) | Extension 1.38.0: it was clicking the microphone |
+| v3.21 | 2026-09-26 | `v3.21/tool-usage` | [#53](https://github.com/PratimeshTiwari/Agent-CLI/pull/53) | Record which tools are actually called, and close two gated items |
+| v3.20 | 2026-09-26 | `v3.20/subagent-watchdog` | [#52](https://github.com/PratimeshTiwari/Agent-CLI/pull/52) | The subagent watchdog was 5.4× the slowest turn ever recorded |
+| v3.19 | 2026-09-26 | `v3.19/drop-terminal-queue` | [#51](https://github.com/PratimeshTiwari/Agent-CLI/pull/51) | Remove terminal failure forwarding — it never produced a record |
+| v3.18 | 2026-09-26 | `v3.18/seamless-tab` | [#50](https://github.com/PratimeshTiwari/Agent-CLI/pull/50) | Extension 1.37.0: ctrl+b opens the tab, and the picker is waited for |
+| v3.17 | 2026-09-26 | `v3.17/generating-traces` | [#49](https://github.com/PratimeshTiwari/Agent-CLI/pull/49) | Extension 1.36.0: record the Stop button's edges, and trace a turn that timed out |
+| v3.16 | 2026-09-26 | `v3.16/out-of-turn-notices` | [#48](https://github.com/PratimeshTiwari/Agent-CLI/pull/48) | Notices raised outside a turn land in the transcript |
+| v3.15 | 2026-09-26 | `v3.15/quick-wins` | [#47](https://github.com/PratimeshTiwari/Agent-CLI/pull/47) | Cover the bridge's message dispatch: 53% → 70% |
+| v3.14 | 2026-09-26 | `v3.14/docs-current` | [#46](https://github.com/PratimeshTiwari/Agent-CLI/pull/46) | Docs: bring both READMEs current, and say how the picker hunt ended |
+| v3.13 | 2026-09-26 | `v3.13/picker-cleanup` | [#45](https://github.com/PratimeshTiwari/Agent-CLI/pull/45) | Picker cleanup: four matching strategies to two, and clear up after the chase |
+| v3.12 | 2026-09-26 | `v3.12/effort-low-medium-high` | [#44](https://github.com/PratimeshTiwari/Agent-CLI/pull/44) | Effort rungs are low/medium/high; the status bar shows the browser's model |
+| v3.11 | 2026-09-26 | `v3.11/the-worker-dropped-the-answer` | [#43](https://github.com/PratimeshTiwari/Agent-CLI/pull/43) | Extension 1.34.0: the worker was dropping model_options before it reached the socket |
+| v3.10 | 2026-09-26 | `v3.10/prove-the-picker-path` | [#42](https://github.com/PratimeshTiwari/Agent-CLI/pull/42) | Extension 1.33.0: make the picker path say which hop failed |
+| v3.9 | 2026-09-25 | `v3.9/picker-repairs-and-deferral` | [#41](https://github.com/PratimeshTiwari/Agent-CLI/pull/41) | Extension 1.32.0: repair the picker path, defer instead of dropping, observe the composer |
+| v3.8 | 2026-09-25 | `v3.8/models-by-structure` | [#40](https://github.com/PratimeshTiwari/Agent-CLI/pull/40) | Extension 1.31.0: read the models from the page, hardcode no product names |
+| v3.7 | 2026-09-25 | `v3.7/deadline-and-picker-order` | [#39](https://github.com/PratimeshTiwari/Agent-CLI/pull/39) | Extension 1.30.0: a deadline that could not outlast its own work, and Pro as the anchor |
+| fix | 2026-09-25 | `fix/deadline-and-picker-order` | [#38](https://github.com/PratimeshTiwari/Agent-CLI/pull/38) *(closed, not merged)* | Extension 1.30.0: a deadline that could not outlast its own work, and Pro as the anchor |
+| fix | 2026-09-25 | `fix/confirm-switch-without-reopening` | [#37](https://github.com/PratimeshTiwari/Agent-CLI/pull/37) | Extension 1.29.1: the switch worked; confirming it is what broke the turn |
+| fix | 2026-09-25 | `fix/effort-may-open-its-tab` | [#36](https://github.com/PratimeshTiwari/Agent-CLI/pull/36) | Extension 1.29.0: /effort may open the tab it needs |
+| fix | 2026-09-25 | `fix/discover-on-tab-not-on-connect` | [#35](https://github.com/PratimeshTiwari/Agent-CLI/pull/35) | Extension 1.28.2: read the picker when a tab exists, not when a socket opens |
+| fix | 2026-09-25 | `fix/menu-budget-and-late-close` | [#34](https://github.com/PratimeshTiwari/Agent-CLI/pull/34) | Extension 1.28.1: the menu budget was cut 20×, and a late menu was left open |
+| chore | 2026-09-25 | `chore/ignore-claude-local-settings` | [#33](https://github.com/PratimeshTiwari/Agent-CLI/pull/33) | chore: ignore .claude/settings.local.json |
+| v3.6 | 2026-09-25 | `v3.6/picker-off-page-timers` | [#32](https://github.com/PratimeshTiwari/Agent-CLI/pull/32) | Extension 1.28.0: the mode picker was read on a clock a hidden tab does not run |
+| v3.5 | 2026-09-25 | `v3.5/version-and-routing` | [#31](https://github.com/PratimeshTiwari/Agent-CLI/pull/31) | Extension 1.26.0: say which build is loaded, and route gathering to a cheaper tab |
+| v3.4 | 2026-09-25 | `v3.4/lanes-and-tab-reuse` | [#30](https://github.com/PratimeshTiwari/Agent-CLI/pull/30) | Lane the model switch, hold one tab per subagent task, and measure the rung |
+| v3.3 | 2026-09-25 | `v3.3/paste-landed` | [#29](https://github.com/PratimeshTiwari/Agent-CLI/pull/29) | fix(bridge): a paste that was "handled" and lost left the composer empty |
+| v3.2 | 2026-09-25 | `v3.2/turn0-false-positive` | [#28](https://github.com/PratimeshTiwari/Agent-CLI/pull/28) | fix(loop): turn0_no_tools fired on the turns that did it right |
+| v3.1 | 2026-09-22 | `v3.1/picker-pin` | [#27](https://github.com/PratimeshTiwari/Agent-CLI/pull/27) | feat(core): pin the browser model per rung, and notice when the picker never answers |
+| v3.0 | 2026-09-22 | `v3/turn0-detector` | [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26) | fix(core): turn0_no_tools missed 5 of the 8 real hallucinations |
+
+### v2 — 2026-09-20 … 2026-09-22 · PRs [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17)–[#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v2.5.1 | 2026-09-22 | `v2.5.1/echo-and-guardrails` | [#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) | Transcript echo, /compact clarity, and model-picker diagnostics |
+| v2.5 | 2026-09-21 | `v2.5/prompt-trim` | [#24](https://github.com/PratimeshTiwari/Agent-CLI/pull/24) | refactor(prompt): say each rule once, and size tool descriptions to Gemini's own guidance |
+| v2.4 | 2026-09-21 | `v2.4/loose-ends` | [#23](https://github.com/PratimeshTiwari/Agent-CLI/pull/23) | chore: stop writing a field nothing reads, and stop timing the machine |
+| v2.4 | 2026-09-21 | `v2.4/loose-ends` | [#22](https://github.com/PratimeshTiwari/Agent-CLI/pull/22) | chore: stop writing a field nothing reads, and stop timing the machine |
+| v2.3 | 2026-09-21 | `v2.3/compact-stall-and-diagnostics` | [#21](https://github.com/PratimeshTiwari/Agent-CLI/pull/21) | feat: bound /compact's wait, and hand lint results to the edit that caused them |
+| v2.2 | 2026-09-21 | `v2.2/tool-call-discipline` | [#20](https://github.com/PratimeshTiwari/Agent-CLI/pull/20) | fix: an answer that arrives before its evidence, and an audit that could not see the claim |
+| v2.1 | 2026-09-21 | `v2.1/fix/tool-call-parsing-and-resume` | [#19](https://github.com/PratimeshTiwari/Agent-CLI/pull/19) | fix: prose is not a tool call, resume reaches the browser, and a thread we left is not a thread we never had |
+| v2 | 2026-09-20 | `v2` | [#18](https://github.com/PratimeshTiwari/Agent-CLI/pull/18) | V2 |
+| v2 | 2026-09-20 | `fix/bridge-speed-and-stability` | [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17) | V1.2 Fix/bridge speed and stability |
+
+### v1 — 2026-09-16 … 2026-09-16 · PRs [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13)–[#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v1.2 | 2026-09-16 | `v1.2-github` | [#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16) | fix(github): a review without an analysis is not a plan, and triage d… |
+| — | 2026-09-16 | `test-pr` | [#15](https://github.com/PratimeshTiwari/Agent-CLI/pull/15) *(closed, not merged)* | test |
+| v1.1 | 2026-09-16 | `v1.1-bug-fixes` | [#14](https://github.com/PratimeshTiwari/Agent-CLI/pull/14) | V1.1 |
+| v1.0 | 2026-09-16 | `v1-stable` | [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13) | V1 stable |
+
+### Betas — 2026-08-26 … 2026-09-06 · PRs [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1)–[#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| Beta v12 | 2026-09-06 | `fix/bridge-lock-and-cli` | [#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) | fix: unwedge the extension bridge, plus CLI, extension, and dependency cleanup |
+| Beta v11 | 2026-09-06 | `beta-11-followup` | [#11](https://github.com/PratimeshTiwari/Agent-CLI/pull/11) | Beta 11 followup |
+| Beta v10 | 2026-09-05 | `beta-v10-code-cleanup` | [#10](https://github.com/PratimeshTiwari/Agent-CLI/pull/10) | Unify agent state under .agent/, fix diff approval, restyle the CLI |
+| Beta v8 | 2026-09-05 | `beta-v8-ui` | [#9](https://github.com/PratimeshTiwari/Agent-CLI/pull/9) | Fix missing tabs and UI rendering issues |
+| Beta v7 | 2026-09-03 | `beta-v7-parallel-subagents` | [#8](https://github.com/PratimeshTiwari/Agent-CLI/pull/8) | Beta v7 parallel subagents |
+| Beta v6 | 2026-09-01 | `beta-v6-system-prompts` | [#7](https://github.com/PratimeshTiwari/Agent-CLI/pull/7) | feat: tiered model profiles and github PR agent rewrite |
+| — | 2026-08-30 | `test-pr` | [#6](https://github.com/PratimeshTiwari/Agent-CLI/pull/6) *(closed, not merged)* | test |
+| Beta v5 | 2026-08-29 | `beta-v5-github-agent` | [#5](https://github.com/PratimeshTiwari/Agent-CLI/pull/5) | Beta v5 GitHub agent |
+| Beta v4 | 2026-08-29 | `beta-v4-subagents` | [#4](https://github.com/PratimeshTiwari/Agent-CLI/pull/4) | Beta v4 subagents |
+| Beta v3 | 2026-08-26 | `beta-v3` | [#3](https://github.com/PratimeshTiwari/Agent-CLI/pull/3) | feat: add prompt improvement plan, CLI UI, and update core agent loop |
+| Beta v2 | 2026-08-26 | `beta-v2` | [#2](https://github.com/PratimeshTiwari/Agent-CLI/pull/2) | Beta v2 |
+| Beta v1 | 2026-08-26 | `beta-v1` | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1) | feat: smart context management, robust image support, and extension s… |
+
+## v5 in detail
+
+### v5.19 — 2026-10-25 · [PR #83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) · `v5.19/release-history`
+
+- This changelog rebuilt: every PR indexed from GitHub with its date, branch and link, grouped by series; the v5 releases written out one by one; every PR number in the older notes linked.
+- The README's screenshots re-captured from the current agent (status-line mode, `⎿` result rows, rounds, line-numbered diffs) and a release-history table added.
+
+### v5.18 — 2026-10-24 · [PR #82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) · `v5.18/thinking-waits` · extension 1.49.0
+
+- A reply is no longer dropped while Gemini is still thinking: the 45s "nothing came back" timeout and the 15s silence fallback no longer run while the Stop button is on screen (a 46s paste plus 36s of Pro thinking had hit the first).
+- Tool calls that Argon interrupts with a `<thought>` are salvaged: the complete calls after the thought are run instead of the whole reply being rejected round after round.
+- The tool-call prompts say to finish thinking before a json block.
+
+### v5.17 — 2026-10-24 · [PR #81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) · `v5.17/rows`
+
+- Redesign phase 3: finished tools on two lines with a `⎿` result (red when it failed); your message with an accent `▌` edge.
+- The mode in the status line, Claude Code style (`⏵⏵ auto mode on (shift+tab to cycle)`); a five-cell context meter; rounds in the turn summary (each call stamped with its round by the loop).
+- Tinted diffs with line numbers when expanded; no tint in the Terminal and Mono themes.
+
+### v5.16 — 2026-10-24 · [PR #80](https://github.com/PratimeshTiwari/Agent-CLI/pull/80) · `v5.16/themes` · closes issue #68
+
+- `/theme` with a live preview: Dark, Light, two colour-blind palettes, Terminal (the classic look, still the default) and Mono (also `NO_COLOR`); saved per person in `~/.agent/settings.json`; every palette held to WCAG contrast by a test.
+- Issue #68 (replies vanishing after compaction) reproduced on v5.4 and absent now, with a regression test.
+- One spinner instead of three; a reply dot that differs from a finished tool's; an unparseable tool call as one row; `⚠` on a mismatched model.
+
+### v5.15 — 2026-10-24 · [PR #79](https://github.com/PratimeshTiwari/Agent-CLI/pull/79) · `v5.15/theme-tokens` · extension 1.48.0
+
+- Colour by role (`ui/theme.js`), no visible change: the same 19 on-screen styles and a byte-identical run.
+- The extension identifies on the socket that opened, not its successor — no more `InvalidStateError: Still in CONNECTING state`.
+
+### v5.14 — 2026-10-24 · [PR #78](https://github.com/PratimeshTiwari/Agent-CLI/pull/78) · `v5.14/fixes-and-ui`
+
+- Finished tools join the transcript as they finish instead of being listed twice: 28 full redraws at 13 rows and 6 at 16 became 0 at every size from 10 to 40.
+- Compaction as one transcript row; the disconnected row names its fix; `tasks 3/5` while a turn runs; `/help` leads with the most-used commands.
+- `setup.sh` finds the newest companion package.
+
+### v5.13 — 2026-10-23 · [PR #77](https://github.com/PratimeshTiwari/Agent-CLI/pull/77) · `v5.13/prompt-and-readme`
+
+- Prompt fixes from a review: pro's duplicate bullets, numbered headings, no planning ceremony for a greeting.
+- A prompt with a paste or selection marker is drawn once; README feature tour images.
+
+### v5.12 — 2026-10-23 · [PR #76](https://github.com/PratimeshTiwari/Agent-CLI/pull/76) · `v5.12/ui-polish`
+
+- `6 reads · 2 edits · 1 command` turn summaries, `/diff`, paths that keep their first directory, `↑ to take back` on queued prompts.
+- The README rewritten short with pictures; release notes moved here.
+
+### v5.11 — 2026-10-23 · [PR #75](https://github.com/PratimeshTiwari/Agent-CLI/pull/75) · `v5.11/three-modes` · extension 1.47.0 · companion 1.8.2
+
+- Three modes: `plan` writes the repo's Markdown without asking (not AGENT.md/CLAUDE.md), `strict` asks for everything, `auto` unchanged.
+
+### v5.10 — 2026-10-23 · [PR #74](https://github.com/PratimeshTiwari/Agent-CLI/pull/74) · `v5.10/large-files`
+
+- Large files: reads cut by whole lines naming what they left out, plain-text file content, edits that survive copied line numbers, `append` for documents, `+N −M` on edit rows.
+
+### v5.9 — 2026-10-23 · [PR #73](https://github.com/PratimeshTiwari/Agent-CLI/pull/73) · `v5.9/compact-in-thread`
+
+- Compaction finally hands its summary to the fresh chat; asked of the same chat; between turns or paused mid-turn and resumed; a progress row. The task list moves to ctrl+o.
+
+### v5.8 — 2026-10-23 · [PR #72](https://github.com/PratimeshTiwari/Agent-CLI/pull/72) · `v5.8/queue-drain`
+
+- A queued prompt is sent when the turn ends, not when ↑ is pressed.
+
+### v5.7 — 2026-10-23 · [PR #71](https://github.com/PratimeshTiwari/Agent-CLI/pull/71) · `v5.7/composer` · extension 1.46.0
+
+- Prompts go in without the 5-second paste wait (Gemini's composer changed).
+
+### v5.6 — 2026-10-23 · [PR #70](https://github.com/PratimeshTiwari/Agent-CLI/pull/70) · `v5.6/spawn-ebadf`
+
+- Commands run again on large repos (`spawn EBADF` from the file watcher); `/reset` starts a repo fresh.
+
+### v5.5 — 2026-10-23 · [PR #69](https://github.com/PratimeshTiwari/Agent-CLI/pull/69) · `v5.5/honest-busy` · extension 1.45.0 · companion 1.8.1
+
+- The busy indicator lasts as long as the turn.
+
+### v5.4 — 2026-10-19 · [PR #67](https://github.com/PratimeshTiwari/Agent-CLI/pull/67) · `v5.4/exit-and-shortcut`
+
+- Exit clears the screen and prints the resume id; ⌘⇧1 says when it has no key.
+
+### v5.3 — 2026-10-19 · [PR #66](https://github.com/PratimeshTiwari/Agent-CLI/pull/66) · `v5.3/hotkeys`
+
+- Global ⌘⇧1 for the floating window; `cmd+alt+j` for the editor panel.
+
+### v5.2 — 2026-10-19 · [PR #65](https://github.com/PratimeshTiwari/Agent-CLI/pull/65) · `v5.2/editor-panel` · companion 1.8.0
+
+- A chat panel in the VS Code companion, sharing the Chrome side panel's renderer.
+
+### v5.1 — 2026-10-19 · [PR #64](https://github.com/PratimeshTiwari/Agent-CLI/pull/64) · `v5.1/one-recovery-policy`
+
+- One recovery policy: provider errors re-ask the failed prompt after a backoff; quota is never retried; rounds per turn recorded.
+
+### v5.0 — 2026-10-19 · [PR #63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63) · `v5.0/clean-slate`
+
+- Clean slate: tests stop writing into `~/.agent`; dead code removed.
 
 ## Before v5
 
@@ -48,7 +236,7 @@ so.** The release number follows the `beta-vN` branch names, which run 1-8, then
 10 and 11.
 
 Two gaps cancel each other out, which is why the numbers look right again at the
-end. **PR #6** was opened and closed without merging, so the PR number runs one
+end. **[PR #6](https://github.com/PratimeshTiwari/Agent-CLI/pull/6)** was opened and closed without merging, so the PR number runs one
 ahead of the beta from v6 to v8. Then there is no **`beta-v9`** — that work
 landed inside `beta-v10-code-cleanup` — and from v10 they line up once more.
 
@@ -62,7 +250,7 @@ missing one**, since the model reaches for it and concludes the code is not ther
 
 ---
 
-### v4.2 — 2026-09-27 · `v4.2/fixes-from-use` · extension 1.42.0
+### v4.2 — 2026-09-27 · [PR #62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) · `v4.2/fixes-from-use` · extension 1.42.0
 
 **Six reports from one session, two of them caused by v4.0.** Everything here was
 found by using the product, and each fix was checked against the report rather
@@ -102,7 +290,7 @@ fixes is on the server side.
 
 ---
 
-### v4.0 — 2026-09-27 · `v4.0/honest-log` · extension 1.41.0
+### v4.0 — 2026-09-27 · [PR #60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60) · `v4.0/honest-log` · extension 1.41.0
 
 **A new series, because the last one ended by measuring itself.** v3 was 34 PRs
 in six days and did not feel like progress; the reason turned out to be
@@ -220,7 +408,7 @@ not measuring the thing it is named for.
 
 ---
 
-### v3.12 – v3.27 — 2026-09-26 … 2026-09-27 · PRs #44–#59
+### v3.12 – v3.27 — 2026-09-26 … 2026-09-27 · PRs [#44](https://github.com/PratimeshTiwari/Agent-CLI/pull/44)–[#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59)
 
 **Sixteen PRs in two days, and what they made visible is why v4 starts with a
 plan rather than another fix.** The model-picker hunt below (#26–#43) ended; this
@@ -291,7 +479,7 @@ per-change record is in [`extension/README.md`](extension/README.md).
 
 ---
 
-### v3.0 – v3.11 — 2026-09-22 … 2026-09-26 · PRs #26–#43
+### v3.0 – v3.11 — 2026-09-22 … 2026-09-26 · PRs [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26)–[#43](https://github.com/PratimeshTiwari/Agent-CLI/pull/43)
 
 **Eighteen PRs, and one of them is the reason for the other seventeen.** The
 model picker — the thing that puts the browser tab on the model the effort rung
@@ -383,7 +571,7 @@ them is the reasoning that would produce them again.
 
 ---
 
-### v2.5.1 — 2026-09-22 · PR #25 · `v2.5.1/echo-and-guardrails`
+### v2.5.1 — 2026-09-22 · [PR #25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) · `v2.5.1/echo-and-guardrails`
 
 **Four small fixes, each reported from use in the same session, none changing
 behavior outside its own narrow case.**
@@ -439,7 +627,7 @@ covered file *content* and function signatures already read, never path
 
 ---
 
-### v2.2 — 2026-09-21 · PR #20 · `v2.2/tool-call-discipline`
+### v2.2 — 2026-09-21 · [PR #20](https://github.com/PratimeshTiwari/Agent-CLI/pull/20) · `v2.2/tool-call-discipline`
 
 **Evidence discipline.** An answer that arrives before its own evidence, and an
 audit that could not see the claim it was written to check.
@@ -592,7 +780,7 @@ audit of dead exports is its own pass.
 
 ---
 
-### v2 — 2026-09-20 · PR #17 · `fix/bridge-speed-and-stability`
+### v2 — 2026-09-20 · [PR #17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17) · `fix/bridge-speed-and-stability`
 
 **Most of it is `fix`** — this release is mostly the product being made to do
 what it already said it did.
@@ -821,10 +1009,10 @@ badly they would fail, not how interesting they were.
   subsystems deleted in September, and everything in it was already in this file
   or `CLAUDE.md`. A third document is a third place to drift.
 
-### v1.0 — 2026-09-16 · PR #13 · `v1-stable`
+### v1.0 — 2026-09-16 · [PR #13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13) · `v1-stable`
 
 The largest release by far, so it is grouped by area rather than listed flat.
-`v1.1-bug-fixes` (PR #14) and `v1.2-github` (PR #16) followed it on 2026-09-17;
+`v1.1-bug-fixes` ([PR #14](https://github.com/PratimeshTiwari/Agent-CLI/pull/14)) and `v1.2-github` ([PR #16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16)) followed it on 2026-09-17;
 their changes are folded into the areas below rather than split out, because
 they were fixes to this work rather than a release of their own.
 
@@ -1019,7 +1207,7 @@ outside the backup directory.
 
 ---
 
-### Beta v12 — 2026-09-07 · PR #12 · `fix/bridge-lock-and-cli`
+### Beta v12 — 2026-09-07 · [PR #12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) · `fix/bridge-lock-and-cli`
 
 - **Installed as `agent`**, running in the current directory.
 - **The extension lock is handed back when a turn dies**, not only when it
@@ -1029,7 +1217,7 @@ outside the backup directory.
 - **Removed:** `jest`, a duplicate `esbuild`, and `ora`. *Why:* unused
   dependencies on a tool people install globally.
 
-### Beta v11 — 2026-09-07 · PR #11 · `beta-11-followup`
+### Beta v11 — 2026-09-07 · [PR #11](https://github.com/PratimeshTiwari/Agent-CLI/pull/11) · `beta-11-followup`
 
 - **Reworked what goes to the model and how often** — the turn-0-and-every-Nth
   rule this project's prompt economics still rest on.
@@ -1041,7 +1229,7 @@ outside the backup directory.
 - **Fixed:** saving config destroyed keys it did not own; a rejected GitHub
   token could not be cleared.
 
-### Beta v10 — 2026-09-05 · PR #10 · `beta-v10-code-cleanup`
+### Beta v10 — 2026-09-05 · [PR #10](https://github.com/PratimeshTiwari/Agent-CLI/pull/10) · `beta-v10-code-cleanup`
 
 The consolidation release.
 
@@ -1057,12 +1245,12 @@ The consolidation release.
 - **Removed:** dead code and unused dependencies; the GitHub plans folder is no
   longer created just by constructing the handler.
 
-### Beta v8 — 2026-09-05 · PR #9 · `beta-v8-ui`
+### Beta v8 — 2026-09-05 · [PR #9](https://github.com/PratimeshTiwari/Agent-CLI/pull/9) · `beta-v8-ui`
 
 - **Claude Code visual aesthetic**, and the first fix for the scroll glitches.
 - **Fixed:** missing tabs and UI rendering issues.
 
-### Beta v7 — 2026-09-04 · PR #8 · `beta-v7-parallel-subagents`
+### Beta v7 — 2026-09-04 · [PR #8](https://github.com/PratimeshTiwari/Agent-CLI/pull/8) · `beta-v7-parallel-subagents`
 
 - **`<Static>` for native history scrolling** — the change the whole current
   frame-budget design grew out of.
@@ -1073,35 +1261,35 @@ The consolidation release.
 - **Fixed:** subagent routing; explicit flex constraints so Ink stopped
   overlapping text.
 
-### Beta v6 — 2026-09-02 · PR #7 · `beta-v6-system-prompts`
+### Beta v6 — 2026-09-02 · [PR #7](https://github.com/PratimeshTiwari/Agent-CLI/pull/7) · `beta-v6-system-prompts`
 
 - **Tiered model profiles** and a GitHub PR agent rewrite.
 - **Context routing, self-correction, and the command allowlist** — with a
   toggle, so it can be turned off without editing config.
 
-### Beta v5 — 2026-08-30 · PR #5 · `beta-v5-github-agent`
+### Beta v5 — 2026-08-30 · [PR #5](https://github.com/PratimeshTiwari/Agent-CLI/pull/5) · `beta-v5-github-agent`
 
 - **The GitHub PR agent**: a headless agent loop, PR-specific directories, a
   concurrency queue, and a five-stage comment-analysis prompt.
 - **Fixed:** background callbacks were not wired, so the agent never actually
   invoked the AI.
 
-### Beta v4 — 2026-08-30 · PR #4 · `beta-v4-subagents`
+### Beta v4 — 2026-08-30 · [PR #4](https://github.com/PratimeshTiwari/Agent-CLI/pull/4) · `beta-v4-subagents`
 
 - **Subagents**, reasoning profiles, a modularised extension, and UI
   virtualisation.
 - **Local LLM support** (removed again in v10).
 
-### Beta v3 — 2026-08-27 · PR #3 · `beta-v3`
+### Beta v3 — 2026-08-27 · [PR #3](https://github.com/PratimeshTiwari/Agent-CLI/pull/3) · `beta-v3`
 
 - **The CLI UI**, and the first serious pass at the prompt.
 
-### Beta v2 — 2026-08-27 · PR #2 · `beta-v2`
+### Beta v2 — 2026-08-27 · [PR #2](https://github.com/PratimeshTiwari/Agent-CLI/pull/2) · `beta-v2`
 
 - **Multi-model support** — ChatGPT and Claude bridges alongside Gemini.
 - **Fixed:** DOM reliability, error handling, and the CLI workflow.
 
-### Beta v1 — 2026-08-27 · PR #1 · `beta-v1`
+### Beta v1 — 2026-08-27 · [PR #1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1) · `beta-v1`
 
 - **Smart context management**, image support, and extension stability.
 
