@@ -55,7 +55,75 @@ export const PALETTES = {
     // is its theme's choice, and VS Code's is light — see UserBar.
     userBg: '#303030',
   },
+
+  /** Truecolor, tuned for a dark background. chalk drops to 256 colours where truecolor is missing. */
+  dark: {
+    text: '#e6e6e6', muted: '#8b93b0',
+    accent: '#7aa2f7', attention: '#ff9e64', success: '#9ece6a', danger: '#f7768e',
+    plan: '#e0af68', auto: '#73daca', strict: '#bb9af7',
+    menu: '#7aa2f7', link: '#7dcfff', review: '#bb9af7', shell: '#9ece6a', diffHeader: '#7dcfff',
+    userFg: '#e6e6e6', userBg: '#2a2f45',
+  },
+
+  /** The same roles with darker inks, for a light background. */
+  light: {
+    text: '#1f2328', muted: '#57606a',
+    accent: '#0969da', attention: '#bc4c00', success: '#1a7f37', danger: '#cf222e',
+    plan: '#9a6700', auto: '#0b7a75', strict: '#8250df',
+    menu: '#0969da', link: '#0550ae', review: '#8250df', shell: '#1a7f37', diffHeader: '#0550ae',
+    userFg: '#1f2328', userBg: '#e6eaef',
+  },
+
+  /**
+   * Red–green safe (Okabe–Ito): success is blue and failure orange, so a
+   * finished step and a failed one never differ only by red against green.
+   */
+  'dark-colorblind': {
+    text: '#e6e6e6', muted: '#9aa0a6',
+    accent: '#cc79a7', attention: '#f0e442', success: '#56b4e9', danger: '#e69f00',
+    plan: '#f0e442', auto: '#56b4e9', strict: '#cc79a7',
+    menu: '#a5d6ff', link: '#a5d6ff', review: '#cc79a7', shell: '#56b4e9', diffHeader: '#a5d6ff',
+    userFg: '#e6e6e6', userBg: '#2a2f45',
+  },
+
+  'light-colorblind': {
+    text: '#1f2328', muted: '#57606a',
+    accent: '#a3417f', attention: '#7a5f00', success: '#0067a3', danger: '#b54a00',
+    plan: '#7a5f00', auto: '#0067a3', strict: '#a3417f',
+    menu: '#0067a3', link: '#0067a3', review: '#a3417f', shell: '#0067a3', diffHeader: '#0067a3',
+    userFg: '#1f2328', userBg: '#e6eaef',
+  },
+
+  /**
+   * No colour at all: `null` is "leave the terminal's own", which Ink draws as
+   * plain text. Bold and dim still carry structure, and a diff keeps its `+`
+   * and `-`. Chosen automatically when `NO_COLOR` is set (no-color.org).
+   */
+  mono: Object.fromEntries(ROLES.map((role) => [role, null])),
 };
+
+/**
+ * What the picker says about each palette, and the background its contrast is
+ * checked against (`theme-tokens.test.js`). `null`: it uses the terminal's own
+ * colours, so there is nothing of ours to check.
+ */
+export const PALETTE_INFO = {
+  terminal: { label: 'Terminal', blurb: 'your terminal\'s own 16 colours — the classic look', background: null },
+  dark: { label: 'Dark', blurb: 'tuned for dark terminals', background: '#1e1e1e' },
+  light: { label: 'Light', blurb: 'for light backgrounds', background: '#ffffff' },
+  'dark-colorblind': { label: 'Dark (colour-blind)', blurb: 'blue and orange instead of green and red', background: '#1e1e1e' },
+  'light-colorblind': { label: 'Light (colour-blind)', blurb: 'blue and orange, for light backgrounds', background: '#ffffff' },
+  mono: { label: 'Mono', blurb: 'no colour — bold and dim only (also NO_COLOR)', background: null },
+};
+
+/**
+ * The theme to start with: `NO_COLOR` wins (it is the user saying so for every
+ * program at once), then the saved choice, then the default.
+ */
+export function startupTheme(env = process.env, saved = null) {
+  if (env.NO_COLOR !== undefined && env.NO_COLOR !== '') return 'mono';
+  return saved && PALETTES[saved] ? saved : DEFAULT_THEME;
+}
 
 export const DEFAULT_THEME = 'terminal';
 

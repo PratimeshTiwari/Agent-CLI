@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { PALETTES, ROLES, T, setTheme, themeName, modeColor, DEFAULT_THEME } from '../../src/ui/theme.js';
+import { PALETTES, PALETTE_INFO, ROLES, T, setTheme, themeName, modeColor, DEFAULT_THEME, startupTheme } from '../../src/ui/theme.js';
 
 const UI = new URL('../../src/ui/', import.meta.url).pathname;
 const files = [
@@ -48,7 +48,7 @@ test('negative control: the check sees the shapes it bans', () => {
 
 test('every palette defines every role', () => {
   for (const [name, palette] of Object.entries(PALETTES)) {
-    for (const role of ROLES) assert.ok(palette[role], `${name}.${role}`);
+    for (const role of ROLES) assert.ok(role in palette && palette[role] !== undefined, `${name}.${role}`);
     for (const key of Object.keys(palette)) assert.ok(ROLES.includes(key), `${name}.${key} is not a role`);
   }
 });
@@ -77,4 +77,48 @@ test('setTheme replaces the live palette in place, and refuses unknown names', (
     delete PALETTES.__probe;
     setTheme('terminal');
   }
+});
+
+/** WCAG relative luminance and contrast ratio. */
+function luminance(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+test('every palette reads: 4.5:1 for words, 3:1 for detail', () => {
+  const failures = [];
+  for (const [name, palette] of Object.entries(PALETTES)) {
+    const bg = PALETTE_INFO[name]?.background;
+    if (!bg) continue; // the terminal's own colours, or none
+    for (const role of ROLES) {
+      if (role === 'userBg') continue;
+      const against = role === 'userFg' ? palette.userBg : bg;
+      const need = role === 'muted' ? 3 : 4.5;
+      const got = contrast(palette[role], against);
+      if (got < need) failures.push(`${name}.${role} ${palette[role]} on ${against}: ${got.toFixed(2)} < ${need}`);
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('every palette has picker text, and every entry there is a palette', () => {
+  assert.deepEqual(Object.keys(PALETTE_INFO).sort(), Object.keys(PALETTES).sort());
+});
+
+test('NO_COLOR wins, then the saved choice, then the default', () => {
+  assert.equal(startupTheme({ NO_COLOR: '1' }, 'dark'), 'mono');
+  assert.equal(startupTheme({ NO_COLOR: '' }, 'dark'), 'dark', 'an empty NO_COLOR is unset (no-color.org)');
+  assert.equal(startupTheme({}, 'light'), 'light');
+  assert.equal(startupTheme({}, 'no-such'), DEFAULT_THEME, 'a stale saved name must not leave the palette half-set');
+  assert.equal(startupTheme({}, null), DEFAULT_THEME);
+});
+
+test('negative control: the contrast check fails what it should', () => {
+  assert.ok(contrast('#777777', '#888888') < 3);
+  assert.ok(contrast('#ffffff', '#000000') > 20);
 });

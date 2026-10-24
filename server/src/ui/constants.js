@@ -58,6 +58,7 @@ const SLASH_COMMANDS = [
   { name: 'plans', desc: 'Past plans, newest first', group: 'project' },
   { name: 'history', desc: 'Past conversations — pick one to reopen it', group: 'chat' },
   { name: 'commands', desc: 'Every shell command the agent has run, by day', group: 'audit' },
+  { name: 'theme', desc: 'Colours — dark, light, colour-blind, terminal, mono', group: 'config' },
   { name: 'name', desc: 'Name the agent — shown in the banner', group: 'config' },
   { name: 'update', desc: 'Pull the agent\'s own repo, and say what to reload', group: 'agent' },
   { name: 'logs', desc: 'What has been failing — `/logs rates` for how often', group: 'audit' },

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import os from 'os';
+import { themeName } from '../theme.js';
 
 /**
  * The header: the wordmark, the attribution, and the one line that says where
@@ -55,7 +56,9 @@ function Wordmark({ text }) {
       {Array.from({ length: BANDS }, (_, b) => {
         const slice = line.slice(b * step, (b + 1) * step);
         if (!slice) return null;
-        return <Text key={b} color={hex(BANDS === 1 ? 0 : b / (BANDS - 1))}>{slice}</Text>;
+        // Mono (and NO_COLOR) means no colour at all — the gradient included.
+        const color = themeName() === 'mono' ? undefined : hex(BANDS === 1 ? 0 : b / (BANDS - 1));
+        return <Text key={b} color={color}>{slice}</Text>;
       })}
     </Text>
   ));

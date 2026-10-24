@@ -13,7 +13,10 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 
 | Release | PR | What changed |
 | --- | --- | --- |
-| v5.13 | — | Prompt fixes from a review (pro's duplicate bullets, numbered headings, no ceremony for a greeting); a prompt with a paste or selection marker is drawn once; README feature tour |
+| v5.16 | — | Themes: `/theme` with a live preview — Dark, Light, two colour-blind palettes, Terminal (the classic look, still the default) and Mono (also `NO_COLOR`); saved per person in `~/.agent/settings.json`. Regression test for issue #68 |
+| v5.15 | #79 | Colour by role (`ui/theme.js`), no visible change; extension 1.48.0 stops logging `Still in CONNECTING state` |
+| v5.14 | #78 | Finished tools no longer listed twice, and 0 full redraws at 10–40 rows; compaction as one transcript row; the disconnected row names its fix; `tasks 3/5` while a turn runs |
+| v5.13 | #77 | Prompt fixes from a review (pro's duplicate bullets, numbered headings, no ceremony for a greeting); a prompt with a paste or selection marker is drawn once; README feature tour |
 | v5.12 | #76 | UI polish: `6 reads · 2 edits · 1 command` turn summaries, `/diff`, paths that keep their first directory, `↑ to take back` on queued prompts, queued rows charged to the frame budget |
 | v5.11 | #75 | Three modes — `plan` writes the repo's Markdown without asking (not AGENT.md/CLAUDE.md), `strict` asks for everything, `auto` unchanged. Extension 1.47.0, companion 1.8.2 |
 | v5.10 | #74 | Large files: reads cut by whole lines and naming what they left out, plain-text file content, edits that survive copied line numbers, `append` for documents, `+N −M` on edit rows |

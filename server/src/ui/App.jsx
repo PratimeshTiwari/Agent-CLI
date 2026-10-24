@@ -8,7 +8,6 @@ import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
-import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
 import { contextField, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
@@ -1361,7 +1360,7 @@ export function App({ agentLoop, wsServer }) {
             <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
               {runningCalls.map((call) => (
                 <Text key={call.id} color={T.accent} wrap="truncate">
-                  {'  '}<Dots tick={animTick} />{' '}{call.name}
+                  {'  '}◌{' '}{call.name}
                 </Text>
               ))}
             </Box>
@@ -1427,6 +1426,7 @@ export function App({ agentLoop, wsServer }) {
             setHistory={setHistory}
             setInput={setInput}
             setInputAtEnd={setInputAtEnd}
+            resetScreen={resetScreen}
           />
 
           <AgentTerminal
@@ -1462,7 +1462,8 @@ export function App({ agentLoop, wsServer }) {
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
           {isProcessing
-            ? <Text color={T.accent}><Dots tick={animTick} /> agent</Text>
+            // A steady dot while busy: the thinking line is the one spinner.
+            ? <Text color={T.accent}>● agent</Text>
             : <Text color={extensionConnected ? T.accent : T.attention} bold>
                 {extensionConnected ? '●' : '○'} agent
               </Text>}
@@ -1513,7 +1514,11 @@ export function App({ agentLoop, wsServer }) {
             leave the row blank, which would read as "off".
           */}
           {browserModelLabel
-            ? <Text color={T.link}>{browserModelLabel}</Text>
+            ? (mismatch
+              // The row above says what is wrong and how to fix it; this marks
+              // the field it is about, and stays while that row scrolls away.
+              ? <Text color={T.attention}>{'⚠ '}{browserModelLabel}</Text>
+              : <Text color={T.link}>{browserModelLabel}</Text>)
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
           <Text color={tokenColor}>{contextText}</Text>

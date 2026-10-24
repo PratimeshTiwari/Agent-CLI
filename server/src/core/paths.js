@@ -341,6 +341,12 @@ export function ensureParent(filePath) {
 export const recentWorkspacesPath = () => path.join(homeDir(), 'recent-workspaces.json');
 
 /**
+ * Settings that belong to the person rather than the project — the theme is
+ * about their terminal, and every repo they open should look the same.
+ */
+export const userSettingsPath = () => path.join(homeDir(), 'settings.json');
+
+/**
  * Where a chosen workspace is left for the supervisor to pick up.
  *
  * Switching workspace mid-session was the problem, not the feature — see

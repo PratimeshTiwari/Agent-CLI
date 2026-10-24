@@ -1141,6 +1141,13 @@ history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/reset.
 (a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
 because the loop would write the old conversation back.
 
+**Issue #68, "output clearing in new subsequent prompts", was this (reproduced 10-24).** Filed
+against v5.4: prompts drawn, replies never. Under the pty on v5.4, auto-compaction rewrote the
+history at the start of a prompt and every reply after it was answered, saved, and never drawn
+— the screen measures what it has drawn by position, and the front had moved. Same scenario on
+v5.16: every reply drawn. `test/ui/reply-after-compaction.test.js` pins it, with the v5.4
+behaviour as its control.
+
 **Compaction never handed anything over, and ran beside the turn (fixed v5.9).** Found under
 the pty by logging every prompt the fake extension received: the first prompt in the fresh chat
 had the system prompt and the next message and **no summary**. The summary was a `system` turn,
@@ -2347,6 +2354,13 @@ ago.
   (`DiffRows`' old `COLOUR`) must be read at render, not at import. Still literal, deliberately:
   the markdown renderer's colours (`marked-terminal`, configured once at load) and the banner
   gradient. The plan for the rest is `.agent/artifacts/plans/2026-10-24-ui-redesign.md`.
+  **Palettes since v5.16:** `dark`, `light`, `dark-colorblind`, `light-colorblind` (Okabe–Ito
+  blue/orange), `mono` (every role `null` — plain text) and `terminal`, still the default. Each
+  palette but `terminal`/`mono` names the background it was designed for in `PALETTE_INFO`, and
+  a test holds every role to WCAG 4.5:1 against it (3:1 for `muted`). `/theme` previews by
+  calling `setTheme` on highlight; esc restores `original`; enter saves to
+  `~/.agent/settings.json` (`core/user-settings.js` — per person, not per repo) and reprints the
+  transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
   exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
   app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup

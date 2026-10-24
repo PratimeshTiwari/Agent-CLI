@@ -137,6 +137,32 @@ export function parseTurnActions(turn) {
     // bottom (`compaction_note`) carries the same summary behind ctrl+e.
     if (msg.type === 'compaction_summary') continue;
 
+    // The correction we sent after an unparseable tool call: the row for the
+    // failed reply already says so (below), and this was a paragraph of it.
+    if (msg.type === 'parse_error') continue;
+
+    // A reply whose tool call could not be parsed: its prose, if it had any,
+    // then one row — not the broken JSON drawn as if it were the answer.
+    if (msg.parseError) {
+      // Everything before the first fence. The broken block is usually the
+      // tool call — which comes last — and is often nested badly enough
+      // (`"path": "core/```json`) that matching fence pairs leaves debris.
+      const prose = String(msg.content || '').split('```')[0]
+        .replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, '')
+        .trim();
+      if (prose) items.push({ type: 'text', id: `turn_${turn.id}_act_${sIdx}_text`, content: prose, msg });
+      items.push({
+        type: 'parse_error',
+        id: `turn_${turn.id}_act_${sIdx}_parse`,
+        attempt: msg.attempt,
+        maxAttempts: msg.maxAttempts,
+        error: msg.parseError,
+        raw: msg.content,
+        msg,
+      });
+      continue;
+    }
+
     if (msg.type === 'compaction_note') {
       // A notice about the conversation, not a reply in it — and not work the
       // agent did, so it is left out of `actions` below.
@@ -282,7 +308,7 @@ export function parseTurnActions(turn) {
 
   // Derived, never accumulated in parallel: two lists that are supposed to
   // agree are two lists that will one day not.
-  const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction');
+  const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction' && i.type !== 'parse_error');
   const finalMessages = items.filter((i) => i.type === 'text');
   return { items, actions, finalMessages };
 }

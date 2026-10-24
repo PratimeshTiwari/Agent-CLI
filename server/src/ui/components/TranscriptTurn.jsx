@@ -2,8 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { Dots } from './RunningLine.jsx';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -237,7 +236,11 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
          * (`⠼ Running run_command... · 2 reads`), with a third copy in the
          * running list between them. What only this row knows is the tally.
          */
-        <>{'  '}<Text color={T.accent}><Dots tick={tick} /></Text>{' so far'}</>
+        /*
+         * And not a spinner: the thinking line under it already spins, and so
+         * did the status bar — three at once read as three things running.
+         */
+        <>{'  '}<Text color={T.muted}>◌</Text>{' so far'}</>
       ) : (
         <>{'  '}{duration === null ? 'Worked' : `Worked for ${duration}s`}</>
       )}
@@ -280,7 +283,8 @@ export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalW
       marginTop={previous && previous.type !== 'text' ? 1 : 0}
       width="100%"
     >
-      {!item.msg.isLocal && <Text color={T.success}>● </Text>}
+      {/* Default foreground, not green: a finished tool's dot is green, and the two read as one. */}
+      {!item.msg.isLocal && <Text bold>● </Text>}
       <Box flexGrow={1} flexShrink={1}>
         {/*
           Clamped while live and whole once committed — the reply is the
@@ -466,6 +470,20 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     return (
       <Box width="100%">
         <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars)}</Text>
+      </Box>
+    );
+  }
+
+  if (act.type === 'parse_error') {
+    return (
+      <Box flexDirection="column" width="100%">
+        <Text color={T.attention} wrap="truncate">{parseErrorRow(act.attempt, act.maxAttempts, verbose)}</Text>
+        {verbose && (
+          <Box marginLeft={2} flexDirection="column">
+            <Text dimColor wrap="wrap">{clampForDisplay(act.error, limit.lines, limit.chars)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.raw, limit.lines, limit.chars)}</Text>
+          </Box>
+        )}
       </Box>
     );
   }

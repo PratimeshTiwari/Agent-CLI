@@ -933,3 +933,13 @@ export function taskProgress(text) {
   if (items.length === 0) return null;
   return { done: items.filter((l) => /\[[xX]\]/.test(l)).length, total: items.length };
 }
+
+/**
+ * The row for a reply whose tool call could not be parsed. It was the broken
+ * JSON drawn as prose, then `ERROR PARSING TOOL CALLS: …` as a paragraph —
+ * ten rows saying "the model will try again".
+ */
+export function parseErrorRow(attempt, maxAttempts, verbose = false) {
+  const n = Number.isFinite(attempt) && Number.isFinite(maxAttempts) ? ` (${attempt}/${maxAttempts})` : '';
+  return `✗ Could not read its tool call — asked it to resend${n}${verbose ? '' : ' · ctrl+e for details'}`;
+}

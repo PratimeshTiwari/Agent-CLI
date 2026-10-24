@@ -16,7 +16,8 @@ import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
-import { T } from '../theme.js';
+import { T, PALETTES, PALETTE_INFO, setTheme } from '../theme.js';
+import { saveUserSettings } from '../../core/user-settings.js';
 
 /**
  * Every modal the agent can raise: questions, command approval, plan review,
@@ -71,6 +72,7 @@ export function Menus({
   setHistory,
   setInput,
   setInputAtEnd,
+  resetScreen,
 }) {
   /**
    * Run a setting change and land somewhere it can be seen. See TOGGLES above.
@@ -110,6 +112,14 @@ export function Menus({
     }
 
     if (!key.escape) return;
+    // The picker previews by applying each palette as you move; leaving
+    // without choosing puts back the one you came in with.
+    if (activeMenu?.type === 'theme') {
+      setTheme(activeMenu.original);
+      setActiveMenu(null);
+      setFocus(FOCUS_INPUT);
+      return;
+    }
     // Escape clears a filter before it closes the page: having typed three
     // letters, "get me out of this filter" is the more likely of the two.
     if (activeMenu?.type === 'settings' && activeMenu.query) {
@@ -293,6 +303,60 @@ export function Menus({
                 </Text>
               </Box>
               <Text dimColor>↑↓ move · enter choose · esc cancel</Text>
+            </Box>
+          );
+        })()}
+
+        {activeMenu?.type === 'theme' && (() => {
+          /*
+           * Live preview, Claude Code style: moving the highlight applies that
+           * palette, so this box and the live frame show it at once. Only the
+           * committed transcript keeps the old colours until enter reprints it.
+           */
+          const names = Object.keys(PALETTES);
+          const labelWidth = Math.max(...names.map((n) => PALETTE_INFO[n].label.length));
+          return (
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} paddingX={1}>
+              <Text bold color={T.menu}>Theme</Text>
+              <SelectInput
+                initialIndex={Math.max(0, names.indexOf(activeMenu.original))}
+                items={names.map((n) => ({
+                  label: `${PALETTE_INFO[n].label.padEnd(labelWidth)}  ${n === activeMenu.original ? '← current' : '         '}`,
+                  value: n,
+                }))}
+                onHighlight={(item) => {
+                  setTheme(item.value);
+                  setActiveMenu((m) => ({ ...m, at: item.value }));
+                }}
+                onSelect={(item) => {
+                  setTheme(item.value);
+                  const saved = saveUserSettings({ theme: item.value });
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  setHistory((prev) => [...prev, {
+                    role: 'assistant', isLocal: true,
+                    content: `🎨 Theme: **${PALETTE_INFO[item.value].label}**`
+                      + (saved ? '' : ' — for this session only; ~/.agent/settings.json could not be written'),
+                  }]);
+                  if (item.value !== activeMenu.original) resetScreen?.();
+                }}
+              />
+              <Text dimColor wrap="truncate">{'  '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
+              {/* The preview: one row per role a person actually meets. */}
+              <Box flexDirection="column" marginTop={1}>
+                <Text wrap="truncate">
+                  {'  '}<Text color={T.success}>⏺ </Text><Text bold>edit_file</Text>
+                  <Text color={T.muted}> invoice.rb </Text><Text color={T.success}>+2 </Text><Text color={T.danger}>−1</Text>
+                  {'   '}<Text color={T.danger}>✗ </Text><Text bold>run_command</Text><Text color={T.danger}> exit 1</Text>
+                </Text>
+                <Text wrap="truncate">
+                  {'  '}<Text color={T.accent}>⠋ Running rspec…</Text>
+                  {'   '}<Text color={T.attention}>⏸ 1 queued</Text>
+                  {'   '}<Text bold color={T.plan}>plan</Text>{' '}<Text bold color={T.auto}>auto</Text>{' '}<Text bold color={T.strict}>strict</Text>
+                  {'   '}<Text color={T.link}>/history</Text>
+                </Text>
+              </Box>
+              <Text dimColor>↑↓ preview · enter keep · esc put it back</Text>
             </Box>
           );
         })()}
