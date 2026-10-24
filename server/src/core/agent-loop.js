@@ -883,14 +883,20 @@ export class AgentLoop {
 
     const errorPrompt = `ERROR PARSING TOOL CALLS:\n${err.message}\n\nPlease fix the JSON formatting of your tool calls and output them again. Ensure you close all tags properly and escape newlines in strings.`;
 
+    // Tagged so the transcript draws one row for the pair instead of the
+    // broken JSON as prose plus the error as a paragraph (parseTurnActions).
     const agentTurn = {
       role: 'agent',
       content: content,
+      parseError: err.message,
+      attempt: this._parseRetries,
+      maxAttempts: MAX_PARSE_RETRIES,
       timestamp: Date.now(),
     };
 
     const systemErrorTurn = {
       role: 'system',
+      type: 'parse_error',
       content: errorPrompt,
       timestamp: Date.now(),
     };

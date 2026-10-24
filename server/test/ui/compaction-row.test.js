@@ -48,3 +48,20 @@ test('every most-used command exists', async () => {
   const names = new Set(SLASH_COMMANDS.map((c) => c.name));
   for (const c of MOST_USED_COMMANDS) assert.ok(names.has(c), `/${c}`);
 });
+
+test('an unparseable tool call is its prose and one row, not the JSON and a paragraph', () => {
+  const { items, actions } = parseTurnActions(turn([
+    { role: 'agent', content: 'Reading the builder.\n```json\n{"name": "read_file", "args": {"path": "a```json\n```', parseError: 'Expected , or }', attempt: 1, maxAttempts: 2 },
+    { role: 'system', type: 'parse_error', content: 'ERROR PARSING TOOL CALLS:\nExpected , or }' },
+  ]));
+  assert.deepEqual(items.map((i) => i.type), ['text', 'parse_error']);
+  assert.equal(items[0].content, 'Reading the builder.');
+  assert.equal(items[1].attempt, 1);
+  assert.equal(actions.length, 0, 'a failed parse is not work the agent did');
+});
+
+test('the parse-error row', async () => {
+  const { parseErrorRow } = await import('../../src/ui/format.js');
+  assert.equal(parseErrorRow(1, 2), '✗ Could not read its tool call — asked it to resend (1/2) · ctrl+e for details');
+  assert.equal(parseErrorRow(undefined, undefined, true), '✗ Could not read its tool call — asked it to resend');
+});
