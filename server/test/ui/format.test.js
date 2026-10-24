@@ -122,8 +122,8 @@ describe('renderMarkdown — the structure Gemini actually writes', () => {
   it('does not renumber a bullet list nested in a numbered one', () => {
     const out = plain('1. Install\n   - with npm\n   - with pnpm\n2. Run it\n');
     assert.match(out, /^1\. Install$/m);
-    assert.match(out, /^ {3}\* with npm$/m);
-    assert.match(out, /^ {3}\* with pnpm$/m, `the child took the parent's number:\n${out}`);
+    assert.match(out, /^ {3}◦ with npm$/m);
+    assert.match(out, /^ {3}◦ with pnpm$/m, `the child took the parent's number:\n${out}`);
     assert.match(out, /^2\. Run it$/m, `the parent kept counting through its child:\n${out}`);
   });
 
@@ -137,13 +137,22 @@ describe('renderMarkdown — the structure Gemini actually writes', () => {
   it('indents to the marker width, not a constant', () => {
     const items = Array.from({ length: 10 }, (_, i) => `${i + 1}. item`).join('\n');
     const out = plain(`${items}\n    - deep\n`);
-    assert.match(out, /^ {4}\* deep$/m, `a four-column marker was indented as three:\n${out}`);
+    assert.match(out, /^ {4}◦ deep$/m, `a four-column marker was indented as three:\n${out}`);
   });
 
   it("keeps a task list's boxes", () => {
     const out = plain('- [ ] not done\n- [x] done\n');
     assert.match(out, /\[ \] not done/);
     assert.match(out, /\[X\] done/);
+  });
+
+  it('renders inline markdown inside a tight item, and bullets are hollow', () => {
+    // Reported with a screenshot: `- \`docs/\`` came out as "* `docs/`" —
+    // marked-terminal's block `text` renderer returns a tight item raw.
+    const out = plain('- `docs/`\n- **bold** item\n');
+    assert.match(out, /^◦ docs\/$/m, `inline code kept its backticks:\n${out}`);
+    assert.match(out, /^◦ bold item$/m);
+    assert.doesNotMatch(out, /^\* /m, 'a `*` bullet reads as unrendered markdown');
   });
 
   it('draws an indented fenced block, and numbering continues past it', () => {

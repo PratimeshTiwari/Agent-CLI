@@ -125,7 +125,12 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
         />
       ))}
 
-      {actions.length > 0 && (
+      {/*
+        Committed turns only. While live, the tally rides on the spinner line
+        (InputBar's `liveTally`), one row instead of two.
+      */}
+      {actions.length > 0 && !isLive && (
+        <Box marginTop={compact ? 0 : 1}>
         <TurnSummary
           isLive={isLive}
           duration={duration}
@@ -134,6 +139,7 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
           tick={tick}
           breakdown={workBreakdown(actions)}
         />
+        </Box>
       )}
     </Box>
   );
@@ -274,7 +280,13 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
 export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalWidth }) {
   if (item.type !== 'text') {
     return (
-      <Box flexDirection="column" marginLeft={2} width="100%">
+      /*
+       * A blank row between events once committed, the way Claude Code spaces
+       * them — reported as "each new event should be spaced out". Committed
+       * rows only: `<Static>` is not budgeted, the live frame is, and a live
+       * row is at most the newest one, so there is nothing above it to space.
+       */
+      <Box flexDirection="column" marginLeft={2} marginTop={!isLive && previous ? 1 : 0} width="100%">
         <ActionRow act={item} verbose={verbose} isLive={isLive} width={terminalWidth} />
       </Box>
     );

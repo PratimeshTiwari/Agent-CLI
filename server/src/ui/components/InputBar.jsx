@@ -53,6 +53,7 @@ export function InputBar({
   slashSelected,
   status,
   syncTokenEstimate,
+  liveTally = '',
   terminalOpen,
   pastes,
   thinkingText,
@@ -127,6 +128,7 @@ export function InputBar({
             <Text dimColor>
               {' ('}{elapsed}s
               {syncTokenEstimate > 0 ? ` · ↑ ${syncTokenEstimate >= 1000 ? `${(syncTokenEstimate / 1000).toFixed(1)}k` : syncTokenEstimate} tokens` : ''}
+              {liveTally ? ` · ${liveTally}` : ''}
               {' · esc to stop)'}
             </Text>
           </Text>

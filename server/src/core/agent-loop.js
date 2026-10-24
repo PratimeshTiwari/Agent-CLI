@@ -466,11 +466,20 @@ export class AgentLoop {
     this._userStoppedAt = null;
 
     /*
-     * Auto-compaction used to start here, alongside the turn — and its last
-     * step switched the tab to a new chat while this turn was still writing
-     * to it, so the turn's next prompt landed in a conversation that had never
-     * seen the task. It runs at the end of a turn now (`_finishTurn`).
+     * Auto-compaction runs here, *before* the new message, and nowhere else —
+     * the way Claude Code does it: past the threshold, the next thing you send
+     * goes to a fresh chat with the summary, and no turn is ever interrupted.
+     *
+     * It once started here *alongside* the turn, and its last step switched
+     * the tab to a new chat while the turn was still writing to it. Awaiting
+     * it is what makes this safe: nothing is sent until it has finished, and
+     * the busy flag is already up, so anything typed meanwhile queues.
      */
+    if (this._wantsCompaction()) {
+      await this._runCompaction({ beforeMessage: true });
+      // esc during the summary: the stop covers the message too.
+      if (!this.isProcessing) return;
+    }
     try {
       // The image goes to the bridge, never into the record. `/image` inlines
       // the whole file as a base64 data URL so the content script can rebuild
@@ -1112,11 +1121,13 @@ export class AgentLoop {
     logToolUsage(this.workspace, this._turnEvidence || new Map(), { rounds: this._roundsThisTurn || 0 });
 
     /*
-     * Compact between turns, never during one. The loop stays busy while it
-     * runs, so a prompt typed meanwhile queues and is sent when it is done —
-     * the idle edge that releases the queue is the one at the end of this.
+     * Only a `/compact` typed during the turn runs here — you asked for it.
+     * Crossing the threshold does not: auto-compaction waits for your next
+     * message (handleUserMessage), so a finished answer is never followed by
+     * a compaction nobody asked for yet. The loop stays busy while it runs,
+     * so a prompt typed meanwhile queues and is sent when it is done.
      */
-    if (this._wantsCompaction()) {
+    if (this._compactAfterTurn && !this.isCompacting) {
       this._compactThenIdle();
       return;
     }
@@ -2816,52 +2827,12 @@ export class AgentLoop {
     );
 
     /*
-     * Full mid-turn: pause, compact, resume — the way Claude Code does.
-     *
-     * Compacting only at a turn's end leaves the long turn uncovered, and the
-     * long turn is the one that fills the thread: a document built from a
-     * dozen files is a dozen read rounds. Here the results are in hand and not
-     * yet sent, so the thread summarises everything up to them, the tab moves
-     * to a fresh chat, and the results go there with the summary — the turn
-     * carries on where it was.
+     * Never compacted here. Mid-turn compaction (pause at the tool-result
+     * boundary, move to a fresh chat, resume) was removed on the owner's call,
+     * 2026-10-25: *"do not compact mid conversation, that should hit after
+     * threshold is met and user enters a new message"*. See handleUserMessage.
      */
-    if (this._wantsCompaction()) {
-      await this._compactAndResume(batch);
-      return;
-    }
-
     this._sendToGemini(batch, this.callbacks);
-  }
-
-  /** Mid-turn compaction, then the paused round's results into the fresh chat. */
-  async _compactAndResume(batch) {
-    this._compactAfterTurn = false;
-    let result = null;
-    try {
-      result = await this._compactHistory(undefined, { auto: true });
-    } catch (err) {
-      logError(this.workspace, {
-        flow: 'agent', op: 'auto_compact',
-        message: `Mid-turn compaction failed: ${err.message}`, detail: err.stack,
-      });
-    }
-    // esc during the summary: the turn was stopped, and stays stopped.
-    if (!this.isProcessing) return;
-
-    const prompt = result?.handedOver
-      ? this.promptBuilder.buildPrompt({
-        userMessage: 'The conversation was compacted while you were working. Continue the task '
-          + 'from where you were — these are the results of the tool calls you made just before:'
-          + `\n\n${batch}`,
-        mode: this.mode,
-        subagents: this.subagentsEnabled,
-        modelConfig: this.modelConfig,
-        objective: this.currentObjective,
-      })
-      : batch; // same thread as before: the results are all it needs
-    this._notify(result?.handedOver ? '🗜 Compacted — continuing the task in a fresh chat'
-      : '🗜 Could not move to a fresh chat — continuing here');
-    this._sendToGemini(prompt, this.callbacks);
   }
 
   /**
@@ -3385,6 +3356,16 @@ export class AgentLoop {
 
   /** Compact, report it, then end the turn the way `_finishTurn` would have. */
   async _compactThenIdle() {
+    try {
+      await this._runCompaction();
+    } finally {
+      this.isProcessing = false;
+      if (this._backgroundCallbacks) this.callbacks = this._backgroundCallbacks;
+    }
+  }
+
+  /** Compact and leave a note in the transcript. Never throws; leaves the busy flag alone. */
+  async _runCompaction({ beforeMessage = false } = {}) {
     const auto = !this._compactAfterTurn;
     this._compactAfterTurn = false;
     try {
@@ -3404,7 +3385,9 @@ export class AgentLoop {
         };
         this.conversationHistory.push(note);
         this.sessionStore.appendTurn(note);
-        this.callbacks.sendToPanel({ id: randomUUID(), type: 'agent_response', payload: { content: note.content }, timestamp: Date.now() });
+        // `continuing` before a message: the turn it opens is about to start,
+        // and a bare agent_response reads as "the turn ended" to every front-end.
+        this.callbacks.sendToPanel({ id: randomUUID(), type: 'agent_response', payload: { content: note.content, continuing: beforeMessage }, timestamp: Date.now() });
       }
     } catch (err) {
       logError(this.workspace, {
@@ -3412,9 +3395,6 @@ export class AgentLoop {
         message: `Compaction failed: ${err.message}`, detail: err.stack,
       });
       this._notify(`⚠️ Compaction failed: ${err.message}`);
-    } finally {
-      this.isProcessing = false;
-      if (this._backgroundCallbacks) this.callbacks = this._backgroundCallbacks;
     }
   }
 

@@ -1,5 +1,15 @@
 /**
- * Leaving the CLI: clear the screen and say how to come back.
+ * Leaving the CLI: keep the session on screen and say how to come back.
+ *
+ * **It no longer clears (2026-10-25).** It did, on request, and the request
+ * changed on seeing it: *"our agent just clears the terminal … unlike Claude
+ * where the work is visible"*. Claude Code erases only its own prompt box and
+ * status row and leaves the transcript in the scrollback, then prints the
+ * resume command under it. Ink's `clear()` erases exactly the live frame and
+ * syncs its log so the final render on unmount writes nothing — the committed
+ * `<Static>` rows above it are the terminal's and stay.
+ *
+ * What follows is the history of the clearing version.
  *
  * Asked for: "whenever we exit, just clear the agent cli like Claude Code
  * does and display the resume session id". What exit used to leave was the
@@ -13,15 +23,14 @@
  * SIGTERM — so there is one farewell and one order: unmount Ink first (it
  * restores the terminal, and an unmount after the clear would repaint its
  * last frame over it), clear the screen and scrollback the way `clear` does,
- * print the command, then shut the bridge and go.
+ * print the command, then shut the bridge and go. (Now: erase the live frame,
+ * unmount, print — see the top of this comment.)
  *
  * Pure parts are exported for tests; `.js` rather than `.jsx` so the repo's
  * plain `node --test` can import it.
  */
 import { leave } from '../core/restart.js';
 
-/** `clear`: screen, scrollback, cursor home. */
-export const CLEAR_SCREEN = '\x1b[2J\x1b[3J\x1b[H';
 
 let ink = null;
 
@@ -40,18 +49,11 @@ export function registerInk(instance) {
  * @param {string|null} id - the live conversation's id, null when there is none worth resuming
  */
 export function farewellText(id, { workspace = null, cwd = process.cwd() } = {}) {
-  if (!id) return '\n  Nothing to resume: no conversation in this session.\n\n';
+  // Nothing worth resuming: say nothing. The screen above already shows
+  // that nothing happened, and a sentence about it is noise on every exit.
+  if (!id) return '\n';
   const where = workspace && workspace !== cwd ? ` --workspace ${quoteIfNeeded(workspace)}` : '';
-  return [
-    '',
-    '  Resume this conversation with:',
-    '',
-    `    agent --resume ${id}${where}`,
-    '',
-    `  or  agent --continue${where}   (the most recent one)`,
-    '',
-    '',
-  ].join('\n');
+  return `\n  Resume this conversation with: agent --resume ${id}${where}\n\n`;
 }
 
 function quoteIfNeeded(p) {
@@ -79,8 +81,11 @@ let leaving = false;
 export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = process.stdout, exit } = {}) {
   if (leaving) return;
   leaving = true;
+  // Erase the live frame (prompt box, status row) and nothing else, then
+  // unmount — whose final render then has nothing left to write.
+  try { ink?.clear?.(); } catch { /* going anyway */ }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  try { out.write(CLEAR_SCREEN + farewellFor(agentLoop)); } catch { /* going anyway */ }
+  try { out.write(farewellFor(agentLoop)); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }

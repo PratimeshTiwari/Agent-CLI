@@ -153,17 +153,28 @@ marked.use({
     list(token) {
       let n = Number(token.start || 1);
       const lines = token.items.map((item) => {
-        const marker = token.ordered ? `${n++}. ` : '* ';
+        // A hollow bullet, dimmed: `*` read as unrendered markdown (reported
+        // with a screenshot). Width is counted from the visible marker, not the
+        // escape codes around it.
+        const shown = token.ordered ? `${n++}. ` : '◦ ';
+        const marker = token.ordered ? shown : `${DIM}◦${RESET} `;
         const tick = item.task ? (item.checked ? '[X] ' : '[ ] ') : '';
+        // A tight item's text is a `text` token holding inline children, and
+        // marked-terminal's block `text` renderer returns it raw — which is how
+        // `- \`docs/\`` came out with its backticks still on. Render those
+        // children as inline markdown, the way a paragraph is.
+        const tokens = item.tokens.map((t) => (t.type === 'text' && t.tokens
+          ? { type: 'html', raw: this.parser.parseInline(t.tokens), text: this.parser.parseInline(t.tokens), block: true, pre: false }
+          : t));
         const body = this.parser
-          .parse(item.tokens, !!item.loose)
+          .parse(tokens, !!item.loose)
           // A loose item's first child is a block and opens with its own
           // newline, which would otherwise land straight after the marker.
           .replace(/^\s+/, '')
           .trimEnd()
           // Continuation lines — a nested list, a second paragraph, a fenced
           // block — sit under the text, not under the marker.
-          .replace(/\n(?=[^\n])/g, `\n${' '.repeat(marker.length + tick.length)}`);
+          .replace(/\n(?=[^\n])/g, `\n${' '.repeat(shown.length + tick.length)}`);
         return `${marker}${tick}${body}`;
       });
       // Leading newline so the list separates from the text above it; the
@@ -550,16 +561,17 @@ export function summarizeResult(toolName, result) {
  * The status bar's context field.
  *
  * Far from the threshold it is `18% of 96k`. Within twenty points it says
- * where compaction happens instead — `62% · compacts at 80%`, then
- * `82% · compacts next` — and drops the budget, which is the part nobody acts
+ * how far is left, in Claude Code's words — `18% until auto-compact`, down to
+ * `0% until auto-compact`, when your next message compacts before it is sent —
+ * and drops the budget, which is the part nobody acts
  * on. It used to append ` · 18% to auto-compact` / ` · compacts after this
  * turn` to the full field, and the right side of the bar does not shrink, so
  * the hint pushed the left side (`agent · scope · /help`) off the row.
  */
 export function contextField(pct, limit, compactAtPct) {
   const toGo = compactAtPct - pct;
-  if (toGo <= 0) return `${pct}% · compacts next`;
-  if (toGo <= 20) return `${pct}% · compacts at ${compactAtPct}%`;
+  // Claude Code's words. At 0% the next message you send compacts first.
+  if (toGo <= 20) return `${Math.max(0, toGo)}% until auto-compact`;
   return `${pct}% of ${limit >= 1000 ? `${Math.round(limit / 1000)}k` : limit}`;
 }
 
@@ -958,11 +970,13 @@ export function contextMeter(pct, cells = 5) {
 
 /**
  * The mode, said the way Claude Code says it, for the status line:
- * `⏵⏵ auto mode on` / `⏸ plan mode on` / `⏸ strict plan mode on`.
+ * `auto mode on` / `plan mode on` / `strict plan mode on`.
  * Replaced a label on the input border, which read as floating above the box.
+ * Plain words: the `⏵⏵` / `⏸` glyphs Claude Code uses render as a thick
+ * `▮▮` in common terminal fonts and were reported as looking bad.
  */
 export function modeLine(mode) {
-  if (mode === 'auto') return '⏵⏵ auto mode on';
-  if (mode === 'strict') return '⏸ strict plan mode on';
-  return '⏸ plan mode on';
+  if (mode === 'auto') return 'auto mode on';
+  if (mode === 'strict') return 'strict plan mode on';
+  return 'plan mode on';
 }

@@ -39,9 +39,9 @@ test('the queued row says how to take a prompt back', () => {
 
 test('the mode is said in the status line, Claude Code style', async () => {
   const { modeLine } = await import('../../src/ui/format.js');
-  assert.equal(modeLine('auto'), '⏵⏵ auto mode on');
-  assert.equal(modeLine('plan'), '⏸ plan mode on');
-  assert.equal(modeLine('strict'), '⏸ strict plan mode on');
+  assert.equal(modeLine('auto'), 'auto mode on');
+  assert.equal(modeLine('plan'), 'plan mode on');
+  assert.equal(modeLine('strict'), 'strict plan mode on');
   assert.match(src('ui/App.jsx'), /modeLine\(mode\)/);
   assert.match(src('ui/App.jsx'), /\(shift\+tab to cycle\)/);
   assert.doesNotMatch(src('ui/components/InputBar.jsx'), /borderTop=\{false\}/, 'the label on the border is gone');
