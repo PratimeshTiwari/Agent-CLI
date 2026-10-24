@@ -1,3 +1,4 @@
+import { noteActivity } from '../activity.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -69,6 +70,7 @@ export function buildAgentCallbacks({
 
   return {
     sendToPanel: (msg) => {
+      noteActivity();
       /*
        * Kept, and returned. The CLI's copy of this dropped the answer on the
        * floor, so `_toExtension` could not tell "the browser did not reply"

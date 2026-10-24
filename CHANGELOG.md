@@ -14,10 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83)
+### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.20 | 2026-10-25 | `v5.20/exit-keeps-transcript-compact-on-send` | [#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) | v5.20: exit keeps the transcript; auto-compaction waits for your next message; spacing and bullets |
 | v5.19 | 2026-10-25 | `v5.19/release-history` | [#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | v5.19: release history with dates, branches and PR links; current README screenshots |
 | v5.18 | 2026-10-24 | `v5.18/thinking-waits` | [#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) | v5.18: replies no longer dropped while Gemini thinks; interrupted tool calls salvaged |
 | v5.17 | 2026-10-24 | `v5.17/rows` | [#81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) | v5.17: redesign phase 3 — tool rows, message edge, mode on the border, meter, rounds, tinted diffs |
@@ -127,6 +128,17 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | Beta v1 | 2026-08-26 | `beta-v1` | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1) | feat: smart context management, robust image support, and extension s… |
 
 ## v5 in detail
+
+### v5.20 — 2026-10-25 · [PR #84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) · `v5.20/exit-keeps-transcript-compact-on-send`
+
+- Exit keeps the session on screen and prints one resume line under it, like Claude Code — or nothing when there was no conversation. It used to clear the screen.
+- Auto-compaction no longer runs during a turn or right after one: once the threshold is crossed, your next message compacts first and is then sent. A `/compact` typed during a turn still runs when it ends. The status bar says `N% until auto-compact`.
+- "Taking a while — make sure the Chrome tab is not minimised" appears after 30s of silence from the browser (60s on High), not after a fixed 10s.
+- The status line reads `plan mode on (shift+tab to cycle)`, without the dot and the pause glyph.
+- Lists use dim `◦` bullets, and inline code inside a list item is rendered (it showed its backticks).
+- A blank row between events in the transcript and before "Worked for…"; the live tally moved onto the spinner line, with a blank row above the spinner.
+- `/effort` picked from its menu shows the command above the result; a reply that was only an empty code block is no longer drawn.
+- `CLAUDE.md` split: history moved verbatim to `docs/history.md` (169k → 122k characters, under the 150k Claude Code loads).
 
 ### v5.19 — 2026-10-25 · [PR #83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) · `v5.19/release-history`
 

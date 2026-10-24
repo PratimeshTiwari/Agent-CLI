@@ -39,9 +39,9 @@ test('the queued row says how to take a prompt back', () => {
 
 test('the mode is said in the status line, Claude Code style', async () => {
   const { modeLine } = await import('../../src/ui/format.js');
-  assert.equal(modeLine('auto'), '⏵⏵ auto mode on');
-  assert.equal(modeLine('plan'), '⏸ plan mode on');
-  assert.equal(modeLine('strict'), '⏸ strict plan mode on');
+  assert.equal(modeLine('auto'), 'auto mode on');
+  assert.equal(modeLine('plan'), 'plan mode on');
+  assert.equal(modeLine('strict'), 'strict plan mode on');
   assert.match(src('ui/App.jsx'), /modeLine\(mode\)/);
   assert.match(src('ui/App.jsx'), /\(shift\+tab to cycle\)/);
   assert.doesNotMatch(src('ui/components/InputBar.jsx'), /borderTop=\{false\}/, 'the label on the border is gone');
@@ -66,4 +66,10 @@ test('/diff shows the last edit, and what happened to it', async () => {
 test('a compaction that worked is one line; one that needs you keeps the long text', () => {
   const loopSrc = src('core/agent-loop.js');
   assert.match(loopSrc, /content: result\.handedOver\s*\? `🗜 /);
+});
+
+test('a menu pick echoes its command above the answer, like every local command', () => {
+  // Reported: "i changed effort but effort did not show up in messages".
+  assert.match(src('ui/components/Menus.jsx'),
+    /\{ role: 'user', content: `\/\$\{command\}`, isLocal: true \},\s*\{ role: 'assistant', content: result\.message, isLocal: true \}/);
 });

@@ -53,6 +53,7 @@ export function InputBar({
   slashSelected,
   status,
   syncTokenEstimate,
+  liveTally = '',
   terminalOpen,
   pastes,
   thinkingText,
@@ -120,13 +121,21 @@ export function InputBar({
 
   return (
     <>
+      {/*
+        The blank row sits *above* the spinner, between it and the last action
+        (reported: "read_file … and this vibing thing should have space"). It
+        used to sit below, where the prompt box's own top margin already put
+        one — two blank rows there, none here. Same height either way, so the
+        live-frame budget is unchanged.
+      */}
       {isProcessing && !diffRequest && (
-        <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
+        <Box flexDirection="column" marginTop={compact ? 0 : 1}>
           <Text color={T.accent}>
             <RunningLine tick={animTick} text={isToolRunningRef.current ? status : thinkingText} />
             <Text dimColor>
               {' ('}{elapsed}s
               {syncTokenEstimate > 0 ? ` · ↑ ${syncTokenEstimate >= 1000 ? `${(syncTokenEstimate / 1000).toFixed(1)}k` : syncTokenEstimate} tokens` : ''}
+              {liveTally ? ` · ${liveTally}` : ''}
               {' · esc to stop)'}
             </Text>
           </Text>

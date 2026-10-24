@@ -12,6 +12,7 @@ import { contextField, contextMeter, disconnectedHint, extractCodeBlocks, modeLi
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
+import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
 import { groupTurns, parseTurnActions } from './transcript.js';
 import { expandPastes, attachedPastes } from './paste.js';
@@ -166,8 +167,8 @@ export function App({ agentLoop, wsServer }) {
   /*
    * Two stages, because "slow" and "stuck" want different things said.
    *
-   * At ten seconds the useful advice is about the tab, which is the ordinary
-   * cause. Past five minutes that advice is no longer true — the slowest turn
+   * After a stretch of silence from the browser (30s, 60s on High) the useful
+   * advice is about the tab, which is the ordinary cause. Past five minutes that advice is no longer true — the slowest turn
    * ever recorded here is 55.7 seconds, measured over 350 — so the useful
    * thing is the way out. Asked for directly after a turn ran to
    * **25,742 seconds**: *"if the load is longer than 5 minutes and it does not
@@ -184,9 +185,16 @@ export function App({ agentLoop, wsServer }) {
       setIsThinkingStuck(false);
       return undefined;
     }
-    const slow = setTimeout(() => setIsThinkingTooLong(true), 10_000);
+    // Slow means *silent*, not old — see ui/activity.js. Sampled once a
+    // second; the setter is a no-op when the value has not changed.
+    const turnStartedAt = Date.now();
+    noteActivity(turnStartedAt);
+    const effortId = resolveEffort(agentLoop.modelConfig?.effort).id;
+    const slow = setInterval(() => setIsThinkingTooLong(isSilentTooLong({
+      now: Date.now(), turnStartedAt, lastAt: lastActivityAt(), effortId,
+    })), 1000);
     const stuck = setTimeout(() => setIsThinkingStuck(true), 5 * 60_000);
-    return () => { clearTimeout(slow); clearTimeout(stuck); };
+    return () => { clearInterval(slow); clearTimeout(stuck); };
   }, [isProcessing]);
 
   // UI State
@@ -496,6 +504,10 @@ export function App({ agentLoop, wsServer }) {
   const tailSeen = tail ? emittedRef.current.get(tail.turn.id) : null;
   const liveTurns = tail && !tailSeen?.summary ? [tail.turn] : [];
   const liveFrom = tailSeen?.items || 0;
+  // The live turn's tally (`2 rounds · 3 reads`) rides on the spinner line
+  // instead of a `◌ so far` row of its own: three stacked status rows — the
+  // tally, the running call, the spinner — were reported as packed together.
+  const liveTally = liveTurns.length > 0 ? workBreakdown(tail.items.actions) : '';
   /*
    * Whether the live turn still owes its prompt bar.
    *
@@ -1269,7 +1281,9 @@ export function App({ agentLoop, wsServer }) {
               // No `marginBottom`: the gap before the next turn belongs to that
               // turn's prompt bar, so that a turn which has both a summary and
               // a following bar does not get two blank rows. See UserBar.
-              <Box key={row.id} flexDirection="column" width="100%">
+              // A blank row above it, like Claude Code: "Worked for…" sat flush
+              // under the last line of the reply and read as part of it.
+              <Box key={row.id} flexDirection="column" marginTop={compact ? 0 : 1} width="100%">
                 <TurnSummary
                   isLive={false}
                   duration={row.duration}
@@ -1406,6 +1420,7 @@ export function App({ agentLoop, wsServer }) {
             slashSelected={slashSelected}
             status={status}
             syncTokenEstimate={syncTokenEstimate}
+            liveTally={liveTally}
             terminalOpen={terminalOpen}
             thinkingText={thinkingText}
             artifacts={artifacts}
@@ -1462,19 +1477,20 @@ export function App({ agentLoop, wsServer }) {
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
           {/*
-            The connection dot, then the mode the way Claude Code shows it. The
-            mode used to be a label on the input border, which read as floating
-            above the box; `/help` gives way to it (typing `/` lists everything).
+            The mode the way Claude Code shows it. It used to be a label on the
+            input border, which read as floating above the box; `/help` gives
+            way to it (typing `/` lists everything). No connection dot: it was
+            reported as looking bad, and a lost connection already says so in
+            the input box (`disconnectedHint`).
           */}
-          <Text color={extensionConnected ? T.accent : T.attention} bold>{extensionConnected ? '●' : '○'}{' '}</Text>
-          <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
+          <Text color={modeColor(mode)}>{'  '}{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
             : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
           {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
         </Text>
         </Box>
-        <Box flexShrink={0}>
+        <Box flexShrink={0} marginLeft={2}>
         <Text dimColor wrap="truncate">
           {/*
             An offer has to be visible or it is not an offer. Yellow because it

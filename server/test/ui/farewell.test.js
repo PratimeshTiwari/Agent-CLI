@@ -1,5 +1,5 @@
 /**
- * Exit clears the screen and prints how to come back.
+ * Exit leaves the session on screen and prints how to come back.
  *
  * And the id it prints is a real one: it resumes now, it is the id the
  * conversation is later filed under, and resuming a filed conversation keeps
@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { farewellText, farewellFor, exitWithFarewell, registerInk, _resetFarewell, CLEAR_SCREEN } from '../../src/ui/farewell.js';
+import { farewellText, farewellFor, exitWithFarewell, registerInk, _resetFarewell } from '../../src/ui/farewell.js';
 import { SessionStore } from '../../src/storage/session-store.js';
 import { AgentLoop } from '../../src/core/agent-loop.js';
 
@@ -21,7 +21,6 @@ const say = (store, text) => store.appendTurn({ role: 'user', content: text, tim
 test('the text names the command, with --workspace only when it is needed', () => {
   const here = farewellText('2026-10-19T11-00-00-000-abcd', { workspace: '/p', cwd: '/p' });
   assert.match(here, /agent --resume 2026-10-19T11-00-00-000-abcd\n/);
-  assert.match(here, /agent --continue/);
   assert.doesNotMatch(here, /--workspace/);
 
   const elsewhere = farewellText('x', { workspace: '/my proj', cwd: '/tmp' });
@@ -30,10 +29,10 @@ test('the text names the command, with --workspace only when it is needed', () =
 
 test('no conversation, no resume command', () => {
   const store = new SessionStore(ws());
-  assert.match(farewellFor({ sessionStore: store }), /Nothing to resume/);
+  assert.doesNotMatch(farewellFor({ sessionStore: store }), /--resume/);
   // A file-watcher event is not a conversation either — the same rule rollover uses.
   store.appendTurn({ role: 'system', content: '[System Event] File x was modified' });
-  assert.match(farewellFor({ sessionStore: store }), /Nothing to resume/);
+  assert.doesNotMatch(farewellFor({ sessionStore: store }), /--resume/);
 });
 
 test('the printed id is stable, and is the id the conversation is filed under', () => {
@@ -84,10 +83,10 @@ test('re-filing a resumed conversation updates its row instead of adding a copy'
   assert.equal(rows[0].turns, 2, 'the newest record wins');
 });
 
-test('exit: unmount first, then clear, then the command — once', async () => {
+test('exit: erase the live frame, unmount, then the command — and never clear the screen', async () => {
   _resetFarewell();
   const order = [];
-  registerInk({ unmount: () => order.push('unmount') });
+  registerInk({ clear: () => order.push('clear'), unmount: () => order.push('unmount') });
   const store = new SessionStore(ws());
   say(store, 'hello');
   const out = { write: (s) => order.push(s) };
@@ -95,9 +94,9 @@ test('exit: unmount first, then clear, then the command — once', async () => {
   await exitWithFarewell({ agentLoop: { sessionStore: store }, out, exit: (c) => codes.push(c) });
   await exitWithFarewell({ agentLoop: { sessionStore: store }, out, exit: (c) => codes.push(c) });
 
-  assert.equal(order[0], 'unmount', 'an unmount after the clear repaints the last frame over it');
-  assert.ok(order[1].startsWith(CLEAR_SCREEN));
-  assert.match(order[1], /agent --resume /);
+  assert.deepEqual(order.slice(0, 2), ['clear', 'unmount'], 'unmounting first repaints the prompt box into the scrollback');
+  assert.doesNotMatch(order[2], /\x1b\[2J|\x1b\[3J/, 'the transcript must survive exit, like Claude Code');
+  assert.match(order[2], /agent --resume /);
   assert.deepEqual(codes, [0], 'a second ctrl+c during shutdown does not print it twice');
   _resetFarewell();
 });

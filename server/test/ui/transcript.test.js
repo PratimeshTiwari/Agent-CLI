@@ -35,6 +35,17 @@ describe('groupTurns', () => {
 });
 
 describe('parseTurnActions', () => {
+  it('draws no reply for an empty fenced block, or a reply that is only fences', () => {
+    // Reported with a screenshot: a `●` over two dashed rules and nothing between.
+    for (const content of ['```\n```', '```json\n\n```', '```\n```\n\n```']) {
+      const { items } = parseTurnActions({ id: 1, steps: [{ role: 'agent', content }] });
+      assert.deepStrictEqual(items.filter((i) => i.type === 'text'), [], JSON.stringify(content));
+    }
+    // Control: a real block with prose survives.
+    const { items } = parseTurnActions({ id: 1, steps: [{ role: 'agent', content: 'Run:\n```sh\nnpm test\n```' }] });
+    assert.match(items.find((i) => i.type === 'text').content, /npm test/);
+  });
+
   it('pairs a tool_result with the tool_call before it', () => {
     const { actions } = parseTurnActions({
       id: 1,

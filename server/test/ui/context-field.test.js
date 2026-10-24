@@ -15,13 +15,13 @@ test('far from the threshold: the budget', () => {
 });
 
 test('within twenty points: where it compacts, and no budget', () => {
-  assert.equal(contextField(60, 96000, 80), '60% · compacts at 80%');
-  assert.equal(contextField(79, 96000, 80), '79% · compacts at 80%');
+  assert.equal(contextField(60, 96000, 80), '20% until auto-compact');
+  assert.equal(contextField(79, 96000, 80), '1% until auto-compact');
 });
 
 test('at or past it: next', () => {
-  assert.equal(contextField(80, 96000, 80), '80% · compacts next');
-  assert.equal(contextField(93, 96000, 80), '93% · compacts next');
+  assert.equal(contextField(80, 96000, 80), '0% until auto-compact');
+  assert.equal(contextField(93, 96000, 80), '0% until auto-compact');
 });
 
 test('never longer than the field it replaced at its longest', () => {

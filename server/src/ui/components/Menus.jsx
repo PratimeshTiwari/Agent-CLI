@@ -90,7 +90,13 @@ export function Menus({
     setActiveMenu(null);
     setFocus(FOCUS_INPUT);
     if (result?.message) {
-      setHistory((prev) => [...prev, { role: 'assistant', content: result.message, isLocal: true }]);
+      // The command you typed, then its answer — the way every other local
+      // command is drawn. Picking from the menu pushed only the answer, so
+      // `⚙ effort High → Low` appeared with nothing above saying where it came
+      // from (reported: "i changed effort but effort did not show up").
+      setHistory((prev) => [...prev,
+        { role: 'user', content: `/${command}`, isLocal: true },
+        { role: 'assistant', content: result.message, isLocal: true }]);
     }
   }, [agentLoop, setActiveMenu, setFocus, setHistory]);
 

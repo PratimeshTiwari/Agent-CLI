@@ -103,14 +103,15 @@ test('/compact during a turn waits for the turn', async () => {
   assert.match(r.message, /as soon as it finishes/);
 });
 
-test('auto-compaction no longer starts beside a turn — it runs at the end of one', () => {
-  const start = SRC.indexOf('  async handleUserMessage(');
-  const body = SRC.slice(start, SRC.indexOf('\n  }\n', start));
-  assert.doesNotMatch(body, /_compactHistory\(/, 'compaction starts alongside the turn again');
+test('auto-compaction waits for your next message — never mid-turn, never at a turn\'s end', () => {
+  // Owner's call, 2026-10-25: "do not compact mid conversation, that should hit
+  // after threshold is met and user enters a new message".
   const finish = SRC.slice(SRC.indexOf('  _finishTurn('));
   const before = finish.slice(0, finish.indexOf('this.isProcessing = false;'));
-  assert.match(before, /if \(this\._wantsCompaction\(\)\) \{\s*this\._compactThenIdle\(\);\s*return;/,
-    'compaction must run before the turn marks itself idle, so typed prompts queue behind it');
+  assert.doesNotMatch(before, /_wantsCompaction\(\)/, 'the end of a turn auto-compacts again');
+  assert.match(before, /if \(this\._compactAfterTurn && !this\.isCompacting\) \{\s*this\._compactThenIdle\(\);\s*return;/,
+    'a /compact typed during the turn must still run when it ends');
+  assert.doesNotMatch(SRC, /_compactAndResume/, 'mid-turn compaction is back');
 });
 
 test('a failed handover is not retried on every turn', () => {
@@ -202,33 +203,33 @@ test('the turn commits while compaction runs, so a long reply is not held live',
   assert.match(app, /const turnInFlight = \(isProcessing \|\| !!agentLoop\?\.isProcessing\) && !agentLoop\?\.isCompacting;/);
 });
 
-test('mid-turn: the paused results go to the fresh chat with the system prompt and the summary', async () => {
+/** handleUserMessage with everything past the compaction gate recorded, not run. */
+function messageLoop({ wants, onCompact = async () => {} }) {
   const { l } = loop();
-  const sent = [];
-  l._sendToGemini = (p) => sent.push(p);
-  l._notify = () => {};
-  l._compactHistory = async () => ({ handedOver: true });
-  l.promptBuilder = { buildPrompt: ({ userMessage }) => `FULL+SUMMARY\n${userMessage}` };
-  await l._compactAndResume('<tool_results>R</tool_results>');
-  assert.match(sent[0], /^FULL\+SUMMARY/);
-  assert.match(sent[0], /Continue the task[\s\S]*<tool_results>R<\/tool_results>/);
+  l.isProcessing = false;
+  const order = [];
+  l._wantsCompaction = () => wants;
+  l._runCompaction = async (opts) => { order.push(['compact', opts]); await onCompact(l); };
+  l.conversationHistory = { push: (t) => order.push(['push', t.content]) };
+  return { l, order };
+}
+
+test('past the threshold, the new message compacts first, then is sent', async () => {
+  const { l, order } = messageLoop({ wants: true });
+  await l.handleUserMessage('next question', l.callbacks).catch(() => {});
+  assert.deepEqual(order[0], ['compact', { beforeMessage: true }]);
+  assert.deepEqual(order[1], ['push', 'next question'], 'the message must follow the compaction');
 });
 
-test('control: a refused handover sends the results into the same chat, plain', async () => {
-  const { l } = loop();
-  const sent = [];
-  l._sendToGemini = (p) => sent.push(p);
-  l._notify = () => {};
-  l._compactHistory = async () => ({ handedOver: false });
-  await l._compactAndResume('<tool_results>R</tool_results>');
-  assert.equal(sent[0], '<tool_results>R</tool_results>');
+test('control: under the threshold, nothing compacts', async () => {
+  const { l, order } = messageLoop({ wants: false });
+  await l.handleUserMessage('next question', l.callbacks).catch(() => {});
+  assert.deepEqual(order[0], ['push', 'next question']);
 });
 
-test('esc during a mid-turn compaction leaves the turn stopped', async () => {
-  const { l } = loop();
-  const sent = [];
-  l._sendToGemini = (p) => sent.push(p);
-  l._compactHistory = async () => { l.isProcessing = false; return { message: 'cancelled' }; };
-  await l._compactAndResume('<tool_results>R</tool_results>');
-  assert.equal(sent.length, 0);
+test('esc during that compaction stops the message too', async () => {
+  const { l, order } = messageLoop({ wants: true, onCompact: async (x) => { x.isProcessing = false; } });
+  await l.handleUserMessage('next question', l.callbacks);
+  assert.equal(order[0][0], 'compact');
+  assert.equal(order.length, 1, `nothing after the stop: ${JSON.stringify(order)}`);
 });
