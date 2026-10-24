@@ -78,17 +78,16 @@ cd ~/code/your-project
 agent
 ```
 
-The status line starts with **`●`** in your accent colour once the extension is connected (`○` in
-yellow until then), followed by the mode — `⏸ plan mode on (shift+tab to cycle)`. Type a request and press
-Enter. To pick up where you left off: `agent --continue`, or `agent --resume <id>` (printed when you
-exit).
+The status line shows the mode — `plan mode on (shift+tab to cycle)` — and the input box says so if
+the extension is not connected. Type a request and press Enter. To pick up where you left off:
+`agent --continue`, or `agent --resume <id>` (printed under the transcript when you exit).
 
 ## Using it
 
 ### Modes — `shift+tab` cycles them
 
-The status line says which one is on, the way Claude Code does: `⏸ plan mode on`,
-`⏵⏵ auto mode on`, `⏸ strict plan mode on`. The input box's border takes the mode's colour.
+The status line says which one is on, the way Claude Code does: `plan mode on`,
+`auto mode on`, `strict plan mode on`. The input box's border takes the mode's colour.
 
 | Mode | Edits | Commands |
 | --- | --- | --- |
@@ -168,7 +167,7 @@ PR with its date, branch and notes — is in [`CHANGELOG.md`](CHANGELOG.md).
 
 | Series | Dates | PRs | What it was about |
 | --- | --- | --- | --- |
-| **v5** | 2026-10-19 … 2026-10-25 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | Clean slate, one recovery policy, the VS Code chat panel, compaction that hands over, large files, three modes, themes, and a redesigned transcript |
+| **v5** | 2026-10-19 … 2026-10-25 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) | Clean slate, one recovery policy, the VS Code chat panel, compaction that hands over, large files, three modes, themes, and a redesigned transcript |
 | **v4** | 2026-09-27 … 2026-10-19 | [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60)–[#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) | An honest failure log, the rename to Agent CLI, fixes from real use |
 | **v3** | 2026-09-22 … 2026-09-27 | [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26)–[#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59) | The model picker, tab lanes, effort low/medium/high, traces, subagent fixes |
 | **v2** | 2026-09-20 … 2026-09-22 | [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17)–[#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) | Bridge speed and stability, tool-call parsing and discipline, prompt trims |
