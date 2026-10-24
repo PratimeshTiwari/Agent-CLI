@@ -132,6 +132,24 @@ export function parseTurnActions(turn) {
   for (let sIdx = 0; sIdx < turn.steps.length; sIdx++) {
     const msg = turn.steps[sIdx];
 
+    // The summary turn heads the loop's history after a compaction, where the
+    // model needs it; on screen it was a wall of system text. The note at the
+    // bottom (`compaction_note`) carries the same summary behind ctrl+e.
+    if (msg.type === 'compaction_summary') continue;
+
+    if (msg.type === 'compaction_note') {
+      // A notice about the conversation, not a reply in it — and not work the
+      // agent did, so it is left out of `actions` below.
+      items.push({
+        type: 'compaction',
+        id: `turn_${turn.id}_act_${sIdx}_compaction`,
+        turns: msg.turns,
+        summary: msg.summary || '',
+        msg,
+      });
+      continue;
+    }
+
     if (msg.role === 'assistant' || msg.role === 'agent') {
       // `<thought>`, not `<think>`. Every tier's prompt asks for `<thought>` —
       // it is the one thing allowed to precede a tool call — and this matched
@@ -264,7 +282,7 @@ export function parseTurnActions(turn) {
 
   // Derived, never accumulated in parallel: two lists that are supposed to
   // agree are two lists that will one day not.
-  const actions = items.filter((i) => i.type !== 'text');
+  const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction');
   const finalMessages = items.filter((i) => i.type === 'text');
   return { items, actions, finalMessages };
 }

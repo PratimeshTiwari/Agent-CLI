@@ -254,6 +254,8 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
 
     return {
       handedOver,
+      turns: toCompact.length,
+      summary,
       message: handedOver
         ? `✓ Compacted ${toCompact.length} turn${toCompact.length === 1 ? '' : 's'}, ${how}; `
           + 'continuing in a fresh chat, with the full history still searchable.'

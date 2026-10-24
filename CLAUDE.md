@@ -1115,14 +1115,14 @@ rather than clears the flag when neither callback set exists yet, because `_toEx
 silently the way `_notify` once did. **The invariant is a reopened thread or a recap, never
 neither**, and `resume-thread.test.js` asserts exactly that.
 
-**The stored chat id can only move forward, and that is the next bug.** `setThread` opens with
-`if (!thread?.id) return`, so passing null is a no-op; `startNewChat()` nulls `this.chatThread` in
-memory and never touches disk; and a fresh chat is `/app` with **no id until its first exchange**,
-so there is nothing to overwrite it with. Between `startNewChat()` and the first reply, memory says
-"no thread" and disk says the old one — and both resume paths read disk. `/compact` and `/new` call
-`startNewChat()` today, so this is live. It needs a third state (`left`) that `planResume` can turn
-into `replay`, and an explicit `clearThread()` — *not* a relaxed `setThread`, whose guard stops a
-bad URL wiping a good record.
+**A chat we walked away from is a third state (`72fe1ed`).** `setThread` opens with
+`if (!thread?.id) return` — that guard stops a URL with no id, which is every brand-new chat, from
+wiping a good record — and a fresh chat has no id until its first exchange. So between
+`startNewChat()` and the first reply, memory said "no thread" while disk still named the old one,
+and both resume paths read disk. `startNewChat()` now calls `sessionStore.clearThread(previous)`,
+which writes `thread: null, leftThread: previous`; `planResume` turns `left` into `replay`. This
+note said "the next bug" for a while after it was fixed — check the code before believing a
+paragraph here that says something is still open.
 
 **A session with no user turn is not filed.** `watcher/file-watcher.js` appends
 `[System Event] File X was modified` turns whenever anything on disk changes, so leaving
@@ -2184,13 +2184,18 @@ ago.
   assertion, because observing it needs a live turn under the pty harness and
   because moving two `set…` calls back above the branch reads as tidying.
 
-  **The transcript only advances on `agent_response`** — `mergeLoopHistory`
-  runs in that one branch of `sendToPanel` — and `agent_response` is only sent
-  when a reply has prose left after the tool calls are stripped. So a round
-  that is *only* tool calls leaves the screen exactly as it was. That is why
-  the report looked like a dead agent rather than a busy one, and it is still
-  the case: the live tool rows are the only sign of progress during those
-  rounds, which is precisely what the bug above was wiping.
+  **The transcript advances on `agent_response` and on every `tool_result`
+  (v5.14).** It used to advance only on `agent_response`, which is sent only
+  when a reply has prose left after the tool calls are stripped — so a round
+  that was *only* tool calls left the screen as it was, and finished calls sat
+  in the live list as `✔ name` while an earlier merge drew the same calls
+  above them as `⏺ name args · result`. Twice per call, and the duplicate was
+  charged to no budget: 28 full clears at 13x72 with a prompt queued, 6 at
+  16x72. The loop pushes the call and result turns *before* it sends
+  `tool_result`, so the handler merges and removes that call by name (parallel
+  calls finish out of order; results used to land on the last row). The live
+  list holds only running calls, shares the turn's rows, and gives way first
+  — the thinking line already names the tool. 0 clears from 10 to 40 rows.
 
 - **An instant local command must not raise a spinner it takes down again.**
   Reported with a screenshot: a `Thinking… (0s · ↑ 29.4k tokens · esc to stop)`

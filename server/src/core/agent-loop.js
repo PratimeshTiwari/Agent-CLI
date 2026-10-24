@@ -3323,6 +3323,9 @@ export class AgentLoop {
       if (result?.message && this.callbacks) {
         const note = {
           role: 'assistant',
+          // Drawn as one dim row (`compactionRow`) with the summary behind
+          // ctrl+e; `content` stays for the side panel and the history file.
+          ...(result.handedOver ? { type: 'compaction_note', turns: result.turns, summary: result.summary } : {}),
           // One line when it worked — it is a notice, not a report. The long
           // text is only for the cases that need the reader to do something.
           content: result.handedOver

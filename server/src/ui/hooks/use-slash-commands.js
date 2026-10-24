@@ -44,7 +44,7 @@ export function resolveOpenTarget(workspace, target) {
   const abs = path.resolve(expanded.startsWith('/') ? expanded : path.join(workspace, expanded));
   return { abs, exists: fs.existsSync(abs) };
 }
-import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
+import { SLASH_COMMANDS, COMMAND_GROUPS, MOST_USED_COMMANDS } from '../constants.js';
 import { AGENT_COMMANDS } from '../../core/slash-commands.js';
 import { oneLine, renderCommandList } from '../format.js';
 import { planResume } from '../../core/chat-thread.js';
@@ -143,6 +143,8 @@ export async function handleSlashCommand(query, {
         role: 'assistant',
         isLocal: true,
         content: [
+          `**Most used**   ${MOST_USED_COMMANDS.map((c) => `/${c}`).join('  ·  ')}`,
+          '',
           '### ⌨️  Keys',
           '  shift+tab   plan → auto → strict',
           '  ctrl+e      expand or collapse every step',
@@ -153,6 +155,7 @@ export async function handleSlashCommand(query, {
           '  ctrl+o      show or hide the task list',
           '  ctrl+y      copy the last code block',
           '  esc         stop the run, or close a menu',
+          '  ctrl+c ×2   quit — prints how to resume',
           '',
           '### ⌨️  Commands',
           renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS),
@@ -1195,7 +1198,11 @@ export async function handleSlashCommand(query, {
           if (command !== 'clear') {
             newHistory.push({ role: 'user', content: query, isLocal: true });
           }
-          if (result && result.message) {
+          if (result?.handedOver) {
+            // One dim row, summary behind ctrl+e — the same row auto-compaction draws.
+            newHistory.push({ role: 'assistant', type: 'compaction_note', turns: result.turns,
+              summary: result.summary, content: result.message, isLocal: true });
+          } else if (result && result.message) {
             newHistory.push({ role: 'assistant', content: result.message, isLocal: true });
           }
           // These three rewrite the transcript rather than extend it — undo

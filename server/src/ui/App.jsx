@@ -10,7 +10,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { clampForDisplay, extractCodeBlocks, workBreakdown } from './format.js';
+import { contextField, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -146,12 +146,17 @@ export function App({ agentLoop, wsServer }) {
 
   // Extension Connection Polling
   const [extensionConnected, setExtensionConnected] = useState(false);
+  const everConnectedRef = useRef(false);
   useEffect(() => {
     if (!wsServer) return;
     const checkConnection = () => {
       // Same boolean means React bails out of the re-render, so this poll is
       // free while nothing changes.
-      setExtensionConnected(Boolean(wsServer.clients && wsServer.clients.size > 0));
+      // An *extension* client, not any client: the VS Code panel connects as
+      // `editor`, and counting it drew `● agent` with no browser behind it.
+      const has = [...(wsServer.clients?.values?.() || [])].some((c) => c.type === 'extension');
+      if (has) everConnectedRef.current = true;
+      setExtensionConnected(has);
     };
     checkConnection();
     const interval = setInterval(checkConnection, 1000);
@@ -627,6 +632,21 @@ export function App({ agentLoop, wsServer }) {
     - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
 
+  /*
+   * The running tool calls share the turn's rows. They were drawn under the
+   * turn with a budget of their own equal to the whole of it, plus a margin
+   * nothing paid for — at 13x72 with a prompt queued that was one row too
+   * many on every render.
+   */
+  // The turn keeps two rows — its newest step and the `so far` tally — and the
+  // list is the first thing to go: the thinking line under it already names
+  // the tool that is running. Keeping one measured a clear at 14x72.
+  const runningMargin = compact ? 0 : 1;
+  const runningFits = Math.min(activeToolCalls.length, Math.floor(liveBudget / 2), liveBudget - 2 - runningMargin);
+  const runningCalls = runningFits > 0 ? activeToolCalls.slice(-runningFits) : [];
+  const runningRows = runningCalls.length === 0 ? 0 : runningCalls.length + runningMargin;
+  const turnBudget = Math.max(1, liveBudget - runningRows);
+
   /**
    * How many lines the expanded artifact panel may draw.
    *
@@ -740,7 +760,10 @@ export function App({ agentLoop, wsServer }) {
     } catch (err) {
       /* ignore fs errors */
     }
-  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace]);
+    // `history.length`: a finished tool now joins the transcript as it lands,
+    // so this re-reads the checklist after every step — the status bar's
+    // `tasks 3/5` would otherwise sit at its value from the start of the turn.
+  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length]);
 
   // The thinking line. One row, rewritten on a calm cadence — the old 75ms
   // typewriter plus a 10ms per-character reveal of the whole reply is what made
@@ -1195,9 +1218,9 @@ export function App({ agentLoop, wsServer }) {
    * Same threshold the loop uses (COMPACT_AT), read rather than restated.
    */
   const compactAtPct = Math.round(COMPACT_AT * 100);
-  const toCompact = compactAtPct - tokenPct;
-  const compactHint = toCompact <= 20 ? (toCompact > 0 ? ` · ${toCompact}% to auto-compact` : ' · compacts after this turn') : '';
+  const contextText = contextField(tokenPct, tokenLimit, compactAtPct);
   const runningTasks = tasks.filter(t => t.status === 'running').length;
+  const tasksDone = taskProgress(artifacts.task);
   // Which repo of a group we are on. Empty for an ordinary single-repo
   // workspace, where showing it would be noise.
   // The scope is a *path* from the state root down to the workspace, so it can
@@ -1321,33 +1344,24 @@ export function App({ agentLoop, wsServer }) {
               showUserBar={liveNeedsBar}
               compact={compact}
               verbose={verbose}
-              status={status}
-              liveBudget={liveBudget}
+              liveBudget={turnBudget}
               tick={animTick}
               terminalWidth={terminalWidth}
             />
           ))}
 
-          {/* Tool calls for the running turn, capped to what the frame can hold. */}
-          {activeToolCalls.length > 0 && (
-            <Box flexDirection="column" marginBottom={1}>
-              {activeToolCalls.slice(-Math.max(1, liveBudget - 1)).map((call) => (
-                <Box key={call.id} flexDirection="column">
-                  <Text color={call.result === undefined ? 'cyan' : 'gray'}>
-                    {'  '}
-                    {call.success === false
-                      ? '✖'
-                      : call.result !== undefined
-                        ? '✔'
-                        : <Dots tick={animTick} />}
-                    {' '}{call.name}
-                  </Text>
-                  {verbose && call.result !== undefined && (
-                    <Box marginLeft={4}>
-                      <Text dimColor wrap="wrap">{clampForDisplay(call.result, 10)}</Text>
-                    </Box>
-                  )}
-                </Box>
+          {/*
+            Calls still running. A finished one is merged into the transcript
+            the moment its result lands (use-agent-callbacks), so this list
+            never repeats a row drawn above it — and its rows, margin included,
+            are taken out of the turn's budget rather than drawn on top of it.
+          */}
+          {runningCalls.length > 0 && (
+            <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
+              {runningCalls.map((call) => (
+                <Text key={call.id} color="cyan" wrap="truncate">
+                  {'  '}<Dots tick={animTick} />{' '}{call.name}
+                </Text>
               ))}
             </Box>
           )}
@@ -1369,6 +1383,7 @@ export function App({ agentLoop, wsServer }) {
             diffRequest={diffRequest}
             elapsed={elapsed}
             extensionConnected={extensionConnected}
+            disconnectedText={disconnectedHint({ port: wsServer?.port, everConnected: everConnectedRef.current })}
             focus={focus}
             handleSubmit={handleSubmit}
             input={input}
@@ -1475,6 +1490,11 @@ export function App({ agentLoop, wsServer }) {
           */}
           {pendingImage ? <Text color="yellow">{'1 image  ·  '}</Text> : ''}
           {runningTasks > 0 ? <Text color="yellow">{runningTasks} bg{'  ·  '}</Text> : ''}
+          {/*
+            The checklist while a turn runs, when its panel is not drawn (it
+            draws only when idle, and says the same there).
+          */}
+          {isProcessing && tasksDone ? <Text>{`tasks ${tasksDone.done}/${tasksDone.total}`}{'  ·  '}</Text> : ''}
           <Text color={modeColor(mode)}>{mode}</Text>
           <Text dimColor>{modeSwitched ? '' : ' ⇥'}{'  ·  '}</Text>
           {/*
@@ -1495,7 +1515,7 @@ export function App({ agentLoop, wsServer }) {
             ? <Text color="cyan">{browserModelLabel}</Text>
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
-          <Text color={tokenColor}>{tokenPct}% of {tokenLimit >= 1000 ? `${Math.round(tokenLimit / 1000)}k` : tokenLimit}{compactHint}</Text>
+          <Text color={tokenColor}>{contextText}</Text>
         </Text>
         </Box>
       </Box>
