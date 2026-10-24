@@ -67,3 +67,9 @@ test('a compaction that worked is one line; one that needs you keeps the long te
   const loopSrc = src('core/agent-loop.js');
   assert.match(loopSrc, /content: result\.handedOver\s*\? `🗜 /);
 });
+
+test('a menu pick echoes its command above the answer, like every local command', () => {
+  // Reported: "i changed effort but effort did not show up in messages".
+  assert.match(src('ui/components/Menus.jsx'),
+    /\{ role: 'user', content: `\/\$\{command\}`, isLocal: true \},\s*\{ role: 'assistant', content: result\.message, isLocal: true \}/);
+});

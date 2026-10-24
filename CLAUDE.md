@@ -1076,10 +1076,13 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
 - **Asked of the current chat** (`_askThread`, a side question on the main lane whose reply is
   consumed whole and never run): 465 characters out, where the paste was the largest prompt in the
   system.
-- **Between turns** (`_finishTurn`, loop still busy so typed prompts queue) **or between rounds**
-  (`_compactAndResume`: pause at the tool-result boundary, compact, send the results to the fresh
-  chat with the system prompt and the summary — the turn carries on). `startNewChat` refuses while
-  the main lane is busy.
+- **Before your next message, never during a turn (v5.20).** Past the threshold, `handleUserMessage`
+  compacts first (`_runCompaction`, awaited, busy flag up so typed prompts queue) and then sends
+  the message into the fresh chat. Owner's call: *"do not compact mid conversation, that should
+  hit after threshold is met and user enters a new message"* — the between-rounds
+  `_compactAndResume` and the automatic end-of-turn run are gone. A `/compact` typed during a
+  turn still runs when it ends. The status bar says `N% until auto-compact` within 20 points.
+  `startNewChat` refuses while the main lane is busy.
 - **Handed over once** as `<compacted_context>`: summary, the archive pointer naming
   `recall_history`, and the kept turns capped (1.5k each, 6k total). The count restarts at **zero**
   — counting the kept turns in full re-triggered it on the next turn (a 335k-character reply).
@@ -1170,9 +1173,10 @@ extension adds the command with nothing bound, and the shortcut silently does no
 the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
-**Exit clears the screen and prints `agent --resume <id>` (v5.4, `ui/farewell.js`).** Every way
-out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — unmounts Ink first (an unmount after the
-clear repaints the last frame over it), clears like `clear`, then prints the command. The id is
+**Exit keeps the transcript and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; no clear
+since v5.20).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
+(erases only the live frame and syncs its log, so the final render on unmount writes nothing),
+unmounts, then prints one line — or nothing, when there was no conversation, like Claude Code. The id is
 `SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
 `rollover`, so the id at exit is the id in `/history`; `--resume <live id>` before it is filed
 behaves as `--continue`, and a resumed conversation keeps its id (`listSessions` keeps the

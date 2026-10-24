@@ -192,6 +192,12 @@ export function parseTurnActions(turn) {
       // An unclosed block — the reply was cut off mid-thought — would otherwise
       // leave a bare opening tag and swallow the rest of the message.
       cleanContent = cleanContent.replace(/<(think|thought)>[\s\S]*$/i, '').trim();
+      // An empty fenced block is debris, not an answer: what is left when a
+      // tool call is lifted out of its fence, or a `<thought>` interrupted
+      // one. Drawn, it was a `●` over two dashed rules and nothing between
+      // (reported with a screenshot). So is a reply that is only fences.
+      cleanContent = cleanContent.replace(/^[ \t]*```[^\n`]*\n\s*```[ \t]*$/gm, '').trim();
+      if (/^(?:\s*```[^\n`]*)+\s*$/.test(cleanContent)) cleanContent = '';
       // The trailing "(128KB)" that /image writes has to be part of the match,
       // not left behind: the whole match is what gets cut out of the prose.
       const imgMatch = cleanContent.match(
