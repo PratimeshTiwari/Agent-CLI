@@ -96,7 +96,7 @@ test('every palette reads: 4.5:1 for words, 3:1 for detail', () => {
     const bg = PALETTE_INFO[name]?.background;
     if (!bg) continue; // the terminal's own colours, or none
     for (const role of ROLES) {
-      if (role === 'userBg') continue;
+      if (role.endsWith('Bg')) continue; // backgrounds: checked as what text sits on, not as text
       const against = role === 'userFg' ? palette.userBg : bg;
       const need = role === 'muted' ? 3 : 4.5;
       const got = contrast(palette[role], against);

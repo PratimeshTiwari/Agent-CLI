@@ -2634,6 +2634,12 @@ export class AgentLoop {
         type: 'tool_call',
         toolName: call.name,
         args: call.args,
+        // Which tool round of the turn this call belonged to. Every call in a
+        // batch runs before the counter moves, so they share a number — and
+        // the screen can say how many round trips a turn took, which a
+        // transcript cannot work out (a round of only tool calls leaves no
+        // reply in it).
+        round: (this._roundsThisTurn || 0) + 1,
         timestamp: Date.now(),
       };
       this.conversationHistory.push(callTurn);

@@ -2,14 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { COMPACT_AT } from '../context/context-manager.js';
 import { nextMode } from '../core/modes.js';
 import { stripImageData } from '../core/prompt-builder.js';
-import { modeColor } from './constants.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
+import { contextField, contextMeter, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -1413,6 +1412,8 @@ export function App({ agentLoop, wsServer }) {
             artifactLines={artifactLines}
             verbose={verbose}
             compact={compact}
+            modeSwitched={modeSwitched}
+            terminalWidth={terminalWidth}
           />
 
           <Menus
@@ -1497,8 +1498,7 @@ export function App({ agentLoop, wsServer }) {
             draws only when idle, and says the same there).
           */}
           {isProcessing && tasksDone ? <Text>{`tasks ${tasksDone.done}/${tasksDone.total}`}{'  ·  '}</Text> : ''}
-          <Text color={modeColor(mode)}>{mode}</Text>
-          <Text dimColor>{modeSwitched ? '' : ' ⇥'}{'  ·  '}</Text>
+          {/* The mode is on the input border now (InputBar), not repeated here. */}
           {/*
             Two different facts, and the row says which one it has.
 
@@ -1521,7 +1521,7 @@ export function App({ agentLoop, wsServer }) {
               : <Text color={T.link}>{browserModelLabel}</Text>)
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
-          <Text color={tokenColor}>{contextText}</Text>
+          <Text color={tokenColor}>{contextMeter(tokenPct)}{' '}{contextText}</Text>
         </Text>
         </Box>
       </Box>

@@ -196,8 +196,11 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
            * keeps it readable on a light one, where it reads as an inverted
            * bar rather than a highlight.
            */
-          <Text key={i} backgroundColor={T.userBg} color={T.userFg} bold>
-            {i === 0 ? ' ❯ ' : '   '}{line}
+          // An accent edge down the whole bar, in place of a `❯` on its first
+          // line; the same three columns, so the wrap above is unchanged.
+          <Text key={i} backgroundColor={T.userBg}>
+            <Text color={T.accent} bold>{'▌'}</Text>
+            <Text color={T.userFg} bold>{'  '}{line}</Text>
           </Text>
         ))}
     </Box>
@@ -312,14 +315,15 @@ export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalW
  * @returns {JSX.Element|null} null when this is not an edit, so the caller can
  *                             fall through to its other shapes
  */
-function diffRowsFor(act) {
+function diffRowsFor(act, width = 0) {
   if (act.toolName !== 'edit_file' && act.toolName !== 'create_file') return null;
   const patch = act.result?.patch;
   if (typeof patch !== 'string' || !patch) return null;
 
   const rows = rowsFromPatch(patch, { maxLines: 24 });
   if (rows.length === 0) return null;
-  return <DiffRows rows={rows} />;
+  // Line numbers and full-width tints: this is the edit, read after the fact.
+  return <DiffRows rows={rows} gutter fill={Math.max(0, width - 6)} />;
 }
 
 /**
@@ -402,21 +406,33 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
         </Text>
       );
     }
+    const failed = act.success === false;
+    const subject = subjectOf(act.toolName, act.args, subjectRoom);
+    const summary = summarizeResult(act.toolName, act.result);
     return (
       <Box flexDirection="column" width="100%">
+        {/*
+          Two lines once it is in the scrollback: what was done, then what came
+          of it under a `⎿`, red when the step failed — so a failed command reads
+          as failed where it happened, not only in the reply. A live row stays
+          one line: the live frame is budgeted in rows, and committed rows cost
+          scrollback, not frame.
+        */}
         <Box flexDirection="row">
-          <Text color={act.success === false ? T.danger : T.success}>{(act.success === false ? '✗' : '⏺') + ' '}</Text>
-          <Text bold color={T.muted}>{act.toolName}</Text>
+          <Text color={failed ? T.danger : T.success}>{(failed ? '✗' : '⏺') + ' '}</Text>
+          <Text bold>{act.toolName}</Text>
           {/* Which file, which pattern, which command. Without it two reads in
               one turn are the same row twice, which is how a turn reading four
               files reads as a turn that did nothing in particular. */}
-          {subjectOf(act.toolName, act.args, subjectRoom) ? (
-            <Text color={T.muted} wrap="truncate">
-              {' '}{subjectOf(act.toolName, act.args, subjectRoom)}
-            </Text>
-          ) : null}
-          <Text dimColor wrap="truncate"> · {summarizeResult(act.toolName, act.result)}</Text>
+          {subject ? <Text color={T.muted} wrap="truncate">{' '}{subject}</Text> : null}
+          {isLive && summary ? <Text dimColor wrap="truncate"> · {summary}</Text> : null}
         </Box>
+        {!isLive && summary ? (
+          <Text wrap="truncate">
+            <Text color={T.muted}>{'  ⎿  '}</Text>
+            {failed ? <Text color={T.danger}>{summary}</Text> : <Text dimColor>{summary}</Text>}
+          </Text>
+        ) : null}
         {verbose && act.result !== null && act.result !== undefined && (
           <Box paddingLeft={2} width="100%">
             {/* An edit gets diff shape, a shell result gets shell shape, and
@@ -425,7 +441,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
                 change could be read in colour was the moment before it was
                 applied — and the transcript, which is what you read afterwards
                 and days later, showed it as a line of dim text. */}
-            {diffRowsFor(act) ?? (
+            {diffRowsFor(act, width) ?? (
               <Text dimColor wrap="wrap">
                 {formatCommandResult(act.result, limit.lines)
                   ?? clampForDisplay(act.result, limit.lines, limit.chars)}

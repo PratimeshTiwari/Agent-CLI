@@ -38,7 +38,9 @@ test('the queued row says how to take a prompt back', () => {
 });
 
 test('the mode key hint goes once it has been used', () => {
-  assert.match(src('ui/App.jsx'), /\{modeSwitched \? '' : ' ⇥'\}/);
+  // On the input border since v5.17 (the mode label), not the status bar.
+  assert.match(src('ui/components/InputBar.jsx'), /modeSwitched \? '' : <Text dimColor>\{' ⇥'\}<\/Text>/);
+  assert.match(src('ui/App.jsx'), /modeSwitched=\{modeSwitched\}/);
 });
 
 test('/diff shows the last edit, and what happened to it', async () => {

@@ -30,7 +30,7 @@ export const ROLES = [
   'text', 'muted', 'accent', 'attention', 'success', 'danger',
   'plan', 'auto', 'strict',
   'menu', 'link', 'review', 'shell', 'diffHeader',
-  'userFg', 'userBg',
+  'userFg', 'userBg', 'addBg', 'delBg',
 ];
 
 export const PALETTES = {
@@ -54,6 +54,9 @@ export const PALETTES = {
     // A hex grey, not the named `gray`: what a terminal paints for bright-black
     // is its theme's choice, and VS Code's is light — see UserBar.
     userBg: '#303030',
+    // No tint: the named-colour look is the classic one, and a named background
+    // (bright green behind code) is not one anybody wants.
+    addBg: null, delBg: null,
   },
 
   /** Truecolor, tuned for a dark background. chalk drops to 256 colours where truecolor is missing. */
@@ -62,7 +65,7 @@ export const PALETTES = {
     accent: '#7aa2f7', attention: '#ff9e64', success: '#9ece6a', danger: '#f7768e',
     plan: '#e0af68', auto: '#73daca', strict: '#bb9af7',
     menu: '#7aa2f7', link: '#7dcfff', review: '#bb9af7', shell: '#9ece6a', diffHeader: '#7dcfff',
-    userFg: '#e6e6e6', userBg: '#2a2f45',
+    userFg: '#e6e6e6', userBg: '#2a2f45', addBg: '#132a1f', delBg: '#2d1a1d',
   },
 
   /** The same roles with darker inks, for a light background. */
@@ -71,7 +74,7 @@ export const PALETTES = {
     accent: '#0969da', attention: '#bc4c00', success: '#1a7f37', danger: '#cf222e',
     plan: '#9a6700', auto: '#0b7a75', strict: '#8250df',
     menu: '#0969da', link: '#0550ae', review: '#8250df', shell: '#1a7f37', diffHeader: '#0550ae',
-    userFg: '#1f2328', userBg: '#e6eaef',
+    userFg: '#1f2328', userBg: '#e6eaef', addBg: '#dafbe1', delBg: '#ffebe9',
   },
 
   /**
@@ -83,7 +86,7 @@ export const PALETTES = {
     accent: '#cc79a7', attention: '#f0e442', success: '#56b4e9', danger: '#e69f00',
     plan: '#f0e442', auto: '#56b4e9', strict: '#cc79a7',
     menu: '#a5d6ff', link: '#a5d6ff', review: '#cc79a7', shell: '#56b4e9', diffHeader: '#a5d6ff',
-    userFg: '#e6e6e6', userBg: '#2a2f45',
+    userFg: '#e6e6e6', userBg: '#2a2f45', addBg: '#0f2742', delBg: '#3a2410',
   },
 
   'light-colorblind': {
@@ -91,7 +94,7 @@ export const PALETTES = {
     accent: '#a3417f', attention: '#7a5f00', success: '#0067a3', danger: '#b54a00',
     plan: '#7a5f00', auto: '#0067a3', strict: '#a3417f',
     menu: '#0067a3', link: '#0067a3', review: '#a3417f', shell: '#0067a3', diffHeader: '#0067a3',
-    userFg: '#1f2328', userBg: '#e6eaef',
+    userFg: '#1f2328', userBg: '#e6eaef', addBg: '#ddf4ff', delBg: '#fff1e5',
   },
 
   /**
