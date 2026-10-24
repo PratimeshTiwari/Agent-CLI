@@ -105,30 +105,45 @@ export function buildAgentCallbacks({
         isToolRunningRef.current = true;
         setActiveToolCalls(prev => [...prev, { id: nextToolCallId(), type: 'call', name: msg.payload.name, args: msg.payload.args }]);
       } else if (msg.type === 'tool_result') {
-        setActiveToolCalls(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last) {
-            last.result = msg.payload.result;
-            last.success = msg.payload.success;
-            
-            // `write_to_file` and `TargetFile` used to be tested for here. Neither
-            // exists: the tools are `create_file` and `edit_file`, and both take
-            // `path`. A name that no tool answers to cannot fire, so the branch
-            // was dead and made this read as if a third write tool existed.
-            if (last.success && (last.name === 'create_file' || last.name === 'edit_file')) {
-              const pathArg = last.args?.path;
-              if (pathArg && (pathArg.endsWith('implementation_plan.md') || pathArg.endsWith('plan.md')) && agentLoop.mode === 'plan') {
-                archivePlan(agentLoop.workspace, paths.artifactPath(agentLoop.workspace, path.basename(pathArg)));
-                setPlanReviewReady(true);
-              }
-              if (pathArg && pathArg.endsWith('walkthrough.md')) {
-                setWalkthroughReady(true);
-              }
-            }
-          }
-          return updated;
+        /*
+         * A finished call leaves the live list and joins the transcript, now.
+         *
+         * It used to stay in the live list as `✔ name` until the next
+         * `agent_response`, while a merge from an earlier round had already
+         * drawn the same call above it as `⏺ name args · result` — so a running
+         * turn listed its finished tools twice, and the duplicate was charged
+         * to nothing, which is what overflowed the frame at 13–16 rows with a
+         * prompt queued (28 full clears at 13x72). The loop pushes the call and
+         * result turns *before* sending this message, so the merge has them.
+         *
+         * Matched by name, first still-running call first: parallel calls
+         * finish out of order, and the old code wrote every result onto the
+         * last row whatever its name.
+         */
+        const { name, success } = msg.payload || {};
+        setActiveToolCalls((prev) => {
+          let idx = prev.findIndex((c) => c.result === undefined && c.name === name);
+          if (idx < 0) idx = prev.findIndex((c) => c.result === undefined);
+          return idx < 0 ? prev : prev.filter((_, j) => j !== idx);
         });
+        setHistory((prev) => mergeLoopHistory(prev, agentLoop.conversationHistory, agentLoop.historyOffset || 0));
+
+        // `write_to_file` and `TargetFile` used to be tested for here. Neither
+        // exists: the tools are `create_file` and `edit_file`, and both take
+        // `path`. The args come from the loop's own record of the call, which
+        // is the last `tool_call` turn by that name.
+        if (success && (name === 'create_file' || name === 'edit_file')) {
+          const callTurn = [...(agentLoop.conversationHistory || [])].reverse()
+            .find((t) => t?.type === 'tool_call' && t.toolName === name);
+          const pathArg = callTurn?.args?.path;
+          if (pathArg && (pathArg.endsWith('implementation_plan.md') || pathArg.endsWith('plan.md')) && agentLoop.mode === 'plan') {
+            archivePlan(agentLoop.workspace, paths.artifactPath(agentLoop.workspace, path.basename(pathArg)));
+            setPlanReviewReady(true);
+          }
+          if (pathArg && pathArg.endsWith('walkthrough.md')) {
+            setWalkthroughReady(true);
+          }
+        }
       } else if (msg.type === 'error') {
         /*
          * **The turn is over, and this is the only thing that says so.**

@@ -19,8 +19,11 @@ const code = summary.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 const live = code.slice(code.indexOf('{isLive ? ('), code.indexOf(') : ('));
 const done = code.slice(code.indexOf(') : ('), code.indexOf('{worked > 0'));
 
-test('the live branch draws the spinner and the status, and no past tense', () => {
-  assert.match(live, /<Dots tick=\{tick\} \/> \{status\}/);
+test('the live branch draws the spinner and the tally, and no past tense', () => {
+  assert.match(live, /<Dots tick=\{tick\} \/>/);
+  // The thinking line under the turn names what is running; this row said it
+  // again, with a third copy in the running list between them.
+  assert.doesNotMatch(live, /\{status\}/, 'the status is drawn twice');
   assert.doesNotMatch(live, /Worked/, '"Worked for ⠋ Thinking…" read as a turn that had stopped');
 });
 

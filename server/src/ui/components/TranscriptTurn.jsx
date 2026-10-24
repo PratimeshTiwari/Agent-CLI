@@ -40,7 +40,7 @@ function userMessageText(content, isLive) {
  * `verbose` (ctrl+e) opens every step's raw output. Because committed rows
  * cannot be repainted, App reprints the transcript when it changes.
  */
-export function TranscriptTurn({ turn, isLive, verbose, status, liveBudget, tick = 0, terminalWidth = 80, fromItem = 0, showUserBar = true, compact = false }) {
+export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, terminalWidth = 80, fromItem = 0, showUserBar = true, compact = false }) {
   // Only shown when it can actually be worked out. A turn whose messages were
   // never stamped has no duration, and printing one anyway is how this shipped
   // reading `Worked for -6.2s`.
@@ -131,7 +131,6 @@ export function TranscriptTurn({ turn, isLive, verbose, status, liveBudget, tick
           duration={duration}
           worked={worked}
           touched={touched}
-          status={status}
           tick={tick}
           breakdown={workBreakdown(actions)}
         />
@@ -218,7 +217,7 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
  * While the turn runs it is the spinner, which now sits directly above the
  * input box rather than four rows up.
  */
-export function TurnSummary({ isLive, duration, worked, touched, status, tick = 0, breakdown = '' }) {
+export function TurnSummary({ isLive, duration, worked, touched, tick = 0, breakdown = '' }) {
   // `wrap="truncate"`: in the live frame a row that wraps is charged as one
   // and drawn as two, and the breakdown made this row long enough to.
   return (
@@ -231,10 +230,13 @@ export function TurnSummary({ isLive, duration, worked, touched, status, tick = 
          * was mid-way through its second search. The words describe a finished
          * turn, so they appear when it has one: the duration below.
          */
-        <>
-          {'  '}
-          <Text color="cyan"><Dots tick={tick} /> {status}</Text>
-        </>
+        /*
+         * And no status either: the thinking line under the turn says
+         * `Running grep_search…` already, and this row said it again
+         * (`⠼ Running run_command... · 2 reads`), with a third copy in the
+         * running list between them. What only this row knows is the tally.
+         */
+        <>{'  '}<Text color="cyan"><Dots tick={tick} /></Text>{' so far'}</>
       ) : (
         <>{'  '}{duration === null ? 'Worked' : `Worked for ${duration}s`}</>
       )}

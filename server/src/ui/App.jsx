@@ -10,7 +10,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { clampForDisplay, extractCodeBlocks, workBreakdown } from './format.js';
+import { extractCodeBlocks, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -626,6 +626,21 @@ export function App({ agentLoop, wsServer }) {
     - (extensionConnected ? 0 : 1)
     - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
+
+  /*
+   * The running tool calls share the turn's rows. They were drawn under the
+   * turn with a budget of their own equal to the whole of it, plus a margin
+   * nothing paid for — at 13x72 with a prompt queued that was one row too
+   * many on every render.
+   */
+  // The turn keeps two rows — its newest step and the `so far` tally — and the
+  // list is the first thing to go: the thinking line under it already names
+  // the tool that is running. Keeping one measured a clear at 14x72.
+  const runningMargin = compact ? 0 : 1;
+  const runningFits = Math.min(activeToolCalls.length, Math.floor(liveBudget / 2), liveBudget - 2 - runningMargin);
+  const runningCalls = runningFits > 0 ? activeToolCalls.slice(-runningFits) : [];
+  const runningRows = runningCalls.length === 0 ? 0 : runningCalls.length + runningMargin;
+  const turnBudget = Math.max(1, liveBudget - runningRows);
 
   /**
    * How many lines the expanded artifact panel may draw.
@@ -1321,33 +1336,24 @@ export function App({ agentLoop, wsServer }) {
               showUserBar={liveNeedsBar}
               compact={compact}
               verbose={verbose}
-              status={status}
-              liveBudget={liveBudget}
+              liveBudget={turnBudget}
               tick={animTick}
               terminalWidth={terminalWidth}
             />
           ))}
 
-          {/* Tool calls for the running turn, capped to what the frame can hold. */}
-          {activeToolCalls.length > 0 && (
-            <Box flexDirection="column" marginBottom={1}>
-              {activeToolCalls.slice(-Math.max(1, liveBudget - 1)).map((call) => (
-                <Box key={call.id} flexDirection="column">
-                  <Text color={call.result === undefined ? 'cyan' : 'gray'}>
-                    {'  '}
-                    {call.success === false
-                      ? '✖'
-                      : call.result !== undefined
-                        ? '✔'
-                        : <Dots tick={animTick} />}
-                    {' '}{call.name}
-                  </Text>
-                  {verbose && call.result !== undefined && (
-                    <Box marginLeft={4}>
-                      <Text dimColor wrap="wrap">{clampForDisplay(call.result, 10)}</Text>
-                    </Box>
-                  )}
-                </Box>
+          {/*
+            Calls still running. A finished one is merged into the transcript
+            the moment its result lands (use-agent-callbacks), so this list
+            never repeats a row drawn above it — and its rows, margin included,
+            are taken out of the turn's budget rather than drawn on top of it.
+          */}
+          {runningCalls.length > 0 && (
+            <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
+              {runningCalls.map((call) => (
+                <Text key={call.id} color="cyan" wrap="truncate">
+                  {'  '}<Dots tick={animTick} />{' '}{call.name}
+                </Text>
               ))}
             </Box>
           )}
