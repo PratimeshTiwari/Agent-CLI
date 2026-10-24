@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.48.0**
+## Current version: **1.49.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,15 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.49.0 — 2026-10-25
+
+- **A reply is no longer dropped while Gemini is still thinking.** The "nothing
+  came back" timeout (45s) ran from the start of the turn, even with the Stop
+  button on screen. A long paste plus a Pro model thinking for half a minute
+  before writing hit it, and the reply that arrived seconds later was thrown
+  away. Both give-up clocks (this one and the 15s silence fallback) now never run
+  while Gemini is generating, and count from the last moment it was.
 
 ### 1.48.0 — 2026-10-24
 

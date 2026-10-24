@@ -2858,6 +2858,44 @@ export class AgentLoop {
     this._sendToGemini(prompt, this.callbacks);
   }
 
+  /**
+   * The complete tool calls written after a `<thought>` that interrupted a
+   * call — see the catch in `_extractToolCalls`. Only the text after the last
+   * `</thought>` is searched, and only objects that parse with a name and args
+   * count; identical repeats (the model re-emits the same call) are taken once.
+   */
+  _salvageInterruptedCalls(text) {
+    if (!/<thought>/i.test(text) || !/<\/thought>/i.test(text)) return [];
+    const after = text.split(/<\/thought>/i).pop();
+    const found = []; const seen = new Set();
+    let at = 0;
+    while ((at = after.indexOf('{', at)) !== -1) {
+      let depth = 0; let end = -1; let inString = false; let esc = false;
+      for (let i = at; i < after.length; i += 1) {
+        const ch = after[i];
+        if (esc) { esc = false; continue; }
+        if (ch === '\\') { esc = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (!inString) {
+          if (ch === '{') depth += 1;
+          if (ch === '}') { depth -= 1; if (depth === 0) { end = i; break; } }
+        }
+      }
+      if (end === -1) break;
+      try {
+        const parsed = JSON.parse(this._cleanJsonString(after.slice(at, end + 1)));
+        if (parsed && typeof parsed.name === 'string' && parsed.args && typeof parsed.args === 'object') {
+          const key = JSON.stringify(parsed);
+          if (!seen.has(key)) { seen.add(key); found.push({ name: parsed.name, args: parsed.args }); }
+          at = end + 1;
+          continue;
+        }
+      } catch { /* not a call; keep looking */ }
+      at += 1;
+    }
+    return found;
+  }
+
   _extractToolCalls(content) {
     const calls = [];
     let cleanContent = content;
@@ -2909,6 +2947,25 @@ export class AgentLoop {
          * turn.
          */
         if (!tag && !LOOKS_LIKE_TOOL_CALL.test(jsonGroup)) return fullMatch;
+        /*
+         * A call interrupted by the model's own thinking. Argon starts writing
+         * a call, switches into a `<thought>` *inside the half-written string*,
+         * and writes the complete call after `</thought>` — and Gemini draws all
+         * of it as one code block. Rejecting the block asked for a repair of a
+         * reply that already held a good call, round after round, until Gemini
+         * answered "I'm having a hard time fulfilling your request" (seen
+         * 2026-10-24). The complete calls after the thought are taken instead.
+         */
+        const salvaged = this._salvageInterruptedCalls(jsonGroup);
+        if (salvaged.length) {
+          calls.push(...salvaged);
+          logNotice(this.workspace, {
+            flow: 'agent', op: 'tool_call_salvaged',
+            message: `Took ${salvaged.length} complete call(s) after an interrupted one`,
+            meta: { names: salvaged.map((c) => c.name) },
+          });
+          return '';
+        }
         throw new Error(`Failed to parse JSON block: ${err.message}\nRaw block: ${jsonGroup}`);
       }
 

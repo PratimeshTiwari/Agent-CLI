@@ -13,6 +13,9 @@ If you emit a tool call, that reply asks a question. Stop there. A `<thought>`
 block planning the call is fine; an answer, a summary or a `## Review` block is
 not, because you are writing it before the results exist.
 
+Finish any `<thought>` before you start a ```json block, and never write one
+inside it: a call interrupted by thinking cannot be run.
+
 The results come back as `<tool_results>` in the next turn. Conclude then, from
 what they say. If the answer is already clear and you need nothing, emit no tool
 call and answer — but do not do both.

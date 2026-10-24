@@ -283,6 +283,16 @@ let completionCheck = null;
 let quietPending = () => false;
 let currentRequestData = null;
 let sawGenerating = false;
+/**
+ * When Gemini was last seen generating (its Stop button visible).
+ *
+ * The give-up clocks count from here, not from the start of the turn. They
+ * used to count from the start, so a turn whose prompt took 46s to type and
+ * whose model then *thought* for 36s before writing a word — Gemini Pro does —
+ * hit the 45s "nothing scraped" timeout while the Stop button was on screen,
+ * and the reply that arrived seconds later was thrown away (2026-10-24 20:59).
+ */
+let lastBusyAt = 0;
 
 /**
  * Talking to the extension, when the extension may no longer be there.
@@ -1106,6 +1116,7 @@ function startResponseObserver() {
   responseStartTime = Date.now();
   lastActivityTime = Date.now();
   sawGenerating = false;
+  lastBusyAt = Date.now();
 
   let lastStreamedText = '';
   let streamingUpdateTimer = null;
@@ -1240,6 +1251,7 @@ function startResponseObserver() {
       traceMark('generating_end');
     }
     if (isGenerating) sawGenerating = true;
+    if (isGenerating) lastBusyAt = now;
 
     // Finished means: no Stop button, the text has stopped growing, and both
     // were still true on the next check. `silenceDuration` is time since the
@@ -1301,7 +1313,7 @@ function startResponseObserver() {
 
     // Nothing scraped at all. Waiting out the 5-minute cap tells the user
     // nothing they can act on, so report what actually broke instead.
-    if (!lastResponseText && totalElapsed >= NO_RESPONSE_TIMEOUT) {
+    if (noResponseExpired({ now, responseStartTime, lastBusyAt, isGenerating, hasText: Boolean(lastResponseText) })) {
       const diagnosis = describeScrapeFailure(isGenerating);
       console.warn(`[Gemini Bridge] ${diagnosis}`);
       clearInterval(streamingUpdateTimer);
@@ -1365,7 +1377,7 @@ function startResponseObserver() {
     }
 
     // Fallback: If for some reason the Stop button check fails but it has been silent for 15s
-    if (lastResponseText && silenceDuration >= RESPONSE_IDLE_TIMEOUT) {
+    if (idleFallbackExpired({ now, lastActivityTime, lastBusyAt, isGenerating, hasText: Boolean(lastResponseText) })) {
       console.warn('[Gemini Bridge] Fallback idle timeout reached (15s silence)');
       clearInterval(streamingUpdateTimer);
       onResponseComplete(lastResponseText);
@@ -1374,6 +1386,34 @@ function startResponseObserver() {
 
   completionCheck = runCompletionCheck;
   activityCheckTimer = setInterval(runCompletionCheck, 2000);
+}
+
+/**
+ * Has a turn that produced no text waited long enough to give up?
+ *
+ * Never while Gemini is generating: a model that is thinking has shown no text
+ * yet, and that is not a failed scrape. The clock runs from whichever is later,
+ * the start of the turn or the last moment the Stop button was seen.
+ */
+function noResponseExpired(at) {
+  // One plain parameter: the test loader lifts functions by brace-matching.
+  const { now, responseStartTime, lastBusyAt, isGenerating, hasText } = at;
+  if (hasText || isGenerating) return false;
+  return now - Math.max(responseStartTime, lastBusyAt) >= NO_RESPONSE_TIMEOUT;
+}
+
+/**
+ * The silence fallback: text exists and nothing has changed for a while.
+ *
+ * Also never while Gemini is generating. It was written for a Stop button the
+ * selectors could not find; with the button *visible*, a long silence is the
+ * model thinking mid-reply — Argon pauses inside a reply to reason — and
+ * ending the turn there delivered half an answer.
+ */
+function idleFallbackExpired(at) {
+  const { now, lastActivityTime, lastBusyAt, isGenerating, hasText } = at;
+  if (!hasText || isGenerating) return false;
+  return now - Math.max(lastActivityTime, lastBusyAt) >= RESPONSE_IDLE_TIMEOUT;
 }
 
 /**
