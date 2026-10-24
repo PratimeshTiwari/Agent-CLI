@@ -17,3 +17,4 @@ Edit a file:
 ```
 
 CRITICAL: Always close JSON blocks with ```. Never leave them open.
+Finish any <thought> before a ```json block — never inside one.
