@@ -22,7 +22,10 @@ import { T } from '../theme.js';
 // Read at render, not import: the palette can change after this module loads.
 const colourFor = (type) => ({ add: T.success, del: T.danger, header: T.diffHeader })[type];
 
-export function DiffRows({ rows, gutter = false, dimContext = true }) {
+// The tint for a changed line, or nothing. Read at render, like the colours.
+const tintFor = (type) => (type === 'add' ? T.addBg : type === 'del' ? T.delBg : null) || undefined;
+
+export function DiffRows({ rows, gutter = false, dimContext = true, fill = 0 }) {
   if (!rows || rows.length === 0) return null;
 
   // One width for every number, so the text starts in the same column on every
@@ -39,6 +42,7 @@ export function DiffRows({ rows, gutter = false, dimContext = true }) {
           wrap="truncate"
           dimColor={row.type === 'more' || (dimContext && row.type === 'ctx')}
           color={colourFor(row.type)}
+          backgroundColor={tintFor(row.type)}
         >
           {gutter && (
             <Text dimColor>
@@ -49,7 +53,11 @@ export function DiffRows({ rows, gutter = false, dimContext = true }) {
               {'  '}
             </Text>
           )}
-          {row.text}
+          {/* A background paints characters, not the line: pad a tinted row out
+              to the width so the band runs edge to edge, as on GitHub. */}
+          {tintFor(row.type) && fill > 0
+            ? String(row.text).padEnd(Math.max(0, fill - (gutter ? width + 2 : 0)))
+            : row.text}
         </Text>
       ))}
     </Box>

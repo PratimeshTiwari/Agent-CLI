@@ -454,9 +454,11 @@ const RUN_TOOLS = new Set(['run_command', 'run_background']);
  * to find. Empty when the turn ran nothing.
  */
 export function workBreakdown(actions = []) {
-  let reads = 0; let edits = 0; let runs = 0; let other = 0;
+  let reads = 0; let edits = 0; let runs = 0; let other = 0; let rounds = 0;
   for (const a of actions) {
     if (a.type !== 'tool') continue;
+    // Stamped by the loop on each call (agent-loop, callTurn.round).
+    if (Number.isFinite(a.msg?.round)) rounds = Math.max(rounds, a.msg.round);
     const name = a.toolName;
     if (READ_TOOLS.has(name)) reads += 1;
     else if (EDIT_TOOLS.has(name)) edits += 1;
@@ -464,7 +466,7 @@ export function workBreakdown(actions = []) {
     else other += 1;
   }
   const n = (count, one, many) => (count ? [`${count} ${count === 1 ? one : many}`] : []);
-  return [...n(reads, 'read', 'reads'), ...n(edits, 'edit', 'edits'), ...n(runs, 'command', 'commands'),
+  return [...n(rounds, 'round', 'rounds'), ...n(reads, 'read', 'reads'), ...n(edits, 'edit', 'edits'), ...n(runs, 'command', 'commands'),
     ...n(other, 'other', 'other')].join(' · ');
 }
 
@@ -942,4 +944,25 @@ export function taskProgress(text) {
 export function parseErrorRow(attempt, maxAttempts, verbose = false) {
   const n = Number.isFinite(attempt) && Number.isFinite(maxAttempts) ? ` (${attempt}/${maxAttempts})` : '';
   return `✗ Could not read its tool call — asked it to resend${n}${verbose ? '' : ' · ctrl+e for details'}`;
+}
+
+/**
+ * A five-cell meter for the status bar: `▰▰▱▱▱`. Rounded to the nearest cell,
+ * with any context at all showing one, so "almost empty" is not drawn as empty.
+ */
+export function contextMeter(pct, cells = 5) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const on = p === 0 ? 0 : Math.max(1, Math.round((p / 100) * cells));
+  return '▰'.repeat(on) + '▱'.repeat(cells - on);
+}
+
+/**
+ * The mode, said the way Claude Code says it, for the status line:
+ * `⏵⏵ auto mode on` / `⏸ plan mode on` / `⏸ strict plan mode on`.
+ * Replaced a label on the input border, which read as floating above the box.
+ */
+export function modeLine(mode) {
+  if (mode === 'auto') return '⏵⏵ auto mode on';
+  if (mode === 'strict') return '⏸ strict plan mode on';
+  return '⏸ plan mode on';
 }

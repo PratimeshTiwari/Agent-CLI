@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { COMPACT_AT } from '../context/context-manager.js';
 import { nextMode } from '../core/modes.js';
 import { stripImageData } from '../core/prompt-builder.js';
-import { modeColor } from './constants.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
+import { contextField, contextMeter, disconnectedHint, extractCodeBlocks, modeLine, taskProgress, workBreakdown } from './format.js';
+import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -1461,17 +1461,17 @@ export function App({ agentLoop, wsServer }) {
       <Box marginTop={compact ? 0 : 1} paddingX={1} flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
-          {isProcessing
-            // A steady dot while busy: the thinking line is the one spinner.
-            ? <Text color={T.accent}>● agent</Text>
-            : <Text color={extensionConnected ? T.accent : T.attention} bold>
-                {extensionConnected ? '●' : '○'} agent
-              </Text>}
-          {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
-          {/* Where `/help` sits, so the hint costs no row of its own. */}
+          {/*
+            The connection dot, then the mode the way Claude Code shows it. The
+            mode used to be a label on the input border, which read as floating
+            above the box; `/help` gives way to it (typing `/` lists everything).
+          */}
+          <Text color={extensionConnected ? T.accent : T.attention} bold>{extensionConnected ? '●' : '○'}{' '}</Text>
+          <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
-            : <Text dimColor>{'  ·  '}/help</Text>}
+            : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
+          {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
         </Text>
         </Box>
         <Box flexShrink={0}>
@@ -1497,8 +1497,7 @@ export function App({ agentLoop, wsServer }) {
             draws only when idle, and says the same there).
           */}
           {isProcessing && tasksDone ? <Text>{`tasks ${tasksDone.done}/${tasksDone.total}`}{'  ·  '}</Text> : ''}
-          <Text color={modeColor(mode)}>{mode}</Text>
-          <Text dimColor>{modeSwitched ? '' : ' ⇥'}{'  ·  '}</Text>
+          {/* The mode is on the input border now (InputBar), not repeated here. */}
           {/*
             Two different facts, and the row says which one it has.
 
@@ -1521,7 +1520,7 @@ export function App({ agentLoop, wsServer }) {
               : <Text color={T.link}>{browserModelLabel}</Text>)
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
-          <Text color={tokenColor}>{contextText}</Text>
+          <Text color={tokenColor}>{contextMeter(tokenPct)}{' '}{contextText}</Text>
         </Text>
         </Box>
       </Box>

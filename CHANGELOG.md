@@ -13,7 +13,8 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 
 | Release | PR | What changed |
 | --- | --- | --- |
-| v5.16 | — | Themes: `/theme` with a live preview — Dark, Light, two colour-blind palettes, Terminal (the classic look, still the default) and Mono (also `NO_COLOR`); saved per person in `~/.agent/settings.json`. Regression test for issue #68 |
+| v5.17 | — | Redesign phase 3: finished tools on two lines with a `⎿` result (red when it failed); your message with an accent edge; the mode on the input border; a context meter; rounds in the turn summary; tinted diffs with line numbers |
+| v5.16 | #80 | Themes: `/theme` with a live preview — Dark, Light, two colour-blind palettes, Terminal (the classic look, still the default) and Mono (also `NO_COLOR`); saved per person in `~/.agent/settings.json`. Regression test for issue #68 |
 | v5.15 | #79 | Colour by role (`ui/theme.js`), no visible change; extension 1.48.0 stops logging `Still in CONNECTING state` |
 | v5.14 | #78 | Finished tools no longer listed twice, and 0 full redraws at 10–40 rows; compaction as one transcript row; the disconnected row names its fix; `tasks 3/5` while a turn runs |
 | v5.13 | #77 | Prompt fixes from a review (pro's duplicate bullets, numbered headings, no ceremony for a greeting); a prompt with a paste or selection marker is drawn once; README feature tour |

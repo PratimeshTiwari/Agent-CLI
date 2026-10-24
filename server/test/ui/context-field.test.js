@@ -29,3 +29,13 @@ test('never longer than the field it replaced at its longest', () => {
     assert.ok(contextField(pct, 96000, 80).length <= '100% of 96k · 20% to auto-compact'.length - 10, String(pct));
   }
 });
+
+test('the meter: five cells, any context shows one, full is full', async () => {
+  const { contextMeter } = await import('../../src/ui/format.js');
+  assert.equal(contextMeter(0), '▱▱▱▱▱');
+  assert.equal(contextMeter(3), '▰▱▱▱▱', 'almost empty must not draw as empty');
+  assert.equal(contextMeter(34), '▰▰▱▱▱');
+  assert.equal(contextMeter(80), '▰▰▰▰▱');
+  assert.equal(contextMeter(100), '▰▰▰▰▰');
+  assert.equal(contextMeter(250), '▰▰▰▰▰');
+});
