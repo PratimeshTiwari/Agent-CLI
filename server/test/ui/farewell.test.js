@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { farewellText, farewellFor, exitWithFarewell, registerInk, _resetFarewell } from '../../src/ui/farewell.js';
+import { farewellText, farewellFor, wantsDim, exitWithFarewell, registerInk, _resetFarewell } from '../../src/ui/farewell.js';
 import { SessionStore } from '../../src/storage/session-store.js';
 import { AgentLoop } from '../../src/core/agent-loop.js';
 
@@ -25,6 +25,19 @@ test('the text names the command, with --workspace only when it is needed', () =
 
   const elsewhere = farewellText('x', { workspace: '/my proj', cwd: '/tmp' });
   assert.match(elsewhere, /agent --resume x --workspace '\/my proj'/);
+});
+
+test('it is Claude Code\'s footer: blank line, label, command on its own line, prompt right under', () => {
+  assert.equal(farewellText('abc', { workspace: '/p', cwd: '/p' }),
+    '\nResume this session with:\nagent --resume abc\n');
+});
+
+test('dim is per line, and only into a terminal', () => {
+  const lines = farewellText('abc', { workspace: '/p', cwd: '/p', dim: true }).split('\n');
+  assert.deepEqual(lines, ['', '\x1b[2mResume this session with:\x1b[22m', '\x1b[2magent --resume abc\x1b[22m', '']);
+  assert.equal(wantsDim({ isTTY: true }), true);
+  assert.equal(wantsDim({ isTTY: false }), false, 'a pipe gets plain text');
+  assert.equal(wantsDim({}), false);
 });
 
 test('no conversation, no resume command', () => {
