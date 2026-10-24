@@ -5,6 +5,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import * as paths from '../../core/paths.js';
 import { FOCUS_INPUT, FOCUS_TERMINAL } from '../constants.js';
+import { T } from '../theme.js';
 
 async function runTerminalCommand(cmd, {
   agentLoop, setHistory, setTerminalInput, setTerminalOpen, setFocus,
@@ -70,10 +71,10 @@ export function AgentTerminal({
   return (
     <>
       {terminalOpen && (
-        <Box borderStyle="single" borderColor="green" padding={1} flexDirection="column" width="100%">
-          <Text bold color="green">💻 Agent Terminal (Press ESC to close)</Text>
+        <Box borderStyle="single" borderColor={T.shell} padding={1} flexDirection="column" width="100%">
+          <Text bold color={T.shell}>💻 Agent Terminal (Press ESC to close)</Text>
           <Box>
-            <Text bold color="green">$ </Text>
+            <Text bold color={T.shell}>$ </Text>
             {focus === FOCUS_TERMINAL ? (
               <TextInput focus={focus === FOCUS_TERMINAL} value={terminalInput} onChange={setTerminalInput} onSubmit={submitTerminalCommand} />
             ) : (

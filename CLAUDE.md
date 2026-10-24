@@ -2338,6 +2338,15 @@ ago.
   costs nothing and degrades correctly — at 60 columns the sentence is cut and
   the command is still intact.
 
+- **Colour is a role, never a name (v5.15, `ui/theme.js`).** Components write `T.accent`,
+  `T.attention`, `T.success`… and the palette picks the colour; `test/ui/theme-tokens.test.js`
+  fails on any `color="cyan"` or `'cyan'` in a `ui/` component. About 86 call sites had named
+  ANSI colours, and cyan alone meant six things. The only palette so far is `terminal`, which
+  maps every role back to its old colour — verified under the pty as the same 19 on-screen
+  styles and a byte-identical run. `T` is mutated in place, so a module-level table of colours
+  (`DiffRows`' old `COLOUR`) must be read at render, not at import. Still literal, deliberately:
+  the markdown renderer's colours (`marked-terminal`, configured once at load) and the banner
+  gradient. The plan for the rest is `.agent/artifacts/plans/2026-10-24-ui-redesign.md`.
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
   exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
   app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup
