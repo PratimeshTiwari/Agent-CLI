@@ -30,9 +30,10 @@ back.
 ![A queued message under a running turn](docs/images/queued.svg)
 
 **Long sessions look after themselves** — near the limit the agent summarises the conversation in
-the same chat, moves to a fresh one, and carries on. The status bar warns you first.
+the same chat, moves to a fresh one, and carries on: one line in the transcript, the summary behind
+`ctrl+e`. The status bar's meter warns you first (`▰▰▰▰▱ 72% · compacts at 80%`).
 
-![The compaction progress bar](docs/images/compaction.svg)
+![A compacted conversation](docs/images/compaction.svg)
 
 *Screenshots are real terminal frames from the project's test harness, replayed through a terminal
 emulator; the editor in the second one is an illustration.*
@@ -77,13 +78,17 @@ cd ~/code/your-project
 agent
 ```
 
-The status bar reads **`● agent`** in cyan once the extension is connected. Type a request and press
+The status line starts with **`●`** in your accent colour once the extension is connected (`○` in
+yellow until then), followed by the mode — `⏸ plan mode on (shift+tab to cycle)`. Type a request and press
 Enter. To pick up where you left off: `agent --continue`, or `agent --resume <id>` (printed when you
 exit).
 
 ## Using it
 
 ### Modes — `shift+tab` cycles them
+
+The status line says which one is on, the way Claude Code does: `⏸ plan mode on`,
+`⏵⏵ auto mode on`, `⏸ strict plan mode on`. The input box's border takes the mode's colour.
 
 | Mode | Edits | Commands |
 | --- | --- | --- |
@@ -155,6 +160,20 @@ history lives in `~/.agent/workspaces/` so a fresh checkout doesn't lose it. In 
 | It feels slow | `/logs extension` shows each stage of a turn; typing the prompt should take well under a second |
 | Something failed | `/logs` groups failures by where they came from |
 | After `git pull` | `/update` says what to reload — usually the extension and a restart |
+
+## Release history
+
+Every change reached `main` through a pull request from a branch that is kept. The full list — every
+PR with its date, branch and notes — is in [`CHANGELOG.md`](CHANGELOG.md).
+
+| Series | Dates | PRs | What it was about |
+| --- | --- | --- | --- |
+| **v5** | 2026-10-19 … 2026-10-25 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | Clean slate, one recovery policy, the VS Code chat panel, compaction that hands over, large files, three modes, themes, and a redesigned transcript |
+| **v4** | 2026-09-27 … 2026-10-19 | [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60)–[#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) | An honest failure log, the rename to Agent CLI, fixes from real use |
+| **v3** | 2026-09-22 … 2026-09-27 | [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26)–[#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59) | The model picker, tab lanes, effort low/medium/high, traces, subagent fixes |
+| **v2** | 2026-09-20 … 2026-09-22 | [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17)–[#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) | Bridge speed and stability, tool-call parsing and discipline, prompt trims |
+| **v1** | 2026-09-16 | [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13)–[#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16) | The first stable release |
+| **Betas** | 2026-08-26 … 2026-09-06 | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1)–[#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) | Context management, subagents, the GitHub agent (later removed), the CLI |
 
 ## More
 

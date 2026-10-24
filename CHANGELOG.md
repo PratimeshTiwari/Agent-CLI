@@ -14,12 +14,13 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-24 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82)
+### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
-| v5.18 | 2026-10-24 | `v5.18/thinking-waits` | [#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) *(open)* | v5.18: replies no longer dropped while Gemini thinks; interrupted tool calls salvaged |
-| v5.17 | 2026-10-24 | `v5.17/rows` | [#81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) *(open)* | v5.17: redesign phase 3 — tool rows, message edge, mode on the border, meter, rounds, tinted diffs |
+| v5.19 | 2026-10-25 | `v5.19/release-history` | [#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | v5.19: release history with dates, branches and PR links; current README screenshots |
+| v5.18 | 2026-10-24 | `v5.18/thinking-waits` | [#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) | v5.18: replies no longer dropped while Gemini thinks; interrupted tool calls salvaged |
+| v5.17 | 2026-10-24 | `v5.17/rows` | [#81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) | v5.17: redesign phase 3 — tool rows, message edge, mode on the border, meter, rounds, tinted diffs |
 | v5.16 | 2026-10-24 | `v5.16/themes` | [#80](https://github.com/PratimeshTiwari/Agent-CLI/pull/80) | v5.16: themes (/theme), issue #68 regression test |
 | v5.15 | 2026-10-24 | `v5.15/theme-tokens` | [#79](https://github.com/PratimeshTiwari/Agent-CLI/pull/79) | v5.15: colour by role (redesign phase 1); extension CONNECTING-state fix |
 | v5.14 | 2026-10-24 | `v5.14/fixes-and-ui` | [#78](https://github.com/PratimeshTiwari/Agent-CLI/pull/78) | v5.14: live-frame fixes, compaction row, disconnected hints, task progress |
@@ -127,16 +128,21 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 
 ## v5 in detail
 
-### v5.18 — 2026-10-24 · [PR #82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) · `v5.18/thinking-waits` · open · extension 1.49.0
+### v5.19 — 2026-10-25 · [PR #83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) · `v5.19/release-history`
+
+- This changelog rebuilt: every PR indexed from GitHub with its date, branch and link, grouped by series; the v5 releases written out one by one; every PR number in the older notes linked.
+- The README's screenshots re-captured from the current agent (status-line mode, `⎿` result rows, rounds, line-numbered diffs) and a release-history table added.
+
+### v5.18 — 2026-10-24 · [PR #82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) · `v5.18/thinking-waits` · extension 1.49.0
 
 - A reply is no longer dropped while Gemini is still thinking: the 45s "nothing came back" timeout and the 15s silence fallback no longer run while the Stop button is on screen (a 46s paste plus 36s of Pro thinking had hit the first).
 - Tool calls that Argon interrupts with a `<thought>` are salvaged: the complete calls after the thought are run instead of the whole reply being rejected round after round.
 - The tool-call prompts say to finish thinking before a json block.
 
-### v5.17 — 2026-10-24 · [PR #81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) · `v5.17/rows` · open
+### v5.17 — 2026-10-24 · [PR #81](https://github.com/PratimeshTiwari/Agent-CLI/pull/81) · `v5.17/rows`
 
 - Redesign phase 3: finished tools on two lines with a `⎿` result (red when it failed); your message with an accent `▌` edge.
-- The mode on the input border; a five-cell context meter; rounds in the turn summary (each call stamped with its round by the loop).
+- The mode in the status line, Claude Code style (`⏵⏵ auto mode on (shift+tab to cycle)`); a five-cell context meter; rounds in the turn summary (each call stamped with its round by the loop).
 - Tinted diffs with line numbers when expanded; no tint in the Terminal and Mono themes.
 
 ### v5.16 — 2026-10-24 · [PR #80](https://github.com/PratimeshTiwari/Agent-CLI/pull/80) · `v5.16/themes` · closes issue #68
