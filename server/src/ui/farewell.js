@@ -51,7 +51,7 @@ export function registerInk(instance) {
 export function farewellText(id, { workspace = null, cwd = process.cwd() } = {}) {
   // Nothing worth resuming: say nothing. The screen above already shows
   // that nothing happened, and a sentence about it is noise on every exit.
-  if (!id) return '\n';
+  if (!id) return '';
   const where = workspace && workspace !== cwd ? ` --workspace ${quoteIfNeeded(workspace)}` : '';
   return `\n  Resume this conversation with: agent --resume ${id}${where}\n\n`;
 }
