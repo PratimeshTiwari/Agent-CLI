@@ -275,6 +275,9 @@ else
 fi
 
 # ── What is left, and why ────────────────────────────────────────────
+# The newest packaged companion, found rather than named: a hard-coded
+# version went stale (it said 1.5.0 for three releases after 1.8.2 shipped).
+VSIX="$(ls "$ROOT"/vscode-companion/cli-agent-companion-*.vsix 2>/dev/null | sort -V | tail -1)"
 cat <<EOF
 
 $(bold "Two steps left — both need a human")
@@ -301,6 +304,6 @@ The status bar reads '● agent' in cyan once the extension connects, and
 $(bold "Optional: the VS Code companion")
 
      Extensions panel → ... → Install from VSIX...
-     $ROOT/vscode-companion/cli-agent-companion-1.5.0.vsix
+     ${VSIX:-$ROOT/vscode-companion/ (run 'vsce package' there first)}
 
 EOF

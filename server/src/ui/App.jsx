@@ -10,7 +10,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { extractCodeBlocks, workBreakdown } from './format.js';
+import { contextField, extractCodeBlocks, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -1210,8 +1210,7 @@ export function App({ agentLoop, wsServer }) {
    * Same threshold the loop uses (COMPACT_AT), read rather than restated.
    */
   const compactAtPct = Math.round(COMPACT_AT * 100);
-  const toCompact = compactAtPct - tokenPct;
-  const compactHint = toCompact <= 20 ? (toCompact > 0 ? ` · ${toCompact}% to auto-compact` : ' · compacts after this turn') : '';
+  const contextText = contextField(tokenPct, tokenLimit, compactAtPct);
   const runningTasks = tasks.filter(t => t.status === 'running').length;
   // Which repo of a group we are on. Empty for an ordinary single-repo
   // workspace, where showing it would be noise.
@@ -1501,7 +1500,7 @@ export function App({ agentLoop, wsServer }) {
             ? <Text color="cyan">{browserModelLabel}</Text>
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
-          <Text color={tokenColor}>{tokenPct}% of {tokenLimit >= 1000 ? `${Math.round(tokenLimit / 1000)}k` : tokenLimit}{compactHint}</Text>
+          <Text color={tokenColor}>{contextText}</Text>
         </Text>
         </Box>
       </Box>

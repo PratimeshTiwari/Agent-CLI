@@ -545,6 +545,23 @@ export function summarizeResult(toolName, result) {
 }
 
 /**
+ * The status bar's context field.
+ *
+ * Far from the threshold it is `18% of 96k`. Within twenty points it says
+ * where compaction happens instead — `62% · compacts at 80%`, then
+ * `82% · compacts next` — and drops the budget, which is the part nobody acts
+ * on. It used to append ` · 18% to auto-compact` / ` · compacts after this
+ * turn` to the full field, and the right side of the bar does not shrink, so
+ * the hint pushed the left side (`agent · scope · /help`) off the row.
+ */
+export function contextField(pct, limit, compactAtPct) {
+  const toGo = compactAtPct - pct;
+  if (toGo <= 0) return `${pct}% · compacts next`;
+  if (toGo <= 20) return `${pct}% · compacts at ${compactAtPct}%`;
+  return `${pct}% of ${limit >= 1000 ? `${Math.round(limit / 1000)}k` : limit}`;
+}
+
+/**
  * Lines added and removed in a unified diff, or null without one. The `+++`
  * and `---` file headers are not lines of the file.
  */
