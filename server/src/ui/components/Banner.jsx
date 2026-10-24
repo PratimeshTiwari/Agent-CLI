@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import os from 'os';
-import { themeName } from '../theme.js';
+import { themeName, PALETTE_INFO, T } from '../theme.js';
+import { welcomeSteps, extensionDir, tildify } from '../welcome.js';
 
 /**
  * The header: the wordmark, the attribution, and the one line that says where
@@ -64,7 +65,43 @@ function Wordmark({ text }) {
   ));
 }
 
-export function Banner({ agentLoop, agentNameAscii }) {
+/**
+ * The first-start card (`ui/welcome.js`). A rounded box in the input bar's
+ * idiom, the command in each step bold so it is the thing the eye lands on,
+ * and the rest dim: it is instructions, read once, and must not outshout the
+ * prompt box under it.
+ */
+function Welcome({ agentLoop }) {
+  const steps = welcomeSteps({
+    themeLabel: PALETTE_INFO[themeName()]?.label,
+    agentName: agentLoop.agentName,
+    extensionPath: tildify(extensionDir()),
+  });
+  return (
+    // Capped, like Claude Code's welcome box: stretched across a 200-column
+    // terminal it is mostly border. Narrower terminals get their full width.
+    <Box flexDirection="column" borderStyle="round" borderColor={T.muted ?? undefined} paddingX={1} marginTop={1}
+      width={Math.min(76, process.stdout.columns || 80)}>
+      <Text bold>Welcome. Three things to set up, once:</Text>
+      {steps.map((step, i) => (
+        <Box key={step.key} marginTop={1}>
+          <Box width={12} flexShrink={0}>
+            <Text dimColor>{`${i + 1}. ${step.title}`}</Text>
+          </Box>
+          <Box flexDirection="column" flexShrink={1}>
+            <Text color={T.accent ?? undefined} bold>{step.command}</Text>
+            {step.lines.map((line, j) => <Text key={j} dimColor>{line}</Text>)}
+          </Box>
+        </Box>
+      ))}
+      <Box marginTop={1}>
+        <Text dimColor>Shown on first start only. /help lists every command.</Text>
+      </Box>
+    </Box>
+  );
+}
+
+export function Banner({ agentLoop, agentNameAscii, welcome = false }) {
   const models = (() => {
     const roles = ['main'];
     const named = roles.map((r) => agentLoop.modelConfig?.[r]).filter(Boolean);
@@ -89,6 +126,7 @@ export function Banner({ agentLoop, agentNameAscii }) {
         {'  ·  '}
         {models}
       </Text>
+      {welcome && <Welcome agentLoop={agentLoop} />}
     </Box>
   );
 }

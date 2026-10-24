@@ -1684,6 +1684,14 @@ ago.
   The later `pollNow()` 401 at `github-poller.js:147` always worked; only the
   startup one was unreachable.
 
+- **The first-start card is decided before the loop exists (v5.22, `ui/welcome.js`).** Theme, name
+  and the extension's Load-unpacked steps (with this checkout's real `extension/` path), drawn
+  inside the banner's `<Static>` row so it costs no live budget. "First" is `welcomed` absent from
+  `~/.agent/settings.json` **and** an empty `~/.agent/workspaces/`; an install with history is
+  marked without being shown, so a `/reset` that empties that folder does not greet an old user.
+  `main.js` must decide before `new AgentLoop` — the session store creates `workspaces/<slug>` —
+  and `welcome.test.js` pins the order.
+
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80

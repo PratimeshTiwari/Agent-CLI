@@ -41,9 +41,10 @@ function createInkStdin() {
 }
 
 export class CliUI {
-  constructor(agentLoop, wsServer) {
+  constructor(agentLoop, wsServer, { welcome = false } = {}) {
     this.agentLoop = agentLoop;
     this.wsServer = wsServer;
+    this.welcome = welcome;
   }
 
   start() {
@@ -92,7 +93,7 @@ export class CliUI {
     // the old colours, and <Static> never repaints it.
     setTheme(startupTheme(process.env, loadUserSettings().theme));
 
-    const instance = render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} />, {
+    const instance = render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome} />, {
       stdin: inkStdin,
       // ctrl+c is ours — see hotkeys.js. Ink's default unmounted the app and
       // left the process alive behind a frozen prompt.
