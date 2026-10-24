@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.47.0**
+## Current version: **1.48.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,16 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.48.0 — 2026-10-24
+
+- **No more `InvalidStateError: Still in CONNECTING state` on chrome://extensions.**
+  On connect the worker waits on storage before it identifies, and if that socket
+  dropped and a retry opened the next one in the meantime, `identify` was sent on
+  the new socket while it was still connecting. Each socket's handlers now use
+  that socket only, so a superseded one stays quiet and its `onclose` no longer
+  tears down its successor. Harmless before (the next socket identified itself),
+  but it filled the Errors page.
 
 ### 1.47.0 — 2026-10-24
 
