@@ -198,13 +198,22 @@ export function Menus({
                 setActiveMenu(null);
                 agentLoop.answerCommandApproval(item.value, activeMenu.payload.command);
                 
-                let statusMsg = '';
-                if (item.value === 'allow_once') statusMsg = 'allowed once';
-                if (item.value === 'allow_always') statusMsg = 'allowed always (added to allowlist)';
-                if (item.value === 'reject') statusMsg = 'rejected';
-                if (item.value === 'reject_always') statusMsg = 'rejected always (added to blocklist)';
-                
-                setHistory(prev => [...prev, { role: 'system', content: `[System: You ${statusMsg} the command: ${activeMenu.payload.command}]` }]);
+                /*
+                 * The decision, not the command. It used to repeat the whole
+                 * command, and a system row wraps: a one-line `for` loop drew
+                 * four rows, charged as one, in the live frame — the overflow
+                 * that cleared the screen on every render at 10 rows while the
+                 * command ran. The command is on the running row under this
+                 * (and on the tool row once it finishes), so saying it here
+                 * too was the only part that cost anything.
+                 */
+                const decision = {
+                  allow_once: 'You allowed the command once',
+                  allow_always: 'You allowed the command always (added to the allowlist)',
+                  reject: 'You rejected the command',
+                  reject_always: 'You rejected the command always (added to the blocklist)',
+                }[item.value];
+                if (decision) setHistory(prev => [...prev, { role: 'system', content: `[System: ${decision}]` }]);
                 setFocus(FOCUS_INPUT);
               }}
             />

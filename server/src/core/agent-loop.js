@@ -174,6 +174,7 @@ import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from './tool-policy.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from './diff-approval.js';
+import { createOutputTail } from './output-tail.js';
 
 
 // Backstop for a prompt the extension never answers. Longer than the content
@@ -2594,11 +2595,28 @@ export class AgentLoop {
         }
         
         if (isApproved) {
-          result = await this.mcpServer.executeTool(call.name, call.args, {
-            editor: this.editor,
-            taskManager: this.taskManager,
-            onTaskAlert: (hit) => this.handleTaskAlert(hit),
+          // The last lines of a running command, under its row on screen. Only
+          // `run_command`: `run_background` returns at once and its output is
+          // `manage_task`'s to show.
+          const sendTail = ({ lines, total }) => this.callbacks.sendToPanel?.({
+            type: 'tool_output',
+            payload: { name: call.name, lines, total },
+            timestamp: Date.now(),
           });
+          const tail = call.name === 'run_command' ? createOutputTail({ emit: sendTail }) : null;
+          // An empty view first: it says the command has *started*, which is
+          // where its elapsed time is counted from — the approval is over.
+          if (tail) sendTail({ lines: [], total: 0 });
+          try {
+            result = await this.mcpServer.executeTool(call.name, call.args, {
+              editor: this.editor,
+              taskManager: this.taskManager,
+              onTaskAlert: (hit) => this.handleTaskAlert(hit),
+              ...(tail ? { onOutput: (chunk) => tail.push(chunk) } : {}),
+            });
+          } finally {
+            tail?.stop();
+          }
           // A command that *succeeded* is the one worth auditing — `git push
           // --force` does not fail, so the failure log never sees it.
           logCommand(this.workspace, {

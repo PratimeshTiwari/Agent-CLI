@@ -980,3 +980,41 @@ export function modeLine(mode) {
   if (mode === 'strict') return 'strict plan mode on';
   return 'plan mode on';
 }
+
+/** How many output lines a running command shows under its row. */
+export const RUNNING_OUTPUT_LINES = 5;
+
+/**
+ * The block of calls still running, and what it costs the live frame.
+ *
+ * The calls share the turn's rows: the turn keeps two (its newest step and the
+ * `so far` tally) and this block is the first thing to shrink. A running
+ * `run_command` also shows the last lines of its output under its row, as
+ * Claude Code's Bash rows do — and those lines come out of the same budget,
+ * after the call rows, so a short terminal drops the output before it drops a
+ * call and never draws a row it has not paid for. An unbounded live row is the
+ * flicker bug (CLAUDE.md, "The live frame must never outgrow the viewport").
+ *
+ * @param {object[]} calls - running calls, oldest first; `output` is the tail
+ * @param {number} liveBudget - rows the live frame may use for the turn and this
+ * @returns {{calls: object[], outputFor: (number|null), output: string[], rows: number}}
+ */
+export function runningLayout(calls = [], liveBudget = 0, { compact = false, maxOutput = RUNNING_OUTPUT_LINES } = {}) {
+  const margin = compact ? 0 : 1;
+  const fits = Math.min(calls.length, Math.floor(liveBudget / 2), liveBudget - 2 - margin);
+  const shown = fits > 0 ? calls.slice(-fits) : [];
+  // The newest call with output: commands run one at a time, but a subagent
+  // started beside one must not take its lines.
+  const watched = [...shown].reverse().find((c) => Array.isArray(c.output) && c.output.length);
+  const spare = liveBudget - 2 - margin - shown.length;
+  const output = watched && spare > 0 ? watched.output.slice(-Math.min(maxOutput, spare)) : [];
+  const rows = shown.length === 0 ? 0 : shown.length + output.length + margin;
+  return { calls: shown, outputFor: output.length ? watched.id : null, output, rows };
+}
+
+/** `4s`, `1m 05s` — a running command's age, on its row. */
+export function elapsedLabel(ms) {
+  const s = Math.max(0, Math.floor((ms || 0) / 1000));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+}

@@ -57,7 +57,7 @@ export const stripAnsi = (text) => String(text ?? '').replace(ANSI, '');
 
 export async function runCommand(args, context) {
   const { command, cwd, timeout = 30 } = args;
-  const { workspace } = context;
+  const { workspace, onOutput } = context;
 
   if (!command || command.trim().length === 0) {
     throw new Error('Command cannot be empty');
@@ -140,6 +140,21 @@ export async function runCommand(args, context) {
         cwd: workingDir,
       });
     });
+
+    /*
+     * Output as it arrives, for the screen (`core/output-tail.js`).
+     *
+     * Listeners beside `exec`'s own rather than a switch to `spawn`: `exec`
+     * still collects, times out and returns exactly what it did, so the model's
+     * result cannot change because the screen started watching. Chunks are
+     * already strings — `exec` sets utf8 on both streams, which also keeps a
+     * multi-byte character split across chunks whole.
+     */
+    if (typeof onOutput === 'function') {
+      const relay = (chunk) => { try { onOutput(String(chunk)); } catch { /* the view must not break the command */ } };
+      child.stdout?.on('data', relay);
+      child.stderr?.on('data', relay);
+    }
 
     // Close stdin at once. `exec` hands the child an open pipe that nothing
     // ever writes to, so anything reading stdin — `read`, an interactive
