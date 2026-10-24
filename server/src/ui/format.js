@@ -955,3 +955,14 @@ export function contextMeter(pct, cells = 5) {
   const on = p === 0 ? 0 : Math.max(1, Math.round((p / 100) * cells));
   return '▰'.repeat(on) + '▱'.repeat(cells - on);
 }
+
+/**
+ * The mode, said the way Claude Code says it, for the status line:
+ * `⏵⏵ auto mode on` / `⏸ plan mode on` / `⏸ strict plan mode on`.
+ * Replaced a label on the input border, which read as floating above the box.
+ */
+export function modeLine(mode) {
+  if (mode === 'auto') return '⏵⏵ auto mode on';
+  if (mode === 'strict') return '⏸ strict plan mode on';
+  return '⏸ plan mode on';
+}

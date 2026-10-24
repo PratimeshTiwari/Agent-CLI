@@ -42,8 +42,6 @@ export function InputBar({
   isThinkingStuck,
   isToolRunningRef,
   mode,
-  modeSwitched = true,
-  terminalWidth = 80,
   newlineRef,
   setInput,
   cursorRef,
@@ -267,26 +265,9 @@ export function InputBar({
             screen rendered as a footnote, for two rows of frame budget. The
             border is already the most visible line here and it costs nothing.
           */}
-          {/*
-            The mode on the border itself: `╭─ plan ───╮`. Ink cannot put text
-            in a border, so the top edge is a row of its own over a box drawn
-            without one — the same single row the edge took before, so the
-            frame budget is unchanged. `⇥` rides along until the first switch.
-          */}
-          {(() => {
-            const color = focus === FOCUS_INPUT ? modeColor(mode) : T.muted;
-            const tag = `${mode}${modeSwitched ? '' : ' ⇥'}`;
-            const fill = Math.max(1, terminalWidth - tag.length - 5);
-            return (
-              <Text color={color} wrap="truncate">
-                {'╭─ '}<Text bold>{mode}</Text>{modeSwitched ? '' : <Text dimColor>{' ⇥'}</Text>}{` ${'─'.repeat(fill)}╮`}
-              </Text>
-            );
-          })()}
           <Box
             flexDirection="row"
             borderStyle="round"
-            borderTop={false}
             borderColor={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}
             paddingX={1}
             width="100%"
