@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
 import { Dots } from './RunningLine.jsx';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 
 /**
@@ -465,6 +465,19 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     return (
       <Box width="100%">
         <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars)}</Text>
+      </Box>
+    );
+  }
+
+  if (act.type === 'compaction') {
+    return (
+      <Box flexDirection="column" width="100%">
+        <Text dimColor wrap="truncate">{compactionRow(act.turns, verbose)}</Text>
+        {verbose && act.summary && (
+          <Box marginLeft={2}>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.summary, limit.lines, limit.chars)}</Text>
+          </Box>
+        )}
       </Box>
     );
   }

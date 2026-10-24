@@ -10,7 +10,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { Dots } from './components/RunningLine.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, extractCodeBlocks, workBreakdown } from './format.js';
+import { contextField, disconnectedHint, extractCodeBlocks, taskProgress, workBreakdown } from './format.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
@@ -146,12 +146,17 @@ export function App({ agentLoop, wsServer }) {
 
   // Extension Connection Polling
   const [extensionConnected, setExtensionConnected] = useState(false);
+  const everConnectedRef = useRef(false);
   useEffect(() => {
     if (!wsServer) return;
     const checkConnection = () => {
       // Same boolean means React bails out of the re-render, so this poll is
       // free while nothing changes.
-      setExtensionConnected(Boolean(wsServer.clients && wsServer.clients.size > 0));
+      // An *extension* client, not any client: the VS Code panel connects as
+      // `editor`, and counting it drew `● agent` with no browser behind it.
+      const has = [...(wsServer.clients?.values?.() || [])].some((c) => c.type === 'extension');
+      if (has) everConnectedRef.current = true;
+      setExtensionConnected(has);
     };
     checkConnection();
     const interval = setInterval(checkConnection, 1000);
@@ -755,7 +760,10 @@ export function App({ agentLoop, wsServer }) {
     } catch (err) {
       /* ignore fs errors */
     }
-  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace]);
+    // `history.length`: a finished tool now joins the transcript as it lands,
+    // so this re-reads the checklist after every step — the status bar's
+    // `tasks 3/5` would otherwise sit at its value from the start of the turn.
+  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length]);
 
   // The thinking line. One row, rewritten on a calm cadence — the old 75ms
   // typewriter plus a 10ms per-character reveal of the whole reply is what made
@@ -1212,6 +1220,7 @@ export function App({ agentLoop, wsServer }) {
   const compactAtPct = Math.round(COMPACT_AT * 100);
   const contextText = contextField(tokenPct, tokenLimit, compactAtPct);
   const runningTasks = tasks.filter(t => t.status === 'running').length;
+  const tasksDone = taskProgress(artifacts.task);
   // Which repo of a group we are on. Empty for an ordinary single-repo
   // workspace, where showing it would be noise.
   // The scope is a *path* from the state root down to the workspace, so it can
@@ -1374,6 +1383,7 @@ export function App({ agentLoop, wsServer }) {
             diffRequest={diffRequest}
             elapsed={elapsed}
             extensionConnected={extensionConnected}
+            disconnectedText={disconnectedHint({ port: wsServer?.port, everConnected: everConnectedRef.current })}
             focus={focus}
             handleSubmit={handleSubmit}
             input={input}
@@ -1480,6 +1490,11 @@ export function App({ agentLoop, wsServer }) {
           */}
           {pendingImage ? <Text color="yellow">{'1 image  ·  '}</Text> : ''}
           {runningTasks > 0 ? <Text color="yellow">{runningTasks} bg{'  ·  '}</Text> : ''}
+          {/*
+            The checklist while a turn runs, when its panel is not drawn (it
+            draws only when idle, and says the same there).
+          */}
+          {isProcessing && tasksDone ? <Text>{`tasks ${tasksDone.done}/${tasksDone.total}`}{'  ·  '}</Text> : ''}
           <Text color={modeColor(mode)}>{mode}</Text>
           <Text dimColor>{modeSwitched ? '' : ' ⇥'}{'  ·  '}</Text>
           {/*

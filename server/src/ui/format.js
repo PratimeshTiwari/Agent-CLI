@@ -886,3 +886,50 @@ export function renderCommandList(commands, groups) {
   }
   return out.join('\n');
 }
+
+/**
+ * The transcript's one row for a compaction, Claude Code style.
+ *
+ * It used to be a paragraph from the assistant (`🗜 Context compacted — ✓
+ * Compacted 14 turns, summarised by this chat; continuing in a fresh chat,
+ * with the full history still searchable.`), drawn as a reply with a `●` — so
+ * a notice read as an answer. The summary is behind ctrl+e, which already
+ * means "show me the detail of every step".
+ */
+export function compactionRow(turns, verbose = false) {
+  const n = Number.isFinite(turns) && turns > 0 ? ` · ${turns} turn${turns === 1 ? '' : 's'} summarised` : '';
+  return `✻ Conversation compacted${n}${verbose ? '' : ' · ctrl+e for the summary'}`;
+}
+
+/** The port the extension dials; it has no setting for another (extension/src/background/policy.js). */
+export const EXTENSION_PORT = 7777;
+
+/**
+ * The "extension not connected" row, naming the fix that applies.
+ *
+ * It said "Open a Gemini tab in Chrome" whatever the cause, and two of the
+ * three causes are not that: an agent started with `--port` can never be
+ * reached, because the extension only dials 7777; and one that was connected
+ * and dropped needs Chrome back, not a first-time setup. Each fits 72
+ * columns: the row truncates from the right, where the fix is.
+ */
+export function disconnectedHint({ port = EXTENSION_PORT, everConnected = false } = {}) {
+  if (port !== EXTENSION_PORT) {
+    return `! Extension dials ${EXTENSION_PORT}, this agent is on ${port} — restart without --port`;
+  }
+  if (everConnected) {
+    return '! Extension disconnected — bring Chrome back; it reconnects by itself';
+  }
+  return '! Extension not connected — open gemini.google.com in Chrome';
+}
+
+/**
+ * `{done, total}` for a task.md checklist, or null when it has none. Counted
+ * from the file, which is the only copy either the user or the model sees.
+ */
+export function taskProgress(text) {
+  if (!text) return null;
+  const items = String(text).match(/^\s*[-*]\s*\[[ xX]\]/gm) || [];
+  if (items.length === 0) return null;
+  return { done: items.filter((l) => /\[[xX]\]/.test(l)).length, total: items.length };
+}

@@ -4,7 +4,7 @@ import { PromptInput } from './PromptInput.jsx';
 import { RunningLine } from './RunningLine.jsx';
 import { FOCUS_INPUT, modeColor } from '../constants.js';
 import { applyPaste, nextPasteId } from '../paste.js';
-import { oneLine } from '../format.js';
+import { oneLine, taskProgress } from '../format.js';
 import { hasClipboardImage } from '../clipboard-image.js';
 
 /** First `n` non-empty lines of an artifact, for the one-glance summary. */
@@ -32,6 +32,7 @@ export function InputBar({
   setPaletteSuppressed,
   elapsed,
   extensionConnected,
+  disconnectedText,
   focus,
   handleSubmit,
   input,
@@ -65,11 +66,8 @@ export function InputBar({
    * copy either the user or the model can be looking at.
    */
   const progress = (() => {
-    if (!artifacts?.task) return '';
-    const items = String(artifacts.task).match(/^\s*[-*]\s*\[[ xX]\]/gm) || [];
-    if (items.length === 0) return '';
-    const done = items.filter((l) => /\[[xX]\]/.test(l)).length;
-    return `${done}/${items.length} done`;
+    const p = taskProgress(artifacts?.task);
+    return p ? `${p.done}/${p.total} done` : '';
   })();
 
   /**
@@ -245,7 +243,7 @@ export function InputBar({
           )}
 
           {!extensionConnected && (
-            <Text color="yellow">! Open a Gemini tab in Chrome — the extension is not connected</Text>
+            <Text color="yellow" wrap="truncate">{disconnectedText}</Text>
           )}
 
           {slashOpen && (
