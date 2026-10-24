@@ -6,6 +6,7 @@ import { FOCUS_INPUT, modeColor } from '../constants.js';
 import { applyPaste, nextPasteId } from '../paste.js';
 import { oneLine, taskProgress } from '../format.js';
 import { hasClipboardImage } from '../clipboard-image.js';
+import { T } from '../theme.js';
 
 /** First `n` non-empty lines of an artifact, for the one-glance summary. */
 /**
@@ -121,7 +122,7 @@ export function InputBar({
     <>
       {isProcessing && !diffRequest && (
         <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
-          <Text color="cyan">
+          <Text color={T.accent}>
             <RunningLine tick={animTick} text={isToolRunningRef.current ? status : thinkingText} />
             <Text dimColor>
               {' ('}{elapsed}s
@@ -136,9 +137,9 @@ export function InputBar({
             it is replaced rather than added to.
           */}
           {isThinkingStuck ? (
-            <Text color="yellow">  (Still waiting — press esc, or type :stop, to take the turn back)</Text>
+            <Text color={T.attention}>  (Still waiting — press esc, or type :stop, to take the turn back)</Text>
           ) : isThinkingTooLong && (
-            <Text color="yellow">  (Taking a while — make sure the Chrome tab is not minimised)</Text>
+            <Text color={T.attention}>  (Taking a while — make sure the Chrome tab is not minimised)</Text>
           )}
         </Box>
       )}
@@ -179,7 +180,7 @@ export function InputBar({
                 {'  ↺ previous conversation filed'}
                 {filedSession.turns ? `, ${filedSession.turns} turns` : ''}
                 {'  · '}
-                <Text color="cyan">/history</Text>
+                <Text color={T.link}>/history</Text>
                 {' to reopen it'}
               </Text>
             </Box>
@@ -216,7 +217,7 @@ export function InputBar({
 
           {hasArtifacts && !isProcessing && (
             <Box flexDirection="column" marginBottom={1}>
-              <Text color="cyan" wrap="truncate">
+              <Text color={T.accent} wrap="truncate">
                 {artifactsOpen ? '▾ ' : '▸ '}
                 {[artifacts.task && 'task.md', artifacts.review && 'review.md',
                   artifacts.walkthrough && 'walkthrough.md'].filter(Boolean).join(' · ')}
@@ -243,13 +244,13 @@ export function InputBar({
           )}
 
           {!extensionConnected && (
-            <Text color="yellow" wrap="truncate">{disconnectedText}</Text>
+            <Text color={T.attention} wrap="truncate">{disconnectedText}</Text>
           )}
 
           {slashOpen && (
             <Box flexDirection="column" paddingX={1}>
               {slashMatches.map((cmd, idx) => (
-                <Text key={cmd.name} color={idx === slashSelected ? 'cyan' : 'gray'} bold={idx === slashSelected}>
+                <Text key={cmd.name} color={idx === slashSelected ? T.menu : T.muted} bold={idx === slashSelected}>
                   {(idx === slashSelected ? '❯ ' : '  ') + `/${cmd.name}`.padEnd(16)}
                   <Text dimColor>{cmd.desc}</Text>
                 </Text>
@@ -267,11 +268,11 @@ export function InputBar({
           <Box
             flexDirection="row"
             borderStyle="round"
-            borderColor={focus === FOCUS_INPUT ? modeColor(mode) : 'gray'}
+            borderColor={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}
             paddingX={1}
             width="100%"
           >
-            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : 'gray'}>{'> '}</Text>
+            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}>{'> '}</Text>
             <PromptInput
               focus={focus === FOCUS_INPUT}
               value={input}

@@ -1,5 +1,6 @@
 /**
- * Values the UI shares across modules. No behaviour, no imports.
+ * Values the UI shares across modules. No behaviour, and no imports but the
+ * one re-export from the palette.
  */
 
 /**
@@ -64,16 +65,8 @@ const SLASH_COMMANDS = [
   { name: 'exit', desc: 'Quit the agent', group: 'agent' },
 ];
 
-/**
- * The mode's colour, used by the input border and the status bar — the border
- * *means* the mode, so the three modes need three colours. Strict is magenta:
- * it asks most, and must not be mistaken for plan at a glance.
- */
-export function modeColor(mode) {
-  if (mode === 'auto') return 'cyan';
-  if (mode === 'strict') return 'magenta';
-  return 'yellow';
-}
+// The mode's colour lives with the palette now; re-exported so callers did not move.
+export { modeColor } from './theme.js';
 
 /** Where typed input goes. */
 export const FOCUS_INPUT = 'input';

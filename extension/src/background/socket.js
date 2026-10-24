@@ -118,22 +118,35 @@ export async function connectWebSocket() {
   retryTimer = null;
 
   let url;
+  let sock;
   try {
     url = await socketUrl();
-    ws = new WebSocket(url);
+    sock = new WebSocket(url);
+    ws = sock;
   } catch (err) {
     console.warn('[socket] could not open', url, err?.message);
     scheduleRetry();
     return;
   }
 
-  ws.onopen = async () => {
+  /*
+   * Every handler below talks to **its own** socket, `sock`, never the shared
+   * `ws`. `onopen` awaits storage before it identifies, and in that gap this
+   * socket can close and a retry can open the next one — so `ws.send` landed
+   * on a socket still CONNECTING and threw `InvalidStateError: Still in
+   * CONNECTING state` (reported from chrome://extensions, 2026-10-24). The
+   * same aliasing let a stale socket's `onclose` null out its successor.
+   */
+  sock.onopen = async () => {
     attempt = 0;
     stopKeepAlive();              // connected: the heartbeat keeps the worker up
     ensureWatchdogAlarm();        // but the worker can still be evicted; see above
     await setState({ connected: true, reconnectAttempts: 0, lastError: null });
+    const shortcut = await floatingShortcut();
+    // Superseded or closed while we waited: the newer socket identifies itself.
+    if (ws !== sock || sock.readyState !== WebSocket.OPEN) return;
 
-    ws.send(JSON.stringify({
+    sock.send(JSON.stringify({
       id: crypto.randomUUID(),
       type: 'identify',
       /*
@@ -157,7 +170,7 @@ export async function connectWebSocket() {
         // so a reloaded unpacked extension gains the command with no key, and
         // the shortcut silently does nothing. Only the browser knows; the
         // server says so in words. See floating.js.
-        floatingShortcut: await floatingShortcut(),
+        floatingShortcut: shortcut,
       },
       timestamp: Date.now(),
     }));
@@ -167,7 +180,7 @@ export async function connectWebSocket() {
     broadcastToSidePanel({ type: 'connection_status', payload: { connected: true } });
   };
 
-  ws.onmessage = async (event) => {
+  sock.onmessage = async (event) => {
     try {
       await handleServerMessage(JSON.parse(event.data));
     } catch (err) {
@@ -175,7 +188,9 @@ export async function connectWebSocket() {
     }
   };
 
-  ws.onclose = async (event) => {
+  sock.onclose = async (event) => {
+    // A socket that was already replaced must not tear down its successor.
+    if (ws !== sock) return;
     ws = null;
     stopHeartbeat();
     await setState({ connected: false });
@@ -185,7 +200,7 @@ export async function connectWebSocket() {
     if (event.code !== 1000) scheduleRetry();
   };
 
-  ws.onerror = async () => {
+  sock.onerror = async () => {
     // `onclose` always follows, and that is where the retry is scheduled — doing
     // it here too would double the ladder.
     await setState({ lastError: 'Connection failed' });

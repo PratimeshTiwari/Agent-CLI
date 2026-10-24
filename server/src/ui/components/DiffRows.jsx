@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { T } from '../theme.js';
 
 /**
  * A unified diff, drawn.
@@ -18,7 +19,8 @@ import { Box, Text } from 'ink';
  * deciding whether to approve something, and wastes it in a transcript row that
  * is already indented under a tool name.
  */
-const COLOUR = { add: 'green', del: 'red', header: 'cyan' };
+// Read at render, not import: the palette can change after this module loads.
+const colourFor = (type) => ({ add: T.success, del: T.danger, header: T.diffHeader })[type];
 
 export function DiffRows({ rows, gutter = false, dimContext = true }) {
   if (!rows || rows.length === 0) return null;
@@ -36,7 +38,7 @@ export function DiffRows({ rows, gutter = false, dimContext = true }) {
           key={i}
           wrap="truncate"
           dimColor={row.type === 'more' || (dimContext && row.type === 'ctx')}
-          color={COLOUR[row.type]}
+          color={colourFor(row.type)}
         >
           {gutter && (
             <Text dimColor>

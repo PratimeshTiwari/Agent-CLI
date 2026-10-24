@@ -87,5 +87,8 @@ test('the binding is reported: the key, empty when unbound, null when unreadable
 
 test('identify carries the binding', () => {
   const socket = readFileSync(resolve(ROOT, 'src/background/socket.js'), 'utf8');
-  assert.match(socket, /floatingShortcut: await floatingShortcut\(\)/);
+  // Read before the send (the onopen awaits must finish before it checks the
+  // socket is still the current one), then carried on the payload.
+  assert.match(socket, /const shortcut = await floatingShortcut\(\);/);
+  assert.match(socket, /floatingShortcut: shortcut,/);
 });

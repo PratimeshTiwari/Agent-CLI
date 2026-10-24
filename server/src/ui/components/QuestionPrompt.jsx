@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import { normalizeQuestionSet, FREEFORM_VALUE } from '../../core/question.js';
+import { T } from '../theme.js';
 
 /**
  * The agent's `ask_question` prompt.
@@ -64,9 +65,9 @@ export function QuestionPrompt({ payload, onAnswer, onCancel }) {
   const active = highlighted ?? items[0];
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={T.menu} paddingX={1}>
       <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color="cyan">{current.header}</Text>
+        <Text bold color={T.menu}>{current.header}</Text>
         {questions.length > 1 && (
           <Text dimColor>{step + 1} of {questions.length}</Text>
         )}
@@ -108,7 +109,7 @@ export function QuestionPrompt({ payload, onAnswer, onCancel }) {
       {typing && (
         <>
           <Box>
-            <Text color="cyan">{'> '}</Text>
+            <Text color={T.menu}>{'> '}</Text>
             <TextInput
               value={draft}
               onChange={setDraft}

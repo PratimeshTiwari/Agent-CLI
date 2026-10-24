@@ -688,20 +688,24 @@
     clearTimeout(retryTimer);
     retryTimer = null;
     let url;
+    let sock;
     try {
       url = await socketUrl();
-      ws = new WebSocket(url);
+      sock = new WebSocket(url);
+      ws = sock;
     } catch (err) {
       console.warn("[socket] could not open", url, err?.message);
       scheduleRetry();
       return;
     }
-    ws.onopen = async () => {
+    sock.onopen = async () => {
       attempt = 0;
       stopKeepAlive();
       ensureWatchdogAlarm();
       await setState({ connected: true, reconnectAttempts: 0, lastError: null });
-      ws.send(JSON.stringify({
+      const shortcut = await floatingShortcut();
+      if (ws !== sock || sock.readyState !== WebSocket.OPEN) return;
+      sock.send(JSON.stringify({
         id: crypto.randomUUID(),
         type: "identify",
         /*
@@ -725,7 +729,7 @@
           // so a reloaded unpacked extension gains the command with no key, and
           // the shortcut silently does nothing. Only the browser knows; the
           // server says so in words. See floating.js.
-          floatingShortcut: await floatingShortcut()
+          floatingShortcut: shortcut
         },
         timestamp: Date.now()
       }));
@@ -733,21 +737,22 @@
       startHeartbeat();
       broadcastToSidePanel({ type: "connection_status", payload: { connected: true } });
     };
-    ws.onmessage = async (event) => {
+    sock.onmessage = async (event) => {
       try {
         await handleServerMessage(JSON.parse(event.data));
       } catch (err) {
         console.warn("[socket] unparseable server message:", err?.message);
       }
     };
-    ws.onclose = async (event) => {
+    sock.onclose = async (event) => {
+      if (ws !== sock) return;
       ws = null;
       stopHeartbeat();
       await setState({ connected: false });
       broadcastToSidePanel({ type: "connection_status", payload: { connected: false } });
       if (event.code !== 1e3) scheduleRetry();
     };
-    ws.onerror = async () => {
+    sock.onerror = async () => {
       await setState({ lastError: "Connection failed" });
     };
   }

@@ -16,6 +16,7 @@ import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
+import { T } from '../theme.js';
 
 /**
  * Every modal the agent can raise: questions, command approval, plan review,
@@ -163,8 +164,8 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'command_approval' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={activeMenu.payload.riskLevel === 'critical' ? 'red' : 'yellow'} padding={1}>
-            <Text bold color={activeMenu.payload.riskLevel === 'critical' ? 'red' : 'yellow'}>
+          <Box flexDirection="column" borderStyle="single" borderColor={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention} padding={1}>
+            <Text bold color={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention}>
               ! Command Execution Request ({activeMenu.payload.riskLevel.toUpperCase()})
             </Text>
             <Text>Command: <Text bold>{activeMenu.payload.command}</Text></Text>
@@ -205,8 +206,8 @@ export function Menus({
           path cannot disagree about it.
         */}
         {activeMenu?.type === 'confirm_destructive' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
-            <Text bold color="yellow">{'! '}{activeMenu.payload.title}</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
+            <Text bold color={T.attention}>{'! '}{activeMenu.payload.title}</Text>
             <Box marginY={1}>
               <Text dimColor wrap="wrap">{activeMenu.payload.detail}</Text>
             </Box>
@@ -232,8 +233,8 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'plan_review' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="magenta" padding={1}>
-            <Text bold color="cyan">Implementation plan ready for review</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={T.review} padding={1}>
+            <Text bold color={T.menu}>Implementation plan ready for review</Text>
             <Text>The agent has created an implementation_plan.md artifact.</Text>
             <SelectInput
               items={[
@@ -258,8 +259,8 @@ export function Menus({
         {activeMenu?.type === 'effort' && (() => {
           const current = resolveEffort(agentLoop.modelConfig?.effort).id;
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-              <Text bold color="cyan">🎚️  How hard should it work?</Text>
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+              <Text bold color={T.menu}>🎚️  How hard should it work?</Text>
               <Text dimColor wrap="wrap">
                 One ladder, least effort first. Each rung sets the prompt profile and names
                 the browser tab it is written for — set your Gemini tab to match.
@@ -321,8 +322,8 @@ export function Menus({
           const over = wanted.length - MAX_AGENT_NAME;
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-              <Text bold color="cyan">Agent name</Text>
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+              <Text bold color={T.menu}>Agent name</Text>
               <Box>
                 <Text dimColor>{'  '}</Text>
                 <TextInput
@@ -361,8 +362,8 @@ export function Menus({
           const run = async (args) => { await applyAndReturn(activeMenu, 'config', args); };
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-              <Text bold color="cyan">
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+              <Text bold color={T.menu}>
                 🌐 Subagents {on ? 'on' : 'off'}
               </Text>
               <Text dimColor wrap="wrap">
@@ -406,8 +407,8 @@ export function Menus({
             const changes = activeMenu.changes || [];
             const undoable = changes.filter((c) => c.restore);
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-                <Text bold color="cyan">
+              <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+                <Text bold color={T.menu}>
                   {changes.length} setting{changes.length === 1 ? '' : 's'} changed
                 </Text>
                 <Box flexDirection="column" marginY={1} paddingLeft={2}>
@@ -415,7 +416,7 @@ export function Menus({
                     <Text key={c.label}>
                       <Text>{c.label}</Text>
                       <Text dimColor>{'  '}{c.from}{' → '}</Text>
-                      <Text color="cyan">{c.to}</Text>
+                      <Text color={T.link}>{c.to}</Text>
                       {c.restore ? null : <Text dimColor>{'  (cannot be undone from here)'}</Text>}
                     </Text>
                   ))}
@@ -465,12 +466,12 @@ export function Menus({
           const selected = matches[Math.min(activeMenu.at || 0, matches.length - 1)];
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
               <Box>
                 {SETTING_GROUPS.map((name) => (
                   <Text key={name}>
                     {name === group
-                      ? <Text bold color="cyan">{name}</Text>
+                      ? <Text bold color={T.menu}>{name}</Text>
                       : <Text dimColor>{name}</Text>}
                     <Text dimColor>{'   '}</Text>
                   </Text>
@@ -597,8 +598,8 @@ export function Menus({
         })()}
 
         {activeMenu?.type === 'commands' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
-            <Text bold color="yellow">🧾  Commands run</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
+            <Text bold color={T.attention}>🧾  Commands run</Text>
             <Text dimColor wrap="wrap">
               Every shell command, and every one that was blocked. Kept per day, and never
               read back into a prompt — this is for you, not for the model.
@@ -626,8 +627,8 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'history' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-            <Text bold color="cyan">
+          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+            <Text bold color={T.menu}>
               {activeMenu.sessions.length} past conversation{activeMenu.sessions.length === 1 ? '' : 's'}
             </Text>
             {/*
@@ -673,8 +674,8 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'plans' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-            <Text bold color="cyan">
+          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+            <Text bold color={T.menu}>
               {activeMenu.plans.length} past plan{activeMenu.plans.length === 1 ? '' : 's'}
             </Text>
             <Text dimColor wrap="wrap">
@@ -708,8 +709,8 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'logs' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="red" padding={1}>
-            <Text bold color="red">🩺  {activeMenu.summary.total} failure{activeMenu.summary.total === 1 ? '' : 's'} logged</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={T.danger} padding={1}>
+            <Text bold color={T.danger}>🩺  {activeMenu.summary.total} failure{activeMenu.summary.total === 1 ? '' : 's'} logged</Text>
             <Text dimColor wrap="wrap">Pick a flow to see what broke in it.</Text>
             <SelectInput
               limit={10}
@@ -764,10 +765,10 @@ export function Menus({
           if (activeMenu.view === 'confirm' && activeMenu.pending) {
             const { cmd, kind } = activeMenu.pending;
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
-                <Text bold color="yellow">🛡️  Remove this rule?</Text>
+              <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
+                <Text bold color={T.attention}>🛡️  Remove this rule?</Text>
                 <Box marginY={1} paddingLeft={2}>
-                  <Text color={kind === 'allow' ? 'green' : 'red'} wrap="wrap">
+                  <Text color={kind === 'allow' ? T.success : T.danger} wrap="wrap">
                     {kind === 'allow' ? '✓ ' : '✗ '}{cmd}
                   </Text>
                 </Box>
@@ -820,8 +821,8 @@ export function Menus({
           // the whole terminal on every render. See ui/constants.js.
           if (activeMenu.view === 'list') {
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
-                <Text bold color="yellow">
+              <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
+                <Text bold color={T.attention}>
                   🛡️  {all.length} command rule{all.length === 1 ? '' : 's'}
                 </Text>
                 <Text dimColor wrap="wrap">Pick one to remove it. You will be asked to confirm.</Text>
@@ -867,8 +868,8 @@ export function Menus({
           ];
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
-              <Text bold color="yellow">🛡️  Command rules — {on ? 'enabled' : 'disabled'}</Text>
+            <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
+              <Text bold color={T.attention}>🛡️  Command rules — {on ? 'enabled' : 'disabled'}</Text>
               <Text dimColor wrap="wrap">
                 Allowed commands run without asking. Blocked ones are refused outright.
               </Text>
@@ -923,8 +924,8 @@ export function Menus({
           };
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-              <Text bold color="cyan">
+            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+              <Text bold color={T.menu}>
                 Skills — {skills.length} across {folders.length} folder{folders.length === 1 ? '' : 's'}
               </Text>
               <Text dimColor wrap="wrap">
@@ -974,8 +975,8 @@ export function Menus({
         })()}
 
         {activeMenu?.type === 'workspace' && (
-          <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
-            <Text bold color="cyan">Workspace</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+            <Text bold color={T.menu}>Workspace</Text>
             <Text dimColor wrap="truncate-start">Here:  {activeMenu.current}</Text>
             <Text dimColor wrap="truncate-start">State: {agentDir(activeMenu.current)}</Text>
             <Text dimColor wrap="wrap">
@@ -1153,20 +1154,20 @@ export function DiffApproval({
   return (
     <Box
       borderStyle="round"
-      borderColor={critical ? 'red' : 'yellow'}
+      borderColor={critical ? T.danger : T.attention}
       paddingX={1}
       flexDirection="column"
       width="100%"
       flexShrink={1}
     >
       <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color={critical ? 'red' : 'yellow'} wrap="truncate-start">
+        <Text bold color={critical ? T.danger : T.attention} wrap="truncate-start">
           {diffRequest.isNewFile ? 'Create' : 'Edit'} {diffRequest.filePath}
         </Text>
         <Text>
-          <Text color="green">+{added}</Text>
+          <Text color={T.success}>+{added}</Text>
           <Text dimColor> / </Text>
-          <Text color="red">-{removed}</Text>
+          <Text color={T.danger}>-{removed}</Text>
         </Text>
       </Box>
 

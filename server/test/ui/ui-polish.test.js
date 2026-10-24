@@ -22,7 +22,7 @@ test('the turn summary says what kind of work, not how many actions', () => {
 });
 
 test('the summary row truncates rather than wraps', () => {
-  assert.match(src('ui/components/TranscriptTurn.jsx'), /<Text color="gray" wrap="truncate">/);
+  assert.match(src('ui/components/TranscriptTurn.jsx'), /<Text color=\{T\.muted\} wrap="truncate">/);
 });
 
 test('a path keeps its project and its file name', () => {

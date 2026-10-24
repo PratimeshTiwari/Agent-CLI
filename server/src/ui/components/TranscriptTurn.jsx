@@ -5,6 +5,7 @@ import { rowsFromPatch } from '../diff-preview.js';
 import { Dots } from './RunningLine.jsx';
 import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
+import { T } from '../theme.js';
 
 /**
  * The user's own message, shortened to fit.
@@ -196,7 +197,7 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
            * keeps it readable on a light one, where it reads as an inverted
            * bar rather than a highlight.
            */
-          <Text key={i} backgroundColor="#303030" color="white" bold>
+          <Text key={i} backgroundColor={T.userBg} color={T.userFg} bold>
             {i === 0 ? ' ❯ ' : '   '}{line}
           </Text>
         ))}
@@ -221,7 +222,7 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
   // `wrap="truncate"`: in the live frame a row that wraps is charged as one
   // and drawn as two, and the breakdown made this row long enough to.
   return (
-    <Text color="gray" wrap="truncate">
+    <Text color={T.muted} wrap="truncate">
       {isLive ? (
         /*
          * No "Worked for" while the turn is running. It is past tense, and
@@ -236,7 +237,7 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
          * (`⠼ Running run_command... · 2 reads`), with a third copy in the
          * running list between them. What only this row knows is the tally.
          */
-        <>{'  '}<Text color="cyan"><Dots tick={tick} /></Text>{' so far'}</>
+        <>{'  '}<Text color={T.accent}><Dots tick={tick} /></Text>{' so far'}</>
       ) : (
         <>{'  '}{duration === null ? 'Worked' : `Worked for ${duration}s`}</>
       )}
@@ -279,7 +280,7 @@ export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalW
       marginTop={previous && previous.type !== 'text' ? 1 : 0}
       width="100%"
     >
-      {!item.msg.isLocal && <Text color="green">● </Text>}
+      {!item.msg.isLocal && <Text color={T.success}>● </Text>}
       <Box flexGrow={1} flexShrink={1}>
         {/*
           Clamped while live and whole once committed — the reply is the
@@ -391,8 +392,8 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     if (artifact) {
       return (
         <Text wrap="truncate">
-          <Text color="green">{'✓ '}</Text>
-          <Text color="gray">{artifact.verb}</Text>
+          <Text color={T.success}>{'✓ '}</Text>
+          <Text color={T.muted}>{artifact.verb}</Text>
           {artifact.detail ? <Text dimColor> · {artifact.detail}</Text> : null}
         </Text>
       );
@@ -400,13 +401,13 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     return (
       <Box flexDirection="column" width="100%">
         <Box flexDirection="row">
-          <Text color={act.success === false ? 'red' : 'green'}>{(act.success === false ? '✗' : '⏺') + ' '}</Text>
-          <Text bold color="gray">{act.toolName}</Text>
+          <Text color={act.success === false ? T.danger : T.success}>{(act.success === false ? '✗' : '⏺') + ' '}</Text>
+          <Text bold color={T.muted}>{act.toolName}</Text>
           {/* Which file, which pattern, which command. Without it two reads in
               one turn are the same row twice, which is how a turn reading four
               files reads as a turn that did nothing in particular. */}
           {subjectOf(act.toolName, act.args, subjectRoom) ? (
-            <Text color="gray" wrap="truncate">
+            <Text color={T.muted} wrap="truncate">
               {' '}{subjectOf(act.toolName, act.args, subjectRoom)}
             </Text>
           ) : null}
@@ -435,7 +436,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
   if (act.type === 'tool_result') {
     return (
       <Box flexDirection="column" width="100%">
-        <Text color="green">{'⏺ '}<Text dimColor>{oneLine(act.result)}</Text></Text>
+        <Text color={T.success}>{'⏺ '}<Text dimColor>{oneLine(act.result)}</Text></Text>
         {verbose && (
           <Box paddingLeft={2} width="100%">
             <Text dimColor wrap="wrap">{clampForDisplay(act.result, limit.lines, limit.chars)}</Text>

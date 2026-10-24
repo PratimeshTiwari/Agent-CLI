@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text } from 'ink';
+import { T } from '../theme.js';
 
 /**
  * The row that says the agent is working, and the frames everything else uses.
@@ -29,14 +30,14 @@ import { Text } from 'ink';
 export const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /** What `<Spinner type="dots" />` drew, without a timer of its own. */
-export function Dots({ tick = 0, color = 'cyan' }) {
+export function Dots({ tick = 0, color = T.accent }) {
   return <Text color={color}>{FRAMES[tick % FRAMES.length]}</Text>;
 }
 
 /** How far either side of the crest still gets brightened. */
 const SPREAD = 3;
 
-export function RunningLine({ text, tick = 0, color = 'cyan' }) {
+export function RunningLine({ text, tick = 0, color = T.accent }) {
   const label = String(text ?? '');
   const frame = FRAMES[tick % FRAMES.length];
 

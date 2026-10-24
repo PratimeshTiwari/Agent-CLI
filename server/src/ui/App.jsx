@@ -29,6 +29,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { bannerText } from './banner-text.js';
 import * as paths from '../core/paths.js';
+import { T } from './theme.js';
 
 /**
  * The terminal front-end.
@@ -1212,7 +1213,7 @@ export function App({ agentLoop, wsServer }) {
   // places, two answers, and the bar was the one people watch.
   const tokenLimit = agentLoop.contextLimit || 50000;
   const tokenPct = Math.round((syncTokenEstimate / tokenLimit) * 100);
-  const tokenColor = tokenPct > 80 ? 'red' : tokenPct > 50 ? 'yellow' : 'cyan';
+  const tokenColor = tokenPct > 80 ? T.danger : tokenPct > 50 ? T.attention : T.accent;
   /*
    * How far to auto-compaction, once it is close — so it is never a surprise.
    * Same threshold the loop uses (COMPACT_AT), read rather than restated.
@@ -1308,14 +1309,14 @@ export function App({ agentLoop, wsServer }) {
             Measured: 1 ESC[2J at 13x80 and 10x80 where there had been none.
           */}
           {pendingReload && (
-            <Text color="yellow" wrap="truncate">
+            <Text color={T.attention} wrap="truncate">
               {'⟳ '}
               {pendingReload.steps.map((s) => s.what).join(' · ')}
               <Text dimColor>{'  —  /update done when finished'}</Text>
             </Text>
           )}
           {update.available && (
-            <Text color="cyan" wrap="truncate">
+            <Text color={T.link} wrap="truncate">
               {'⬆ '}{update.behind} update{update.behind === 1 ? '' : 's'} available
               <Text dimColor>{'  —  /update to pull'}</Text>
             </Text>
@@ -1327,7 +1328,7 @@ export function App({ agentLoop, wsServer }) {
             the row carries the fix rather than only the complaint.
           */}
           {mismatch && (
-            <Text color="yellow" wrap="truncate">
+            <Text color={T.attention} wrap="truncate">
               {'⚠ browser is on '}<Text bold>{mismatch.current}</Text>
               {', this rung wants '}<Text bold>{mismatch.wanted}</Text>
               <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
@@ -1359,7 +1360,7 @@ export function App({ agentLoop, wsServer }) {
           {runningCalls.length > 0 && (
             <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
               {runningCalls.map((call) => (
-                <Text key={call.id} color="cyan" wrap="truncate">
+                <Text key={call.id} color={T.accent} wrap="truncate">
                   {'  '}<Dots tick={animTick} />{' '}{call.name}
                 </Text>
               ))}
@@ -1461,14 +1462,14 @@ export function App({ agentLoop, wsServer }) {
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
           {isProcessing
-            ? <Text color="cyan"><Dots tick={animTick} /> agent</Text>
-            : <Text color={extensionConnected ? 'cyan' : 'yellow'} bold>
+            ? <Text color={T.accent}><Dots tick={animTick} /> agent</Text>
+            : <Text color={extensionConnected ? T.accent : T.attention} bold>
                 {extensionConnected ? '●' : '○'} agent
               </Text>}
           {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
           {/* Where `/help` sits, so the hint costs no row of its own. */}
           {exitArmed
-            ? <Text color="yellow">{'  ·  '}Press Ctrl+C again to exit</Text>
+            ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
             : <Text dimColor>{'  ·  '}/help</Text>}
         </Text>
         </Box>
@@ -1488,8 +1489,8 @@ export function App({ agentLoop, wsServer }) {
             row that is already drawn and already budgeted, costing nothing
             when there is no image.
           */}
-          {pendingImage ? <Text color="yellow">{'1 image  ·  '}</Text> : ''}
-          {runningTasks > 0 ? <Text color="yellow">{runningTasks} bg{'  ·  '}</Text> : ''}
+          {pendingImage ? <Text color={T.attention}>{'1 image  ·  '}</Text> : ''}
+          {runningTasks > 0 ? <Text color={T.attention}>{runningTasks} bg{'  ·  '}</Text> : ''}
           {/*
             The checklist while a turn runs, when its panel is not drawn (it
             draws only when idle, and says the same there).
@@ -1512,7 +1513,7 @@ export function App({ agentLoop, wsServer }) {
             leave the row blank, which would read as "off".
           */}
           {browserModelLabel
-            ? <Text color="cyan">{browserModelLabel}</Text>
+            ? <Text color={T.link}>{browserModelLabel}</Text>
             : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
           {'  ·  '}
           <Text color={tokenColor}>{contextText}</Text>
