@@ -106,6 +106,11 @@ exit).
 | `ctrl+j` | newline without sending |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
+**Themes.** `/theme` picks the colours and previews each as you move through the list: Dark and
+Light (tuned palettes), colour-blind versions of both (blue and orange instead of green and red),
+**Terminal** (your terminal's own colours, the default) and Mono. The choice follows you across
+repos (`~/.agent/settings.json`); `NO_COLOR` always means Mono.
+
 Messages typed while the agent is working are **queued** and sent when it finishes. Paste freely —
 long pastes collapse to a marker. `/image` attaches an image (bare for the clipboard).
 
@@ -119,6 +124,7 @@ long pastes collapse to a marker. `/image` attaches an image (bare for the clipb
 | `/compact` | summarise the conversation now (it also happens on its own, with a progress bar) |
 | `/history` | past conversations — pick one to reopen |
 | `/settings` | everything that is set, on one page |
+| `/theme` | colours — Dark, Light, colour-blind, Terminal (the classic look) or Mono; previews as you move |
 | `/logs` | what has been failing · `/logs extension` for how long the browser takes |
 | `/reset` | start this repo fresh — its `.agent` state goes to `~/.agent/trash`, nothing deleted |
 | `/help` | every key and command |

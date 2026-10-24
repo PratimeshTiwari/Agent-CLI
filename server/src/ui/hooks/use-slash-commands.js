@@ -56,6 +56,8 @@ import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
 import { checkForUpdate, isDirty, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
+import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
+import { saveUserSettings } from '../../core/user-settings.js';
 
 /** For the confirm prompt: a plan that cannot be made is described as none. */
 function safePlanReset(workspace, args = []) {
@@ -507,6 +509,35 @@ export async function handleSlashCommand(query, {
     // told it does not exist is a worse trade than one line of redirection.
     if ((command === 'effort' || command === 'model' || command === 'reasoning') && args.length === 0) {
       setActiveMenu({ type: 'effort' });
+      setIsProcessing(false);
+      return;
+    }
+
+    /*
+     * `/theme` opens the picker; `/theme <name>` sets it outright. Saved per
+     * person (~/.agent/settings.json), because a theme is about the terminal,
+     * not the repo. The transcript is reprinted in the new colours — committed
+     * rows belong to the terminal and cannot be recoloured in place.
+     */
+    if (command === 'theme') {
+      if (args.length === 0) {
+        setActiveMenu({ type: 'theme', original: themeName(), at: themeName() });
+        setIsProcessing(false);
+        return;
+      }
+      const wanted = args[0].toLowerCase();
+      const names = Object.keys(PALETTES);
+      let reply;
+      if (!PALETTES[wanted]) {
+        reply = `❌ No theme called \`${args[0]}\`. There is: ${names.map((n) => `\`${n}\``).join(', ')}.`;
+      } else {
+        setTheme(wanted);
+        const saved = saveUserSettings({ theme: wanted });
+        reply = `🎨 Theme: **${PALETTE_INFO[wanted].label}**`
+          + (saved ? '' : ' — for this session only; ~/.agent/settings.json could not be written');
+        resetScreen();
+      }
+      setHistory((prev) => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: reply, isLocal: true }]);
       setIsProcessing(false);
       return;
     }

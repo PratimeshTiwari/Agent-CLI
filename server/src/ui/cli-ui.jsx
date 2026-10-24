@@ -5,6 +5,8 @@ import { splitTrailingEnter } from './enter-splitter.js';
 import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
 import { registerInk, exitWithFarewell } from './farewell.js';
 import { App } from './App.jsx';
+import { setTheme, startupTheme } from './theme.js';
+import { loadUserSettings } from '../core/user-settings.js';
 
 /**
  * The stream Ink reads: real stdin, with a trailing Enter delivered separately.
@@ -85,6 +87,10 @@ export class CliUI {
       // chunk this is here to take apart.
       if (enter) setImmediate(() => inkStdin.write(enter));
     });
+
+    // Before the first frame: a theme applied after it would draw the banner in
+    // the old colours, and <Static> never repaints it.
+    setTheme(startupTheme(process.env, loadUserSettings().theme));
 
     const instance = render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} />, {
       stdin: inkStdin,

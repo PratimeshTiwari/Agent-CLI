@@ -1427,6 +1427,7 @@ export function App({ agentLoop, wsServer }) {
             setHistory={setHistory}
             setInput={setInput}
             setInputAtEnd={setInputAtEnd}
+            resetScreen={resetScreen}
           />
 
           <AgentTerminal
