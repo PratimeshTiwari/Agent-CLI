@@ -1130,3 +1130,55 @@ export function lastReply(history = []) {
   }
   return null;
 }
+
+/**
+ * The command approval box, laid out to the rows it may have.
+ *
+ * It is drawn where the input box was, and was charged as the input's three
+ * rows — while it drew borders, a padded title, a command that wraps, the
+ * directory and the reason, which wrap too, and four options. With a long
+ * command that was fifteen rows or more against three, and the in-flight turn
+ * above it kept its whole budget, so the frame outgrew a 16-row terminal and
+ * cleared on every render while the box was up. Measured under the pty,
+ * 2026-10-26: 15 `ESC[2J` at 16 rows, all with the box on screen.
+ *
+ * So every row is decided here, pre-wrapped at the box's inner width and drawn
+ * truncated, and App charges `rows` against the live turn. What gives way
+ * first is the padding, then the reason, then the directory, then the border —
+ * **never the command**, which is the thing being approved. When even the
+ * command does not fit, the title says how much of it is not shown rather
+ * than hiding it (on the title row, because a row of its own is the row there
+ * is no room for).
+ *
+ * @param {{command?: string, cwd?: string, riskReason?: string}} payload
+ * @param {{width?: number, maxRows?: number}} [room]
+ * @returns {{command: string[], hidden: number, cwd: boolean, reason: boolean, padded: boolean, bordered: boolean, rows: number}}
+ */
+export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } = {}) {
+  const OPTIONS = 4;
+  const TITLE = 1;
+  const fits = (bordered) => {
+    const inner = Math.max(10, width - (bordered ? 4 : 2));    // border, and a column of padding each side
+    const all = [];
+    String(payload.command ?? '').split('\n').forEach((line, i) => {
+      let rest = (i === 0 ? 'Command: ' : '  ') + line;
+      while (rest.length > inner) { all.push(rest.slice(0, inner)); rest = `  ${rest.slice(inner)}`; }
+      all.push(rest);
+    });
+    let room = maxRows - (bordered ? 2 : 0) - TITLE - OPTIONS;
+    const shown = Math.max(1, Math.min(all.length, room));
+    room -= shown;
+    const cwd = room >= 1 && Boolean(payload.cwd);
+    room -= cwd ? 1 : 0;
+    const reason = room >= 1 && Boolean(payload.riskReason);
+    room -= reason ? 1 : 0;
+    const padded = bordered && room >= 2;
+    const rows = (bordered ? 2 : 0) + TITLE + OPTIONS + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 2 : 0);
+    return { command: all.slice(0, shown), hidden: all.length - shown, cwd, reason, padded, bordered, rows };
+  };
+  // The border goes only when the whole command would not fit inside it.
+  const boxed = fits(true);
+  if (boxed.hidden === 0 && boxed.rows <= maxRows) return boxed;
+  const bare = fits(false);
+  return bare.hidden < boxed.hidden || boxed.rows > maxRows ? bare : boxed;
+}

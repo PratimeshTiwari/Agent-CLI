@@ -10,7 +10,7 @@ import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/Tran
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
 import { loadImage, tagAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
-import { contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -668,13 +668,26 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // Steered prompts share the block (and its three rows) with queued ones.
   const waiting = queued.length + steered.length;
   const queuedRows = waiting === 0 ? 0 : Math.min(waiting, 3) + (waiting > 3 ? 1 : 0) + 1;
-  const liveBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
+  const frameBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
     - queuedRows
     - promptExtraRows
     - (slashOpen ? slashMatches.length : 0)
     - (extensionConnected ? 0 : 1)
     - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
+  /*
+   * The command approval box is drawn where the input box was, so the three
+   * rows the input is charged inside `reservedRows` are its own; everything
+   * past them comes out of the live turn. It used to come out of nothing — 15
+   * clears at 16 rows with a long command, all with the box up. The box may
+   * grow until the turn is down to one row, and `approvalLayout` fits it to
+   * that.
+   */
+  const INPUT_ROWS = 3;
+  const approval = activeMenu?.type === 'command_approval'
+    ? approvalLayout(activeMenu.payload, { width: terminalWidth, maxRows: INPUT_ROWS + frameBudget - 1 })
+    : null;
+  const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0));
 
   /*
    * The running tool calls share the turn's rows. They were drawn under the
@@ -1501,6 +1514,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             setActiveMenu={setActiveMenu}
             agentLoop={agentLoop}
             terminalWidth={terminalWidth}
+            approval={approval}
             handleSubmit={handleSubmit}
             mode={mode}
             setFocus={setFocus}

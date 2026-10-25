@@ -782,8 +782,12 @@ and the turn keeps its two rows. Measured under the pty: 0 clears after approval
 24 rows. The run also showed the approval *decision* row repeating the whole command — a system
 row wraps, so a one-line `for` loop drew four rows charged as one — and that row now names only
 the decision. **Not done:** moving a running command to the background (`ctrl+b` is the browser
-key, and it needs `exec`'s process handed to `TaskManager`). **Still open:** the approval box
-itself is taller than a 13-row terminal (9 clears while it is up, on `main` too).
+key, and it needs `exec`'s process handed to `TaskManager`). **The approval box fits since
+v5.24** (`approvalLayout`, `format.js`): it is drawn where the input was and was charged as the
+input's three rows while drawing fifteen with a long command — 15 clears at 16 rows. Every row is
+decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
+reason, directory, then the border, never the command; a cut command says so on the title row. 0
+clears at 10, 13, 16 and 24 rows.
 
 **Large files and documents (v5.10).** Reported from the work laptop: simple edits in
 1,000–2,000-line files went badly, and building a Confluence document from several files

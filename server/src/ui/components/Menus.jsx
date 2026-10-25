@@ -65,6 +65,7 @@ export function Menus({
   setActiveMenu,
   agentLoop,
   terminalWidth = 80,
+  approval = null,
   handleSubmit,
   mode,
   setActiveTab,
@@ -178,13 +179,28 @@ export function Menus({
         )}
 
         {activeMenu?.type === 'command_approval' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention} padding={1}>
-            <Text bold color={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention}>
+          /*
+            Every row here is decided by `approvalLayout` (format.js) and drawn
+            truncated, so the box is exactly the height App charged for it. A
+            row that wraps is a row nobody paid for.
+          */
+          <Box flexDirection="column"
+            borderStyle={approval?.bordered === false ? undefined : 'single'}
+            borderColor={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention}
+            paddingX={1} paddingY={approval?.padded === false ? 0 : 1}>
+            <Text bold color={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention} wrap="truncate">
               ! Command Execution Request ({activeMenu.payload.riskLevel.toUpperCase()})
+              {approval?.hidden > 0 && (
+                <Text>{` · ${approval.hidden} more line${approval.hidden === 1 ? '' : 's'} of the command not shown`}</Text>
+              )}
             </Text>
-            <Text>Command: <Text bold>{activeMenu.payload.command}</Text></Text>
-            <Text>Directory: {activeMenu.payload.cwd}</Text>
-            <Text>Reason: {activeMenu.payload.riskReason}</Text>
+            {(approval?.command ?? [`Command: ${activeMenu.payload.command}`]).map((line, i) => (
+              <Text key={i} wrap="truncate">
+                {i === 0 ? <>{'Command: '}<Text bold>{line.slice('Command: '.length)}</Text></> : <Text bold>{line}</Text>}
+              </Text>
+            ))}
+            {approval?.cwd !== false && <Text wrap="truncate">Directory: {activeMenu.payload.cwd}</Text>}
+            {approval?.reason !== false && <Text wrap="truncate">Reason: {activeMenu.payload.riskReason}</Text>}
             <SelectInput
               items={[
                 { label: 'Allow Command Once', value: 'allow_once' },
