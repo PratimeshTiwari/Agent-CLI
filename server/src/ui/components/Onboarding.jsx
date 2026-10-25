@@ -1,0 +1,291 @@
+import React, { useEffect, useState } from 'react';
+import { Box, Text, useInput, useStdout } from 'ink';
+import SelectInput from 'ink-select-input';
+import TextInput from 'ink-text-input';
+import { exec } from 'child_process';
+import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
+import { Wordmark } from './Banner.jsx';
+import { FRAMES } from './RunningLine.jsx';
+import { bannerText } from '../banner-text.js';
+import { copyToClipboard } from '../clipboard.js';
+import { saveUserSettings } from '../../core/user-settings.js';
+import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
+import {
+  STEPS, extensionDir, extensionStatus, onboardingLayout, progressBar, revealColumns, tildify,
+} from '../welcome.js';
+
+/**
+ * First-start setup, Claude Code style: full screens before the app, one
+ * decision each. The pure half — when to show it, the bar, the layout by
+ * height — is `ui/welcome.js`.
+ *
+ * It runs *instead of* App, not on top of it, so there is no transcript
+ * underneath to keep consistent, and App mounts afterwards with the theme
+ * applied and the name saved: the banner it commits to `<Static>` is the one
+ * the person just chose, which a reprint could not otherwise give it.
+ *
+ * Every screen is a live frame, so the decorative blocks are dropped by height
+ * (`onboardingLayout`) and every row truncates rather than wraps.
+ */
+
+const SPLASH = 'splash';
+
+function useTerminalSize() {
+  const { stdout } = useStdout();
+  const read = () => ({ rows: stdout?.rows || 24, columns: stdout?.columns || 80 });
+  const [size, setSize] = useState(read);
+  useEffect(() => {
+    if (!stdout?.on) return undefined;
+    const onResize = () => setSize(read());
+    stdout.on('resize', onResize);
+    return () => stdout.off?.('resize', onResize);
+  }, [stdout]);
+  return size;
+}
+
+/** `Agent CLI setup ············ Step 2 of 3  ▰▰▰▰▰▰▰▰▱▱▱▱` */
+function Header({ step, since, columns }) {
+  const right = `Step ${step + 1} of ${STEPS.length}  `;
+  const bar = progressBar(step, since);
+  const left = 'Agent CLI setup';
+  const gap = Math.max(2, Math.min(columns, 76) - left.length - right.length - bar.length);
+  return (
+    <Text wrap="truncate">
+      <Text bold>{left}</Text>
+      {' '.repeat(gap)}
+      <Text dimColor>{right}</Text>
+      <Text color={T.accent ?? undefined}>{bar}</Text>
+    </Text>
+  );
+}
+
+function Hint({ children }) {
+  return <Text dimColor wrap="truncate">{children}</Text>;
+}
+
+function Gap({ show }) {
+  return show ? <Text> </Text> : null;
+}
+
+export function Onboarding({ agentLoop, wsServer, onDone }) {
+  const { rows, columns } = useTerminalSize();
+  const layout = onboardingLayout(rows);
+  const spaced = !layout.compact;
+
+  const [screen, setScreen] = useState(SPLASH);
+  const [tick, setTick] = useState(0);
+  const [enteredAt, setEnteredAt] = useState(0);
+  const [originalTheme] = useState(themeName);
+  const [themeAt, setThemeAt] = useState(themeName);
+  const [name, setName] = useState(agentLoop?.agentName || '');
+  const [nameError, setNameError] = useState('');
+  const [status, setStatus] = useState(() => extensionStatus(wsServer));
+  const [copied, setCopied] = useState(null);
+
+  // One clock for every animation on these screens, as App does.
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 80);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const check = () => setStatus((prev) => {
+      const next = extensionStatus(wsServer);
+      return prev.connected === next.connected && prev.version === next.version ? prev : next;
+    });
+    const id = setInterval(check, 500);
+    return () => clearInterval(id);
+  }, [wsServer]);
+
+  const go = (next) => {
+    setScreen(next);
+    setEnteredAt(tick);
+  };
+
+  const finish = () => {
+    saveUserSettings({ welcomed: true });
+    onDone?.();
+  };
+
+  const saveName = (value) => {
+    const wanted = String(value || '').trim();
+    if (wanted.length > MAX_AGENT_NAME) {
+      setNameError(`${MAX_AGENT_NAME} characters or fewer — it is drawn as large lettering`);
+      return;
+    }
+    if (wanted && agentLoop && wanted !== agentLoop.agentName) {
+      agentLoop.agentName = wanted;
+      try { agentLoop._saveConfig?.(); } catch { /* the name still holds for this session */ }
+    }
+    go('chrome');
+  };
+
+  const extPath = tildify(extensionDir());
+
+  useInput((input, key) => {
+    if (screen === SPLASH) {
+      if (key.return) go('theme');
+      else if (key.escape) finish();
+      return;
+    }
+    // On the theme and name screens the list and the text field own Enter and
+    // the letters; only esc is ours.
+    if (screen === 'theme') {
+      if (key.escape) { setTheme(originalTheme); setThemeAt(originalTheme); go('name'); }
+      return;
+    }
+    if (screen === 'name') {
+      if (key.escape) { setNameError(''); go('chrome'); }
+      return;
+    }
+    if (screen === 'chrome') {
+      if (key.return || key.escape) { finish(); return; }
+      if (input === 'c') {
+        copyToClipboard(extensionDir()).then((ok) => setCopied(ok ? 'copied' : 'no clipboard here'), () => setCopied('no clipboard here'));
+      } else if (input === 'o') {
+        const url = 'https://gemini.google.com/app';
+        const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open';
+        try { exec(`${opener} "${url}"`); } catch { /* the step says where to go anyway */ }
+      }
+    }
+  });
+
+  const since = tick - enteredAt;
+  const width = Math.min(columns, 76);
+
+  if (screen === SPLASH) {
+    const mark = bannerText('Agent CLI');
+    const markWidth = Math.max(...mark.split('\n').map((l) => l.length));
+    return (
+      <Box flexDirection="column" width={width}>
+        {layout.welcomeWordmark && (
+          <>
+            <Wordmark text={mark} reveal={revealColumns(tick, markWidth)} truncate />
+            <Gap show={spaced} />
+          </>
+        )}
+        <Text bold wrap="truncate">Welcome to Agent CLI</Text>
+        <Text dimColor wrap="truncate">A coding agent that works through Gemini in your own browser. No API key.</Text>
+        <Gap show={spaced} />
+        <Text wrap="truncate">Three quick steps: <Text bold>theme</Text>, <Text bold>name</Text>, and <Text bold>connecting Chrome</Text>.</Text>
+        <Gap show={spaced} />
+        <Hint>
+          <Text color={T.accent ?? undefined}>{FRAMES[tick % FRAMES.length]}</Text>
+          {' Press enter to start · esc to skip setup'}
+        </Hint>
+      </Box>
+    );
+  }
+
+  const step = STEPS.indexOf(screen);
+
+  if (screen === 'theme') {
+    const names = Object.keys(PALETTES);
+    const labelWidth = Math.max(...names.map((n) => PALETTE_INFO[n].label.length));
+    return (
+      <Box flexDirection="column" width={width}>
+        <Header step={step} since={since} columns={columns} />
+        <Gap show={spaced} />
+        <Text bold wrap="truncate">Choose the text style that looks best with your terminal</Text>
+        <Gap show={spaced} />
+        <SelectInput
+          initialIndex={Math.max(0, names.indexOf(originalTheme))}
+          items={names.map((n) => ({ label: PALETTE_INFO[n].label.padEnd(labelWidth), value: n }))}
+          onHighlight={(item) => { setTheme(item.value); setThemeAt(item.value); }}
+          onSelect={(item) => {
+            setTheme(item.value);
+            saveUserSettings({ theme: item.value });
+            go('name');
+          }}
+        />
+        <Text dimColor wrap="truncate">{'  '}{PALETTE_INFO[themeAt]?.blurb}</Text>
+        {layout.themePreview && (
+          /* The preview: what an edit, a failure and a running step look like
+             in this palette — the rows a person actually meets. */
+          <Box flexDirection="column" borderStyle="round" borderColor={T.muted ?? undefined} paddingX={1} marginTop={spaced ? 1 : 0}>
+            <Text wrap="truncate">
+              <Text color={T.success ?? undefined}>⏺ </Text><Text bold>edit_file</Text>
+              <Text dimColor> greet.js </Text><Text color={T.success ?? undefined}>+1 </Text><Text color={T.danger ?? undefined}>−1</Text>
+            </Text>
+            <Text wrap="truncate" dimColor>{'  1  function greet() {'}</Text>
+            <Text wrap="truncate" color={T.danger ?? undefined}>{'  2 -  console.log("Hello, World!");'}</Text>
+            <Text wrap="truncate" color={T.success ?? undefined}>{'  2 +  console.log("Hello, Agent!");'}</Text>
+            <Text wrap="truncate">
+              <Text color={T.accent ?? undefined}>{FRAMES[tick % FRAMES.length]} Running npm test…</Text>
+              {'   '}<Text bold color={T.plan ?? undefined}>plan</Text>{' '}<Text bold color={T.auto ?? undefined}>auto</Text>
+              {'   '}<Text color={T.link ?? undefined}>/history</Text>
+            </Text>
+          </Box>
+        )}
+        <Gap show={spaced} />
+        <Hint>↑↓ preview · enter choose · esc keep current · later: /theme</Hint>
+      </Box>
+    );
+  }
+
+  if (screen === 'name') {
+    const shown = name.trim() || 'Agent CLI';
+    return (
+      <Box flexDirection="column" width={width}>
+        <Header step={step} since={since} columns={columns} />
+        <Gap show={spaced} />
+        <Text bold wrap="truncate">What should your agent be called?</Text>
+        <Gap show={spaced} />
+        <Box>
+          <Text color={T.accent ?? undefined} bold>{'❯ '}</Text>
+          <TextInput
+            value={name}
+            placeholder="Agent CLI"
+            onChange={(v) => { setName(v); setNameError(''); }}
+            onSubmit={saveName}
+          />
+        </Box>
+        <Text dimColor={!nameError} color={nameError ? (T.danger ?? undefined) : undefined} wrap="truncate">
+          {nameError || `${name.trim().length}/${MAX_AGENT_NAME} · drawn in the banner like this:`}
+        </Text>
+        {layout.nameWordmark && (
+          <>
+            <Gap show={spaced} />
+            <Wordmark text={bannerText(shown.slice(0, MAX_AGENT_NAME))} truncate />
+          </>
+        )}
+        <Gap show={spaced} />
+        <Hint>enter save · esc keep {agentLoop?.agentName ? `"${agentLoop.agentName}"` : 'the default'} · later: /name</Hint>
+      </Box>
+    );
+  }
+
+  // Chrome.
+  const spinner = FRAMES[tick % FRAMES.length];
+  return (
+    <Box flexDirection="column" width={width}>
+      <Header step={step} since={since} columns={columns} />
+      <Gap show={spaced} />
+      <Text bold wrap="truncate">Connect Chrome. The agent types into gemini.google.com for you.</Text>
+      <Gap show={spaced} />
+      <Text wrap="truncate"><Text dimColor>1. </Text>Open <Text bold>chrome://extensions</Text> and turn on <Text bold>Developer mode</Text></Text>
+      <Text wrap="truncate">
+        <Text dimColor>2. </Text><Text bold>Load unpacked</Text> → {extPath}
+        <Text dimColor>{'   c '}{copied ? `· ${copied}` : 'copies the path'}</Text>
+      </Text>
+      <Text wrap="truncate">
+        <Text dimColor>3. </Text>Open <Text bold>gemini.google.com</Text>, sign in, leave the tab open
+        <Text dimColor>{'   o opens it'}</Text>
+      </Text>
+      <Gap show={spaced} />
+      {status.connected ? (
+        <Text color={T.success ?? undefined} wrap="truncate">
+          ✔ Connected{status.version ? <Text dimColor>{` · extension ${status.version}`}</Text> : null}
+        </Text>
+      ) : (
+        <Text color={T.accent ?? undefined} wrap="truncate">{spinner} Waiting for the extension to connect…</Text>
+      )}
+      <Gap show={spaced} />
+      <Hint>
+        {status.connected
+          ? 'enter start the agent'
+          : 'enter finish anyway (it connects by itself later) · esc skip'}
+      </Hint>
+    </Box>
+  );
+}

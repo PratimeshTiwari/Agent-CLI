@@ -176,8 +176,9 @@ async function main() {
 
   // Before the loop exists: its session store creates this workspace's folder
   // under workspaces/, and an empty workspaces/ is what says "first start".
+  // 'pending' until setup ends, so a ctrl+c halfway brings it back next time.
   const firstRun = firstRunState({ settings: loadUserSettings(), workspacesDir: resolve(configHome, 'workspaces') });
-  if (firstRun.mark) saveUserSettings({ welcomed: true });
+  if (firstRun.write !== null) saveUserSettings({ welcomed: firstRun.write });
   
   // Verify workspace exists
   if (!existsSync(config.workspace)) {

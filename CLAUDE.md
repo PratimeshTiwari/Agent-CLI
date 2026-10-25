@@ -1684,13 +1684,16 @@ ago.
   The later `pollNow()` 401 at `github-poller.js:147` always worked; only the
   startup one was unreachable.
 
-- **The first-start card is decided before the loop exists (v5.22, `ui/welcome.js`).** Theme, name
-  and the extension's Load-unpacked steps (with this checkout's real `extension/` path), drawn
-  inside the banner's `<Static>` row so it costs no live budget. "First" is `welcomed` absent from
-  `~/.agent/settings.json` **and** an empty `~/.agent/workspaces/`; an install with history is
-  marked without being shown, so a `/reset` that empties that folder does not greet an old user.
-  `main.js` must decide before `new AgentLoop` — the session store creates `workspaces/<slug>` —
-  and `welcome.test.js` pins the order.
+- **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
+  `ui/welcome.js`).** Splash, theme (live preview), name (figlet preview as you type), Chrome
+  (Load-unpacked steps with this checkout's real `extension/` path; spinner → `✔ Connected`).
+  `Root` in `cli-ui.jsx` switches — never both mounted — so the banner App commits to `<Static>`
+  has the chosen theme and name. "First" is `welcomed` absent from `~/.agent/settings.json` and an
+  empty `~/.agent/workspaces/`; it is `'pending'` until setup ends (a ctrl+c halfway shows it
+  again) and an install with history is marked `true` unseen. `main.js` must decide before
+  `new AgentLoop` — the session store creates `workspaces/<slug>` — and `welcome.test.js` pins it.
+  The screens are live frames: `onboardingLayout` drops the wordmark, then the theme preview, then
+  spacing by height. Pty: 0 clears at 12, 16, 20, 30 rows.
 
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous

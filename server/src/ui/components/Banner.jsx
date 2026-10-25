@@ -1,8 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import os from 'os';
-import { themeName, PALETTE_INFO, T } from '../theme.js';
-import { welcomeSteps, extensionDir, tildify } from '../welcome.js';
+import { themeName } from '../theme.js';
 
 /**
  * The header: the wordmark, the attribution, and the one line that says where
@@ -47,15 +46,18 @@ const hex = (t) => {
  * independently makes the short rows (figlet's descenders) sweep through the
  * whole range in a few characters, and the wordmark shears.
  */
-function Wordmark({ text }) {
+export function Wordmark({ text, reveal = Infinity, truncate = false }) {
   const lines = String(text ?? '').split('\n');
   const width = Math.max(1, ...lines.map((l) => l.length));
   const step = Math.max(1, Math.ceil(width / BANDS));
 
+  // `reveal` is setup's splash drawing the mark in from the left; `truncate`
+  // is for the live frame, where a wordmark wider than the terminal must not
+  // wrap into rows nobody budgeted. The banner itself uses neither.
   return lines.map((line, row) => (
-    <Text key={row}>
+    <Text key={row} wrap={truncate ? 'truncate' : undefined}>
       {Array.from({ length: BANDS }, (_, b) => {
-        const slice = line.slice(b * step, (b + 1) * step);
+        const slice = line.slice(0, reveal).slice(b * step, (b + 1) * step);
         if (!slice) return null;
         // Mono (and NO_COLOR) means no colour at all — the gradient included.
         const color = themeName() === 'mono' ? undefined : hex(BANDS === 1 ? 0 : b / (BANDS - 1));
@@ -65,43 +67,7 @@ function Wordmark({ text }) {
   ));
 }
 
-/**
- * The first-start card (`ui/welcome.js`). A rounded box in the input bar's
- * idiom, the command in each step bold so it is the thing the eye lands on,
- * and the rest dim: it is instructions, read once, and must not outshout the
- * prompt box under it.
- */
-function Welcome({ agentLoop }) {
-  const steps = welcomeSteps({
-    themeLabel: PALETTE_INFO[themeName()]?.label,
-    agentName: agentLoop.agentName,
-    extensionPath: tildify(extensionDir()),
-  });
-  return (
-    // Capped, like Claude Code's welcome box: stretched across a 200-column
-    // terminal it is mostly border. Narrower terminals get their full width.
-    <Box flexDirection="column" borderStyle="round" borderColor={T.muted ?? undefined} paddingX={1} marginTop={1}
-      width={Math.min(76, process.stdout.columns || 80)}>
-      <Text bold>Welcome. Three things to set up, once:</Text>
-      {steps.map((step, i) => (
-        <Box key={step.key} marginTop={1}>
-          <Box width={12} flexShrink={0}>
-            <Text dimColor>{`${i + 1}. ${step.title}`}</Text>
-          </Box>
-          <Box flexDirection="column" flexShrink={1}>
-            <Text color={T.accent ?? undefined} bold>{step.command}</Text>
-            {step.lines.map((line, j) => <Text key={j} dimColor>{line}</Text>)}
-          </Box>
-        </Box>
-      ))}
-      <Box marginTop={1}>
-        <Text dimColor>Shown on first start only. /help lists every command.</Text>
-      </Box>
-    </Box>
-  );
-}
-
-export function Banner({ agentLoop, agentNameAscii, welcome = false }) {
+export function Banner({ agentLoop, agentNameAscii }) {
   const models = (() => {
     const roles = ['main'];
     const named = roles.map((r) => agentLoop.modelConfig?.[r]).filter(Boolean);
@@ -126,7 +92,6 @@ export function Banner({ agentLoop, agentNameAscii, welcome = false }) {
         {'  ·  '}
         {models}
       </Text>
-      {welcome && <Welcome agentLoop={agentLoop} />}
     </Box>
   );
 }

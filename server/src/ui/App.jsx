@@ -55,7 +55,7 @@ import { T } from './theme.js';
  */
 const SESSION_STARTED_AT = Date.now();
 
-export function App({ agentLoop, wsServer, welcome = false }) {
+export function App({ agentLoop, wsServer }) {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState([...agentLoop.conversationHistory]);
 
@@ -1268,7 +1268,7 @@ export function App({ agentLoop, wsServer, welcome = false }) {
       <Static key={staticEpoch} items={staticItems}>
         {(row) => {
           if (row.isBanner) {
-            return <Banner key={row.id} agentLoop={agentLoop} agentNameAscii={agentNameAscii} welcome={welcome} />;
+            return <Banner key={row.id} agentLoop={agentLoop} agentNameAscii={agentNameAscii} />;
           }
           if (row.kind === 'user') {
             return (

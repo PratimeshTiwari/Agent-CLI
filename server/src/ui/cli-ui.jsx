@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
 import { splitTrailingEnter } from './enter-splitter.js';
 import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
 import { registerInk, exitWithFarewell } from './farewell.js';
 import { App } from './App.jsx';
+import { Onboarding } from './components/Onboarding.jsx';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../core/user-settings.js';
 
@@ -38,6 +39,19 @@ function createInkStdin() {
     return stream;
   };
   return stream;
+}
+
+/**
+ * Setup first, on a person's first start, then the app — never both at once.
+ * App mounts only after setup ends, so the banner it commits to <Static> is
+ * drawn in the theme just chosen and carries the name just given.
+ */
+function Root({ agentLoop, wsServer, welcome }) {
+  const [settingUp, setSettingUp] = useState(welcome);
+  if (settingUp) {
+    return <Onboarding agentLoop={agentLoop} wsServer={wsServer} onDone={() => setSettingUp(false)} />;
+  }
+  return <App agentLoop={agentLoop} wsServer={wsServer} />;
 }
 
 export class CliUI {
@@ -93,7 +107,7 @@ export class CliUI {
     // the old colours, and <Static> never repaints it.
     setTheme(startupTheme(process.env, loadUserSettings().theme));
 
-    const instance = render(<App agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome} />, {
+    const instance = render(<Root agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome} />, {
       stdin: inkStdin,
       // ctrl+c is ours — see hotkeys.js. Ink's default unmounted the app and
       // left the process alive behind a frozen prompt.

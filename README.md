@@ -78,9 +78,10 @@ cd ~/code/your-project
 agent
 ```
 
-The very first start shows a welcome card under the banner with the three things to set up once:
-`/theme` to pick colours for your terminal, `/name <text>` to name the agent, and the steps to load
-the Chrome extension (with the exact folder to pick). It is not shown again.
+The very first start walks you through setup, one screen per step: pick a theme (previewed live
+as you move), name the agent (its banner drawn as you type), and connect Chrome (the exact folder
+to load, and a spinner that turns into **Connected** when the extension dials in). Enter goes on,
+esc skips. Later: `/theme` and `/name`.
 
 The status line shows the mode — `plan mode on (shift+tab to cycle)` — and the input box says so if
 the extension is not connected. Type a request and press Enter. To pick up where you left off:
