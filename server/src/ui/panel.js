@@ -90,3 +90,29 @@ export function cutStart(text, width) {
   const w = Math.max(2, width);
   return s.length > w ? `…${s.slice(s.length - (w - 1))}` : s;
 }
+
+/**
+ * Which theme role a `/settings` value is drawn in.
+ *
+ * Owner, 2026-10-26: "maybe give some sort of color … it looks dull". Every
+ * value was dim, so `on` and `off` and a path all looked the same. Now
+ * the colour says what kind of thing the value is: on is green, off is dim,
+ * a mode is its status-bar colour, a level is a link, anything waiting on
+ * you is attention, a path is dim. Everything else is plain text.
+ *
+ * @param {{label: string, value: string}} row
+ * @returns {string} a role in `ui/theme.js`'s `ROLES`; `text` for plain
+ */
+export function settingTone({ label, value } = {}) {
+  const v = String(value ?? '');
+  if (v === 'on') return 'success';
+  if (v === 'off') return 'muted';
+  if (label === 'Edit approval' && ['plan', 'auto', 'strict'].includes(v)) return v;
+  if (label === 'Effort') return 'link';
+  if (label === 'Extension' || label === 'Extension build') {
+    return /not connected|older than/.test(v) ? 'attention' : 'success';
+  }
+  if (label === 'Diffs') return /^[1-9]/.test(v) ? 'attention' : 'muted';
+  if (['Workspace', 'State directory', 'Instructions', 'Memory file', 'Skills'].includes(label)) return 'muted';
+  return 'text';
+}

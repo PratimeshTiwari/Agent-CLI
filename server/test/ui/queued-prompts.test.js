@@ -49,8 +49,8 @@ test('draining waits for the loop, a closed diff prompt and no open menu', () =>
 
 test('stopping clears the queue', () => {
   // Otherwise a stop is followed immediately by the next queued prompt.
-  const stop = app.slice(app.indexOf('Agent forcefully stopped') - 2000,
-    app.indexOf('Agent forcefully stopped') + 500);
+  const stop = app.slice(app.indexOf("note: 'Interrupted'") - 2000,
+    app.indexOf("note: 'Interrupted'") + 500);
   assert.match(stop, /setQueued\(\[\]\)/);
 });
 

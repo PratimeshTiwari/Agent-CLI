@@ -498,7 +498,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     const seen = emittedRef.current.get(turn.id) || { user: false, items: 0, summary: false };
 
     if (!seen.user && turn.userMsg) {
-      fresh.push({ id: `row_user_${turn.id}`, kind: 'user', content: turn.userMsg.content });
+      fresh.push({ id: `row_user_${turn.id}`, kind: 'user', content: turn.userMsg.content, note: turn.userMsg.note });
       seen.user = true;
     }
     for (let n = seen.items; n < ready.length; n++) {
@@ -959,10 +959,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setSteered([]); // the loop dropped its copy in noteUserStop
       // `:stop` never reaches the model, so its echo is local — counting it as
       // loop history would shift the merge by one and cost a turn on screen.
+      // The outcome hangs under the prompt as `⎿  Interrupted`, the way an
+      // action's result does (owner, 2026-10-26: the 🛑 row "does not follow
+      // our actions pattern"), rather than as a reply of its own.
       setHistory(prev => [
         ...prev,
-        { role: 'user', content: query, isLocal: true, timestamp: Date.now() },
-        { role: 'assistant', content: '🛑 Agent forcefully stopped.', isLocal: true, timestamp: Date.now() }
+        { role: 'user', content: query, isLocal: true, timestamp: Date.now(), note: 'Interrupted' },
       ]);
       return;
     }
@@ -1333,7 +1335,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
           }
           if (row.kind === 'user') {
             return (
-              <UserBar key={row.id} content={row.content} isLive={false}
+              <UserBar key={row.id} content={row.content} note={row.note} isLive={false}
                 terminalWidth={terminalWidth} compact={compact} />
             );
           }

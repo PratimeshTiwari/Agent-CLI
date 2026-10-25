@@ -14,10 +14,13 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#86](https://github.com/PratimeshTiwari/Agent-CLI/pull/86)
+### v5 — 2026-10-19 … 2026-10-26 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#89](https://github.com/PratimeshTiwari/Agent-CLI/pull/89)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.25 | 2026-10-26 | `v5.25/effort-slider-quiet-replies` | [#89](https://github.com/PratimeshTiwari/Agent-CLI/pull/89) | v5.25: effort slider, one-line replies, quieter menus |
+| v5.24 | 2026-10-26 | `v5.24/images-panel-ui-fixes` | [#87](https://github.com/PratimeshTiwari/Agent-CLI/pull/87) | v5.24: images, side panel, /help, one menu look |
+| v5.23 | 2026-10-26 | `v5.23/steer-into-turn` | [#88](https://github.com/PratimeshTiwari/Agent-CLI/pull/88) | v5.23: steer into the running turn; exit and intro |
 | v5.22 | 2026-10-25 | `v5.22/first-run-welcome` | [#86](https://github.com/PratimeshTiwari/Agent-CLI/pull/86) | v5.22: first-start setup, Look A startup, /copy |
 | v5.21 | 2026-10-25 | `v5.21/exit-footer-and-live-command-output` | [#85](https://github.com/PratimeshTiwari/Agent-CLI/pull/85) | v5.21: live output under a running command; Claude Code's exit footer |
 | v5.20 | 2026-10-25 | `v5.20/exit-keeps-transcript-compact-on-send` | [#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) | v5.20: exit keeps the transcript; auto-compaction waits for your next message; spacing and bullets |

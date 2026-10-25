@@ -42,7 +42,7 @@ test('the slash branch is reached before the turn state is reset', () => {
   // same state and sits above the branch. My first version of this assertion
   // matched that occurrence and failed against correct code.
   const body = submitBody();
-  const afterStop = body.indexOf('Agent forcefully stopped');
+  const afterStop = body.indexOf("note: 'Interrupted'");
   assert.ok(afterStop > -1, ':stop should still be handled first');
 
   const rest = body.slice(afterStop);

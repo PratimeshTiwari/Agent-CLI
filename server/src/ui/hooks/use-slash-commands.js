@@ -303,7 +303,7 @@ export async function handleSlashCommand(query, {
         if (!state.available) { say('✔ Up to date.'); return; }
 
         const n = state.behind;
-        const lines = [`### ${n} update${n === 1 ? '' : 's'} available`, ''];
+        const lines = [`**${n} update${n === 1 ? '' : 's'} available**`, ''];
         // Said here rather than after the pull is attempted: it is the one
         // thing that would stop this working, and knowing now is worth more
         // than finding out when you ask for it.
@@ -323,7 +323,7 @@ export async function handleSlashCommand(query, {
       if (!outcome.files.length) { say('✔ Already up to date.'); return; }
 
       const n = outcome.files.length;
-      const heading = `### Updated — ${n} file${n === 1 ? '' : 's'} changed`;
+      const heading = `**Updated**  ${n} file${n === 1 ? '' : 's'} changed`;
       const lines = [];
 
       /**
@@ -654,7 +654,7 @@ export async function handleSlashCommand(query, {
         });
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
-          content: `### 🧾 ${day} — ${entries.length} command${entries.length === 1 ? '' : 's'}\n\n`
+          content: `**Commands**  ${day} · ${entries.length} command${entries.length === 1 ? '' : 's'}\n\n`
             + (lines.join('\n') || '  _(none)_'),
         }]);
         setIsProcessing(false);
@@ -792,7 +792,7 @@ export async function handleSlashCommand(query, {
             + `(${MIN_TURNS_FOR_RATE} needed). The counts are real; the percentages wait.`;
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
-          content: `### 📉 Text-channel failures\n\n${note}\n\n${body}\n\n`
+          content: `**Text-channel failures**\n\n${note}\n\n${body}\n\n`
             + '_The denominator is `traces.jsonl`: one entry per turn the browser answered, '
             + 'which is the population these failures are drawn from._',
         }]);
@@ -822,7 +822,7 @@ export async function handleSlashCommand(query, {
         if (u.turns === 0) {
           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
             role: 'assistant', isLocal: true,
-            content: '### 🔧 Tool usage\n\nNothing recorded yet — this starts counting '
+            content: '**Tool usage**\n\nNothing recorded yet — this starts counting '
               + 'from the next turn.',
           }]);
           setIsProcessing(false);
@@ -846,7 +846,7 @@ export async function handleSlashCommand(query, {
           : '';
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
-          content: `### 🔧 Tool usage\n\n**${u.calls}** calls over **${u.turns}** turns`
+          content: `**Tool usage**\n\n**${u.calls}** calls over **${u.turns}** turns`
             + ` — ${quiet} of them used no tools at all.${rounds}\n\n${used}${never}`,
         }]);
         setIsProcessing(false);
@@ -876,7 +876,7 @@ export async function handleSlashCommand(query, {
           }).join('\n');
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
-          content: `### 🔔 Notices\n_Expected states. Recorded so a trend is visible, `
+          content: `**Notices**\n\n_Expected states. Recorded so a trend is visible, `
             + `not because anything needs doing._\n\n${body}`,
         }]);
         setIsProcessing(false);
@@ -929,7 +929,7 @@ export async function handleSlashCommand(query, {
             const mark = e.level === 'notice' ? '·' : '✗';
             return `  ${mark} ${when} **${e.op || '—'}** — ${e.message}${repeat}${detail}`;
           }).join('\n');
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `### 🩺 ${arg} — ${FLOWS[arg]}\n${timing}${body}`, isLocal: true }]);
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `**Failures · ${arg}**  ${FLOWS[arg]}\n\n${timing}${body}`, isLocal: true }]);
         setIsProcessing(false);
         return;
       }
@@ -957,7 +957,7 @@ export async function handleSlashCommand(query, {
         : '';
       let content;
       if (summary.total === 0) {
-        content = '### 🩺 Failures\nNothing has failed since the log was last cleared.'
+        content = '**Failures**  nothing has failed since the log was last cleared.'
           + noticeLine;
       } else {
         const rows = summary.byFlow.map((f) => {
@@ -965,7 +965,7 @@ export async function handleSlashCommand(query, {
           return `  **${f.flow}** ${String(f.count).padStart(3)}  _${f.label}_\n`
             + `      last ${when} — ${f.lastMessage}`;
         }).join('\n');
-        content = `### 🩺 ${summary.total} failure${summary.total === 1 ? '' : 's'} logged\n${rows}`
+        content = `**Failures**  ${summary.total} logged\n\n${rows}`
           + `${noticeLine}\n\n`
           + `_\`/logs <flow>\` for detail · \`/logs clear\` to reset · full log in \`.agent/logs/errors.jsonl\`_`;
       }
@@ -1046,7 +1046,7 @@ export async function handleSlashCommand(query, {
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant',
           isLocal: true,
-          content: `### 📁 Skill folders, searched in order\n${dirs.join('\n')}\n\n`
+          content: `**Skill folders**  searched in order\n\n${dirs.join('\n')}\n\n`
             + `Add one with \`/skills dir add <path>\`${canPickFolder() ? ' — or bare, to pick one from a dialog' : ''}, `
             + 'drop one with `/skills dir remove <path>`.\n'
             + 'The first folder to define a name wins, so a project can override a personal skill.',
@@ -1087,7 +1087,7 @@ export async function handleSlashCommand(query, {
         const body = skills.length === 0
           ? 'No skills yet. Create one with `/skills new <name>`.'
           : skills.map((sk) => `  • **${sk.name}** — ${sk.description || '_(no description)_'}\n    \`${sk.relative}\``).join('\n');
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `### 🧩 Skills\n${body}`, isLocal: true }]);
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `**Skills**\n\n${body}`, isLocal: true }]);
         setIsProcessing(false);
         return;
       }

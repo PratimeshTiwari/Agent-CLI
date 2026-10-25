@@ -5,7 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { wrapLines, panelRoom, listWindow } from '../../src/ui/panel.js';
+import { wrapLines, panelRoom, listWindow, settingTone } from '../../src/ui/panel.js';
+import { ROLES } from '../../src/ui/theme.js';
+import { describeSettings } from '../../src/core/settings.js';
 
 test('listWindow: never taller than its room, and the cursor is always shown', () => {
   for (let count = 0; count <= 30; count++) {
@@ -55,4 +57,23 @@ test('no menu draws a border any more', () => {
   const src = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /borderStyle=/);
   assert.doesNotMatch(src, /from 'ink-select-input'/, 'a menu is back on the old list');
+});
+
+test('settings values are coloured by kind: on, off, modes, levels, waiting work, paths', () => {
+  assert.equal(settingTone({ label: 'Memory', value: 'on' }), 'success');
+  assert.equal(settingTone({ label: 'Subagents', value: 'off' }), 'muted');
+  assert.equal(settingTone({ label: 'Edit approval', value: 'strict' }), 'strict');
+  assert.equal(settingTone({ label: 'Effort', value: 'high' }), 'link');
+  assert.equal(settingTone({ label: 'Diffs', value: '2 pending' }), 'attention');
+  assert.equal(settingTone({ label: 'Diffs', value: '0 pending' }), 'muted');
+  assert.equal(settingTone({ label: 'Extension', value: 'not connected yet' }), 'attention');
+  assert.equal(settingTone({ label: 'Workspace', value: '/w' }), 'muted');
+  assert.equal(settingTone({ label: 'Turns', value: '14' }), 'text');
+});
+
+test('every settings tone is a role a palette defines', () => {
+  for (const row of describeSettings(null)) {
+    const tone = settingTone(row);
+    assert.ok(ROLES.includes(tone), `${row.label}: ${tone}`);
+  }
 });

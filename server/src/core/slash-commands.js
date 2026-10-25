@@ -112,11 +112,24 @@ export function isSlowCommand(command, args = []) {
   return false;
 }
 
+/**
+ * A setting changed, said the one way every command says it (owner,
+ * 2026-10-26: "just say effort changed to this … subagent on -> off or already
+ * off"). `⚙` marks a row this program wrote, the change is the whole message,
+ * and anything after `·` is only what the status bar does not already show.
+ */
+export function changed(setting, from, to, note = '') {
+  const what = String(from) === String(to) ? `already **${to}**` : `**${from}** → **${to}**`;
+  return `⚙ ${setting}  ${what}${note ? ` · ${note}` : ''}`;
+}
+
 export async function handleSlashCommand(loop, command, args) {
   switch (command) {
-    case 'plan':
+    case 'plan': {
+      const from = loop.mode;
       loop.mode = 'plan';
-      return { message: '🔒 Plan Mode — every edit and command asks first, except Markdown files in this repo (AGENT.md and CLAUDE.md still ask). `/strict` makes Markdown ask too.' };
+      return { message: changed('mode', from, 'plan', 'edits and commands ask first; Markdown in the repo does not') };
+    }
 
     /*
      * The last edit's diff, whatever happened to it. An edit row says
@@ -133,13 +146,17 @@ export async function handleSlashCommand(loop, command, args) {
       return { message: `**${last.filePath}** — ${state}\n\n\`\`\`diff\n${shown.join('\n')}\n\`\`\`` };
     }
 
-    case 'strict':
+    case 'strict': {
+      const from = loop.mode;
       loop.mode = 'strict';
-      return { message: '🔐 Strict Plan Mode — every edit, Markdown included, and every command asks first.' };
+      return { message: changed('mode', from, 'strict', 'every edit, Markdown included, asks first') };
+    }
 
-    case 'auto':
+    case 'auto': {
+      const from = loop.mode;
       loop.mode = 'auto';
-      return { message: '⚡ Switched to Auto Mode. Safe edits will be auto-applied.' };
+      return { message: changed('mode', from, 'auto', 'safe edits apply without asking') };
+    }
 
     // `/memory` used to *toggle* memory, so typing it to look at something
     // switched it off. It shows what is remembered now; on/off is a word you
@@ -148,14 +165,11 @@ export async function handleSlashCommand(loop, command, args) {
       const action = (args?.[0] || '').toLowerCase();
 
       if (action === 'on' || action === 'off') {
+        const from = loop.memoryManager.isMemoryEnabled() ? 'on' : 'off';
         loop.memoryManager.memoryEnabled = action === 'on';
         loop._saveConfig();
-        loop.promptBuilder?.resetPromptState?.();
-        return {
-          message: action === 'on'
-            ? 'Memory on — learned facts go back into the prompt.'
-            : 'Memory off — nothing new is learned and nothing is recalled.',
-        };
+        if (from !== action) loop.promptBuilder?.resetPromptState?.();
+        return { message: changed('memory', from, action) };
       }
 
       if (action === 'forget') {
@@ -169,14 +183,11 @@ export async function handleSlashCommand(loop, command, args) {
       const facts = loop.memoryManager.getAllMemories();
       const where = paths.memoryPath(loop.workspace);
       if (facts.length === 0) {
-        return {
-          message: `Nothing remembered yet.\n\nFacts land in \`${where}\` as the agent `
-            + 'learns them, and it is an ordinary markdown file — edit it freely.',
-        };
+        return { message: `Nothing remembered yet · facts land in \`${where}\`, an ordinary file you can edit` };
       }
       return {
-        message: `### Memory — ${facts.length} fact${facts.length === 1 ? '' : 's'}`
-          + `${loop.memoryManager.isMemoryEnabled() ? '' : ' _(off — not being recalled)_'}\n\n`
+        message: `**Memory**  ${facts.length} fact${facts.length === 1 ? '' : 's'}`
+          + `${loop.memoryManager.isMemoryEnabled() ? '' : ' · off, not recalled'}\n\n`
           + facts.map((f, i) => `${i + 1}. ${f}`).join('\n')
           + `\n\n_\`${where}\` · \`/memory forget <n>\` · \`/memory off\`_`,
       };
@@ -216,25 +227,14 @@ export async function handleSlashCommand(loop, command, args) {
       // thing this command has, so requiring it is ceremony.
       const asked = ['subagents', 'subagent', 'reviewer'].includes(word) ? value : word;
 
-      if (OFF.includes(asked)) {
-        loop.modelConfig.subagents = false;
+      const was = loop.subagentsEnabled ? 'on' : 'off';
+      if (OFF.includes(asked) || ON.includes(asked)) {
+        const to = OFF.includes(asked) ? 'off' : 'on';
+        loop.modelConfig.subagents = to === 'on';
         loop._saveConfig();
-        loop.promptBuilder.resetPromptState();
-        return {
-          message: '👤 Subagents off — one tab, start to finish. Research, review and '
-            + 'implementation are all this conversation.',
-        };
-      }
-
-      if (ON.includes(asked)) {
-        loop.modelConfig.subagents = true;
-        loop._saveConfig();
-        loop.promptBuilder.resetPromptState();
-        return {
-          message: '🔭 Subagents on — `ask_subagent` can fan work out to parallel tabs.\n\n'
-            + 'Each one starts with an empty context: it has not seen this conversation, which '
-            + 'is the point of the `review` role and the cost of the others.',
-        };
+        // The tool list in the prompt changes only when the setting does.
+        if (to !== was) loop.promptBuilder.resetPromptState();
+        return { message: changed('subagents', was, to) };
       }
 
       // Both older names still work, and say once what the command is called now.
@@ -243,10 +243,7 @@ export async function handleSlashCommand(loop, command, args) {
       const renamed = command === 'subagents' ? ''
         : `_(\`/${command}\` is now \`/subagents\` — it is the one thing it sets.)_\n\n`;
       return {
-        message: `${renamed}### 🌐 Subagents: ${loop.subagentsEnabled ? '**on**' : '**off**'}\n\n`
-          + '  `ask_subagent` opens a second tab of this model with an empty context.\n'
-          + '  Roles: `research` (explore), `review` (read a change cold), `task` (an errand).\n\n'
-          + '_`/subagents on` · `/subagents off`_',
+        message: `${renamed}Subagents are **${was}** · \`/subagents ${was === 'on' ? 'off' : 'on'}\` to change it`,
       };
     }
 
@@ -265,8 +262,8 @@ export async function handleSlashCommand(loop, command, args) {
       if (!wanted) {
         return {
           message: current
-            ? `The agent is called **${current}**.\n\n_\`/name <text>\` to change it, \`/name default\` to undo._`
-            : 'The agent has no name set — the banner reads "Agent CLI".\n\n_`/name <text>` to give it one._',
+            ? `The agent is called **${current}** · \`/name <text>\` to change it`
+            : 'No name set — the banner reads "Agent CLI" · `/name <text>` to give it one',
         };
       }
 
@@ -278,11 +275,7 @@ export async function handleSlashCommand(loop, command, args) {
       const clearing = wanted.toLowerCase() === 'default' || wanted.toLowerCase() === 'reset';
       loop.agentName = clearing ? '' : wanted;
       loop._saveConfig();
-      return {
-        message: clearing
-          ? 'Name cleared — the banner reads "Agent CLI" again.\n\n_Restart to see it._'
-          : `The agent is called **${wanted}**.\n\n_Restart to see it in the banner._`,
-      };
+      return { message: changed('name', current || 'Agent CLI', clearing ? 'Agent CLI' : wanted, 'restart to see it in the banner') };
     }
 
     /**
@@ -317,8 +310,8 @@ export async function handleSlashCommand(loop, command, args) {
       // which one, and the id is the thing `--resume` takes.
       return {
         message: filed
-          ? `✨ New chat. The previous one is filed as \`${filed}\` — \`agent --resume ${filed}\` brings it back.`
-          : '✨ New chat.',
+          ? `New chat · \`agent --resume ${filed}\` brings the last one back`
+          : 'New chat',
         reset: true,
       };
     }
@@ -351,8 +344,7 @@ export async function handleSlashCommand(loop, command, args) {
        * zero here — which is correct, and looks like a bug without this line.
        */
       return {
-        message: '🧹 Window cleared. The agent has forgotten this conversation; '
-          + 'the Gemini tab has not — `/new` starts a fresh one there.',
+        message: 'Window cleared · the Gemini tab still has the chat — `/new` starts a fresh one',
         reset: true,
       };
 
@@ -384,12 +376,10 @@ export async function handleSlashCommand(loop, command, args) {
     // question — where the agent's *own source* is.
     case 'agent-dir': {
       return {
-        message: `📂 Workspace: \`${loop.workspace}\`\n`
-          + `   State:     \`${paths.agentDir(loop.workspace)}\`\n\n`
-          + `The agent's own source is at \`${loop.agentSourceDir}\`. You do not need to `
-          + 'switch to it — file tools take absolute paths, and the system prompt already '
-          + 'tells the model it may edit itself there.\n\n'
-          + 'To work somewhere else: `/workspace <path>`, which restarts into it.',
+        message: `Workspace  \`${loop.workspace}\`\n`
+          + `State      \`${paths.agentDir(loop.workspace)}\`\n`
+          + `Source     \`${loop.agentSourceDir}\`\n\n`
+          + '`/workspace <path>` to work somewhere else',
       };
     }
 
@@ -456,9 +446,9 @@ export async function handleSlashCommand(loop, command, args) {
         let browser;
         if (plan.action === 'switch') {
           loop.switchModelTo(plan.model.label);
-          browser = `switching the browser to **${plan.model.label}**${pinned}`;
+          browser = `switching to **${plan.model.label}**${pinned}`;
         } else if (plan.action === 'none') {
-          browser = `browser already on **${plan.model.label}**${pinned}`;
+          browser = `tab already on **${plan.model.label}**${pinned}`;
         } else {
           loop._pendingEffortSwitch = chosen.id;
           loop.requestModelOptions?.(true);
@@ -473,7 +463,7 @@ export async function handleSlashCommand(loop, command, args) {
            * of an attempt; the follow-up comes from `requestModelOptions`'s
            * watchdog, which now says something when nothing comes back.
            */
-          browser = `asked the browser for **${chosen.browser}** — \`ctrl+b\` shows the tab`;
+          browser = `asked the browser for **${chosen.browser}** · \`ctrl+b\` shows the tab`;
         }
 
         // A pin naming something this plan does not offer is the single way
@@ -481,33 +471,21 @@ export async function handleSlashCommand(loop, command, args) {
         if (plan.pinMissed) browser += ` · ⚠ ${plan.pinMissed}`;
 
         /*
-         * What the change actually costs, said once and only when it applies.
-         *
-         * `resetPromptState()` above means the next message carries the whole
-         * system prompt — up to 26 KB — into a thread that already has one.
-         * That is precisely the large-repeated-payload case Gemini's repetition
-         * and A/B filters react to, and it is invisible: the command looks
-         * instant and the price arrives on the next turn.
-         *
-         * A line, not a confirmation dialog. `/effort` is used often enough
-         * that a prompt on every change is friction, and `/compact` already
-         * hands the thread over properly.
+         * No second line about the cost. It said the next message resends the
+         * full prompt into this chat, which is true, and the owner asked for
+         * the reply to be the change and nothing else (2026-10-26, with a
+         * screenshot: "we don't have to make it so verbose, just say effort
+         * changed to this, model is set"). The tab's answer follows as its own
+         * row — `✓ tab on …`, or the warning when the switch did not land.
          */
-        const midChat = (loop.conversationHistory?.length > 0)
-          ? '\n  _next message resends the full prompt into this chat — `/compact` starts a fresh one_'
-          : '';
-
         const change = before.id === chosen.id
           ? `already **${chosen.name}**`
           : `**${before.name}** → **${chosen.name}**`;
 
-        return { message: `${renamed}⚙ effort  ${change} · ${browser}${midChat}` };
+        return { message: `${renamed}⚙ effort  ${change} · ${browser}` };
       }
 
       const now = resolveEffort(loop.modelConfig.effort);
-      const list = EFFORT_LEVELS
-        .map((e) => `  ${e.label} \`/effort ${e.id}\`${e.id === now.id ? '  ← current' : ''}\n      ${e.blurb}`)
-        .join('\n');
       /*
        * A word that is not a rung has to be *rejected*, not ignored.
        *
@@ -521,7 +499,8 @@ export async function handleSlashCommand(loop, command, args) {
         ? `⚠ \`${wanted}\` is not an effort level — nothing changed.\n\n`
         : '';
       return {
-        message: `${renamed}${rejected}🎚️ Effort: **${now.label}** · browser tab: **${now.browser}**\n\n${list}`,
+        message: `${renamed}${rejected}Effort is **${now.name}** · tab **${now.browser}** · `
+          + `\`/effort ${EFFORT_LEVELS.map((e) => e.id).join('|')}\``,
       };
     }
 
@@ -537,35 +516,35 @@ export async function handleSlashCommand(loop, command, args) {
         if (!rules.allow.includes(rest)) rules.allow.push(rest);
         rules.block = rules.block.filter((c) => c !== rest);
         loop._saveConfig();
-        return { message: `✔ Allowed: \`${rest}\`` };
+        return { message: `⚙ allowlist  allowed \`${rest}\`` };
       }
       if (action === 'block' && rest) {
         if (!rules.block.includes(rest)) rules.block.push(rest);
         rules.allow = rules.allow.filter((c) => c !== rest);
         loop._saveConfig();
-        return { message: `⛔ Blocked: \`${rest}\`` };
+        return { message: `⚙ allowlist  blocked \`${rest}\`` };
       }
       if (action === 'remove' && rest) {
         const had = rules.allow.includes(rest) || rules.block.includes(rest);
         rules.allow = rules.allow.filter((c) => c !== rest);
         rules.block = rules.block.filter((c) => c !== rest);
         loop._saveConfig();
-        return { message: had ? `🗑️ Removed: \`${rest}\`` : `Not a rule: \`${rest}\`` };
+        return { message: had ? `⚙ allowlist  removed \`${rest}\`` : `Not a rule: \`${rest}\`` };
       }
       if (action === 'clear') {
         const n = rules.allow.length + rules.block.length;
         rules.allow = [];
         rules.block = [];
         loop._saveConfig();
-        return { message: `🧹 Cleared ${n} rule${n === 1 ? '' : 's'}.` };
+        return { message: `⚙ allowlist  cleared ${n} rule${n === 1 ? '' : 's'}` };
       }
       if (action === 'enable' || action === 'disable') {
+        const from = rules.enabled !== false ? 'on' : 'off';
         rules.enabled = action === 'enable';
         loop._saveConfig();
         return {
-          message: rules.enabled
-            ? '✔ Command rules **enabled** — allowed commands run without asking.'
-            : '⛔ Command rules **disabled** — every command asks for approval.',
+          message: changed('command rules', from, rules.enabled ? 'on' : 'off',
+            rules.enabled ? 'allowed commands run without asking' : 'every command asks'),
         };
       }
 
@@ -573,9 +552,8 @@ export async function handleSlashCommand(loop, command, args) {
       // and printing every one of them turned "what is this command?" into a
       // page of git incantations. The picker is where you read and remove them.
       return {
-        message: `### 🛡️ Command rules — ${rules.enabled !== false ? 'enabled' : 'disabled'}\n\n`
-          + `${rules.allow.length} allowed · ${rules.block.length} blocked\n\n`
-          + '_`/allowlist` on its own opens the picker — view, add, or remove there._',
+        message: `Command rules are **${rules.enabled !== false ? 'on' : 'off'}** · `
+          + `${rules.allow.length} allowed, ${rules.block.length} blocked · \`/allowlist\` opens the picker`,
       };
     }
 

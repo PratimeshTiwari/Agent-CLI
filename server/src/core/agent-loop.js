@@ -8,6 +8,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { randomUUID } from 'crypto';
 import { looksLikeMultipleDrafts, looksLikeCodeQuestion } from './drift-detector.js';
 import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
@@ -156,7 +157,6 @@ import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory } from './compaction.js';
-import { describeMode } from './modes.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig } from './effort.js';
@@ -1789,7 +1789,7 @@ export class AgentLoop {
       // `✓` and `!` rather than emoji, which is what every other row in this
       // transcript uses for the same two meanings.
       this._notify(same(switchedTo, requested)
-        ? `✓ Browser model is now ${switchedTo}.`
+        ? `✓ tab on ${switchedTo}`
         : `! Browser model is still ${switchedTo || 'unknown'} — asked for ${requested}.`
           + `\n  Change it by hand in the Gemini tab (ctrl+b opens it). `
           + 'The prompt here already changed.');
@@ -1797,7 +1797,7 @@ export class AgentLoop {
     }
 
     if (switchedTo) {
-      this._notify(`✓ Browser model switched to ${switchedTo}.`);
+      this._notify(`✓ tab on ${switchedTo}`);
       return;
     }
 
@@ -3316,13 +3316,24 @@ export class AgentLoop {
     const pending = this.diffEngine.getPendingDiffs().length;
     const applied = this.diffEngine.appliedDiffs.length;
 
+    /*
+     * A meter and three rows (owner, 2026-10-26: "this context box looks
+     * cluttered"). The mode row went because the status bar already says it;
+     * the token row was 90 characters of which the number was eleven.
+     */
+    const k = (n) => (n < 1000 ? `${n}` : `${(n / 1000).toFixed(n < 100000 ? 1 : 0).replace(/\.0$/, '')}k`);
+    const cells = 10;
+    const on = pct === 0 ? 0 : Math.max(1, Math.round((pct / 100) * cells));
+    const meter = '▰'.repeat(on) + '▱'.repeat(cells - on);
+    const edits = [pending && `${pending} pending`, applied && `${applied} applied`].filter(Boolean);
+    const home = os.homedir();
+    const tilde = this.workspace.startsWith(`${home}/`) ? `~${this.workspace.slice(home.length)}` : this.workspace;
+    // Cut from the left, like the source labels below: the end names the repo.
+    const where = tilde.length <= 80 ? tilde : `…${tilde.slice(-79)}`;
     const rows = [
-      ['Mode', describeMode(this.mode)],
-      ['Turns', `${turns}`],
-      ['Tokens', `~${used.toLocaleString()} / ${limit.toLocaleString()}  (${pct}%)`
-        + '   — everything sent to the tab, not just these turns'],
-      ['Diffs', `${pending} pending · ${applied} applied`],
-      ['Workspace', this.workspace],
+      ['tokens', `~${k(used)} of ${k(limit)} · everything sent to the tab`],
+      ['turns', `${turns}${edits.length ? ` · edits ${edits.join(', ')}` : ''}`],
+      ['workspace', where],
     ];
 
     /**
@@ -3349,8 +3360,11 @@ export class AgentLoop {
     const fit = (label) => (label.length <= LABEL_MAX
       ? label
       : `…${label.slice(-(LABEL_MAX - 1))}`);
-    const labels = sources.map((r) => fit(r.label));
+    // The label is the file; a row with none (`—`) is named by its group.
+    const labels = sources.map((r) => fit(r.label && r.label !== '—' ? r.label : r.group));
     const width = Math.min(LABEL_MAX, Math.max(10, ...labels.map((l) => l.length)));
+    // One glyph says whether it went in: loaded, something to look at, or not.
+    const mark = (state) => (state === 'loaded' ? '✔' : ['template', 'missing', 'unreadable'].includes(state) ? '⚠' : '·');
 
     // One row per source, one line per row. The detail truncates rather than
     // the label: you can lose the end of "looks like the unedited template — it
@@ -3360,18 +3374,18 @@ export class AgentLoop {
     const LINE_MAX = 96;
     const sourceLines = sources.length
       ? ['', '', '**Feeding the prompt**', '', ...sources.map((r, i) => {
-        const head = `  ${r.group.padEnd(9)} ${labels[i].padEnd(width)}  `;
-        const detail = r.state === 'loaded' ? r.detail : `${r.state} — ${r.detail}`;
+        const head = `  ${mark(r.state)} ${labels[i].padEnd(width)}  `;
+        const detail = r.state === 'loaded' ? r.detail : `${r.state} · ${r.detail}`;
         const room = Math.max(12, LINE_MAX - head.length);
         return head + (detail.length <= room ? detail : `${detail.slice(0, room - 1)}…`);
       })]
       : [];
 
     return {
-      message: `### 📊 Context\n\n`
-        + rows.map(([k, v]) => `  ${k.padEnd(10)} ${v}`).join('\n')
+      message: `**Context**  ${meter}  ${pct}%\n\n`
+        + rows.map(([key, v]) => `  ${key.padEnd(10)} ${v}`).join('\n')
         + sourceLines.join('\n')
-        + `\n\n_\`/compact\` to summarise it · \`/clear\` to drop it · \`/open <path>\` to read one_`,
+        + '\n\n_`/compact` summarise · `/clear` drop · `/open <path>` read one_',
     };
   }
 

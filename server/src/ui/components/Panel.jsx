@@ -53,7 +53,8 @@ export function Panel({ ruled = true, head = null, title, status = null, tone = 
  * pickers do. Off for anything that approves or destroys: a digit typed into
  * a prompt that appeared under the keyboard must not answer it.
  *
- * Items: `{label, value, key?, detail?, current?, colour?}`.
+ * Items: `{label, value, key?, detail?, current?, colour?, tone?}`. `tone` is a
+ * theme role for the detail; without one the detail is dim.
  */
 export function Choices({
   items,
@@ -114,7 +115,12 @@ export function Choices({
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>
             {numbered ? <Text color={sel ? T.accent : undefined} dimColor={!sel}>{(i < 9 ? `${i + 1}.` : '').padEnd(numWidth)}</Text> : null}
             <Text color={sel ? T.accent : item.colour} bold={sel}>{label}</Text>
-            {item.detail ? <Text color={sel ? T.accent : undefined} dimColor={!sel}>{'  '}{item.detail}</Text> : null}
+            {item.detail ? (
+              // `text` is the terminal's own foreground, never the palette's
+              // white, which vanishes on a light background.
+              <Text color={sel ? T.accent : item.tone && item.tone !== 'text' ? T[item.tone] : undefined}
+                dimColor={!sel && (!item.tone || item.tone === 'muted')}>{'  '}{item.detail}</Text>
+            ) : null}
             {item.current ? <Text color={T.success}>{'  ✔'}</Text> : null}
           </Text>
         );

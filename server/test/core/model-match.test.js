@@ -170,7 +170,7 @@ describe('the message after an effort switch', () => {
    */
   test('a known switch names what changed and what the browser is doing', async () => {
     const msg = await run('high', [{ label: '3.8 Flash' }, { label: 'Gemini Pro' }]);
-    assert.match(msg, /switching the browser to \*\*Gemini Pro\*\*/);
+    assert.match(msg, /switching to \*\*Gemini Pro\*\*/);
     assert.match(msg, /⚙ effort/);
     assert.doesNotMatch(msg, /Check the Gemini tab/i, 'it still sends the user looking');
     // One row. The blurb belongs to bare `/effort`, which lists every rung.
@@ -221,7 +221,7 @@ describe('the message after an effort switch', () => {
     const msg = await run('high', [{ label: 'Extended thinking' }, { label: '3.1 Pro' }], {
       modelConfig: { effort: 'high', browserModels: { high: 'Extended thinking' } },
     });
-    assert.match(msg, /switching the browser to \*\*Extended thinking\*\*/);
+    assert.match(msg, /switching to \*\*Extended thinking\*\*/);
     assert.match(msg, /_\(pinned\)_/);
   });
 
@@ -239,16 +239,13 @@ describe('the message after an effort switch', () => {
     assert.match(msg, /3\.1 Pro/, 'it still switches to the best it can find');
   });
 
-  test('mid-chat, it says the next message resends the whole prompt', async () => {
+  // The owner asked for the change and nothing else (2026-10-26): the
+  // resend-cost line that used to follow mid-chat is gone.
+  test('mid-chat it is still one row', async () => {
     const msg = await run('low', [{ label: '3.8 Flash' }], {
       conversationHistory: [{ role: 'user', content: 'hi' }],
     });
-    assert.match(msg, /resends the full prompt/);
-    assert.match(msg, /\/compact/);
-  });
-
-  test('and says nothing of the sort in a fresh chat', async () => {
-    const msg = await run('low', [{ label: '3.8 Flash' }], { conversationHistory: [] });
+    assert.equal(msg.split('\n').length, 1, msg);
     assert.doesNotMatch(msg, /resends/);
   });
 
@@ -282,7 +279,7 @@ describe('noteModelOptions reports what landed', () => {
   test('a switch that landed says so', () => {
     const { loop, said } = notes();
     loop.noteModelOptions([{ label: 'Gemini Pro', selected: true }], 'Gemini Pro', 'Gemini Pro');
-    assert.match(said[0], /now Gemini Pro/);
+    assert.match(said[0], /✓ tab on Gemini Pro/);
     assert.ok(said[0].startsWith('✓'), `not a success row: ${said[0]}`);
   });
 
