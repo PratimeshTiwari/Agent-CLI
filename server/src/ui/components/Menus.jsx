@@ -8,6 +8,7 @@ import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
 import { panelRoom, wrapLines, cutStart } from '../panel.js';
+import { sliderLayout } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
@@ -153,6 +154,23 @@ export function Menus({
         setActiveMenu(null);
         setFocus(FOCUS_INPUT);
         if (name) setInputAtEnd(`/${name} `);
+        return;
+      }
+    }
+
+    // `/effort` is a slider: ←/→ move the marker and stop at the ends, enter
+    // or a digit applies. Nothing applies on a move, so esc changes nothing.
+    if (activeMenu?.type === 'effort') {
+      const current = resolveEffort(agentLoop.modelConfig?.effort).id;
+      const at = Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === (activeMenu.at || current)));
+      if (key.leftArrow || key.rightArrow) {
+        const next = Math.max(0, Math.min(EFFORT_LEVELS.length - 1, at + (key.leftArrow ? -1 : 1)));
+        if (next !== at) setActiveMenu({ ...activeMenu, at: EFFORT_LEVELS[next].id });
+        return;
+      }
+      const digit = /^[1-9]$/.test(_char) ? Number(_char) - 1 : -1;
+      if (key.return || (digit >= 0 && digit < EFFORT_LEVELS.length)) {
+        applyAndReturn(activeMenu, 'effort', [EFFORT_LEVELS[key.return ? at : digit].id]);
         return;
       }
     }
@@ -403,36 +421,50 @@ export function Menus({
 
         {activeMenu?.type === 'effort' && (() => {
           /*
-           * Claude Code's picker (asked for 2026-10-26): numbered rows, the one
-           * in effect ticked, what the highlighted one does on a line of its own
-           * underneath. No emoji in the rows: their widths disagree between
-           * terminals, so a column padded after them lines up on none.
+           * A slider, the way Claude Code draws its effort control (asked for
+           * 2026-10-26): Faster ← → Smarter, a marker on the bar, the levels
+           * under it, and what the marked one is on two lines below. Laid out by
+           * `sliderLayout` at an exact width; keys are in the `useInput` above.
            */
           const current = resolveEffort(agentLoop.modelConfig?.effort).id;
-          const at = activeMenu.at || current;
-          const { sub, tight, room } = fit(
-            'How hard the agent works on each turn. Each level sends its own prompt and expects that Gemini model in the tab.',
-            2,
-          );
+          const at = Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === (activeMenu.at || current)));
+          const marked = EFFORT_LEVELS[at];
+          const s = sliderLayout({ levels: EFFORT_LEVELS, at, width: W });
+          const pad = ' '.repeat(s.indent);
+          // The spaces that centre `text` under the bar.
+          const lead = (text) => ' '.repeat(Math.max(1, s.indent + Math.floor((s.span - text.length) / 2)));
+          const tick = marked.id === current ? '  ✔ current' : '';
+          const { tight } = fit('', 5);
+          let used = 0;
           return (
-            <Panel width={W} title="Effort" sub={sub} tight={tight}
-              keys="↑↓ move · 1–3 or enter choose · esc cancel">
-              <Choices
-                numbered
-                limit={room}
-                initialIndex={Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === current))}
-                items={EFFORT_LEVELS.map((e) => ({
-                  label: e.name, detail: e.browser, value: e.id, current: e.id === current,
-                }))}
-                onHighlight={(item) => {
-                  if (item.value !== activeMenu.at) setActiveMenu((m) => ({ ...m, at: item.value }));
-                }}
-                onSelect={async (item) => {
-                  await applyAndReturn(activeMenu, 'effort', [item.value]);
-                }}
-              />
-              <Text> </Text>
-              <Text dimColor wrap="truncate">{'   '}{resolveEffort(at).blurb}</Text>
+            <Panel width={W} title="Effort" tight={tight}
+              keys={`←/→ adjust · 1–${EFFORT_LEVELS.length} or enter confirm · esc cancel`}>
+              {tight ? null : <Text dimColor wrap="truncate">{pad}{s.ends}</Text>}
+              <Text wrap="truncate">
+                {pad}<Text color={T.muted}>{s.bar.before}</Text>
+                <Text color={T.accent} bold>{s.bar.marker}</Text>
+                <Text color={T.muted}>{s.bar.after}</Text>
+              </Text>
+              <Text wrap="truncate">
+                {pad}
+                {s.labels.map((label, i) => {
+                  const gap = ' '.repeat(Math.max(0, label.col - used));
+                  used = label.col + label.text.length;
+                  return (
+                    <React.Fragment key={label.text}>
+                      {gap}
+                      {i === at
+                        ? <Text bold color={T.accent}>{label.text}</Text>
+                        : <Text dimColor={EFFORT_LEVELS[i].id !== current}>{label.text}</Text>}
+                    </React.Fragment>
+                  );
+                })}
+              </Text>
+              <Text wrap="truncate">
+                {lead(marked.browser + tick)}{marked.browser}
+                {tick ? <Text color={T.success}>{tick}</Text> : null}
+              </Text>
+              <Text dimColor wrap="truncate">{lead(marked.blurb)}{marked.blurb}</Text>
             </Panel>
           );
         })()}

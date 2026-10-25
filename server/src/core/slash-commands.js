@@ -456,9 +456,9 @@ export async function handleSlashCommand(loop, command, args) {
         let browser;
         if (plan.action === 'switch') {
           loop.switchModelTo(plan.model.label);
-          browser = `switching the browser to **${plan.model.label}**${pinned}`;
+          browser = `switching to **${plan.model.label}**${pinned}`;
         } else if (plan.action === 'none') {
-          browser = `browser already on **${plan.model.label}**${pinned}`;
+          browser = `tab already on **${plan.model.label}**${pinned}`;
         } else {
           loop._pendingEffortSwitch = chosen.id;
           loop.requestModelOptions?.(true);
@@ -473,7 +473,7 @@ export async function handleSlashCommand(loop, command, args) {
            * of an attempt; the follow-up comes from `requestModelOptions`'s
            * watchdog, which now says something when nothing comes back.
            */
-          browser = `asked the browser for **${chosen.browser}** — \`ctrl+b\` shows the tab`;
+          browser = `asked the browser for **${chosen.browser}** · \`ctrl+b\` shows the tab`;
         }
 
         // A pin naming something this plan does not offer is the single way
@@ -481,27 +481,18 @@ export async function handleSlashCommand(loop, command, args) {
         if (plan.pinMissed) browser += ` · ⚠ ${plan.pinMissed}`;
 
         /*
-         * What the change actually costs, said once and only when it applies.
-         *
-         * `resetPromptState()` above means the next message carries the whole
-         * system prompt — up to 26 KB — into a thread that already has one.
-         * That is precisely the large-repeated-payload case Gemini's repetition
-         * and A/B filters react to, and it is invisible: the command looks
-         * instant and the price arrives on the next turn.
-         *
-         * A line, not a confirmation dialog. `/effort` is used often enough
-         * that a prompt on every change is friction, and `/compact` already
-         * hands the thread over properly.
+         * No second line about the cost. It said the next message resends the
+         * full prompt into this chat, which is true, and the owner asked for
+         * the reply to be the change and nothing else (2026-10-26, with a
+         * screenshot: "we don't have to make it so verbose, just say effort
+         * changed to this, model is set"). The tab's answer follows as its own
+         * row — `✓ tab on …`, or the warning when the switch did not land.
          */
-        const midChat = (loop.conversationHistory?.length > 0)
-          ? '\n  _next message resends the full prompt into this chat — `/compact` starts a fresh one_'
-          : '';
-
         const change = before.id === chosen.id
           ? `already **${chosen.name}**`
           : `**${before.name}** → **${chosen.name}**`;
 
-        return { message: `${renamed}⚙ effort  ${change} · ${browser}${midChat}` };
+        return { message: `${renamed}⚙ effort  ${change} · ${browser}` };
       }
 
       const now = resolveEffort(loop.modelConfig.effort);

@@ -1789,7 +1789,7 @@ export class AgentLoop {
       // `✓` and `!` rather than emoji, which is what every other row in this
       // transcript uses for the same two meanings.
       this._notify(same(switchedTo, requested)
-        ? `✓ Browser model is now ${switchedTo}.`
+        ? `✓ tab on ${switchedTo}`
         : `! Browser model is still ${switchedTo || 'unknown'} — asked for ${requested}.`
           + `\n  Change it by hand in the Gemini tab (ctrl+b opens it). `
           + 'The prompt here already changed.');
@@ -1797,7 +1797,7 @@ export class AgentLoop {
     }
 
     if (switchedTo) {
-      this._notify(`✓ Browser model switched to ${switchedTo}.`);
+      this._notify(`✓ tab on ${switchedTo}`);
       return;
     }
 
