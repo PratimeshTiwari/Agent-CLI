@@ -138,7 +138,7 @@ test(':stop tells the loop, and does it before the abort', () => {
   const app = readFileSync(
     join(fileURLToPath(new URL('../../src/ui/App.jsx', import.meta.url))), 'utf8',
   );
-  const stop = app.slice(app.indexOf("cleanQuery === ':stop'"), app.indexOf('🛑 Agent forcefully stopped.'));
+  const stop = app.slice(app.indexOf("cleanQuery === ':stop'"), app.indexOf("note: 'Interrupted'"));
   assert.match(stop, /agentLoop\.noteUserStop\(\)/, ':stop no longer records that you stopped it');
   assert.ok(
     stop.indexOf('noteUserStop') < stop.indexOf('abortExtensionWork'),

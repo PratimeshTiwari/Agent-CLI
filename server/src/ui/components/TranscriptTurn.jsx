@@ -101,8 +101,8 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
         Deciding from `fromItem` drew it twice for the whole thinking phase.
       */}
       {turn.userMsg && showUserBar && (
-        <UserBar content={turn.userMsg.content} isLive={isLive} terminalWidth={terminalWidth}
-          compact={compact} />
+        <UserBar content={turn.userMsg.content} note={turn.userMsg.note} isLive={isLive}
+          terminalWidth={terminalWidth} compact={compact} />
       )}
 
       {/*
@@ -158,7 +158,7 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
  * Its own component because it is **final the moment it is drawn**, which is
  * the property `<Static>` requires and the turn around it does not have.
  */
-export function UserBar({ content, isLive, terminalWidth = 80, compact = false }) {
+export function UserBar({ content, note, isLive, terminalWidth = 80, compact = false }) {
   // The image block above the message is drawn as `⎿ [Image #1]` rows under
   // it, each a link to the file (see ui/image-attach.js). Committed only: the
   // live copy of the bar lasts a moment, and its rows are budgeted.
@@ -219,6 +219,12 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
           {'  ⎿  '}<Text underline>{linkImageTags(imageTag(n), links)}</Text>
         </Text>
       ))}
+      {/* What became of a prompt that never reached the model (`:stop`). */}
+      {note ? (
+        <Text wrap="truncate">
+          <Text color={T.muted}>{'  ⎿  '}</Text><Text color={T.attention}>{note}</Text>
+        </Text>
+      ) : null}
     </Box>
   );
 }
