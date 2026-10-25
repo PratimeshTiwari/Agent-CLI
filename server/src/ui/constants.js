@@ -40,7 +40,7 @@ const SLASH_COMMANDS = [
   { name: 'open', desc: 'Open a file in your editor', group: 'project' },
   { name: 'effort', desc: 'How hard to work, and which browser tab it expects', group: 'config' },
   { name: 'allowlist', desc: 'Manage auto-approved/blocked command rules', group: 'config' },
-  { name: 'subagents', desc: 'Subagents on or off — parallel tabs for research, review and errands', group: 'config' },
+  { name: 'subagents', desc: 'Subagents on or off — parallel tabs for research and review', group: 'config' },
   { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not · `/plan show` previews the plan', group: 'work' },
   { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },
   { name: 'auto', desc: 'Auto Mode — safe edits apply automatically', group: 'work' },

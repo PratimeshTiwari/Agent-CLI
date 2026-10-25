@@ -278,7 +278,11 @@ export function InputBar({
           {slashOpen && (
             <Box flexDirection="column" paddingX={1}>
               {slashMatches.map((cmd, idx) => (
-                <Text key={cmd.name} color={idx === slashSelected ? T.menu : T.muted} bold={idx === slashSelected}>
+                // Truncated: a description that wraps is a row drawn and not
+                // charged, and `/subagents`'s did at 80 columns (1 clear at 13
+                // rows under the pty, 2026-10-26).
+                <Text key={cmd.name} color={idx === slashSelected ? T.menu : T.muted} bold={idx === slashSelected}
+                  wrap="truncate">
                   {(idx === slashSelected ? '❯ ' : '  ') + `/${cmd.name}`.padEnd(16)}
                   <Text dimColor>{cmd.desc}</Text>
                 </Text>

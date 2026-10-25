@@ -468,6 +468,36 @@ function explainDisconnected() {
   );
 }
 
+/*
+ * Prompts this panel sent, drawn already, whose `user_turn` is still to come.
+ *
+ * The loop tells every surface what was asked, so a prompt typed in the
+ * terminal appears here too (reported with a screenshot, 2026-10-26: replies
+ * arrived, the questions never did). The panel drew its own on send, so its
+ * own come back once and are skipped — matched by content rather than by
+ * client, because the Chrome panel and the VS Code panel are both "the panel".
+ */
+const ownSends = [];
+
+function takeOwnEcho(content) {
+  const at = ownSends.indexOf(content);
+  if (at < 0) return false;
+  ownSends.splice(at, 1);
+  return true;
+}
+
+/*
+ * A recorded prompt with an image in it, as it is drawn: the loop records an
+ * `[Image attached: <path> …]` line and an `<image_data>` placeholder.
+ * Kept in step with `foldImageHeader` in the CLI's format.js.
+ */
+function foldImageHeader(text) {
+  const s = String(text ?? '');
+  if (!s.startsWith('[Image attached:')) return s;
+  return s.replace(/^\[Image attached:[^\n]*\]\s*/, '[Image] ')
+    .replace(/<image_data>[\s\S]*?<\/image_data>\s*/, '');
+}
+
 function sendMessage() {
   const content = commandInput.value.trim();
   if (!content || isWaitingForResponse) return;
@@ -506,6 +536,7 @@ function sendMessage() {
 
   // Display user message
   appendMessage('user', content);
+  ownSends.push(content);
 
   // Send to service worker → server
   chrome.runtime.sendMessage({
@@ -1126,6 +1157,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
      * screen wins, because a reconnect mid-session must not duplicate what the
      * reader is looking at.
      */
+    // A prompt typed somewhere else — the terminal, or the other panel.
+    case 'user_turn': {
+      const content = String(payload?.content ?? '');
+      if (!content || takeOwnEcho(content)) break;
+      if (welcomeMessage) welcomeMessage.remove();
+      removeThinking();
+      appendMessage('user', foldImageHeader(content));
+      showThinking();
+      break;
+    }
+
+    // The loop went idle: the turn ended, was stopped, or failed. The only
+    // end a stopped turn has — it sends no `agent_response`.
+    case 'turn_idle':
+      removeThinking();
+      isWaitingForResponse = false;
+      sendBtn.disabled = false;
+      reflectSendState();
+      break;
+
     case 'history': {
       if (historyRestored || messageStream.querySelector('.message-user')) break;
       historyRestored = true;
@@ -1137,7 +1188,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       for (const turn of turns) {
         const { body, review } = splitReview(turn.content);
-        if (turn.role === 'user') appendMessage('user', turn.content);
+        if (turn.role === 'user') appendMessage('user', foldImageHeader(turn.content));
         else if (body) appendMessage('agent', body);
         if (turn.role !== 'user' && review) appendReview(review);
       }

@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.49.0**
+## Current version: **1.50.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,15 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.50.0 — 2026-10-26
+
+- **The panel shows prompts typed in the terminal.** It showed the replies to
+  them and never the prompts. The agent now sends every prompt to every panel,
+  and a panel skips the ones it sent itself, so nothing is drawn twice.
+- **The thinking row goes when a turn ends, however it ends.** A turn stopped or
+  failed in the terminal sent no reply, so the panel kept spinning. The agent
+  now says when it goes idle.
 
 ### 1.49.0 — 2026-10-25
 

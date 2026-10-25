@@ -524,6 +524,21 @@ export class AgentLoop {
       };
       this.conversationHistory.push(turn);
       this.sessionStore.appendTurn(turn);
+      /*
+       * Every surface is told what was asked, not only the one it was typed in.
+       *
+       * The panel drew its own prompts locally and was sent everything after
+       * them — replies, tool rows, diffs — so a prompt typed in the terminal
+       * reached the panel as an answer to nothing (reported with a screenshot,
+       * 2026-10-26). The surface that sent it recognises its own and skips it;
+       * see `takeOwnEcho` in the panel.
+       */
+      this.callbacks?.sendToPanel?.({
+        id: randomUUID(),
+        type: 'user_turn',
+        payload: { content: remembered },
+        timestamp: turn.timestamp,
+      });
 
       // Retries re-send this. The attachment is already in the browser's own
       // conversation by then, so re-pasting it would duplicate the upload.

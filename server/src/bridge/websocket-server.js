@@ -180,6 +180,16 @@ export class WebSocketServer {
         this.agentLoop.handleDiffResponse(randomUUID(), { diffId: diff?.diffId, action: 'reject' }),
     };
     this.agentLoop.setBackgroundCallbacks(backgroundCallbacks);
+    /*
+     * The panels learn a turn is over from the loop, whoever started it.
+     *
+     * They knew only from `agent_response`, which a stopped or failed turn
+     * never sends — and once a terminal prompt is drawn in the panel
+     * (`user_turn`), its thinking row would outlive an esc in the terminal.
+     */
+    this.agentLoop.onIdle?.(() => this.broadcast('extension', {
+      id: randomUUID(), type: 'turn_idle', payload: {}, timestamp: Date.now(),
+    }));
   }
 
   /**
