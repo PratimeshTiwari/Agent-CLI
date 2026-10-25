@@ -1627,6 +1627,11 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   Ink has read it before the chord runs. **A component that reads its props inside an input
   handler is a stale closure waiting for a slow frame.**
 
+- **A setting reply is one line (v5.25, `changed()` in `core/slash-commands.js`).** `⚙ <setting>
+  **from** → **to**`, or `already **x**`, plus at most one `·` clause the status bar does not
+  already say — owner's words: "subagent on -> off or already off/on". No emoji and no paragraph:
+  the reply sits in the scrollback for the rest of the session. A setting that did not change does
+  not call `resetPromptState()`, which would spend a full turn-0 payload to change nothing.
 - **A menu opened from `/settings` must not answer in the transcript.** `returnTo` is the
   settings page, so setting it back reopens that page *on top of* whatever the command just
   said. Four screens did this — `/effort`, `/config`, and two on the allowlist — and the
