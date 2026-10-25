@@ -1491,6 +1491,17 @@ queue, press nothing and it is gone, which is the cancel nobody had to invent a 
 when the box is empty: half a typed sentence must not be replaced by something queued a minute
 ago.
 
+**`ctrl+x ctrl+s` steers instead (v5.23).** Asked for on 2026-10-25: queue by default, steer on
+request. The last queued prompt goes to `AgentLoop.steer`; the next tool-results prompt carries it
+as `<user_steer>` with a one-line explanation inline (not in the system prompt — rare, and that is
+the payload kept small), and the loop records a `type: 'steer'` turn drawn as `↳ steered:`. A turn
+that ends with no further tool round never builds that prompt, so the idle edge hands the steer back
+(`takeSteers`) as the next message — first in line. `noteUserStop` drops steers;
+`abortExtensionWork` does not, because it also runs on error paths where the message is still
+wanted. Both bytes are in `HOTKEYS` (raw mode clears IXON, so ctrl+s arrives instead of freezing
+the terminal), and `chordGate` allows 1.5 s between them. Pty: delivered, drawn, and the fallback
+sent as a message; 0 clears at 10, 13, 24 rows.
+
 ## Gotchas
 
 - **`server/src/index.js` is the bin and does nothing but re-spawn `main.js` under `tsx`** —

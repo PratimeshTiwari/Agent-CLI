@@ -35,6 +35,12 @@ export const HOTKEYS = {
   // for its own Gemini panel: pressing it in the terminal opened Chrome instead.
   '\x0f': 'artifacts',
   '\x02': 'focus-browser', // ctrl+b — bring the Gemini tab to the front
+  // ctrl+x then ctrl+s — steer the last queued prompt into the running turn
+  // (2026-10-25). Raw mode clears IXON, so ctrl+s arrives as a byte instead of
+  // freezing the terminal. Both are pulled here or ink-text-input would type
+  // their letters into the prompt.
+  '\x18': 'steer-arm',
+  '\x13': 'steer',
   '\x03': 'interrupt',    // ctrl+c — clear the prompt; twice to exit (cli-ui decides)
 };
 
@@ -52,6 +58,26 @@ export function interruptGate(windowMs = EXIT_WINDOW_MS) {
     if (now - last < windowMs) return 'exit';
     last = now;
     return 'first';
+  };
+}
+
+/** ctrl+s counts as the second half of the chord only this soon after ctrl+x. */
+export const STEER_WINDOW_MS = 1500;
+
+/**
+ * The two-key chord, as a function App can call and a test can drive. `arm` on
+ * ctrl+x; `fire` on ctrl+s answers whether the chord completed, and disarms
+ * either way, so a stray ctrl+s later does nothing.
+ */
+export function chordGate(windowMs = STEER_WINDOW_MS) {
+  let armedAt = -Infinity;
+  return {
+    arm(now = Date.now()) { armedAt = now; },
+    fire(now = Date.now()) {
+      const ok = now - armedAt <= windowMs;
+      armedAt = -Infinity;
+      return ok;
+    },
   };
 }
 

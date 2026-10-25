@@ -158,6 +158,7 @@ export async function handleSlashCommand(query, {
           '  ctrl+j      newline, without sending   ·   ↑ ↓   move a line, or recall',
           '  ctrl+o      show or hide the task list',
           '  ctrl+y      copy the last code block',
+          '  ctrl+x ctrl+s   steer the last queued message into the running turn',
           '  esc         stop the run, or close a menu',
           '  ctrl+c ×2   quit — prints how to resume',
           '',

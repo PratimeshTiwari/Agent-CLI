@@ -285,6 +285,33 @@ export class AgentLoop {
     return () => this._idleListeners.delete(fn);
   }
 
+  /*
+   * Steering: a message typed during a turn, sent *into* it.
+   *
+   * Asked for on 2026-10-25 — queue by default, `ctrl+x ctrl+s` to steer. A
+   * steer cannot be typed into Gemini while it is writing (one tab, one
+   * in-flight prompt), so it rides with the next tool-results prompt as
+   * `<user_steer>` (`buildToolResultBatch`). A turn that ends without another
+   * tool round never builds one: the UI takes what is left (`takeSteers`, on
+   * the idle edge) and sends it as the next message. Never dropped, except by
+   * an explicit stop (`noteUserStop`).
+   */
+
+  /** Hold `text` for the next tool-results prompt. False when there is no turn to steer. */
+  steer(text) {
+    const t = String(text ?? '').trim();
+    if (!t || !this.isProcessing) return false;
+    (this._steers ||= []).push(t);
+    return true;
+  }
+
+  /** Every steer not yet delivered, removed. */
+  takeSteers() {
+    const out = this._steers || [];
+    this._steers = [];
+    return out;
+  }
+
   constructor({ workspace, mcpServer, promptBuilder, diffEngine, riskClassifier, editor, configHome, continueSession = false, resumeSessionId = null, agentSourceDir, taskManager }) {
     this.workspace = workspace;
     this.mcpServer = mcpServer;
@@ -2278,6 +2305,8 @@ export class AgentLoop {
    */
   noteUserStop() {
     this._userStoppedAt = Date.now();
+    // Stopping means stopping: a steer must not come back as the next message.
+    this._steers = [];
   }
 
   /**
@@ -2840,9 +2869,18 @@ export class AgentLoop {
       : '';
     this._withheldConclusion = false;
 
+    const steers = this.takeSteers();
+    const steerText = steers.join('\n\n');
     const batch = this.promptBuilder.buildToolResultBatch(
-      toolResults, this.turnEvidence, this._dueHandover(), withheld,
+      toolResults, this.turnEvidence, this._dueHandover(), withheld, steerText,
     );
+    if (steers.length) {
+      // On the record, and on screen as `↳ steered:` inside the running turn.
+      const steerTurn = { role: 'system', type: 'steer', content: steerText, timestamp: Date.now() };
+      this.conversationHistory.push(steerTurn);
+      this.sessionStore.appendTurn(steerTurn);
+      this.callbacks.sendToPanel?.({ type: 'steer_delivered', payload: { count: steers.length }, timestamp: Date.now() });
+    }
 
     /*
      * Never compacted here. Mid-turn compaction (pause at the tool-result

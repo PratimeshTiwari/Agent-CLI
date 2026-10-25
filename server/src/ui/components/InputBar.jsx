@@ -38,6 +38,7 @@ export function InputBar({
   handleSubmit,
   input,
   isProcessing,
+  steered = [],
   isThinkingTooLong,
   isThinkingStuck,
   isToolRunningRef,
@@ -208,18 +209,26 @@ export function InputBar({
             `wrap="truncate"` for the same reason — a queued prompt can be a
             paragraph, and a row that wraps is charged as one and drawn as two.
           */}
-          {queued.length > 0 && (
+          {(queued.length > 0 || steered.length > 0) && (
             <Box flexDirection="column" marginBottom={1}>
-              {queued.slice(0, 3).map((q, i, shown) => (
-                <Text key={i} dimColor wrap="truncate">
-                  {'  ⏸ queued  '}{oneLine(q, 64)}
-                  {/* The take-back had no affordance. On the last row, where
-                      truncation reaches it first and the text survives. */}
-                  {i === shown.length - 1 && queued.length <= 3 ? '  · ↑ to take back' : ''}
+              {/* Steered first: they reach the model before anything queued. */}
+              {steered.slice(0, 3).map((q, i) => (
+                <Text key={`s${i}`} color={T.accent} wrap="truncate">
+                  {'  ↳ steering  '}{oneLine(q, 48)}<Text dimColor>{'  · goes in with the next tool results'}</Text>
                 </Text>
               ))}
-              {queued.length > 3 && (
-                <Text dimColor wrap="truncate">{'  ⏸ '}… {queued.length - 3} more queued  · ↑ takes back the last</Text>
+              {queued.slice(0, Math.max(0, 3 - Math.min(steered.length, 3))).map((q, i, shown) => (
+                <Text key={i} dimColor wrap="truncate">
+                  {'  ⏸ queued  '}{oneLine(q, isProcessing ? 40 : 64)}
+                  {/* The take-back had no affordance. On the last row, where
+                      truncation reaches it first and the text survives. The
+                      steer hint only while there is a turn to steer into. */}
+                  {i === shown.length - 1 && queued.length === shown.length
+                    ? `${isProcessing ? '  · ctrl+x ctrl+s to steer' : ''}  · ↑ to take back` : ''}
+                </Text>
+              ))}
+              {queued.length + steered.length > 3 && (
+                <Text dimColor wrap="truncate">{'  ⏸ '}… {queued.length + steered.length - 3} more queued  · ↑ takes back the last</Text>
               )}
             </Box>
           )}

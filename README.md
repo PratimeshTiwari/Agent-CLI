@@ -109,6 +109,7 @@ The status line says which one is on, the way Claude Code does: `⏸ plan mode o
 | `esc` | stop the run |
 | `ctrl+c` twice | quit (prints how to resume) |
 | `↑` | with an empty prompt, take back a queued message |
+| `ctrl+x` `ctrl+s` | steer the last queued message into the running turn instead of waiting |
 | `ctrl+e` | expand or collapse every step |
 | `ctrl+o` | show or hide the task list |
 | `ctrl+y` | copy the last code block |
