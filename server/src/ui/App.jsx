@@ -687,10 +687,23 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const approval = activeMenu?.type === 'command_approval'
     ? approvalLayout(activeMenu.payload, { width: terminalWidth, maxRows: INPUT_ROWS + frameBudget - 1 })
     : null;
-  const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0));
   // What a menu drawn in place of the input may use: the input's own rows and
-  // the live frame's, which a menu opened between turns has to itself.
-  const menuRows = Math.max(3, frameBudget + INPUT_ROWS);
+  // the live frame's, which a menu opened between turns has to itself — and,
+  // between turns, the spinner row and its margin, which `reservedRows` counts
+  // and only a running turn draws (`InputBar`). Without them `/effort` showed
+  // two of its three rungs at 13 rows with four rows empty under the status bar.
+  //
+  // A menu opened *during* a turn — the agent's `ask_question` — shares the
+  // live frame with the turn, so it is charged the way the approval box is:
+  // the turn keeps one row and the menu has the rest. Before, both were given
+  // the whole of it: 25 `ESC[2J` at 13 and 16 rows while a question was up.
+  const menuMidTurn = Boolean(activeMenu) && activeMenu.type !== 'command_approval' && isProcessing;
+  const idleRows = isProcessing ? 0 : (isCompactHeight(terminalHeight) ? 1 : 2);
+  const menuRows = menuMidTurn
+    ? Math.max(3, INPUT_ROWS + frameBudget - 1)
+    : Math.max(3, frameBudget + INPUT_ROWS + idleRows);
+  const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0)
+    - (menuMidTurn ? menuRows - INPUT_ROWS : 0));
 
   /*
    * The running tool calls share the turn's rows. They were drawn under the
@@ -1384,8 +1397,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
               <Text dimColor>{'  —  /update to pull'}</Text>
             </Text>
           )}
-          {/* The in-flight turn — the only transcript rows Ink repaints. */}
-          {liveTurns.map((turn) => (
+          {/* The in-flight turn — the only transcript rows Ink repaints. Not
+              while a menu it raised is up (the agent's question): the menu is
+              what is being waited on, and at 13 rows the two together were 15
+              `ESC[2J` — the turn's margins are more than the one row it keeps. */}
+          {!menuMidTurn && liveTurns.map((turn) => (
             <TranscriptTurn
               key={turn.id}
               turn={turn}
@@ -1445,6 +1461,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             setFocus={setFocus}
             mode={mode}
             terminalHeight={terminalHeight}
+            width={terminalWidth}
           />
 
           {/*

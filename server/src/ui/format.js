@@ -1144,43 +1144,44 @@ export function lastReply(history = []) {
  * cleared on every render while the box was up. Measured under the pty,
  * 2026-10-26: 15 `ESC[2J` at 16 rows, all with the box on screen.
  *
- * So every row is decided here, pre-wrapped at the box's inner width and drawn
+ * So every row is decided here, pre-wrapped at the panel's width and drawn
  * truncated, and App charges `rows` against the live turn. What gives way
- * first is the padding, then the reason, then the directory, then the border —
- * **never the command**, which is the thing being approved. When even the
+ * first is the gap above the choices, then the reason, then the directory,
+ * then the rule — **never the command**, which is the thing being approved. When even the
  * command does not fit, the title says how much of it is not shown rather
  * than hiding it (on the title row, because a row of its own is the row there
  * is no room for).
  *
+ * Since 2026-10-26 it is drawn like every other menu (`ui/panel.js`): a rule
+ * in the risk colour and no border, which is two rows and four columns back.
+ *
  * @param {{command?: string, cwd?: string, riskReason?: string}} payload
  * @param {{width?: number, maxRows?: number}} [room]
- * @returns {{command: string[], hidden: number, cwd: boolean, reason: boolean, padded: boolean, bordered: boolean, rows: number}}
+ * @returns {{command: string[], hidden: number, ruled: boolean, cwd: boolean, reason: boolean, padded: boolean, rows: number}}
  */
 export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } = {}) {
-  const OPTIONS = 4;
+  const RULE = 1;
   const TITLE = 1;
-  const fits = (bordered) => {
-    const inner = Math.max(10, width - (bordered ? 4 : 2));    // border, and a column of padding each side
-    const all = [];
-    String(payload.command ?? '').split('\n').forEach((line, i) => {
-      let rest = (i === 0 ? 'Command: ' : '  ') + line;
-      while (rest.length > inner) { all.push(rest.slice(0, inner)); rest = `  ${rest.slice(inner)}`; }
-      all.push(rest);
-    });
-    let room = maxRows - (bordered ? 2 : 0) - TITLE - OPTIONS;
-    const shown = Math.max(1, Math.min(all.length, room));
-    room -= shown;
-    const cwd = room >= 1 && Boolean(payload.cwd);
-    room -= cwd ? 1 : 0;
-    const reason = room >= 1 && Boolean(payload.riskReason);
-    room -= reason ? 1 : 0;
-    const padded = bordered && room >= 2;
-    const rows = (bordered ? 2 : 0) + TITLE + OPTIONS + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 2 : 0);
-    return { command: all.slice(0, shown), hidden: all.length - shown, cwd, reason, padded, bordered, rows };
-  };
-  // The border goes only when the whole command would not fit inside it.
-  const boxed = fits(true);
-  if (boxed.hidden === 0 && boxed.rows <= maxRows) return boxed;
-  const bare = fits(false);
-  return bare.hidden < boxed.hidden || boxed.rows > maxRows ? bare : boxed;
+  const OPTIONS = 4;
+  const inner = Math.max(10, width - 2);                       // the panel's one-column indent
+  const all = [];
+  String(payload.command ?? '').split('\n').forEach((line, i) => {
+    let rest = (i === 0 ? 'Command: ' : '  ') + line;
+    while (rest.length > inner) { all.push(rest.slice(0, inner)); rest = `  ${rest.slice(inner)}`; }
+    all.push(rest);
+  });
+  let room = maxRows - TITLE - OPTIONS;
+  const shown = Math.max(1, Math.min(all.length, room));
+  room -= shown;
+  // The rule is the last thing to go before the command: at the smallest
+  // heights it is the row the old borderless fallback did not spend.
+  const ruled = room >= RULE;
+  room -= ruled ? RULE : 0;
+  const cwd = room >= 1 && Boolean(payload.cwd);
+  room -= cwd ? 1 : 0;
+  const reason = room >= 1 && Boolean(payload.riskReason);
+  room -= reason ? 1 : 0;
+  const padded = room >= 1;
+  const rows = (ruled ? RULE : 0) + TITLE + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 1 : 0) + OPTIONS;
+  return { command: all.slice(0, shown), hidden: all.length - shown, ruled, cwd, reason, padded, rows };
 }

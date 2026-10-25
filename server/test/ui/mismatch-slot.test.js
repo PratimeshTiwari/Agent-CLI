@@ -14,7 +14,7 @@ const app = readFileSync(new URL('../../src/ui/App.jsx', import.meta.url), 'utf8
 
 test('the row is drawn after the in-flight turn and right before the input', () => {
   const row = app.indexOf('{mismatch && (');
-  const turn = app.indexOf('{liveTurns.map((turn) => (');
+  const turn = app.indexOf('liveTurns.map((turn) => (');
   const input = app.indexOf('<InputBar\n');
   assert.ok(row > -1 && turn > -1 && input > -1, 'control: all three are still here');
   assert.ok(row > turn, 'above the turn is where it looked odd');

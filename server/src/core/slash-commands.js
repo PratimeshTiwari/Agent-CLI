@@ -153,8 +153,8 @@ export async function handleSlashCommand(loop, command, args) {
         loop.promptBuilder?.resetPromptState?.();
         return {
           message: action === 'on'
-            ? '🧠 Memory on — learned facts go back into the prompt.'
-            : '🧠 Memory off — nothing new is learned and nothing is recalled.',
+            ? 'Memory on — learned facts go back into the prompt.'
+            : 'Memory off — nothing new is learned and nothing is recalled.',
         };
       }
 
@@ -163,19 +163,19 @@ export async function handleSlashCommand(loop, command, args) {
         if (!which) return { message: 'Usage: `/memory forget <number>` — the numbers are the ones `/memory` shows.' };
         const ok = loop.memoryManager.removeMemory(which);
         loop.promptBuilder?.resetPromptState?.();
-        return { message: ok ? `🗑️ Forgot #${which}.` : `Nothing at #${which}.` };
+        return { message: ok ? `Forgot #${which}.` : `Nothing at #${which}.` };
       }
 
       const facts = loop.memoryManager.getAllMemories();
       const where = paths.memoryPath(loop.workspace);
       if (facts.length === 0) {
         return {
-          message: `🧠 Nothing remembered yet.\n\nFacts land in \`${where}\` as the agent `
+          message: `Nothing remembered yet.\n\nFacts land in \`${where}\` as the agent `
             + 'learns them, and it is an ordinary markdown file — edit it freely.',
         };
       }
       return {
-        message: `### 🧠 Memory — ${facts.length} fact${facts.length === 1 ? '' : 's'}`
+        message: `### Memory — ${facts.length} fact${facts.length === 1 ? '' : 's'}`
           + `${loop.memoryManager.isMemoryEnabled() ? '' : ' _(off — not being recalled)_'}\n\n`
           + facts.map((f, i) => `${i + 1}. ${f}`).join('\n')
           + `\n\n_\`${where}\` · \`/memory forget <n>\` · \`/memory off\`_`,

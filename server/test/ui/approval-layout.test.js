@@ -14,17 +14,18 @@ import { approvalLayout } from '../../src/ui/format.js';
 const LONG = 'for i in 1 2 3; do echo LONGROW-$i; sleep 1; done; echo the-quick-brown-fox-jumps-over-the-lazy-dog-and-keeps-going-well-past-eighty-columns';
 const payload = { command: LONG, cwd: '/w/project', riskReason: 'Mutating shell command' };
 
-test('with room, everything is shown, boxed and padded', () => {
+test('with room, everything is shown, with the gap above the choices', () => {
   const l = approvalLayout(payload, { width: 80, maxRows: 40 });
   assert.equal(l.hidden, 0);
   assert.equal(l.command.length, 2, 'the long command is two rows at 80 columns');
-  assert.ok(l.bordered && l.padded && l.cwd && l.reason);
-  assert.equal(l.rows, 2 + 2 + 1 + 2 + 1 + 1 + 4);
+  assert.ok(l.padded && l.cwd && l.reason);
+  // rule, title, command ×2, directory, reason, gap, four choices
+  assert.equal(l.rows, 1 + 1 + 2 + 1 + 1 + 1 + 4);
 });
 
 test('every command row fits inside the box, so none of them wraps', () => {
   const l = approvalLayout(payload, { width: 60, maxRows: 40 });
-  for (const line of l.command) assert.ok(line.length <= 56, line);
+  for (const line of l.command) assert.ok(line.length <= 58, line);
   assert.equal(l.command.join('').replace(/\s+/g, ''), `Command:${LONG}`.replace(/\s+/g, ''), 'nothing lost between rows');
 });
 
@@ -38,28 +39,29 @@ test('it never asks for more rows than it was given, down to the bare minimum', 
 test('padding, reason and directory go before the command does', () => {
   const l = approvalLayout(payload, { width: 80, maxRows: 9 });
   assert.equal(l.hidden, 0, 'the command is the thing being approved');
+  assert.equal(l.rows, 9);
   assert.equal(l.padded, false);
   assert.equal(l.reason, false);
 });
 
-test('when even the command cannot fit, the box drops its border and says what is cut', () => {
+test('when even the command cannot fit, the title says what is cut', () => {
   const l = approvalLayout(payload, { width: 80, maxRows: 6 });
-  assert.equal(l.bordered, false);
+  assert.equal(l.ruled, false, 'the rule goes before the command does');
   assert.equal(l.command.length, 1);
   assert.equal(l.hidden, 1);
   const menus = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
   assert.match(menus, /more line\$\{approval\.hidden === 1 \? '' : 's'\} of the command not shown/);
 });
 
-// Control: a short command keeps the box it always had.
-test('a short command is unchanged', () => {
+// Control: a short command is one row, with everything around it.
+test('a short command is one row', () => {
   const l = approvalLayout({ ...payload, command: 'npm test' }, { width: 80, maxRows: 40 });
   assert.deepEqual(l.command, ['Command: npm test']);
-  assert.ok(l.bordered && l.padded);
+  assert.ok(l.padded && l.cwd && l.reason);
 });
 
 test('App charges the box against the live turn', () => {
   const app = readFileSync(new URL('../../src/ui/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /approvalLayout\(activeMenu\.payload, \{ width: terminalWidth, maxRows: INPUT_ROWS \+ frameBudget - 1 \}\)/);
-  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\);/);
+  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\n\s+- \(menuMidTurn \? menuRows - INPUT_ROWS : 0\)\);/);
 });

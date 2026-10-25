@@ -3,7 +3,7 @@ import { render } from 'ink';
 import { PassThrough } from 'node:stream';
 import { extractHotkeys, dispatchInOrder, hotkeys, interruptGate } from './hotkeys.js';
 import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './farewell.js';
-import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR } from './screen-span.js';
+import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR, enterSequence } from './screen-span.js';
 import { App } from './App.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
@@ -90,7 +90,7 @@ export class CliUI {
     // session then starts at row 1 — which is where exit rewinds to.
     const ttyIO = Boolean(process.stdout.isTTY && process.stdin.isTTY);
     if (ttyIO && !process.env.AGENT_CLI_NO_CLEAR) {
-      process.stdout.write('\n'.repeat(Math.max(1, process.stdout.rows || 24)) + '\x1b[H');
+      process.stdout.write(enterSequence({ rows: process.stdout.rows || 24 }));
     }
     const span = ttyIO ? createScreenSpan({ rows: process.stdout.rows }) : null;
     let cursorWaiter = null;

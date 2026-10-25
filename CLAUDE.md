@@ -1770,6 +1770,17 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   calling `setTheme` on highlight; esc restores `original`; enter saves to
   `~/.agent/settings.json` (`core/user-settings.js` — per person, not per repo) and reprints the
   transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
+- **Every menu is a `Panel` (v5.24, `ui/panel.js`, `components/Panel.jsx`).** Asked for 2026-10-26:
+  the boxes "do not follow a common design theme". `/help`'s shape for all of them — a rule, a
+  title, at most two dim lines, `Choices` (`❯`, a dim second column, `✔` on the current one,
+  `1.`–`9.` where a digit may answer, never on an approval), one line of keys. No borders:
+  `panel.test.js` fails on a `borderStyle` in `Menus.jsx`. `panelRoom` sheds spacing, then the
+  description, never a choice. A menu opened **mid-turn** (`ask_question`) is charged like the
+  approval box and hides the live turn — 25 `ESC[2J` at 13 and 16 rows before, 0 now; an idle
+  menu also gets the spinner's rows. Menus at 13 rows: 13 clears on the previous commit, 0 now;
+  10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
+  (`enterSequence`), because a command line scrolled off screen is pinned over the header by
+  sticky scroll.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
