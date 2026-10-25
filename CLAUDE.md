@@ -1706,6 +1706,15 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   header's text column needs an **explicit width**: inside `<Static>` Yoga sizes it to content and
   `wrap="truncate"` then wraps instead. `/copy` (same release) copies the last reply's markdown.
 
+- **The header draws in on every start, and exit says goodbye (v5.23, `ui/intro.js`,
+  `components/Intro.jsx`).** `Root` shows `Intro` — the banner with a `frame`: the mark sweeps in,
+  the name types out, the dim lines arrive, ~440 ms — then mounts App, whose `<Static>` writes the
+  same header at the same position. On exit `farewell.js` awaits the registered outro (capped at
+  `OUTRO_CAP_MS`): App swaps its live frame for `❯ Goodbye.`, then the clear and the footer.
+  **App must draw the goodbye itself** — swapping App out for it left Ink laying out the Static App
+  had owned, ~90 blank rows a frame, the transcript pushed off screen. TTY only, ≥16 rows for the
+  intro, off under `AGENT_CLI_NO_ANIMATION` or `CI`. Pty: 1 `ESC[2J` (the exit's own) at 13, 16, 24.
+
 - **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
   `ui/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
   (Load-unpacked steps with this checkout's real `extension/` path; spinner → `✔ Connected`).

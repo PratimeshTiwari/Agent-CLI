@@ -5,6 +5,7 @@ import { stripImageData } from '../core/prompt-builder.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
+import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
@@ -54,7 +55,7 @@ import { T } from './theme.js';
  */
 const SESSION_STARTED_AT = Date.now();
 
-export function App({ agentLoop, wsServer }) {
+export function App({ agentLoop, wsServer, closing = false }) {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState([...agentLoop.conversationHistory]);
 
@@ -1324,6 +1325,8 @@ export function App({ agentLoop, wsServer }) {
           );
         }}
       </Static>
+      {/* Exit's goodbye replaces the live frame; the scrollback stays (cli-ui.jsx, Root). */}
+      {closing ? <Goodbye /> : (<>
 
           {/*
             Notices, at the top of everything Ink can repaint.
@@ -1582,6 +1585,7 @@ export function App({ agentLoop, wsServer }) {
         </Text>
         </Box>
       </Box>
+      </>)}
     </Box>
   );
 }

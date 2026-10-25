@@ -38,6 +38,15 @@ import { leave } from '../core/restart.js';
 
 
 let ink = null;
+let outro = null;
+
+/** Root hands over its goodbye: a function whose promise settles when it has played. */
+export function registerOutro(fn) {
+  outro = fn;
+}
+
+/** Longest exit will wait for the goodbye, whatever it says — leaving must not hang on a render. */
+export const OUTRO_CAP_MS = 600;
 
 /** cli-ui hands over the Ink instance so the farewell can unmount it first. */
 export function registerInk(instance) {
@@ -130,6 +139,11 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
   leaving = true;
   // Erase the live frame (prompt box, status row) and nothing else, then
   // unmount — whose final render then has nothing left to write.
+  if (outro && out?.isTTY) {
+    try {
+      await Promise.race([outro(), new Promise((r) => setTimeout(r, OUTRO_CAP_MS))]);
+    } catch { /* going anyway */ }
+  }
   try { ink?.clear?.(); } catch { /* going anyway */ }
   try { ink?.unmount(); } catch { /* going anyway */ }
   try { out.write(exitText(agentLoop, out)); } catch { /* going anyway */ }
@@ -141,4 +155,5 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
 export function _resetFarewell() {
   leaving = false;
   ink = null;
+  outro = null;
 }

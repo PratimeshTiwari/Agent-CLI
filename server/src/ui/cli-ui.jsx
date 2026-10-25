@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
 import { splitTrailingEnter } from './enter-splitter.js';
 import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
-import { registerInk, exitWithFarewell } from './farewell.js';
+import { registerInk, registerOutro, exitWithFarewell } from './farewell.js';
 import { App } from './App.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
+import { Intro, Goodbye } from './components/Intro.jsx';
+import { animationAllowed, OUTRO_MS } from './intro.js';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../core/user-settings.js';
 
@@ -46,12 +48,30 @@ function createInkStdin() {
  * App mounts only after setup ends, so the banner it commits to <Static> is
  * drawn in the theme just chosen and carries the name just given.
  */
-function Root({ agentLoop, wsServer, welcome }) {
+function Root({ agentLoop, wsServer, welcome, animate = false, outro = false }) {
   const [settingUp, setSettingUp] = useState(welcome);
+  // Setup has just played its own splash; the header does not draw in twice.
+  const [introDone, setIntroDone] = useState(!animate || welcome);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!outro) return undefined;
+    // Exit asks for the goodbye and waits for it (capped in farewell.js);
+    // swapping the app out leaves the scrollback it committed where it is.
+    registerOutro(() => new Promise((resolve) => {
+      setClosing(true);
+      setTimeout(resolve, OUTRO_MS);
+    }));
+    return () => registerOutro(null);
+  }, [outro]);
+  // App draws the goodbye itself, in place of its live frame. Swapping App out
+  // for it instead left Ink laying out the Static it had owned: ~90 blank rows
+  // a frame, pushing the transcript off screen (measured under the pty).
+  if (closing && (settingUp || !introDone)) return <Goodbye />;
   if (settingUp) {
     return <Onboarding agentLoop={agentLoop} wsServer={wsServer} onDone={() => setSettingUp(false)} />;
   }
-  return <App agentLoop={agentLoop} wsServer={wsServer} />;
+  if (!introDone) return <Intro agentLoop={agentLoop} onDone={() => setIntroDone(true)} />;
+  return <App agentLoop={agentLoop} wsServer={wsServer} closing={closing} />;
 }
 
 export class CliUI {
@@ -107,7 +127,11 @@ export class CliUI {
     // the old colours, and <Static> never repaints it.
     setTheme(startupTheme(process.env, loadUserSettings().theme));
 
-    const instance = render(<Root agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome} />, {
+    const tty = Boolean(process.stdout.isTTY);
+    const animate = animationAllowed({ isTTY: tty, rows: process.stdout.rows || 0 });
+    const outro = animationAllowed({ isTTY: tty, rows: Infinity });
+    const instance = render(<Root agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome}
+      animate={animate} outro={outro} />, {
       stdin: inkStdin,
       // ctrl+c is ours — see hotkeys.js. Ink's default unmounted the app and
       // left the process alive behind a frozen prompt.
