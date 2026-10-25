@@ -617,14 +617,21 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * confirmation it would sit directly under "switching the browser to X" and
    * contradict it.
    */
+  /*
+   * Resolved here rather than inside, for both arguments: `modelMismatch` takes
+   * rung ids only (a retired word matches nothing, on purpose), `browserModels`
+   * is keyed by rung id, and `modelConfig.effort` can still be a pre-2026-09-20
+   * word on an old config. Passing it raw made the row silent on exactly those
+   * configs while the status bar read `effort: high` — found under the pty,
+   * 2026-10-26, with a config holding `standard`.
+   */
+  const effortRung = resolveEffort(agentLoop.modelConfig?.effort);
   const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight)
     ? null
     : modelMismatch(
-    agentLoop.modelConfig?.effort,
+    effortRung.id,
     agentLoop.modelOptions || [],
-    // Resolved here rather than inside: `browserModels` is keyed by rung id and
-    // `modelConfig.effort` can still be a pre-2026-09-20 word on an old config.
-    browserModelPin(agentLoop.modelConfig, resolveEffort(agentLoop.modelConfig?.effort).id),
+    browserModelPin(agentLoop.modelConfig, effortRung.id),
   );
   /*
    * What the browser's picker says is selected, or null when it has never been
@@ -1361,20 +1368,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
               <Text dimColor>{'  —  /update to pull'}</Text>
             </Text>
           )}
-          {/*
-            The model the prompt is written for, against the one the tab is on.
-            Both names, because "wrong model" without saying which is a warning
-            you cannot act on — and `ctrl+b` is the key that shows the tab, so
-            the row carries the fix rather than only the complaint.
-          */}
-          {mismatch && (
-            <Text color={T.attention} wrap="truncate">
-              {'⚠ browser is on '}<Text bold>{mismatch.current}</Text>
-              {', this rung wants '}<Text bold>{mismatch.wanted}</Text>
-              <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
-            </Text>
-          )}
-
           {/* The in-flight turn — the only transcript rows Ink repaints. */}
           {liveTurns.map((turn) => (
             <TranscriptTurn
@@ -1437,6 +1430,27 @@ export function App({ agentLoop, wsServer, closing = false }) {
             mode={mode}
             terminalHeight={terminalHeight}
           />
+
+          {/*
+            The model the prompt is written for, against the one the tab is on.
+            Both names, because "wrong model" without saying which is a warning
+            you cannot act on — and `ctrl+b` is the key that shows the tab, so
+            the row carries the fix rather than only the complaint.
+
+            Directly above the input, in a slot of its own (2026-10-26). It used
+            to sit at the top of the live frame, above the in-flight turn, so it
+            appeared over a turn's rows mid-turn and moved with them — reported
+            as "looks odd". Here it stays put while the turn above it grows.
+            Still one truncated row charged through `noticeRows`, so the frame
+            budget is unchanged; the part to keep is on the left.
+          */}
+          {mismatch && (
+            <Text color={T.attention} wrap="truncate">
+              {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
+              {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
+              <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
+            </Text>
+          )}
 
           <InputBar
             queued={queued}
