@@ -71,8 +71,6 @@ function harness() {
     setActiveMenu() {},
     setHistory: (f) => history.push(typeof f === 'function' ? f([]) : f),
     setIsProcessing() {},
-    setPendingImage() {},
-    pendingImage: null,
   });
 
   const lastMessage = () => {
@@ -140,7 +138,6 @@ describe('arguments do not break anything', () => {
    * a mistake.
    */
   const CASES = [
-    '/image remove', '/image /nonexistent/x.png',
     '/open', '/open nope.txt',
     '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools',
     '/name Ada', '/name',

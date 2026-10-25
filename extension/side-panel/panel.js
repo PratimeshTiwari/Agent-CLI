@@ -487,15 +487,19 @@ function takeOwnEcho(content) {
 }
 
 /*
- * A recorded prompt with an image in it, as it is drawn: the loop records an
- * `[Image attached: <path> …]` line and an `<image_data>` placeholder.
- * Kept in step with `foldImageHeader` in the CLI's format.js.
+ * A recorded prompt with images in it, as it is drawn: the loop records one
+ * `[Image #n: <path>] …` line and an `<image_data>` placeholder per image above
+ * the message, whose own `[Image #n]` tags stay. The format before 2026-10-26
+ * was one `[Image attached: <path> …]` line. Kept in step with `foldImages` in
+ * the CLI's ui/image-attach.js.
  */
 function foldImageHeader(text) {
   const s = String(text ?? '');
-  if (!s.startsWith('[Image attached:')) return s;
-  return s.replace(/^\[Image attached:[^\n]*\]\s*/, '[Image] ')
-    .replace(/<image_data>[\s\S]*?<\/image_data>\s*/, '');
+  if (s.startsWith('[Image attached:')) {
+    return s.replace(/^\[Image attached:[^\n]*\]\s*/, '[Image] ')
+      .replace(/<image_data>[\s\S]*?<\/image_data>\s*/, '');
+  }
+  return s.replace(/^(?:\[Image #\d+: [^\]\n]+\][^\n]*\n<image_data>[^\n]*?<\/image_data>\n?)+\n*/, '');
 }
 
 function sendMessage() {

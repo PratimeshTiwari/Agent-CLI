@@ -36,6 +36,7 @@ export function InputBar({
   disconnectedText,
   focus,
   handleSubmit,
+  attachImage,
   input,
   isProcessing,
   steered = [],
@@ -113,7 +114,7 @@ export function InputBar({
     // is a signal rather than a guess. The clipboard probe costs ~60ms and runs
     // only on this path, which is already the rare one.
     if (text === '' && hasClipboardImage()) {
-      handleSubmit('/paste-image');
+      attachImage();
       return;
     }
 

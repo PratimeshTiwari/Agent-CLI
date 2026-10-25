@@ -163,7 +163,7 @@ import { resolveEffort, effortFromConfig } from './effort.js';
 import { planModelSwitch, browserModelPin } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
-import { stripImageData, promptCharge } from './prompt-builder.js';
+import { stripImageData, stripImageHeaders, promptCharge } from './prompt-builder.js';
 import { validateWorkspace } from './workspaces.js';
 import { z } from 'zod';
 import { SessionStore } from '../storage/session-store.js';
@@ -542,7 +542,7 @@ export class AgentLoop {
 
       // Retries re-send this. The attachment is already in the browser's own
       // conversation by then, so re-pasting it would duplicate the upload.
-      this.currentObjective = remembered;
+      this.currentObjective = stripImageHeaders(remembered);
       // One tool-amnesia retry per user turn; see handleGeminiResponse.
       this._deniedToolsOnce = false;
       /**

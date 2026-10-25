@@ -683,50 +683,60 @@ async function injectPrompt(text) {
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
 
-    // Paste event
-    const dataTransfer = new DataTransfer();
-
-    // Intercept image data if present
-    const imgRegex = /<image_data>\n(data:image\/[^;]+;base64,[^\n]+)\n<\/image_data>/;
-    const imgMatch = text.match(imgRegex);
+    /*
+     * Images go in first, on a paste of their own; the text follows on the
+     * path every prompt takes.
+     *
+     * They were one paste event carrying both, and Gemini stopped taking pasted
+     * text around 2026-09-25 (see below). So the text never landed, and because
+     * an image was in the event the code waited out the whole
+     * `PASTE_LAND_BUDGET_MS` for it before inserting it directly — five seconds
+     * on every image turn, seen as "a good lag between the image paste and the
+     * prompt paste" (reported 2026-10-26). Apart, the image paste is the page's
+     * to take, and the text is never waited for unless something claims it.
+     *
+     * Every `<image_data>` block is taken, not only the first: a prompt can carry
+     * `[Image #1]` and `[Image #2]`, and a block left behind would be pasted
+     * into the chat as a wall of base64.
+     */
+    const IMAGE_BLOCK = /<image_data>\n(data:image\/[^;]+;base64,[^\n]+)\n<\/image_data>\n?/g;
+    const dataUrls = [...text.matchAll(IMAGE_BLOCK)].map((m) => m[1]);
+    text = text.replace(IMAGE_BLOCK, '').trim();
     let hasImage = false;
-    
-    if (imgMatch) {
-      const dataUrl = imgMatch[1];
-      text = text.replace(imgRegex, '').trim(); // Remove raw base64 from the text
-      
-      try {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        const ext = blob.type.split('/')[1] || 'png';
-        const file = new File([blob], `image.${ext}`, { type: blob.type });
-        dataTransfer.items.add(file);
+
+    if (dataUrls.length) {
+      const images = new DataTransfer();
+      for (const [i, dataUrl] of dataUrls.entries()) {
+        try {
+          const blob = await (await fetch(dataUrl)).blob();
+          const ext = blob.type.split('/')[1] || 'png';
+          images.items.add(new File([blob], `image-${i + 1}.${ext}`, { type: blob.type }));
+          console.log(`[Gemini Bridge] Attached image ${i + 1}: ${Math.round(blob.size / 1024)}KB`);
+        } catch (err) {
+          console.error('[Gemini Bridge] Failed to convert image data URL to Blob', err);
+        }
+      }
+      if (images.items.length) {
+        input.focus();
+        input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: images, bubbles: true, cancelable: true }));
         hasImage = true;
-        console.log(`[Gemini Bridge] Attached image file: image.${ext} (${Math.round(blob.size/1024)}KB)`);
-      } catch (err) {
-        console.error('[Gemini Bridge] Failed to convert image data URL to Blob', err);
       }
     }
 
+    const dataTransfer = new DataTransfer();
     if (text) {
       dataTransfer.setData('text/plain', text);
     }
 
-    // Dispatch a single paste event for both image and text
     const pasteEvent = new ClipboardEvent('paste', {
       clipboardData: dataTransfer,
       bubbles: true,
       cancelable: true
     });
-    
+
     // Focus before pasting
     input.focus();
-    const pasteClaimed = !input.dispatchEvent(pasteEvent);
-
-    // If we pasted an image, wait for it to process
-    if (hasImage) {
-      await new Promise(r => setTimeout(r, 500));
-    }
+    const pasteClaimed = text ? !input.dispatchEvent(pasteEvent) : false;
 
     /*
      * `preventDefault()` is not evidence that the text arrived.
@@ -796,11 +806,11 @@ async function injectPrompt(text) {
      * first: the `type` stage went from ~30 ms to a 6.5 s median, every round
      * trip of every turn.
      *
-     * Images still wait: an attachment is uploaded on the page's own schedule
-     * and the composer may legitimately stay empty meanwhile.
+     * Images no longer wait here: they are pasted on their own above, so the
+     * text is waited for exactly when something claimed it.
      */
     let landed = !text || Boolean(composerText());
-    if (!landed && (pasteClaimed || hasImage)) {
+    if (!landed && pasteClaimed) {
       landed = Boolean(await waitForDom(() => (composerText() ? true : null), PASTE_LAND_BUDGET_MS));
     }
 

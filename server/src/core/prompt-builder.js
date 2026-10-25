@@ -1381,3 +1381,18 @@ export function promptCharge(prompt) {
   if (!images) return text.length;
   return stripImageData(text).length + images * IMAGE_CHARGE_CHARS;
 }
+
+/**
+ * A recorded prompt without its image block: what the message *says*.
+ *
+ * `currentObjective` rides in the context line of every later prompt, and it
+ * was the recorded prompt verbatim — so Gemini was shown `[Objective: [Image
+ * attached: /Users/…/clipboard-1792959966558.png (159…` on each round of an
+ * image turn (seen in the tab, 2026-10-26). The `[Image #n]` tags in the text
+ * stay; they are part of what was asked.
+ */
+export function stripImageHeaders(text) {
+  return String(text ?? '')
+    .replace(/^(?:\[Image #\d+: [^\]\n]+\][^\n]*\n<image_data>[^\n]*?<\/image_data>\n?)+\n*/, '')
+    .replace(/^\[Image attached:[^\n]*\]\s*(?:<image_data>[\s\S]*?<\/image_data>\s*)?/, '');
+}

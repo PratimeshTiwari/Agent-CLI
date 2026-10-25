@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
-import { splitTrailingEnter } from './enter-splitter.js';
-import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
+import { extractHotkeys, dispatchInOrder, hotkeys, interruptGate } from './hotkeys.js';
 import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './farewell.js';
 import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR } from './screen-span.js';
 import { App } from './App.jsx';
@@ -140,29 +139,25 @@ export class CliUI {
         }
         if (!chunk) return;
       }
-      // Application chords come out first and are dispatched on the side. They
-      // must never reach Ink: `ink-text-input` types any key it does not
-      // recognise straight into the prompt, so ctrl+e used to leave an "e"
-      // behind on its way to toggling the transcript.
+      // Application chords come out of the stream and are dispatched on the
+      // side, in their place among the text (`dispatchInOrder`). They must
+      // never reach Ink: `ink-text-input` types any key it does not recognise
+      // straight into the prompt, so ctrl+e used to leave an "e" behind on its
+      // way to toggling the transcript.
       const stripped = extractHotkeys(String(chunk), pasteState);
       pasteState = stripped.state;
-      for (const name of stripped.hotkeys) {
-        // The second ctrl+c exits from here, below React, so a broken render
-        // can never trap someone in the app. The first is React's to draw.
-        if (name === 'interrupt' && interrupt() === 'exit') {
-          exitWithFarewell({ agentLoop: this.agentLoop, wsServer: this.wsServer });
-          continue;
-        }
-        hotkeys.emit(name);
-      }
-      if (!stripped.text) return;
-
-      const [text, enter] = splitTrailingEnter(stripped.text);
-      if (text) inkStdin.write(text);
-      // Deferred, not written back to back: Ink's read() drains everything
-      // buffered at once, so two immediate writes would arrive as the single
-      // chunk this is here to take apart.
-      if (enter) setImmediate(() => inkStdin.write(enter));
+      dispatchInOrder(stripped.parts, {
+        write: (text) => inkStdin.write(text),
+        emit: (name) => {
+          // The second ctrl+c exits from here, below React, so a broken render
+          // can never trap someone in the app. The first is React's to draw.
+          if (name === 'interrupt' && interrupt() === 'exit') {
+            exitWithFarewell({ agentLoop: this.agentLoop, wsServer: this.wsServer });
+            return;
+          }
+          hotkeys.emit(name);
+        },
+      });
     });
 
     // Before the first frame: a theme applied after it would draw the banner in

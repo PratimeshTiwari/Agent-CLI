@@ -56,7 +56,6 @@ const SLASH_COMMANDS = [
   { name: 'copy', desc: 'Copy the last reply as markdown · `/copy code` for the last code block', group: 'work' },
   { name: 'shell', desc: 'A scratch shell inside the agent (also `/terminal`)', group: 'project' },
   { name: 'skills', desc: 'List, create and open skills the agent can load', group: 'project' },
-  { name: 'image', desc: 'Attach an image — a path, bare for the clipboard, remove to drop it', group: 'work' },
   { name: 'plans', desc: 'Past plans, newest first', group: 'project' },
   { name: 'history', desc: 'Past conversations — pick one to reopen it', group: 'chat' },
   { name: 'commands', desc: 'Every shell command the agent has run, by day', group: 'audit' },

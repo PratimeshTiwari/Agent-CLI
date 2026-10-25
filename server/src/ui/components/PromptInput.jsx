@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { backspaceAt } from '../image-attach.js';
 
 /**
  * The prompt field. Replaces `ink-text-input`, which could not do two things
@@ -41,37 +42,61 @@ export function PromptInput({
   cursorRef,
   maxRows = 0,
 }) {
-  const [offset, setOffset] = useState(value.length);
+  /**
+   * What the field holds *now*: text and caret, ahead of the render.
+   *
+   * **Every handler reads this, never the render's `value`.** Ink delivers
+   * keys as they arrive and React renders when it gets round to it, so on a
+   * busy event loop several keys land between two renders. Reading the
+   * render's `value` made each of them edit the same stale text — and a
+   * ctrl+v tag put in between was overwritten by the next letter. Measured
+   * under the pty, 2026-10-26: `look at` + ctrl+v + `please` sent
+   * `look atplease`, no tag, no image.
+   */
+  const live = useRef({ value, offset: value.length });
+  const [, redraw] = useState(0);
 
   /**
-   * The last value this component itself produced.
+   * The values this field handed to `onChange` that have not come back yet.
    *
    * Everything here is a controlled edit: a keystroke calls `onChange`, the
-   * parent stores it, and it comes back as a new `value`. Without a way to
-   * recognise its own work the effect below treats every edit as text arriving
-   * from outside and drags the caret to the end — so backspacing in the middle
-   * of a line deleted the right character and then put the caret after the last
+   * parent stores it, and it comes back as a new `value`. A value that is one
+   * of ours is our own work arriving late — possibly older than `live`, when
+   * keys outran the render — and must not move anything. Without a way to
+   * recognise its own work the field treats every edit as text arriving from
+   * outside and drags the caret to the end — so backspacing in the middle of a
+   * line deleted the right character and then put the caret after the last
    * one, and the next keystroke landed at the end.
    */
-  const selfEdit = useRef(value);
-  const lastValue = useRef(value);
-
-  const edit = (next, nextOffset) => {
-    selfEdit.current = next;
-    lastValue.current = next;
-    setOffset(nextOffset);
-    onChange(next);
-  };
+  const produced = useRef([]);
+  const seen = useRef(value);
 
   // Text that arrived from somewhere else — a paste, a recalled history entry, a
   // cleared prompt — puts the caret at the end, which is where someone who has
-  // just been handed text wants to carry on typing.
-  useEffect(() => {
-    if (value === lastValue.current) return;
-    lastValue.current = value;
-    if (value === selfEdit.current) return;
-    setOffset(value.length);
-  }, [value]);
+  // just been handed text wants to carry on typing. Decided during render, not
+  // in an effect, so a key arriving before the effect runs edits the new text.
+  if (value !== seen.current) {
+    seen.current = value;
+    const ours = produced.current.indexOf(value);
+    if (ours >= 0) produced.current.splice(0, ours + 1);
+    else {
+      produced.current = [];
+      live.current = { value, offset: value.length };
+    }
+  }
+
+  const setCaret = (at) => {
+    live.current = { ...live.current, offset: at };
+    redraw((n) => n + 1);
+  };
+
+  const edit = (next, nextOffset) => {
+    live.current = { value: next, offset: nextOffset };
+    produced.current.push(next);
+    if (produced.current.length > 64) produced.current.shift();
+    redraw((n) => n + 1);
+    onChange(next);
+  };
 
   /** Line and column for an offset, so up/down can keep the column. */
   const locate = (text, at) => {
@@ -88,35 +113,44 @@ export function PromptInput({
   };
 
   const moveByLine = (delta) => {
-    const starts = lineStarts(value);
-    const { line, column } = locate(value, offset);
+    const { value: text, offset: at } = live.current;
+    const starts = lineStarts(text);
+    const { line, column } = locate(text, at);
     const target = line + delta;
     if (target < 0 || target >= starts.length) return false;   // the caller takes it
     const start = starts[target];
-    const end = target + 1 < starts.length ? starts[target + 1] - 1 : value.length;
-    setOffset(Math.min(start + column, end));
+    const end = target + 1 < starts.length ? starts[target + 1] - 1 : text.length;
+    setCaret(Math.min(start + column, end));
     return true;
   };
 
   // The imperative handle use-key-bindings reaches through. A ref rather than
   // props because the answer ("did that arrow move the caret?") has to come back
   // synchronously, inside the keypress.
+  //
+  // `apply` is how text goes in at the caret from outside the keyboard — an
+  // `[Image #n]` tag on ctrl+v. Through `edit`, so the key after it sees it.
   if (cursorRef) {
     cursorRef.current = {
       moveUp: () => moveByLine(-1),
       moveDown: () => moveByLine(1),
-      isMultiline: () => value.includes('\n'),
-      toEnd: () => setOffset(value.length),
+      isMultiline: () => live.current.value.includes('\n'),
+      toEnd: () => setCaret(live.current.value.length),
+      apply: (fn) => {
+        const next = fn(live.current.value, live.current.offset);
+        edit(next.value, next.offset);
+      },
     };
   }
 
   useInput((input, key) => {
+    const { value, offset } = live.current;
     // Up and down belong to use-key-bindings; see the note above.
     if (key.upArrow || key.downArrow) return;
     if (key.tab) return;                       // cycles menus elsewhere
 
-    if (key.leftArrow) { setOffset((n) => Math.max(0, n - 1)); return; }
-    if (key.rightArrow) { setOffset((n) => Math.min(value.length, n + 1)); return; }
+    if (key.leftArrow) { setCaret(Math.max(0, offset - 1)); return; }
+    if (key.rightArrow) { setCaret(Math.min(value.length, offset + 1)); return; }
 
     if (key.return) {
       // Shift+Enter, or Esc+Enter arriving as meta, means a newline. The parent
@@ -132,7 +166,9 @@ export function PromptInput({
 
     if (key.backspace || key.delete) {
       if (offset === 0) return;
-      edit(value.slice(0, offset - 1) + value.slice(offset), offset - 1);
+      // An `[Image #n]` tag goes in one press, and its image with it.
+      const after = backspaceAt(value, offset);
+      edit(after.value, after.offset);
       return;
     }
 
@@ -178,7 +214,7 @@ export function PromptInput({
    * the drawn height exactly `maxRows` whether it is scrolled or not.
    */
   const lines = value.split('\n');
-  const at = Math.min(offset, value.length);
+  const at = Math.min(live.current.offset, value.length);
   const caretLine = locate(value, at).line;
 
   let start = 0;

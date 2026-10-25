@@ -117,11 +117,24 @@ describe('the paste is checked against the composer, not against preventDefault'
 describe('an unclaimed paste is not waited for', () => {
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   test('whether anyone claimed the paste is recorded', () => {
-    assert.match(code, /const pasteClaimed = !input\.dispatchEvent\(pasteEvent\)/);
+    assert.match(code, /const pasteClaimed = text \? !input\.dispatchEvent\(pasteEvent\) : false/);
   });
-  test('the wait runs only for a claimed paste or an image', () => {
-    assert.match(code, /if \(!landed && \(pasteClaimed \|\| hasImage\)\) \{\s*landed = Boolean\(await waitForDom/,
+  /*
+   * Only a claimed paste is waited for. It was "a claimed paste or an image",
+   * which with text and image in one event meant every image turn waited the
+   * whole budget for text Gemini no longer takes from a paste — five seconds,
+   * reported as "a good lag between the image paste and the prompt paste"
+   * (2026-10-26). Images now go in on a paste of their own, below.
+   */
+  test('the wait runs only for a claimed paste', () => {
+    assert.match(code, /if \(!landed && pasteClaimed\) \{\s*landed = Boolean\(await waitForDom/,
       'an unclaimed text paste waits out the whole budget before the fallback');
+  });
+  test('images are pasted on their own, before the text', () => {
+    const images = code.indexOf("clipboardData: images");
+    const textPaste = code.indexOf('const pasteClaimed');
+    assert.ok(images > -1, 'images still go in by paste');
+    assert.ok(images < textPaste);
   });
   test('control: the fallback still inserts whenever the text has not landed', () => {
     assert.match(code, /if \(!landed && text\) \{[\s\S]{0,200}document\.execCommand\('insertText', false, text\)/);

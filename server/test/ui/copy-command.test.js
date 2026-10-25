@@ -38,7 +38,7 @@ test('with nothing to copy it says so, and never touches the clipboard', async (
   await handleSlashCommand('/copy', {
     agentLoop: { conversationHistory: [{ role: 'user', content: 'hi' }], commandRules: {} },
     wsServer: { clients: new Set() },
-    resetScreen() {}, setActiveMenu() {}, setIsProcessing() {}, setPendingImage() {},
+    resetScreen() {}, setActiveMenu() {}, setIsProcessing() {},
     setHistory: (f) => rows.push(...f([])),
   });
   assert.equal(rows.at(-1).content, '📋 No reply to copy yet.');

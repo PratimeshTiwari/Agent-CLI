@@ -9,7 +9,8 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, imageTag, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { loadImage, tagAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
+import { contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -207,7 +208,31 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [mode, setMode] = useState(agentLoop.mode || 'plan');
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalInput, setTerminalInput] = useState('');
-  const [pendingImage, setPendingImage] = useState(null);
+  // Images attached with ctrl+v, each named in the prompt by its `[Image #n]`
+  // tag. One goes with a message only while its tag is in the text.
+  const [pendingImages, setPendingImages] = useState([]);
+  // One line in the status row for a moment, where the mode hint sits — what
+  // ctrl+v says when there is nothing to paste.
+  const [flash, setFlash] = useState(null);
+  const flashTimer = useRef(null);
+  const flashNote = React.useCallback((text) => {
+    clearTimeout(flashTimer.current);
+    setFlash(text);
+    flashTimer.current = setTimeout(() => setFlash(null), 3000);
+    flashTimer.current.unref?.();
+  }, []);
+  // ctrl+v: the clipboard's image into the prompt, as a tag where you are
+  // typing — Claude Code's shape, asked for 2026-10-26. No command row.
+  const attachImage = React.useCallback(() => {
+    const got = loadImage({ workspace: agentLoop.workspace });
+    if (!got.ok) { flashNote(got.reason); return; }
+    setPendingImages((prev) => [...prev, got.image]);
+    // At the caret, through the field's own edit path: a key already on its
+    // way must see the tag, or it types over it (see `PromptInput`'s `live`).
+    const put = (v, o) => tagAt(v, o, got.image.n);
+    if (cursorRef.current?.apply) cursorRef.current.apply(put);
+    else setInput((prev) => put(prev, prev.length).value);
+  }, [agentLoop, flashNote]);
   const [activeMenu, setActiveMenu] = useState(null);
   const [planReviewReady, setPlanReviewReady] = useState(false);
   // Bumped on the loop's busy → idle edge (see `onIdle` below). Declared up
@@ -947,8 +972,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
         setActiveMenu,
         setHistory,
         setIsProcessing: turnInFlight ? () => {} : setIsProcessing,
-        setPendingImage,
-        pendingImage,
         openShell: () => { setTerminalOpen(true); setFocus(FOCUS_TERMINAL); },
       });
       return;
@@ -969,12 +992,14 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // transcript keeps the marker form, so a 500-line paste never becomes a
     // 500-row user message in the live frame.
     let messageContent = expandPastes(query, pastes);
-    // The echo names the image the way the attach note did, so the prompt reads
-    // `[Image #1] what is this` and you can see it went with this message.
-    const shownQuery = pendingImage ? `${imageTag(pendingImage.n ?? 1)} ${query}` : query;
-    if (pendingImage) {
-      messageContent = `[Image attached: ${pendingImage.path} (${pendingImage.sizeKB}KB, ${pendingImage.mime})]\n\n<image_data>\ndata:${pendingImage.mime};base64,${pendingImage.base64}\n</image_data>\n\n${messageContent}`;
-      setPendingImage(null);
+    // Only the images whose tags are still in the text: deleting a tag is how
+    // one is taken off. The echo carries the block as the loop will record it,
+    // so the screen draws the same `⎿ [Image #1]` link now and after a resume.
+    const images = imagesInText(query, pendingImages);
+    const shownQuery = recordedImageBlock(images) + query;
+    if (images.length) {
+      messageContent = imagePromptBlock(images) + messageContent;
+      setPendingImages((prev) => prev.filter((img) => !images.includes(img)));
     }
 
     // Optimistically update the UI so the user sees their prompt immediately
@@ -1114,7 +1139,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // bytes are still taken off stdin — an unhandled chord types its letter
     // into the prompt — and say where the thing went, once per press.
     terminal: () => retiredKey('ctrl+t', '/shell'),
-    'paste-image': () => handleSubmit('/paste-image'),
+    'paste-image': attachImage,
 
     /*
      * ctrl+x ctrl+s: the last queued prompt goes into the running turn instead
@@ -1426,6 +1451,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             disconnectedText={disconnectedHint({ port: wsServer?.port, everConnected: everConnectedRef.current })}
             focus={focus}
             handleSubmit={handleSubmit}
+            attachImage={attachImage}
             input={input}
             isProcessing={isProcessing}
             isThinkingTooLong={isThinkingTooLong}
@@ -1517,7 +1543,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
           <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
-            : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
+            : flash
+              ? <Text color={T.attention}>{'  ·  '}{flash}</Text>
+              : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
           {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
         </Text>
         </Box>
@@ -1529,15 +1557,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
             only when something is waiting and takes no room otherwise.
           */}
           {attachedCount > 0 ? `${attachedCount} paste${attachedCount === 1 ? '' : 's'}  ·  ` : ''}
-          {/*
-            An attached image had no representation anywhere. The transcript
-            said so once and scrolled away, so the only way to know one was
-            armed was to remember attaching it — and the only way to find out
-            was to send it. Same shape as the pastes beside it: one field in a
-            row that is already drawn and already budgeted, costing nothing
-            when there is no image.
-          */}
-          {pendingImage ? <Text color={T.attention}>{`${imageTag(pendingImage.n ?? 1)}  ·  `}</Text> : ''}
           {runningTasks > 0 ? <Text color={T.attention}>{runningTasks} bg{'  ·  '}</Text> : ''}
           {/*
             The checklist while a turn runs, when its panel is not drawn (it

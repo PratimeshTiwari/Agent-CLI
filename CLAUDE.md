@@ -1603,15 +1603,25 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   and saves nothing**: the context is identical when the task arrives, plus the
   model's acknowledgements. Make turn 0 smaller; do not spread it out.
 
-- **An attached image can be taken off again, and says that it is on.**
-  Reported from use: *"there is no option to remove image? how to do that?"* —
-  and there was not. `setPendingImage(null)` ran in exactly one place, on
-  submit, so once attached the only ways to be rid of it were to send it or
-  restart. It had no representation either: the transcript said so once and
-  scrolled away, so the only way to find out an image was armed was to send it.
-  `/image remove` detaches, and the status row carries `1 image` beside the
-  paste count — the same field pattern, in a row that is already drawn and
-  already budgeted, costing nothing when there is no image.
+- **An image is a tag in the prompt, Claude Code's way (v5.24, `ui/image-attach.js`).**
+  ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
+  an image goes with a message only while its tag is in the text, so backspace — which takes a
+  tag in one press — is how it comes off. `/image` and `/paste-image` are gone, and so is the
+  status-bar count: the tag *is* the representation. Each image is sent as a
+  `[Image #n: <path>] (KB, mime)` header plus its `<image_data>` block; the tab lifts every
+  block out and pastes the files **on their own, before the text**, and no longer waits five
+  seconds for a text paste that could never land because an image was in it. The record keeps
+  the header without the data, which is what lets the sent message draw `⎿ [Image #n]` rows
+  as OSC 8 links to the file (cmd+click — not mouse tracking) on a resume too.
+
+  **Two races had to go before a tag survived the next key.** The field's handlers edited the
+  *render's* `value`, so on a busy event loop several keys landed between renders and each
+  edited the same stale text; and `cli-ui` dispatched chords before the text in the same chunk.
+  Under the pty, `look at` + ctrl+v + `please` sent `look atplease` with no image. `PromptInput`
+  now reads `live` (text and caret, ahead of the render) and takes outside text through
+  `cursorRef.apply`; `dispatchInOrder` writes text, then defers everything after it a turn, so
+  Ink has read it before the chord runs. **A component that reads its props inside an input
+  handler is a stale closure waiting for a slow frame.**
 
 - **A menu opened from `/settings` must not answer in the transcript.** `returnTo` is the
   settings page, so setting it back reopens that page *on top of* whatever the command just
@@ -1761,7 +1771,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
   box's top rule in scrollback. `OSASCRIPT_STDIO` in `ui/clipboard-image.js`. The same release
   stopped the meter counting an image's base64 (`promptCharge`: a 650 KB screenshot read `0%
-  until auto-compact`) and made `/image` answer `[Image #1] attached · 635 KB`, local, one row.
+  until auto-compact`).
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
   exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
   app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup

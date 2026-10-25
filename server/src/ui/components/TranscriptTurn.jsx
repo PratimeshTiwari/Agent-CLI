@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, foldImageHeader } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -17,7 +18,6 @@ import { T } from '../theme.js';
  */
 function userMessageText(content, isLive) {
   const max = isLive ? 3 : 12;
-  content = foldImageHeader(content);
   const lines = String(content ?? '').split('\n');
   if (lines.length <= max) return content;
   return `${lines.slice(0, max).join('\n')}\n… +${lines.length - max} more lines`;
@@ -159,6 +159,10 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
  * the property `<Static>` requires and the turn around it does not have.
  */
 export function UserBar({ content, isLive, terminalWidth = 80, compact = false }) {
+  // The image block above the message is drawn as `⎿ [Image #1]` rows under
+  // it, each a link to the file (see ui/image-attach.js). Committed only: the
+  // live copy of the bar lasts a moment, and its rows are budgeted.
+  const { text, links } = foldImages(content);
   return (
     /*
      * A blank row **above** the bar, and it is the bar's to own.
@@ -186,7 +190,7 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
      * live frame that outgrows the viewport is the clear-and-repaint bug.
      */
     <Box flexDirection="column" marginTop={compact ? 0 : 1} marginBottom={1} width="100%">
-      {blockLines(userMessageText(content, isLive), terminalWidth, 2)
+      {blockLines(userMessageText(text, isLive), terminalWidth, 2)
         .map((line, i) => (
           // eslint-disable-next-line react/no-array-index-key
           /*
@@ -210,6 +214,11 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
             <Text color={T.userFg} bold>{'  '}{line}</Text>
           </Text>
         ))}
+      {!isLive && [...links.keys()].map((n) => (
+        <Text key={`image-${n}`} dimColor wrap="truncate">
+          {'  ⎿  '}<Text underline>{linkImageTags(imageTag(n), links)}</Text>
+        </Text>
+      ))}
     </Box>
   );
 }
@@ -481,15 +490,19 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
           one line: the live frame is budgeted in rows, and committed rows cost
           scrollback, not frame.
         */}
-        <Box flexDirection="row">
+        {/* One Text, not a row of them: in a flex row Yoga shrinks every child
+            to fit, so a long subject squeezed the *name* and wrapped it —
+            `⏺ run_comma` over `nd`, reported with a screenshot 2026-10-26.
+            Inline, the line is cut from the right, and the name comes first. */}
+        <Text wrap="truncate">
           <Text color={failed ? T.danger : T.success}>{(failed ? '✗' : '⏺') + ' '}</Text>
           <Text bold>{act.toolName}</Text>
           {/* Which file, which pattern, which command. Without it two reads in
               one turn are the same row twice, which is how a turn reading four
               files reads as a turn that did nothing in particular. */}
-          {subject ? <Text color={T.muted} wrap="truncate">{' '}{subject}</Text> : null}
-          {isLive && summary ? <Text dimColor wrap="truncate"> · {summary}</Text> : null}
-        </Box>
+          {subject ? <Text color={T.muted}>{' '}{subject}</Text> : null}
+          {isLive && summary ? <Text dimColor> · {summary}</Text> : null}
+        </Text>
         {!isLive && summary ? (
           <Text wrap="truncate">
             <Text color={T.muted}>{'  ⎿  '}</Text>

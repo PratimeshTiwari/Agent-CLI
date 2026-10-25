@@ -7,13 +7,8 @@ import { exitWithFarewell } from '../farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
 import { planReset, applyReset } from '../../core/reset.js';
-import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { canCopy, copyToClipboard } from '../clipboard.js';
-import { lastReply, lastCodeBlock, imageAttachedNote, imageTag } from '../format.js';
-
-// Numbered per session, as Claude Code numbers them. Module state on purpose:
-// it outlives a remount of App (a theme change reprints) and resets on restart.
-let imagesAttached = 0;
+import { lastReply, lastCodeBlock } from '../format.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
 import { planBoxRow } from '../plan-box.js';
@@ -109,8 +104,6 @@ export async function handleSlashCommand(query, {
   setActiveMenu,
   setHistory,
   setIsProcessing,
-  setPendingImage,
-  pendingImage,
   openShell,
   confirmed = false,
 }) {
@@ -135,7 +128,7 @@ export async function handleSlashCommand(query, {
             ...warning,
             onConfirm: () => handleSlashCommand(query, {
               agentLoop, wsServer, resetScreen, setActiveMenu, setHistory,
-              setIsProcessing, setPendingImage, openShell, confirmed: true,
+              setIsProcessing, openShell, confirmed: true,
             }),
           },
         });
@@ -1176,97 +1169,6 @@ export async function handleSlashCommand(query, {
       await switchWorkspace(args.join(' '));
       return;
     }
-
-    if (command === 'image' || command === 'paste-image') {
-      /**
-       * Taking it back off.
-       *
-       * Reported from use: *"there is no option to remove image? how to do
-       * that?"* — and there was not. `setPendingImage(null)` ran in exactly one
-       * place, on submit, so once an image was attached the only ways to get
-       * rid of it were to send it or to restart the CLI. Attaching by accident
-       * meant your next prompt carried a base64 payload you did not want, into
-       * a browser composer, on a turn you had not budgeted for it.
-       *
-       * `remove` shadows a file of that name in the workspace, which is a
-       * trade worth making: `/image remove` is what people type, and the
-       * file-not-found path was the only thing it displaced.
-       */
-      if (args.length === 1 && ['remove', 'clear', 'off', 'none'].includes(args[0].toLowerCase())) {
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
-          role: 'assistant',
-          isLocal: true,
-          content: pendingImage
-            ? `${imageTag(pendingImage.n)} removed — it will not be sent.`
-            : 'No image is attached.',
-        }]);
-        setPendingImage(null);
-        setIsProcessing(false);
-        return;
-      }
-
-      let finalFilePath = '';
-      let ext = '';
-      // `/image` with a path attaches that file; with nothing after it, the
-      // thing you meant is the screenshot you just took. Two commands for one
-      // idea is one too many, so the bare form reads the clipboard and
-      // `/paste-image` survives only as the name people already learned.
-      const fromClipboard = command === 'paste-image' || args.length === 0;
-      if (fromClipboard) {
-        if (!canReadClipboardImage()) {
-           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: 'Clipboard image paste is only supported on macOS. `/image <path>` attaches a file.' }]);
-           setIsProcessing(false); return;
-        }
-        // The module, not a copy of it. The copy that lived here wrote every
-        // paste to one fixed `clipboard-image.png`, so a second screenshot
-        // overwrote the first while it was still attached to an unsent prompt
-        // — the exact bug `readClipboardImage`'s per-copy name exists to stop.
-        const image = readClipboardImage(agentLoop.workspace);
-        if (!image) {
-          setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: 'No image on the clipboard. Copy one, or `/image <path>` to attach a file.' }]);
-          setIsProcessing(false); return;
-        }
-        finalFilePath = image.path;
-        ext = path.extname(image.path).toLowerCase();
-      } else {
-        const { resolve, extname } = await import('path');
-        const { existsSync } = await import('fs');
-        finalFilePath = resolve(agentLoop.workspace, args.join(' '));
-        if (!existsSync(finalFilePath)) {
-           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: `No such file: ${finalFilePath}` }]);
-           setIsProcessing(false); return;
-        }
-        ext = extname(finalFilePath).toLowerCase();
-      }
-
-      try {
-        const { readFileSync } = await import('fs');
-        const imageBuffer = readFileSync(finalFilePath);
-        const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.tiff': 'image/tiff' };
-        const mime = mimeTypes[ext] || 'image/png';
-        imagesAttached += 1;
-        setPendingImage({
-          n: imagesAttached,
-          base64: imageBuffer.toString('base64'),
-          mime,
-          path: finalFilePath,
-          sizeKB: Math.round(imageBuffer.length / 1024)
-        });
-        // Local, and one line. It was an unmarked row holding the full path,
-        // which wrapped across three rows (reported with a screenshot,
-        // 2026-10-26); see `imageAttachedNote`.
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
-          role: 'assistant',
-          isLocal: true,
-          content: imageAttachedNote(imagesAttached, imageBuffer.length),
-        }]);
-      } catch (e) {
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: `Could not read the image: ${e.message}` }]);
-      }
-      setIsProcessing(false);
-      return;
-    }
-
 
     // Handle standard agent loop commands
     // From the module that handles them, not a copy kept here. The copy is how

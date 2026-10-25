@@ -127,6 +127,10 @@ per-change history below.
 - **The thinking row goes when a turn ends, however it ends.** A turn stopped or
   failed in the terminal sent no reply, so the panel kept spinning. The agent
   now says when it goes idle.
+- **Images go in first, on their own, and the text no longer waits for them.**
+  A prompt with an image waited five seconds for its text to land, every time.
+  Every image in a prompt is pasted now, not only the first, and the panel
+  draws a recorded image prompt as `[Image]` rather than its header.
 
 ### 1.49.0 — 2026-10-25
 

@@ -19,8 +19,9 @@
  * longer empty. Reported as *"backspace is not working… but working again after
  * I did up and down arrow."*
  *
- * `PromptInput`'s own effect has always done this correctly, against the value
- * that actually arrived.
+ * `PromptInput` has always done this itself, against the value that actually
+ * arrived — in an effect until 2026-10-26, during render since, so a key that
+ * arrives before the effect would have run edits the new text.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -57,11 +58,11 @@ test('it still sets the text', () => {
  * `ink-text-input` over.
  */
 test('the field moves its own caret to the end of text it did not produce', () => {
-  const effect = field.slice(field.indexOf('useEffect(() => {'), field.indexOf('}, [value]);'));
-  assert.match(effect, /selfEdit\.current/,
+  const sync = field.slice(field.indexOf('if (value !== seen.current) {'), field.indexOf('const setCaret'));
+  assert.match(sync, /produced\.current\.indexOf\(value\)/,
     'the field cannot tell its own edits from text arriving, so backspacing in '
     + 'the middle of a line would jump the caret to the end');
-  assert.match(effect, /setOffset\(value\.length\)/);
+  assert.match(sync, /live\.current = \{ value, offset: value\.length \}/);
 });
 
 // And the guard that made the bug silent rather than loud.
