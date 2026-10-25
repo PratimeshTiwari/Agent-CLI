@@ -61,6 +61,9 @@ export function InputBar({
   verbose,
   compact,
 }) {
+  // The filed-session row goes for good on the first keystroke (see its row).
+  const [filedDismissed, setFiledDismissed] = React.useState(false);
+  React.useEffect(() => { if (input) setFiledDismissed(true); }, [input]);
   const hasArtifacts = Boolean(artifacts?.task || artifacts?.review || artifacts?.walkthrough);
 
   /**
@@ -184,12 +187,19 @@ export function InputBar({
             already in, lists every conversation rather than the most recent
             one, and says per row whether the model still remembers it.
           */}
-          {filedSession && !isProcessing && history.length === 0 && (
+          {/*
+            A bullet, and gone the moment you type (v5.24 — the `↺` row was
+            reported as looking odd, and it outstayed its use: once you are
+            writing a message you have decided not to reopen anything).
+            Dismissed for good rather than while the box is empty, so deleting
+            what you typed does not bring it back.
+          */}
+          {filedSession && !filedDismissed && !isProcessing && history.length === 0 && (
             <Box marginBottom={1}>
               <Text dimColor wrap="truncate">
-                {'  ↺ previous conversation filed'}
-                {filedSession.turns ? `, ${filedSession.turns} turns` : ''}
-                {'  · '}
+                {'• Previous conversation filed'}
+                {filedSession.turns ? ` (${filedSession.turns} turns)` : ''}
+                {' · '}
                 <Text color={T.link}>/history</Text>
                 {' to reopen it'}
               </Text>

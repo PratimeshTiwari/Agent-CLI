@@ -1531,7 +1531,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
         row already separated the bar from the prompt, and the line was drawing
         a boundary that was never in doubt.
       */}
-      <Box marginTop={compact ? 0 : 1} paddingX={1} flexDirection="row" justifyContent="space-between" width="100%">
+      {/*
+        Flush with the input's rules at both ends (v5.24). It was indented two
+        on the left (padding plus a leading space) and one on the right, so it
+        sat visibly right of the `❯` above it — reported as "slightly off".
+      */}
+      <Box marginTop={compact ? 0 : 1} flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
           {/*
@@ -1541,7 +1546,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             reported as looking bad, and a lost connection already says so in
             the input box (`disconnectedHint`).
           */}
-          <Text color={modeColor(mode)}>{' '}{modeLine(mode)}</Text>
+          <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
             : <Text dimColor>{' (shift+tab to cycle)'}</Text>}

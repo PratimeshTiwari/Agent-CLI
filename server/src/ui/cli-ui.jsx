@@ -83,10 +83,16 @@ export class CliUI {
   }
 
   start() {
-    // No clear on the way in: the shell line that launched the agent stays
-    // above the header, as Claude Code's does, and exit erases back to it
-    // (screen-span.js). `console.clear()` here used to wipe it.
+    // A clean screen on the way in, without throwing anything away (v5.24 —
+    // reported: the last session's resume footer and the shell line sat above
+    // the header and "looks a bit odd"). `console.clear()` erased them; v5.23
+    // left them. A newline per row scrolls whatever is visible up into the
+    // scrollback instead, so it is one scroll away and not on screen, and the
+    // session then starts at row 1 — which is where exit rewinds to.
     const ttyIO = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    if (ttyIO && !process.env.AGENT_CLI_NO_CLEAR) {
+      process.stdout.write('\n'.repeat(Math.max(1, process.stdout.rows || 24)) + '\x1b[H');
+    }
     const span = ttyIO ? createScreenSpan({ rows: process.stdout.rows }) : null;
     let cursorWaiter = null;
     if (span) {
