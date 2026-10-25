@@ -163,7 +163,7 @@ import { resolveEffort, effortFromConfig } from './effort.js';
 import { planModelSwitch, browserModelPin } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
-import { stripImageData } from './prompt-builder.js';
+import { stripImageData, stripImageHeaders, promptCharge } from './prompt-builder.js';
 import { validateWorkspace } from './workspaces.js';
 import { z } from 'zod';
 import { SessionStore } from '../storage/session-store.js';
@@ -524,10 +524,25 @@ export class AgentLoop {
       };
       this.conversationHistory.push(turn);
       this.sessionStore.appendTurn(turn);
+      /*
+       * Every surface is told what was asked, not only the one it was typed in.
+       *
+       * The panel drew its own prompts locally and was sent everything after
+       * them — replies, tool rows, diffs — so a prompt typed in the terminal
+       * reached the panel as an answer to nothing (reported with a screenshot,
+       * 2026-10-26). The surface that sent it recognises its own and skips it;
+       * see `takeOwnEcho` in the panel.
+       */
+      this.callbacks?.sendToPanel?.({
+        id: randomUUID(),
+        type: 'user_turn',
+        payload: { content: remembered },
+        timestamp: turn.timestamp,
+      });
 
       // Retries re-send this. The attachment is already in the browser's own
       // conversation by then, so re-pasting it would duplicate the upload.
-      this.currentObjective = remembered;
+      this.currentObjective = stripImageHeaders(remembered);
       // One tool-amnesia retry per user turn; see handleGeminiResponse.
       this._deniedToolsOnce = false;
       /**
@@ -1497,8 +1512,19 @@ export class AgentLoop {
       result = `User answered: ${answer}`;
     }
 
-    this.pendingQuestionResolve({ success: true, result });
+    /*
+     * The pairs, for the screen. The model reads `result`, which is unchanged;
+     * the transcript draws `· question → answer` from these, the way Claude
+     * Code does. A side panel answers with a bare string, so its question is
+     * the one `ask_question` recorded when it asked.
+     */
+    const answers = Array.isArray(answer)
+      ? answer.map((e) => ({ question: String(e?.question ?? ''), answer: String(e?.answer ?? '') }))
+      : [{ question: this.pendingQuestions?.[0]?.question || '', answer: String(answer ?? '') }];
+
+    this.pendingQuestionResolve({ success: true, result, answers });
     this.pendingQuestionResolve = null;
+    this.pendingQuestions = null;
   }
 
   /**
@@ -1515,8 +1541,10 @@ export class AgentLoop {
         success: true,
         result: 'The user dismissed the question without answering. Do not ask it again. '
           + 'Choose the most reasonable interpretation, state it explicitly as an assumption, and continue.',
+        declined: true,
       });
       this.pendingQuestionResolve = null;
+      this.pendingQuestions = null;
     }
   }
 
@@ -2485,7 +2513,7 @@ export class AgentLoop {
         resolve(result);
       };
       this._threadAsk = ask;
-      this.contextChars += prompt.length;
+      this.contextChars += promptCharge(prompt);
       this._enqueueExtensionRequest({
         prompt,
         expectResponse: true,
@@ -2498,7 +2526,7 @@ export class AgentLoop {
     this._threadAsk = null; // anything still owed to a side question is not this
     // Create a promise that will be resolved when we get the Gemini response
     this.pendingGeminiResponse = true;
-    this.contextChars += prompt.length;
+    this.contextChars += promptCharge(prompt);
 
     /**
      * Kept verbatim, because a resend cannot be a rebuild.
@@ -2713,6 +2741,9 @@ export class AgentLoop {
         // The answer is used either way; this keeps the record of which ones
         // arrived that way, so the row can eventually say so.
         ...(result.unstructured ? { unstructured: true } : {}),
+        // `ask_question`: what was asked and answered, so the row can say it.
+        ...(Array.isArray(result.answers) ? { answers: result.answers } : {}),
+        ...(result.declined ? { declined: true } : {}),
         timestamp: Date.now(),
       };
       this.conversationHistory.push(resultTurn);

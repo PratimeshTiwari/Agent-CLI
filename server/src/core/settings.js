@@ -60,7 +60,6 @@ export function describeSettings(agentLoop) {
     fs.readFileSync(paths.configPath(agentLoop.workspace), 'utf8'),
   ), {});
   const effort = resolveEffort(mc.effort);
-  const main = mc.main || 'gemini';
   const subagents = mc.subagents !== false;
   const rules = agentLoop?.commandRules || { enabled: true, allow: [], block: [] };
   const memoryOn = agentLoop?.memoryManager?.isMemoryEnabled?.() !== false;
@@ -93,21 +92,13 @@ export function describeSettings(agentLoop) {
     },
     {
       group: 'Settings',
-      label: 'Main model',
-      value: main,
-      hint: 'implements, and answers you',
-      run: '/config',
-      restore: (value) => `/config main ${value}`,
-    },
-    {
-      group: 'Settings',
       label: 'Subagents',
       value: subagents ? 'on' : 'off',
       hint: subagents
         ? 'parallel tabs with empty context — research, review, errands'
         : 'one tab, start to finish — nothing can be delegated',
-      run: '/config',
-      restore: (value) => `/config subagents ${value}`,
+      run: '/subagents',
+      restore: (value) => `/subagents ${value}`,
     },
     {
       group: 'Settings',

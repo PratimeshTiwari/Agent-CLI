@@ -82,6 +82,8 @@ function askQuestion(loop, call) {
       header: call.args.header,
       questions: call.args.questions,
     });
+    // Kept for `answerQuestion`, which pairs a bare-string answer with it.
+    loop.pendingQuestions = questions;
     loop.callbacks.sendToPanel({
       id: randomUUID(),
       type: 'ask_question',

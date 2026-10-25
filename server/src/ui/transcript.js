@@ -6,6 +6,15 @@
  * reasoned about — and tested — without a terminal.
  */
 
+/** The plan files the agent writes, preferred first — the order plan review uses. */
+export const PLAN_FILES = ['implementation_plan.md', 'plan.md'];
+
+/** Is this path one of the agent's plan files? */
+export function isPlanFile(p) {
+  const name = String(p || '').split('/').pop();
+  return PLAN_FILES.includes(name);
+}
+
 /**
  * Group flat history into turns. Messages are tagged with their index in the
  * flat list on the way through, which callers rely on to address them.
@@ -85,6 +94,12 @@ export function describeArtifactWrite(toolName, args) {
   const path = String(args?.path || '');
   if (!/(^|\/)\.agent\/artifacts\//.test(path)) return null;
   const file = path.split('/').pop() || path;
+
+  // The plan, said the way Claude Code says it, with the way to read it.
+  // `plan: true` is what draws it as `● Updated plan ⎿ /plan show to preview`.
+  if (isPlanFile(file) && (toolName === 'create_file' || toolName === 'edit_file')) {
+    return { verb: toolName === 'create_file' ? 'Wrote plan' : 'Updated plan', detail: '', plan: true };
+  }
 
   if (toolName === 'create_file') {
     const items = (String(args.content || '').match(/^\s*[-*]\s*\[[ xX]\]/gm) || []).length;
@@ -176,6 +191,19 @@ export function parseTurnActions(turn) {
       continue;
     }
 
+    if (msg.kind === 'plan_box') {
+      // The plan, in a box (`ui/plan-box.js`). A document shown to the user,
+      // not work the agent did, so it stays out of `actions` like compaction.
+      items.push({
+        type: 'plan_box',
+        id: `turn_${turn.id}_act_${sIdx}_plan`,
+        path: msg.path,
+        content: msg.content,
+        msg,
+      });
+      continue;
+    }
+
     if (msg.role === 'assistant' || msg.role === 'agent') {
       // `<thought>`, not `<think>`. Every tier's prompt asks for `<thought>` —
       // it is the one thing allowed to precede a tool call — and this matched
@@ -238,9 +266,11 @@ export function parseTurnActions(turn) {
       const nextMsg = turn.steps[sIdx + 1];
       let result = null;
       let success = null;
+      let resultMsg = null;
       if (nextMsg && nextMsg.type === 'tool_result') {
         result = nextMsg.result;
         success = nextMsg.success;
+        resultMsg = nextMsg;
         sIdx++; // Group tool_result with tool_call into one action
       }
       pushAction({
@@ -250,6 +280,9 @@ export function parseTurnActions(turn) {
         args: msg.args,
         result,
         success,
+        // The result turn itself, for what rides on it besides the result —
+        // `ask_question`'s answered pairs.
+        resultMsg,
         msg
       });
     } else if (msg.type === 'tool_result') {
@@ -317,7 +350,10 @@ export function parseTurnActions(turn) {
 
   // Derived, never accumulated in parallel: two lists that are supposed to
   // agree are two lists that will one day not.
-  const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction' && i.type !== 'parse_error');
+  // `image` is `/image` saying what it attached — a command's answer, not
+  // work. Counted, it drew `Worked · 1 action` under `/paste-image`.
+  const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction'
+    && i.type !== 'parse_error' && i.type !== 'plan_box' && i.type !== 'image');
   const finalMessages = items.filter((i) => i.type === 'text');
   return { items, actions, finalMessages };
 }

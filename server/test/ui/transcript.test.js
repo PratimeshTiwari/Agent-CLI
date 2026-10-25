@@ -78,7 +78,7 @@ describe('parseTurnActions', () => {
   });
 
   it('lifts an attached image out of the message body', () => {
-    const { actions, finalMessages } = parseTurnActions({
+    const { items: actions, finalMessages } = parseTurnActions({
       id: 1,
       steps: [{ role: 'assistant', content: '🖼️ Image attached: /tmp/shot.png\nlook at this' }],
     });
@@ -89,7 +89,7 @@ describe('parseTurnActions', () => {
   });
 
   it('separates command output from other system messages', () => {
-    const { actions } = parseTurnActions({
+    const { items: actions } = parseTurnActions({
       id: 1,
       steps: [
         { role: 'system', type: 'command_output', content: '$ ls' },
@@ -105,7 +105,7 @@ describe('parseTurnActions — image attachments', () => {
   const turnWith = (content) => ({ id: 0, userMsg: null, steps: [{ role: 'assistant', content }] });
 
   it('the size suffix /image writes is consumed, not left in the prose', () => {
-    const { actions, finalMessages } = parseTurnActions(
+    const { items: actions, finalMessages } = parseTurnActions(
       turnWith('🖼️ Image attached: /tmp/shot.png (128KB)\nType your prompt and the image will be included.'),
     );
     assert.strictEqual(actions[0].type, 'image');
@@ -117,14 +117,14 @@ describe('parseTurnActions — image attachments', () => {
   it('every supported extension is recognised, with or without a size', () => {
     for (const name of ['a.png', 'b.jpg', 'c.jpeg', 'd.webp']) {
       for (const suffix of ['', ' (4KB)', '(1024 KB)']) {
-        const { actions } = parseTurnActions(turnWith(`🖼️ Image attached: /tmp/${name}${suffix}\nrest`));
+        const { items: actions } = parseTurnActions(turnWith(`🖼️ Image attached: /tmp/${name}${suffix}\nrest`));
         assert.strictEqual(actions[0]?.content, `/tmp/${name}`, `${name}${suffix}`);
       }
     }
   });
 
   it('an image and a think block in one message get distinct ids', () => {
-    const { actions } = parseTurnActions(
+    const { items: actions } = parseTurnActions(
       turnWith('<think>hmm</think>🖼️ Image attached: /tmp/a.png (2KB)\nrest'),
     );
     const ids = actions.map((a) => a.id);
@@ -496,8 +496,10 @@ describe('describeArtifactWrite', () => {
 
   it('another artifact says which file', () => {
     assert.deepStrictEqual(
-      describeArtifactWrite('edit_file', { path: '.agent/artifacts/plan.md', edits: [] }),
-      { verb: 'plan.md updated', detail: '' },
+      // Not plan.md: the plan files are drawn as `● Updated plan` since v5.24
+      // (test/ui/plan-box.test.js).
+      describeArtifactWrite('edit_file', { path: '.agent/artifacts/walkthrough.md', edits: [] }),
+      { verb: 'walkthrough.md updated', detail: '' },
     );
   });
 });

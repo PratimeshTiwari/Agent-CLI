@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.49.0**
+## Current version: **1.50.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,23 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.50.0 — 2026-10-26
+
+- **The panel shows prompts typed in the terminal.** It showed the replies to
+  them and never the prompts. The agent now sends every prompt to every panel,
+  and a panel skips the ones it sent itself, so nothing is drawn twice.
+- **The thinking row goes when a turn ends, however it ends.** A turn stopped or
+  failed in the terminal sent no reply, so the panel kept spinning. The agent
+  now says when it goes idle.
+- **Images go in first, on their own, and the text no longer waits for them.**
+  A prompt with an image waited five seconds for its text to land, every time.
+  Every image in a prompt is pasted now, not only the first, and the panel
+  draws a recorded image prompt as `[Image]` rather than its header.
+- **Paste an image into the panel.** It goes in as `[Image #1]` where you are
+  typing, is sent only while that tag is in the text, and backspace removes the
+  tag in one press — the same as the terminal. The agent saves it under
+  `.agent/tmp/`, so the terminal's transcript links to it too.
 
 ### 1.49.0 — 2026-10-25
 

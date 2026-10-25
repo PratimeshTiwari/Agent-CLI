@@ -71,16 +71,21 @@ export function AgentTerminal({
   return (
     <>
       {terminalOpen && (
-        <Box borderStyle="single" borderColor={T.shell} padding={1} flexDirection="column" width="100%">
-          <Text bold color={T.shell}>💻 Agent Terminal (Press ESC to close)</Text>
+        // The shared menu look (`ui/panel.js`): a rule in the shell colour, no box.
+        <Box flexDirection="column" width="100%">
+          <Text color={T.shell} wrap="truncate">{'─'.repeat(Math.max(1, process.stdout.columns || 80))}</Text>
+          <Text wrap="truncate">{' '}<Text bold color={T.shell}>Shell</Text><Text dimColor>{'  runs in the workspace'}</Text></Text>
+          <Text> </Text>
           <Box>
-            <Text bold color={T.shell}>$ </Text>
+            <Text bold color={T.shell}>{' $ '}</Text>
             {focus === FOCUS_TERMINAL ? (
               <TextInput focus={focus === FOCUS_TERMINAL} value={terminalInput} onChange={setTerminalInput} onSubmit={submitTerminalCommand} />
             ) : (
               <Text>{terminalInput}</Text>
             )}
           </Box>
+          <Text> </Text>
+          <Text dimColor wrap="truncate">{' enter run · esc close'}</Text>
         </Box>
       )}
     </>

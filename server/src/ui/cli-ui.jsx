@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
-import { splitTrailingEnter } from './enter-splitter.js';
-import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
+import { extractHotkeys, dispatchInOrder, hotkeys, interruptGate } from './hotkeys.js';
 import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './farewell.js';
-import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR } from './screen-span.js';
+import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR, enterSequence } from './screen-span.js';
 import { App } from './App.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
@@ -83,10 +82,16 @@ export class CliUI {
   }
 
   start() {
-    // No clear on the way in: the shell line that launched the agent stays
-    // above the header, as Claude Code's does, and exit erases back to it
-    // (screen-span.js). `console.clear()` here used to wipe it.
+    // A clean screen on the way in, without throwing anything away (v5.24 —
+    // reported: the last session's resume footer and the shell line sat above
+    // the header and "looks a bit odd"). `console.clear()` erased them; v5.23
+    // left them. A newline per row scrolls whatever is visible up into the
+    // scrollback instead, so it is one scroll away and not on screen, and the
+    // session then starts at row 1 — which is where exit rewinds to.
     const ttyIO = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    if (ttyIO && !process.env.AGENT_CLI_NO_CLEAR) {
+      process.stdout.write(enterSequence({ rows: process.stdout.rows || 24 }));
+    }
     const span = ttyIO ? createScreenSpan({ rows: process.stdout.rows }) : null;
     let cursorWaiter = null;
     if (span) {
@@ -134,29 +139,25 @@ export class CliUI {
         }
         if (!chunk) return;
       }
-      // Application chords come out first and are dispatched on the side. They
-      // must never reach Ink: `ink-text-input` types any key it does not
-      // recognise straight into the prompt, so ctrl+e used to leave an "e"
-      // behind on its way to toggling the transcript.
+      // Application chords come out of the stream and are dispatched on the
+      // side, in their place among the text (`dispatchInOrder`). They must
+      // never reach Ink: `ink-text-input` types any key it does not recognise
+      // straight into the prompt, so ctrl+e used to leave an "e" behind on its
+      // way to toggling the transcript.
       const stripped = extractHotkeys(String(chunk), pasteState);
       pasteState = stripped.state;
-      for (const name of stripped.hotkeys) {
-        // The second ctrl+c exits from here, below React, so a broken render
-        // can never trap someone in the app. The first is React's to draw.
-        if (name === 'interrupt' && interrupt() === 'exit') {
-          exitWithFarewell({ agentLoop: this.agentLoop, wsServer: this.wsServer });
-          continue;
-        }
-        hotkeys.emit(name);
-      }
-      if (!stripped.text) return;
-
-      const [text, enter] = splitTrailingEnter(stripped.text);
-      if (text) inkStdin.write(text);
-      // Deferred, not written back to back: Ink's read() drains everything
-      // buffered at once, so two immediate writes would arrive as the single
-      // chunk this is here to take apart.
-      if (enter) setImmediate(() => inkStdin.write(enter));
+      dispatchInOrder(stripped.parts, {
+        write: (text) => inkStdin.write(text),
+        emit: (name) => {
+          // The second ctrl+c exits from here, below React, so a broken render
+          // can never trap someone in the app. The first is React's to draw.
+          if (name === 'interrupt' && interrupt() === 'exit') {
+            exitWithFarewell({ agentLoop: this.agentLoop, wsServer: this.wsServer });
+            return;
+          }
+          hotkeys.emit(name);
+        },
+      });
     });
 
     // Before the first frame: a theme applied after it would draw the banner in

@@ -1,16 +1,18 @@
 import React from 'react';
 import { exec } from 'child_process';
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
 import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
+import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
+import { panelRoom, wrapLines, cutStart } from '../panel.js';
+import { Panel, Choices } from './Panel.jsx';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
-import { describeSettings, filterSettings, settingsChanged, settingsColumns, SETTING_GROUPS, VALUE_MAX } from '../../core/settings.js';
+import { describeSettings, filterSettings, settingsChanged, SETTING_GROUPS, VALUE_MAX } from '../../core/settings.js';
 import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
@@ -23,7 +25,7 @@ import { saveUserSettings } from '../../core/user-settings.js';
  * Every modal the agent can raise: questions, command approval, plan review,
  * and the /mode, /model, /config and /github pickers.
  *
- * All of them answer through SelectInput rather than raw keypresses — an
+ * All of them answer through `Choices` (`Panel.jsx`) rather than raw keypresses — an
  * approval that could be triggered by a stray 'y' in typed text is how edits
  * used to get applied without anyone agreeing to them.
  */
@@ -65,6 +67,8 @@ export function Menus({
   setActiveMenu,
   agentLoop,
   terminalWidth = 80,
+  menuRows = 20,
+  approval = null,
   handleSubmit,
   mode,
   setActiveTab,
@@ -100,8 +104,12 @@ export function Menus({
     }
   }, [agentLoop, setActiveMenu, setFocus, setHistory]);
 
+  // Every menu is a `Panel` (`ui/panel.js`): what it can afford at this height.
+  const W = terminalWidth;
+  const fit = (subtitle, extra = 0) => panelRoom({ rows: menuRows, width: W, subtitle, extra });
+
   // Every menu's footer promised `esc cancel` and nothing listened: the agent's
-  // own key bindings go inert while a modal is up, and SelectInput knows only
+  // own key bindings go inert while a modal is up, and `Choices` knows only
   // the arrows and Enter. So escape lands here, and only here — one step back
   // where a menu has steps, closed otherwise.
   useInput((_char, key) => {
@@ -109,12 +117,44 @@ export function Menus({
     // its cursor, and not shift+tab alone, which is the global mode toggle
     // everywhere else — inside a menu the agent's own bindings are inert, so
     // tab is free here and nowhere else.
-    if (key.tab && activeMenu?.type === 'settings') {
-      const step = key.shift ? -1 : 1;
+    // ←/→ too (asked for 2026-10-26, as on /help), but only while the filter
+    // is empty: with text in it they move its cursor, which is what they mean
+    // to someone editing a word.
+    const arrows = (key.leftArrow || key.rightArrow) && !activeMenu?.query;
+    if ((key.tab || arrows) && activeMenu?.type === 'settings' && activeMenu.view !== 'leaving') {
+      const step = key.shift || key.leftArrow ? -1 : 1;
       const at = Math.max(0, SETTING_GROUPS.indexOf(activeMenu.group || SETTING_GROUPS[0]));
       const next = (at + step + SETTING_GROUPS.length) % SETTING_GROUPS.length;
-      setActiveMenu({ ...activeMenu, group: SETTING_GROUPS[next], query: '' });
+      setActiveMenu({ ...activeMenu, group: SETTING_GROUPS[next], query: '', at: 0 });
       return;
+    }
+
+    // `/help`: ←/→ or tab between the tabs, ↑/↓ over the commands, enter puts
+    // the selected one in the prompt. Esc closes, below, like every menu.
+    if (activeMenu?.type === 'help') {
+      if (key.tab || key.leftArrow || key.rightArrow) {
+        const step = key.leftArrow || (key.tab && key.shift) ? -1 : 1;
+        setActiveMenu({ ...activeMenu, tab: nextTab(activeMenu.tab, step), cursor: 0 });
+        return;
+      }
+      // ↑/↓ select on Commands and scroll the other two, over the positions
+      // the page itself says it has at this size.
+      if (key.upArrow || key.downArrow) {
+        const { count } = helpPage({
+          tab: activeMenu.tab, cursor: activeMenu.cursor, width: terminalWidth,
+          rows: Math.max(1, menuRows - HELP_CHROME_ROWS),
+        });
+        const cursor = Math.max(0, Math.min(count - 1, (activeMenu.cursor || 0) + (key.upArrow ? -1 : 1)));
+        setActiveMenu({ ...activeMenu, cursor });
+        return;
+      }
+      if (key.return && activeMenu.tab === 'commands') {
+        const name = commandRows().filter((r) => r.kind === 'command')[activeMenu.cursor || 0]?.name;
+        setActiveMenu(null);
+        setFocus(FOCUS_INPUT);
+        if (name) setInputAtEnd(`/${name} `);
+        return;
+      }
     }
 
     if (!key.escape) return;
@@ -161,64 +201,140 @@ export function Menus({
         {activeMenu?.type === 'ask_question' && (
           <QuestionPrompt
             payload={activeMenu.payload}
+            width={W}
+            rows={menuRows}
             onAnswer={(entries) => {
               setActiveMenu(null);
+              // The answer is drawn by the `ask_question` row, from the result
+              // turn (`questionRows`). A row added here as well was the same
+              // answer twice, and the only copy a reprint or resume lost.
               agentLoop.answerQuestion(entries);
-              const summary = entries.length === 1
-                ? `You answered: ${entries[0].answer}`
-                : entries.map((e, i) => `${i + 1}. ${e.answer}`).join('  ');
-              setHistory(prev => [...prev, { role: 'system', content: `[System: ${summary}]` }]);
               setFocus(FOCUS_INPUT);
             }}
             onCancel={() => {
               setActiveMenu(null);
               agentLoop.cancelQuestion();
-              setHistory(prev => [...prev, { role: 'system', content: '[System: You dismissed the question. The agent will proceed on its own assumption.]' }]);
               setFocus(FOCUS_INPUT);
             }}
           />
         )}
 
-        {activeMenu?.type === 'command_approval' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention} padding={1}>
-            <Text bold color={activeMenu.payload.riskLevel === 'critical' ? T.danger : T.attention}>
-              ! Command Execution Request ({activeMenu.payload.riskLevel.toUpperCase()})
-            </Text>
-            <Text>Command: <Text bold>{activeMenu.payload.command}</Text></Text>
-            <Text>Directory: {activeMenu.payload.cwd}</Text>
-            <Text>Reason: {activeMenu.payload.riskReason}</Text>
-            <SelectInput
-              items={[
-                { label: 'Allow Command Once', value: 'allow_once' },
-                { label: 'Allow Always (Add to Allowlist)', value: 'allow_always' },
-                { label: 'Reject Command', value: 'reject' },
-                { label: 'Reject Always (Add to Blocklist)', value: 'reject_always' }
-              ]}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                agentLoop.answerCommandApproval(item.value, activeMenu.payload.command);
-                
-                /*
-                 * The decision, not the command. It used to repeat the whole
-                 * command, and a system row wraps: a one-line `for` loop drew
-                 * four rows, charged as one, in the live frame — the overflow
-                 * that cleared the screen on every render at 10 rows while the
-                 * command ran. The command is on the running row under this
-                 * (and on the tool row once it finishes), so saying it here
-                 * too was the only part that cost anything.
-                 */
-                const decision = {
-                  allow_once: 'You allowed the command once',
-                  allow_always: 'You allowed the command always (added to the allowlist)',
-                  reject: 'You rejected the command',
-                  reject_always: 'You rejected the command always (added to the blocklist)',
-                }[item.value];
-                if (decision) setHistory(prev => [...prev, { role: 'system', content: `[System: ${decision}]` }]);
-                setFocus(FOCUS_INPUT);
-              }}
-            />
-          </Box>
-        )}
+        {/*
+          `/help`: box-less, like Claude Code's — a rule, the tabs, the page and
+          one line of keys. Fitted to `menuRows` by `helpPage`, every row
+          truncated, so it is exactly the height it was given.
+        */}
+        {activeMenu?.type === 'help' && (() => {
+          const page = helpPage({
+            tab: activeMenu.tab,
+            cursor: activeMenu.cursor,
+            width: terminalWidth,
+            rows: Math.max(1, menuRows - HELP_CHROME_ROWS),
+          });
+          return (
+            <Box flexDirection="column">
+              <Text color={T.muted} wrap="truncate">{'─'.repeat(Math.max(1, terminalWidth))}</Text>
+              <Text wrap="truncate">
+                {HELP_TABS.map(([id, label], i) => (
+                  <React.Fragment key={id}>
+                    {i > 0 ? '   ' : ' '}
+                    {id === activeMenu.tab
+                      ? <Text bold inverse>{` ${label} `}</Text>
+                      : <Text dimColor>{` ${label} `}</Text>}
+                  </React.Fragment>
+                ))}
+              </Text>
+              <Text> </Text>
+              {page.lines.map((line, i) => {
+                // Headings in the accent, names plain, what they do dimmed —
+                // three weights, so the two columns read apart at a glance.
+                if (line.kind === 'heading') return <Text key={i} bold color={T.accent} wrap="truncate">{` ${line.text}`}</Text>;
+                if (line.kind === 'more') return <Text key={i} color={T.muted} wrap="truncate">{`   ${line.text}`}</Text>;
+                if (line.kind === 'blank') return <Text key={i}> </Text>;
+                if (line.name) {
+                  const rest = line.text.slice(line.name.length);
+                  const lead = line.kind === 'command' ? (line.selected ? ' ❯  ' : '    ') : ' ';
+                  return (
+                    <Text key={i} wrap="truncate">
+                      <Text color={line.selected ? T.accent : undefined} bold={line.selected}>{lead}{line.name}</Text>
+                      {line.selected
+                        ? <Text color={T.accent}>{rest}</Text>
+                        : <Text dimColor>{rest}</Text>}
+                    </Text>
+                  );
+                }
+                return <Text key={i} wrap="truncate">{` ${line.text}`}</Text>;
+              })}
+              <Text> </Text>
+              <Text dimColor wrap="truncate">
+                {activeMenu.tab === 'commands'
+                  ? ' ←/→ tabs · ↑↓ move · enter puts it in the prompt · esc close'
+                  : ' ←/→ or tab to switch · ↑↓ scroll · esc close'}
+              </Text>
+            </Box>
+          );
+        })()}
+
+        {activeMenu?.type === 'command_approval' && (() => {
+          /*
+            Every row here is decided by `approvalLayout` (format.js) and drawn
+            truncated, so the panel is exactly the height App charged for it. A
+            row that wraps is a row nobody paid for. No digits: an approval that
+            a stray keypress could answer is how things used to run without
+            anyone agreeing to them.
+          */
+          const p = activeMenu.payload;
+          const critical = p.riskLevel === 'critical';
+          return (
+            <Panel tight ruled={approval?.ruled !== false} tone={critical ? 'danger' : 'attention'} width={W}
+              title="Run this command?"
+              status={`${p.riskLevel} risk${approval?.hidden > 0
+                ? ` · ${approval.hidden} more line${approval.hidden === 1 ? '' : 's'} of the command not shown`
+                : ''}`}>
+              {(approval?.command ?? [`Command: ${p.command}`]).map((line, i) => (
+                <Text key={i} wrap="truncate">
+                  {' '}{i === 0
+                    ? <><Text dimColor>{'Command: '}</Text><Text bold>{line.slice('Command: '.length)}</Text></>
+                    : <Text bold>{line}</Text>}
+                </Text>
+              ))}
+              {approval?.cwd !== false && <Text wrap="truncate"> <Text dimColor>Directory: </Text>{p.cwd}</Text>}
+              {approval?.reason !== false && <Text wrap="truncate"> <Text dimColor>Reason:    </Text>{p.riskReason}</Text>}
+              {approval?.padded !== false && <Text> </Text>}
+              <Choices
+                limit={4}
+                items={[
+                  { label: 'Allow once', value: 'allow_once' },
+                  { label: 'Allow always', detail: 'add it to the allowlist', value: 'allow_always' },
+                  { label: 'Reject', value: 'reject' },
+                  { label: 'Reject always', detail: 'add it to the blocklist', value: 'reject_always' },
+                ]}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  agentLoop.answerCommandApproval(item.value, p.command);
+
+                  /*
+                   * The decision, not the command. It used to repeat the whole
+                   * command, and a system row wraps: a one-line `for` loop drew
+                   * four rows, charged as one, in the live frame — the overflow
+                   * that cleared the screen on every render at 10 rows while the
+                   * command ran. The command is on the running row under this
+                   * (and on the tool row once it finishes), so saying it here
+                   * too was the only part that cost anything.
+                   */
+                  const decision = {
+                    allow_once: 'You allowed the command once',
+                    allow_always: 'You allowed the command always (added to the allowlist)',
+                    reject: 'You rejected the command',
+                    reject_always: 'You rejected the command always (added to the blocklist)',
+                  }[item.value];
+                  if (decision) setHistory(prev => [...prev, { role: 'system', content: `[System: ${decision}]` }]);
+                  setFocus(FOCUS_INPUT);
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
         {/*
           Destroying more than you named.
@@ -230,81 +346,84 @@ export function Menus({
           is decided in `ui/destructive.js`, so the typed path and the settings
           path cannot disagree about it.
         */}
-        {activeMenu?.type === 'confirm_destructive' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
-            <Text bold color={T.attention}>{'! '}{activeMenu.payload.title}</Text>
-            <Box marginY={1}>
-              <Text dimColor wrap="wrap">{activeMenu.payload.detail}</Text>
-            </Box>
-            <SelectInput
-              items={[
-                { label: 'Cancel — change nothing', value: 'no' },
-                { label: activeMenu.payload.confirmLabel, value: 'yes' },
-              ]}
-              onSelect={(item) => {
-                const pending = activeMenu.payload;
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                if (item.value === 'yes') pending.onConfirm?.();
-                else {
-                  setHistory((prev) => [...prev, {
-                    role: 'assistant', isLocal: true, timestamp: Date.now(),
-                    content: `Cancelled — nothing was changed.`,
-                  }]);
-                }
-              }}
-            />
-          </Box>
-        )}
-
-        {activeMenu?.type === 'plan_review' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.review} padding={1}>
-            <Text bold color={T.menu}>Implementation plan ready for review</Text>
-            <Text>The agent has created an implementation_plan.md artifact.</Text>
-            <SelectInput
-              items={[
-                { label: 'Proceed with Implementation Plan', value: 'accept' },
-                { label: 'Reject', value: 'reject' },
-                { label: 'Provide Custom Feedback (Chat)', value: 'custom' }
-              ]}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                if (item.value === 'accept') {
-                  handleSubmit('I have reviewed the implementation plan and approve it. Please proceed with the execution phase.');
-                } else if (item.value === 'reject') {
-                  handleSubmit('I reject the implementation plan. Please wait for my feedback.');
-                } else {
+        {activeMenu?.type === 'confirm_destructive' && (() => {
+          const { sub, tight } = fit(activeMenu.payload.detail);
+          return (
+            <Panel tone="attention" width={W} title={activeMenu.payload.title} sub={sub} tight={tight}
+              keys="↑↓ move · enter choose · esc cancel">
+              <Choices
+                items={[
+                  { label: 'Cancel', detail: 'change nothing', value: 'no' },
+                  { label: activeMenu.payload.confirmLabel, value: 'yes', colour: T.danger },
+                ]}
+                onSelect={(item) => {
+                  const pending = activeMenu.payload;
+                  setActiveMenu(null);
                   setFocus(FOCUS_INPUT);
-                }
-              }}
-            />
-          </Box>
-        )}
+                  if (item.value === 'yes') pending.onConfirm?.();
+                  else {
+                    setHistory((prev) => [...prev, {
+                      role: 'assistant', isLocal: true, timestamp: Date.now(),
+                      content: `Cancelled — nothing was changed.`,
+                    }]);
+                  }
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'plan_review' && (() => {
+          const { sub, tight } = fit(activeMenu.path
+            ? `Shown above, and saved at ${activeMenu.path}.`
+            : 'The agent has written a plan.');
+          return (
+            <Panel tone="review" width={W} title="Plan ready for review" sub={sub} tight={tight}
+              keys="↑↓ move · enter choose">
+              <Choices
+                items={[
+                  { label: 'Proceed', detail: 'carry out the plan', value: 'accept' },
+                  { label: 'Reject', detail: 'and wait for my feedback', value: 'reject' },
+                  { label: 'Give feedback', detail: 'type it in the prompt', value: 'custom' },
+                ]}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  if (item.value === 'accept') {
+                    handleSubmit('I have reviewed the implementation plan and approve it. Please proceed with the execution phase.');
+                  } else if (item.value === 'reject') {
+                    handleSubmit('I reject the implementation plan. Please wait for my feedback.');
+                  } else {
+                    setFocus(FOCUS_INPUT);
+                  }
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
         {activeMenu?.type === 'effort' && (() => {
+          /*
+           * Claude Code's picker (asked for 2026-10-26): numbered rows, the one
+           * in effect ticked, what the highlighted one does on a line of its own
+           * underneath. No emoji in the rows: their widths disagree between
+           * terminals, so a column padded after them lines up on none.
+           */
           const current = resolveEffort(agentLoop.modelConfig?.effort).id;
+          const at = activeMenu.at || current;
+          const { sub, tight, room } = fit(
+            'How hard the agent works on each turn. Each level sends its own prompt and expects that Gemini model in the tab.',
+            2,
+          );
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-              <Text bold color={T.menu}>🎚️  How hard should it work?</Text>
-              <Text dimColor wrap="wrap">
-                One ladder, least effort first. Each rung sets the prompt profile and names
-                the browser tab it is written for — set your Gemini tab to match.
-              </Text>
-              <Box marginTop={1} />
-              <SelectInput
-                items={(() => {
-                  // No emoji in the rows. Their terminal widths disagree — ⚡ is
-                  // usually one column and 🧠 is two — so a name column padded
-                  // after them lines up on no terminal at all, which is what
-                  // made this list look crooked.
-                  const nameWidth = Math.max(...EFFORT_LEVELS.map((e) => e.name.length));
-                  const tabWidth = Math.max(...EFFORT_LEVELS.map((e) => e.browser.length));
-                  return EFFORT_LEVELS.map((e) => ({
-                    label: `${e.name.padEnd(nameWidth)}  ${e.browser.padEnd(tabWidth)}`
-                      + `  ${e.id === current ? '← current' : '         '}`,
-                    value: e.id,
-                  }));
-                })()}
+            <Panel width={W} title="Effort" sub={sub} tight={tight}
+              keys="↑↓ move · 1–3 or enter choose · esc cancel">
+              <Choices
+                numbered
+                limit={room}
+                initialIndex={Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === current))}
+                items={EFFORT_LEVELS.map((e) => ({
+                  label: e.name, detail: e.browser, value: e.id, current: e.id === current,
+                }))}
                 onHighlight={(item) => {
                   if (item.value !== activeMenu.at) setActiveMenu((m) => ({ ...m, at: item.value }));
                 }}
@@ -312,32 +431,30 @@ export function Menus({
                   await applyAndReturn(activeMenu, 'effort', [item.value]);
                 }}
               />
-              <Box marginTop={1}>
-                <Text dimColor wrap="truncate">
-                  {'  '}{resolveEffort(activeMenu.at || current).blurb}
-                </Text>
-              </Box>
-              <Text dimColor>↑↓ move · enter choose · esc cancel</Text>
-            </Box>
+              <Text> </Text>
+              <Text dimColor wrap="truncate">{'   '}{resolveEffort(at).blurb}</Text>
+            </Panel>
           );
         })()}
 
         {activeMenu?.type === 'theme' && (() => {
           /*
            * Live preview, Claude Code style: moving the highlight applies that
-           * palette, so this box and the live frame show it at once. Only the
+           * palette, so this panel and the live frame show it at once. Only the
            * committed transcript keeps the old colours until enter reprints it.
            */
           const names = Object.keys(PALETTES);
-          const labelWidth = Math.max(...names.map((n) => PALETTE_INFO[n].label.length));
+          // blurb, gap, two preview rows
+          const { sub, tight, room } = fit('', 4);
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} paddingX={1}>
-              <Text bold color={T.menu}>Theme</Text>
-              <SelectInput
+            <Panel width={W} title="Theme" sub={sub} tight={tight}
+              keys="↑↓ preview · enter keep · esc put it back">
+              <Choices
+                numbered
+                limit={room}
                 initialIndex={Math.max(0, names.indexOf(activeMenu.original))}
                 items={names.map((n) => ({
-                  label: `${PALETTE_INFO[n].label.padEnd(labelWidth)}  ${n === activeMenu.original ? '← current' : '         '}`,
-                  value: n,
+                  label: PALETTE_INFO[n].label, value: n, current: n === activeMenu.original,
                 }))}
                 onHighlight={(item) => {
                   setTheme(item.value);
@@ -356,23 +473,21 @@ export function Menus({
                   if (item.value !== activeMenu.original) resetScreen?.();
                 }}
               />
-              <Text dimColor wrap="truncate">{'  '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
+              <Text dimColor wrap="truncate">{'   '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
+              <Text> </Text>
               {/* The preview: one row per role a person actually meets. */}
-              <Box flexDirection="column" marginTop={1}>
-                <Text wrap="truncate">
-                  {'  '}<Text color={T.success}>⏺ </Text><Text bold>edit_file</Text>
-                  <Text color={T.muted}> invoice.rb </Text><Text color={T.success}>+2 </Text><Text color={T.danger}>−1</Text>
-                  {'   '}<Text color={T.danger}>✗ </Text><Text bold>run_command</Text><Text color={T.danger}> exit 1</Text>
-                </Text>
-                <Text wrap="truncate">
-                  {'  '}<Text color={T.accent}>⠋ Running rspec…</Text>
-                  {'   '}<Text color={T.attention}>⏸ 1 queued</Text>
-                  {'   '}<Text bold color={T.plan}>plan</Text>{' '}<Text bold color={T.auto}>auto</Text>{' '}<Text bold color={T.strict}>strict</Text>
-                  {'   '}<Text color={T.link}>/history</Text>
-                </Text>
-              </Box>
-              <Text dimColor>↑↓ preview · enter keep · esc put it back</Text>
-            </Box>
+              <Text wrap="truncate">
+                {'   '}<Text color={T.success}>⏺ </Text><Text bold>edit_file</Text>
+                <Text color={T.muted}> invoice.rb </Text><Text color={T.success}>+2 </Text><Text color={T.danger}>−1</Text>
+                {'   '}<Text color={T.danger}>✗ </Text><Text bold>run_command</Text><Text color={T.danger}> exit 1</Text>
+              </Text>
+              <Text wrap="truncate">
+                {'   '}<Text color={T.accent}>⠋ Running rspec…</Text>
+                {'   '}<Text color={T.attention}>⏸ 1 queued</Text>
+                {'   '}<Text bold color={T.plan}>plan</Text>{' '}<Text bold color={T.auto}>auto</Text>{' '}<Text bold color={T.strict}>strict</Text>
+                {'   '}<Text color={T.link}>/history</Text>
+              </Text>
+            </Panel>
           );
         })()}
 
@@ -399,12 +514,13 @@ export function Menus({
           const draft = activeMenu.draft ?? '';
           const wanted = draft.trim();
           const over = wanted.length - MAX_AGENT_NAME;
+          const { tight } = fit('', 2);
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-              <Text bold color={T.menu}>Agent name</Text>
+            <Panel width={W} title="Agent name" tight={tight}
+              keys={`enter ${over > 0 ? '· fix the length first' : 'save'} · esc cancel`}>
               <Box>
-                <Text dimColor>{'  '}</Text>
+                <Text color={T.accent}>{' ❯ '}</Text>
                 <TextInput
                   value={draft}
                   placeholder="Agent CLI"
@@ -415,18 +531,15 @@ export function Menus({
                   }}
                 />
               </Box>
-              <Text dimColor wrap="truncate">
-                {'  ↳ '}
+              <Text color={over > 0 ? T.attention : undefined} dimColor={over <= 0} wrap="truncate">
+                {'   ↳ '}
                 {over > 0
                   ? `${wanted.length}/${MAX_AGENT_NAME} — too long for the banner, drop ${over}`
                   : (wanted
                     ? 'drawn as the banner wordmark · restart to see it'
                     : 'empty clears it — the banner reads “Agent CLI”')}
               </Text>
-              <Text dimColor wrap="truncate">
-                {'  '}enter {over > 0 ? '· fix the length first' : 'save'} · esc cancel
-              </Text>
-            </Box>
+            </Panel>
           );
         })()}
 
@@ -438,33 +551,26 @@ export function Menus({
         */}
         {activeMenu?.type === 'config' && (() => {
           const on = agentLoop.subagentsEnabled;
-          const run = async (args) => { await applyAndReturn(activeMenu, 'config', args); };
+          const run = async (args) => { await applyAndReturn(activeMenu, 'subagents', args); };
+          const { sub, tight, room } = fit(
+            'A subagent is a second tab of this model that has never seen this conversation — '
+              + 'the point of the review role, and the cost of the others: it knows only what it is sent.',
+          );
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-              <Text bold color={T.menu}>
-                🌐 Subagents {on ? 'on' : 'off'}
-              </Text>
-              <Text dimColor wrap="wrap">
-                A subagent is a second tab of this model with an empty context — it has never
-                seen this conversation. That is the point of the review role and the cost of
-                the others: it knows only what it is sent.
-              </Text>
-              <SelectInput
+            <Panel width={W} title="Subagents" status={on ? 'on' : 'off'} sub={sub} tight={tight}
+              keys="↑↓ move · 1–2 or enter choose · esc cancel">
+              <Choices
+                numbered
+                limit={room}
+                initialIndex={on ? 0 : 1}
                 items={[
-                  {
-                    label: `🔭  On — ask_subagent can research, review and run errands${on ? '  ← current' : ''}`,
-                    value: 'subagents on',
-                  },
-                  {
-                    label: `👤  Off — one tab, start to finish${on ? '' : '  ← current'}`,
-                    value: 'subagents off',
-                  },
+                  { label: 'On', detail: 'ask_subagent can research, review and run errands', value: 'subagents on', current: on },
+                  { label: 'Off', detail: 'one tab, start to finish', value: 'subagents off', current: !on },
                 ]}
                 onSelect={(item) => run(item.value.split(' '))}
               />
-              <Text dimColor>↑↓ move · enter choose · esc cancel</Text>
-            </Box>
+            </Panel>
           );
         })()}
 
@@ -485,29 +591,24 @@ export function Menus({
           if (activeMenu.view === 'leaving') {
             const changes = activeMenu.changes || [];
             const undoable = changes.filter((c) => c.restore);
+            const { sub, tight } = fit('These applied as you picked them — nothing is waiting to be saved.', changes.length + 1);
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-                <Text bold color={T.menu}>
-                  {changes.length} setting{changes.length === 1 ? '' : 's'} changed
-                </Text>
-                <Box flexDirection="column" marginY={1} paddingLeft={2}>
-                  {changes.map((c) => (
-                    <Text key={c.label}>
-                      <Text>{c.label}</Text>
-                      <Text dimColor>{'  '}{c.from}{' → '}</Text>
-                      <Text color={T.link}>{c.to}</Text>
-                      {c.restore ? null : <Text dimColor>{'  (cannot be undone from here)'}</Text>}
-                    </Text>
-                  ))}
-                </Box>
-                <Text dimColor wrap="wrap">
-                  These applied as you picked them — there is nothing waiting to be saved.
-                </Text>
-                <SelectInput
+              <Panel width={W} title={`${changes.length} setting${changes.length === 1 ? '' : 's'} changed`}
+                sub={sub} tight={tight} keys="↑↓ move · enter choose">
+                {changes.map((c) => (
+                  <Text key={c.label} wrap="truncate">
+                    {'   '}<Text>{c.label}</Text>
+                    <Text dimColor>{'  '}{c.from}{' → '}</Text>
+                    <Text color={T.link}>{c.to}</Text>
+                    {c.restore ? null : <Text dimColor>{'  (cannot be undone from here)'}</Text>}
+                  </Text>
+                ))}
+                <Text> </Text>
+                <Choices
                   items={[
                     { label: 'Keep them', value: 'keep' },
                     ...(undoable.length
-                      ? [{ label: `↩️   Put ${undoable.length === changes.length ? 'them' : `${undoable.length} of them`} back`, value: 'undo' }]
+                      ? [{ label: `Put ${undoable.length === changes.length ? 'them' : `${undoable.length} of them`} back`, value: 'undo' }]
                       : []),
                   ]}
                   onSelect={async (item) => {
@@ -528,37 +629,36 @@ export function Menus({
                     }]);
                   }}
                 />
-                <Text dimColor>↑↓ move · enter choose</Text>
-              </Box>
+              </Panel>
             );
           }
 
           // ── The page ───────────────────────────────────────────────
-          // The list lives in Ink's repainted frame, so it is bounded and says
-          // how much it is not showing. See ui/constants.js.
-          const LIMIT = 8;
-          const hidden = Math.max(0, matches.length - LIMIT);
-          // Over `matches`, not `rows`. See `settingsColumns`: measuring the
-          // whole set and padding the filtered one is where the gap in
-          // `Effort              deep` came from.
-          const { width, vwidth } = settingsColumns(matches);
-          const selected = matches[Math.min(activeMenu.at || 0, matches.length - 1)];
+          // Tabs drawn as `/help` draws them. The list lives in Ink's
+          // repainted frame, so it gets the rows the panel can spare and says
+          // how much it is not showing.
+          const selected = matches[Math.min(activeMenu.at || 0, Math.max(0, matches.length - 1))];
+          // the filter row and the hint row
+          const { tight, room } = fit('', 2);
+          const tabs = (
+            <Text wrap="truncate">
+              {SETTING_GROUPS.map((name, i) => (
+                <React.Fragment key={name}>
+                  {i > 0 ? '   ' : ' '}
+                  {name === group && !query
+                    ? <Text bold inverse>{` ${name} `}</Text>
+                    : <Text dimColor>{` ${name} `}</Text>}
+                </React.Fragment>
+              ))}
+              {query ? <Text color={T.accent}>{'   all tabs'}</Text> : null}
+            </Text>
+          );
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
+            <Panel width={W} head={tabs} tight={tight}
+              keys={`type to filter · ←/→ tabs · ↑↓ move · enter change · esc ${query ? 'clear' : 'close'}`}>
               <Box>
-                {SETTING_GROUPS.map((name) => (
-                  <Text key={name}>
-                    {name === group
-                      ? <Text bold color={T.menu}>{name}</Text>
-                      : <Text dimColor>{name}</Text>}
-                    <Text dimColor>{'   '}</Text>
-                  </Text>
-                ))}
-                {query ? <Text dimColor>{'(all tabs)'}</Text> : null}
-              </Box>
-              <Box>
-                <Text dimColor>{'⌕ '}</Text>
+                <Text color={query ? T.accent : T.muted}>{' ⌕ '}</Text>
                 <TextInput
                   value={query}
                   placeholder="filter…"
@@ -566,16 +666,17 @@ export function Menus({
                 />
               </Box>
               {matches.length === 0 ? (
-                <Text dimColor>{`  nothing matches “${query}”`}</Text>
+                <Text dimColor wrap="truncate">{`   nothing matches “${query}”`}</Text>
               ) : (
-                <SelectInput
-                  limit={LIMIT}
+                <Choices
+                  limit={room}
+                  initialIndex={activeMenu.at || 0}
                   items={matches.map((row) => ({
-                    // Two columns and nothing else. The hint used to ride along
-                    // here and was truncated mid-word at every width — it is
-                    // only ever wanted for the row you are looking at, so it
-                    // moved below the list where it has the whole line.
-                    label: `${row.label.padEnd(width)}   ${oneLine(row.value, VALUE_MAX).padEnd(vwidth)}`,
+                    // Two columns and nothing else. The hint is only ever
+                    // wanted for the row you are looking at, so it sits under
+                    // the list where it has the whole line.
+                    label: row.label,
+                    detail: oneLine(row.value, VALUE_MAX),
                     value: row.run || '',
                     key: row.label,
                   }))}
@@ -607,7 +708,7 @@ export function Menus({
                       setActiveMenu({ type: 'effort', returnTo: back });
                       return;
                     }
-                    if (item.value === '/config') {
+                    if (item.value === '/subagents') {
                       setActiveMenu({ type: 'config', returnTo: back });
                       return;
                     }
@@ -652,174 +753,152 @@ export function Menus({
                   }}
                 />
               )}
-              {hidden > 0 ? <Text dimColor>{`  ↓ ${hidden} more — type to narrow`}</Text> : null}
               {/*
-                `↳` and a matching indent, rather than a blank row between.
-
-                The hint sat flush under the last row at the same indent and
-                read as one more setting. A separator row is the obvious fix
-                and is the wrong one here: this list is drawn inside Ink's
-                repainted frame, where a row spent on spacing is a row the
-                viewport does not have — the settings page is already border,
-                padding, tabs, filter, eight rows, trim notice, hint and keys.
-                The marker costs nothing and says the same thing.
-
-                The key hints take the same indent, which they did not before.
+                `↳` and a matching indent, rather than a blank row between: the
+                list is drawn inside Ink's repainted frame, where a row spent on
+                spacing is a row the viewport does not have.
               */}
-              {selected?.hint
-                ? <Text dimColor wrap="truncate">{'  ↳ '}{selected.hint}</Text>
-                : null}
-              <Text dimColor wrap="truncate">
-                {'  '}type to filter · tab switches · ↑↓ move · enter change · esc {query ? 'clear' : 'close'}
-              </Text>
-            </Box>
+              <Text dimColor wrap="truncate">{selected?.hint ? `   ↳ ${selected.hint}` : ' '}</Text>
+            </Panel>
           );
         })()}
 
-        {activeMenu?.type === 'commands' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
-            <Text bold color={T.attention}>🧾  Commands run</Text>
-            <Text dimColor wrap="wrap">
-              Every shell command, and every one that was blocked. Kept per day, and never
-              read back into a prompt — this is for you, not for the model.
-            </Text>
-            <SelectInput
-              limit={10}
-              items={activeMenu.days.map((day) => {
-                const entries = readCommands(activeMenu.workspace, day);
-                const blocked = entries.filter((e) => e.outcome !== 'ran').length;
-                return {
-                  label: `${day}   ${String(entries.length).padStart(3)} command${entries.length === 1 ? ' ' : 's'}`
-                    + (blocked ? `   ${blocked} not run` : ''),
-                  value: day,
-                };
-              })}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                handleSubmit(`/commands ${item.value}`);
-              }}
-              key="commands-days"
-            />
-            <Text dimColor>↑↓ move · enter open · esc cancel</Text>
-          </Box>
-        )}
+        {activeMenu?.type === 'commands' && (() => {
+          const { sub, tight, room } = fit(
+            'Every shell command, and every one that was blocked. Kept per day, and never read back into a prompt — this is for you, not for the model.',
+          );
+          return (
+            <Panel width={W} title="Commands run" sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
+              <Choices
+                limit={room}
+                items={activeMenu.days.map((day) => {
+                  const entries = readCommands(activeMenu.workspace, day);
+                  const blocked = entries.filter((e) => e.outcome !== 'ran').length;
+                  return {
+                    label: day,
+                    detail: `${String(entries.length).padStart(3)} command${entries.length === 1 ? ' ' : 's'}`
+                      + (blocked ? `   ${blocked} not run` : ''),
+                    value: day,
+                  };
+                })}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  handleSubmit(`/commands ${item.value}`);
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
-        {activeMenu?.type === 'history' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-            <Text bold color={T.menu}>
-              {activeMenu.sessions.length} past conversation{activeMenu.sessions.length === 1 ? '' : 's'}
-            </Text>
-            {/*
-              The disposition is said per row, before the choice is made,
-              because "continue" and "replay" are different promises and
-              collapsing them is how a picker silently does the second while
-              looking like the first. `continue` means the tab is still on that
-              Gemini thread and the model genuinely remembers; `replay` means it
-              is not, so the next message has to carry a recap.
-            */}
-            <Text dimColor wrap="wrap">
-              Enter reopens one. ↩ continue = the tab still has that thread ·
-              ↻ replay = the model gets a recap first.
-            </Text>
-            <SelectInput
-              limit={10}
-              items={activeMenu.sessions.map((session) => ({
-                // Date first because that is how you look for one, then what
-                // it was about — a column of timestamps says nothing about
-                // which conversation you actually want back.
-                // `localStamp` takes a Date; a session record carries
-                // `updated`/`started` as millisecond numbers. Copying the
-                // plans row verbatim left this reading `session.when`, which
-                // does not exist — the column rendered blank, and only a pty
-                // run showed it.
-                label: `${stampOf(session) || '                '}`
-                  + `  ${session.resume === 'continue' ? '↩' : '↻'}`
-                  + `  ${String(session.turns ?? '?').padStart(3)} turns`
-                  + `  ${oneLine(session.title || session.id, 44)}`,
-                value: session.id,
-                key: session.id,
-              }))}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                // Back through the command, not into the loop from here: the
-                // slash-command path already owns restoring the transcript.
-                handleSubmit(`/history ${item.value}`);
-              }}
-            />
-            <Text dimColor>↑↓ move · enter reopen · esc cancel</Text>
-          </Box>
-        )}
+        {activeMenu?.type === 'history' && (() => {
+          /*
+            The disposition is said per row, before the choice is made,
+            because "continue" and "replay" are different promises and
+            collapsing them is how a picker silently does the second while
+            looking like the first. `continue` means the tab is still on that
+            Gemini thread and the model genuinely remembers; `replay` means it
+            is not, so the next message has to carry a recap.
+          */
+          const n = activeMenu.sessions.length;
+          const { sub, tight, room } = fit('↩ continue — the tab still has that thread · ↻ replay — the model gets a recap first');
+          return (
+            <Panel width={W} title="Past conversations" status={String(n)} sub={sub} tight={tight}
+              keys="↑↓ move · enter reopen · esc cancel">
+              <Choices
+                limit={room}
+                items={activeMenu.sessions.map((session) => ({
+                  // Date first because that is how you look for one, then what
+                  // it was about — a column of timestamps says nothing about
+                  // which conversation you actually want back. `localStamp`
+                  // takes a Date; a session record carries `updated`/`started`
+                  // as millisecond numbers, hence `stampOf`.
+                  label: stampOf(session) || '                ',
+                  detail: `${session.resume === 'continue' ? '↩' : '↻'}`
+                    + `  ${String(session.turns ?? '?').padStart(3)} turns`
+                    + `  ${oneLine(session.title || session.id, 60)}`,
+                  value: session.id,
+                  key: session.id,
+                }))}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  // Back through the command, not into the loop from here: the
+                  // slash-command path already owns restoring the transcript.
+                  handleSubmit(`/history ${item.value}`);
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
-        {activeMenu?.type === 'plans' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-            <Text bold color={T.menu}>
-              {activeMenu.plans.length} past plan{activeMenu.plans.length === 1 ? '' : 's'}
-            </Text>
-            <Text dimColor wrap="wrap">
-              Each one was archived when the next replaced it. Enter opens it in your editor.
-            </Text>
-            <SelectInput
-              limit={10}
-              items={activeMenu.plans.map((plan) => ({
-                // Date first because that is how you look for one, then the
-                // heading, because a column of timestamps says nothing about
-                // which plan you actually want back.
-                // Local parts, not toISOString(): the stamp in the filename was
-                // written in local time, so converting it to UTC to display it
-                // moved every plan by the offset — a plan archived at 14:32
-                // listed itself as 09:02.
-                label: `${plan.when ? localStamp(plan.when) : '                '}`
-                  + `  ${oneLine(plan.title || plan.name, 52)}`,
-                value: plan.path,
-                key: plan.name,
-              }))}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                try {
-                  exec(`"${agentLoop.editor || 'code'}" "${item.value}" || open "${item.value}" || xdg-open "${item.value}"`);
-                } catch { /* no editor on this machine */ }
-              }}
-            />
-            <Text dimColor>↑↓ move · enter open · esc cancel</Text>
-          </Box>
-        )}
+        {activeMenu?.type === 'plans' && (() => {
+          const n = activeMenu.plans.length;
+          const { sub, tight, room } = fit('Each one was archived when the next replaced it. Enter opens it in your editor.');
+          return (
+            <Panel width={W} title="Past plans" status={String(n)} sub={sub} tight={tight}
+              keys="↑↓ move · enter open · esc cancel">
+              <Choices
+                limit={room}
+                items={activeMenu.plans.map((plan) => ({
+                  // Local parts, not toISOString(): the stamp in the filename was
+                  // written in local time, so converting it to UTC to display it
+                  // moved every plan by the offset — a plan archived at 14:32
+                  // listed itself as 09:02.
+                  label: plan.when ? localStamp(plan.when) : '                ',
+                  detail: oneLine(plan.title || plan.name, 70),
+                  value: plan.path,
+                  key: plan.name,
+                }))}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  try {
+                    exec(`"${agentLoop.editor || 'code'}" "${item.value}" || open "${item.value}" || xdg-open "${item.value}"`);
+                  } catch { /* no editor on this machine */ }
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
-        {activeMenu?.type === 'logs' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.danger} padding={1}>
-            <Text bold color={T.danger}>🩺  {activeMenu.summary.total} failure{activeMenu.summary.total === 1 ? '' : 's'} logged</Text>
-            <Text dimColor wrap="wrap">Pick a flow to see what broke in it.</Text>
-            <SelectInput
-              limit={10}
-              items={[
-                ...activeMenu.summary.byFlow.map((f) => ({
-                  label: `${String(f.count).padStart(3)}  ${f.flow.padEnd(10)} ${f.label}`,
-                  value: f.flow,
-                })),
-                // Reachable, and below the failures. These are the expected
-                // states that used to be mixed in with them and outnumbered
-                // them three to one; a reader wants them available and never
-                // first.
-                ...(activeMenu.summary.notices?.count
-                  ? [{
-                    label: `${String(activeMenu.summary.notices.count).padStart(3)}  `
-                      + 'notices    Expected states — nothing to act on',
-                    value: 'notices',
-                  }]
-                  : []),
-                { label: '🧹  Clear the log', value: 'clear' },
-              ]}
-              onSelect={(item) => {
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                handleSubmit(`/logs ${item.value}`);
-              }}
-            />
-            <Text dimColor>↑↓ move · enter open · esc cancel</Text>
-          </Box>
-        )}
+        {activeMenu?.type === 'logs' && (() => {
+          const total = activeMenu.summary.total;
+          const { sub, tight, room } = fit('Pick a flow to see what broke in it.');
+          return (
+            <Panel width={W} title="Failure log" status={`${total} failure${total === 1 ? '' : 's'}`}
+              sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
+              <Choices
+                limit={room}
+                items={[
+                  ...activeMenu.summary.byFlow.map((f) => ({
+                    label: `${String(f.count).padStart(3)}  ${f.flow}`,
+                    detail: f.label,
+                    value: f.flow,
+                    colour: T.danger,
+                  })),
+                  // Reachable, and below the failures. These are the expected
+                  // states that used to be mixed in with them and outnumbered
+                  // them three to one; a reader wants them available and never
+                  // first.
+                  ...(activeMenu.summary.notices?.count
+                    ? [{
+                      label: `${String(activeMenu.summary.notices.count).padStart(3)}  notices`,
+                      detail: 'Expected states — nothing to act on',
+                      value: 'notices',
+                    }]
+                    : []),
+                  { label: '     Clear the log', value: 'clear' },
+                ]}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  handleSubmit(`/logs ${item.value}`);
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
         {activeMenu?.type === 'allowlist' && (() => {
           const rules = activeMenu.rules;
@@ -829,37 +908,31 @@ export function Menus({
             ...rules.block.map((c) => ({ cmd: c, kind: 'block' })),
           ];
 
-          const close = () => {
-            // Back to settings when that is where this was opened from.
-            if (activeMenu.returnTo) { setActiveMenu(activeMenu.returnTo); return; }
-            setActiveMenu(null);
-            setFocus(FOCUS_INPUT);
-          };
-
           // ── Confirm ────────────────────────────────────────────────
           // A rule can be a paragraph of shell — a compound git command with
           // quoted echoes in it — and one keypress used to delete it outright
           // with nothing shown but a truncated line. So the full text is spelled
-          // out here, wrapped, before anything is removed.
+          // out here, before anything is removed — wrapped to the rows there are.
           if (activeMenu.view === 'confirm' && activeMenu.pending) {
             const { cmd, kind } = activeMenu.pending;
+            const consequence = kind === 'allow'
+              ? 'The agent will ask before running this again.'
+              : 'The agent will be allowed to propose this again.';
+            const { sub, tight, room } = fit(consequence);
+            const lines = wrapLines(cmd, W - 5, Math.max(1, room - 3));
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
-                <Text bold color={T.attention}>🛡️  Remove this rule?</Text>
-                <Box marginY={1} paddingLeft={2}>
-                  <Text color={kind === 'allow' ? T.success : T.danger} wrap="wrap">
-                    {kind === 'allow' ? '✓ ' : '✗ '}{cmd}
+              <Panel tone="attention" width={W} title="Remove this rule?" sub={sub} tight={tight}
+                keys="↑↓ move · enter choose · esc back">
+                {lines.map((line, i) => (
+                  <Text key={i} color={kind === 'allow' ? T.success : T.danger} wrap="truncate">
+                    {i === 0 ? (kind === 'allow' ? ' ✓ ' : ' ✗ ') : '   '}{line}
                   </Text>
-                </Box>
-                <Text dimColor wrap="wrap">
-                  {kind === 'allow'
-                    ? 'The agent will ask before running this again.'
-                    : 'The agent will be allowed to propose this again.'}
-                </Text>
-                <SelectInput
+                ))}
+                <Text> </Text>
+                <Choices
                   items={[
-                    { label: '🗑️   Yes, remove it', value: 'yes' },
-                    { label: '↩️   No, keep it', value: 'no' },
+                    { label: 'Yes, remove it', value: 'yes', colour: T.danger },
+                    { label: 'No, keep it', value: 'no' },
                   ]}
                   onSelect={(item) => {
                     if (item.value === 'no') {
@@ -888,8 +961,7 @@ export function Menus({
                     });
                   }}
                 />
-                <Text dimColor>↑↓ move · enter choose · esc back</Text>
-              </Box>
+              </Panel>
             );
           }
 
@@ -899,21 +971,20 @@ export function Menus({
           // frame past the viewport — which is what makes Ink clear and repaint
           // the whole terminal on every render. See ui/constants.js.
           if (activeMenu.view === 'list') {
+            const { sub, tight, room } = fit('Pick one to remove it. You will be asked to confirm.');
             return (
-              <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
-                <Text bold color={T.attention}>
-                  🛡️  {all.length} command rule{all.length === 1 ? '' : 's'}
-                </Text>
-                <Text dimColor wrap="wrap">Pick one to remove it. You will be asked to confirm.</Text>
-                <SelectInput
-                  limit={10}
+              <Panel tone="attention" width={W} title="Command rules" status={String(all.length)}
+                sub={sub} tight={tight} keys="↑↓ move · enter remove · esc back">
+                <Choices
+                  limit={room}
                   items={[
                     ...all.map(({ cmd, kind }) => ({
-                      label: `${kind === 'allow' ? '✓' : '✗'}  ${oneLine(cmd, 58)}`,
+                      label: `${kind === 'allow' ? '✓' : '✗'}  ${oneLine(cmd, Math.max(20, W - 8))}`,
                       value: cmd,
                       key: `${kind}:${cmd}`,
+                      colour: kind === 'allow' ? T.success : T.danger,
                     })),
-                    { label: '←   Back', value: '\u0000back', key: 'back' },
+                    { label: '←  Back', value: '\u0000back', key: 'back' },
                   ]}
                   onSelect={(item) => {
                     if (item.value === '\u0000back') {
@@ -924,35 +995,35 @@ export function Menus({
                     setActiveMenu({ ...activeMenu, view: 'confirm', pending: rule });
                   }}
                 />
-                <Text dimColor>↑↓ move · enter remove · esc back</Text>
-              </Box>
+              </Panel>
             );
           }
 
           // ── The menu ───────────────────────────────────────────────
           // The rules used to be listed right here, so opening /allowlist to
           // toggle it meant reading every rule you had ever added. What belongs
-          // on the first screen is the four things you can do.
+          // on the first screen is the things you can do.
           const items = [
-            { label: on ? 'Disable — ask before every command' : 'Enable — let allowed commands run',
-              value: on ? 'disable' : 'enable' },
-            { label: '＋  Allow a command…', value: '\u0000add' },
-            { label: '＋  Block a command…', value: '\u0000block' },
+            on
+              ? { label: 'Turn off', detail: 'ask before every command', value: 'disable' }
+              : { label: 'Turn on', detail: 'let allowed commands run without asking', value: 'enable' },
+            { label: 'Allow a command…', value: '\u0000add' },
+            { label: 'Block a command…', value: '\u0000block' },
             ...(all.length > 0
               ? [
-                { label: `View commands (${all.length})`, value: '\u0000list' },
-                { label: '🧹  Clear every rule', value: 'clear' },
+                { label: 'View rules', detail: `${rules.allow.length} allowed · ${rules.block.length} blocked`, value: '\u0000list' },
+                { label: 'Clear every rule', value: 'clear', colour: T.danger },
               ]
               : []),
           ];
+          const { sub, tight, room } = fit('Allowed commands run without asking. Blocked ones are refused outright.');
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.attention} padding={1}>
-              <Text bold color={T.attention}>🛡️  Command rules — {on ? 'enabled' : 'disabled'}</Text>
-              <Text dimColor wrap="wrap">
-                Allowed commands run without asking. Blocked ones are refused outright.
-              </Text>
-              <SelectInput
+            <Panel width={W} title="Command rules" status={on ? 'on' : 'off'} sub={sub} tight={tight}
+              keys={`↑↓ move · 1–${items.length} or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
+              <Choices
+                numbered
+                limit={room}
                 items={items}
                 onSelect={(item) => {
                   if (item.value === '\u0000list') {
@@ -962,9 +1033,8 @@ export function Menus({
                   /**
                    * The two prefill rows have to close the menu *completely*.
                    *
-                   * `close()` returns to `/settings` when that is where this
-                   * was opened from — right for cancelling, wrong here. The
-                   * prompt is hidden while any menu is open
+                   * Returning to `/settings` is right for cancelling, wrong
+                   * here. The prompt is hidden while any menu is open
                    * (`promptVisible = … && !activeMenu`), so the prefill landed
                    * in a box nobody could see and the row looked dead. That is
                    * what "add/remove does not work" was: the command itself is
@@ -978,52 +1048,47 @@ export function Menus({
                     return;
                   }
                   // In place, for the same reason as the removal above: from
-                  // settings, `close()` reopens the page and the answer lands
+                  // settings, closing reopens the page and the answer lands
                   // where it cannot be read.
                   agentLoop.handleSlashCommand('allowlist', [item.value]);
                   setActiveMenu({ ...activeMenu, rules: agentLoop.commandRules });
                 }}
               />
-              <Text dimColor>↑↓ move · enter choose · esc cancel</Text>
-            </Box>
+            </Panel>
           );
         })()}
 
         {activeMenu?.type === 'skills' && (() => {
           const skills = activeMenu.skills || [];
           const folders = skillSearchPath(activeMenu.workspace, agentLoop.skillFolders || []);
-          // Padded, like every other list here. Names of different lengths
-          // against an unpadded description made this read as a ragged wall.
-          const nameWidth = Math.min(24, Math.max(...skills.map((sk) => sk.name.length), 0));
           const back = () => {
             if (activeMenu.returnTo) { setActiveMenu(activeMenu.returnTo); return true; }
             setActiveMenu(null);
             setFocus(FOCUS_INPUT);
             return false;
           };
+          const { sub, tight, room } = fit(
+            'Markdown files the agent opens when their description matches the task. Only the descriptions sit in the prompt, so each one costs a line.',
+          );
 
           return (
-            <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-              <Text bold color={T.menu}>
-                Skills — {skills.length} across {folders.length} folder{folders.length === 1 ? '' : 's'}
-              </Text>
-              <Text dimColor wrap="wrap">
-                Markdown files the agent opens when their description matches the task. Only the
-                descriptions sit in the prompt, so writing more of them costs a line each.
-              </Text>
-              <SelectInput
-                limit={10}
+            <Panel width={W} title="Skills"
+              status={`${skills.length} across ${folders.length} folder${folders.length === 1 ? '' : 's'}`}
+              sub={sub} tight={tight} keys={`↑↓ move · enter open · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
+              <Choices
+                limit={room}
                 items={[
                   ...skills.map((sk) => ({
-                    label: `${sk.name.padEnd(nameWidth)}  ${oneLine(sk.description || '(no description)', 44)}`,
+                    label: oneLine(sk.name, 24),
+                    detail: oneLine(sk.description || '(no description)', 60),
                     value: `open:${sk.file}`,
                     key: sk.file,
                   })),
-                  { label: '＋  New skill…', value: 'new', key: '_new' },
+                  { label: 'New skill…', value: 'new', key: '_new' },
                   // The settings row is called "Skill folders" and used to open
                   // a list with no way to reach them, which is what made this
                   // screen feel half-finished.
-                  { label: `📁  Folders searched (${folders.length})…`, value: 'folders', key: '_folders' },
+                  { label: 'Folders searched…', detail: String(folders.length), value: 'folders', key: '_folders' },
                   { label: 'Open the skills folder', value: `open:${skillsDir(activeMenu.workspace)}`, key: '_dir' },
                 ]}
                 onSelect={(item) => {
@@ -1048,53 +1113,56 @@ export function Menus({
                   } catch (e) { /* no editor on this machine */ }
                 }}
               />
-              <Text dimColor>↑↓ move · enter open · esc {activeMenu.returnTo ? 'back' : 'cancel'}</Text>
-            </Box>
+            </Panel>
           );
         })()}
 
-        {activeMenu?.type === 'workspace' && (
-          <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
-            <Text bold color={T.menu}>Workspace</Text>
-            <Text dimColor wrap="truncate-start">Here:  {activeMenu.current}</Text>
-            <Text dimColor wrap="truncate-start">State: {agentDir(activeMenu.current)}</Text>
-            <Text dimColor wrap="wrap">
-              The agent restarts into it. This conversation belongs to the project you are
-              leaving, and so do its memory, config and command rules.
-            </Text>
-            <SelectInput
-              limit={10}
-              items={[
-                ...listWorkspaceCandidates(activeMenu.current).map((c) => ({
-                  label: `${c.current ? '● ' : '  '}${c.label}`,
-                  value: c.path,
-                })),
-                ...(canPickFolder()
-                  ? [{ label: '  Browse…', value: '\u0000browse' }]
-                  : []),
-                { label: '  Type a path instead…', value: '\u0000type' },
-              ]}
-              onSelect={async (item) => {
-                setActiveMenu(null);
-                setFocus(FOCUS_INPUT);
-                if (item.value === '\u0000browse') {
-                  const chosen = await pickFolder('Choose a project to work on');
-                  if (chosen && chosen !== activeMenu.current) handleSubmit(`/workspace ${chosen}`);
-                  return;
-                }
-                if (item.value === '\u0000type') {
-                  // Hand the user a half-written command rather than a second
-                  // prompt of our own: the input line already knows how to edit.
-                  setInputAtEnd('/workspace ');
-                  return;
-                }
-                if (item.value === activeMenu.current) return;
-                handleSubmit(`/workspace ${item.value}`);
-              }}
-            />
-            <Text dimColor>↑↓ move · enter choose · esc cancel</Text>
-          </Box>
-        )}
+        {activeMenu?.type === 'workspace' && (() => {
+          // Here and State: two rows besides the list.
+          const { sub, tight, room } = fit(
+            'The agent restarts into it. This conversation belongs to the project you are leaving, and so do its memory, config and command rules.',
+            2,
+          );
+          return (
+            <Panel width={W} title="Workspace" sub={sub} tight={tight} keys="↑↓ move · enter choose · esc cancel">
+              {/* Cut from the left by hand: `truncate-start` cut the label too. */}
+              <Text wrap="truncate"><Text dimColor>{' Here   '}</Text>{cutStart(activeMenu.current, W - 9)}</Text>
+              <Text wrap="truncate"><Text dimColor>{' State  '}</Text>{cutStart(agentDir(activeMenu.current), W - 9)}</Text>
+              <Choices
+                limit={room}
+                items={[
+                  ...listWorkspaceCandidates(activeMenu.current).map((c) => ({
+                    // The tick says "current"; the label saying it too was twice.
+                    label: c.current ? c.label.replace(/ — current$/, '') : c.label,
+                    value: c.path,
+                    current: c.current,
+                  })),
+                  ...(canPickFolder()
+                    ? [{ label: 'Browse…', value: '\u0000browse' }]
+                    : []),
+                  { label: 'Type a path instead…', value: '\u0000type' },
+                ]}
+                onSelect={async (item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  if (item.value === '\u0000browse') {
+                    const chosen = await pickFolder('Choose a project to work on');
+                    if (chosen && chosen !== activeMenu.current) handleSubmit(`/workspace ${chosen}`);
+                    return;
+                  }
+                  if (item.value === '\u0000type') {
+                    // Hand the user a half-written command rather than a second
+                    // prompt of our own: the input line already knows how to edit.
+                    setInputAtEnd('/workspace ');
+                    return;
+                  }
+                  if (item.value === activeMenu.current) return;
+                  handleSubmit(`/workspace ${item.value}`);
+                }}
+              />
+            </Panel>
+          );
+        })()}
 
     </>
   );
@@ -1103,7 +1171,7 @@ export function Menus({
 /**
  * Pending edit approval.
  *
- * Its own SelectInput for the same reason as the rest: an approval that a stray
+ * Its own `Choices` for the same reason as the rest: an approval that a stray
  * 'y' in typed text could trigger is how edits used to get applied without
  * anyone agreeing to them.
  *
@@ -1133,6 +1201,7 @@ export function DiffApproval({
   setFocus,
   mode = 'plan',
   terminalHeight = 24,
+  width = process.stdout.columns || 80,
 }) {
   const [expanded, setExpanded] = React.useState(false);
 
@@ -1150,7 +1219,7 @@ export function DiffApproval({
    *
    * A letter rather than a chord: `ctrl+e` is already transcript verbosity and
    * is pulled off stdin before Ink sees it, so it would toggle the wrong thing
-   * from here. And a third `SelectInput` row was the other option — rejected,
+   * from here. And a third `Choices` row was the other option — rejected,
    * because this list is a safety decision and putting a *view* action in it
    * is how someone approves a write while meaning to look at it.
    *
@@ -1230,39 +1299,39 @@ export function DiffApproval({
   const critical = diffRequest.riskLevel === 'critical';
 
 
+  const tone = critical ? T.danger : T.attention;
   return (
-    <Box
-      borderStyle="round"
-      borderColor={critical ? T.danger : T.attention}
-      paddingX={1}
-      flexDirection="column"
-      width="100%"
-      flexShrink={1}
-    >
+    // The shared menu look (`ui/panel.js`): a rule in the risk colour where
+    // the round box was, which also gives the diff the box's four columns.
+    <Box flexDirection="column" width="100%" flexShrink={1}>
+      <Text color={tone} wrap="truncate">{'─'.repeat(Math.max(1, width))}</Text>
       <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color={critical ? T.danger : T.attention} wrap="truncate-start">
-          {diffRequest.isNewFile ? 'Create' : 'Edit'} {diffRequest.filePath}
+        <Text wrap="truncate-start">
+          {' '}<Text bold color={tone}>{diffRequest.isNewFile ? 'Create' : 'Edit'}</Text>
+          <Text bold>{' '}{diffRequest.filePath}</Text>
         </Text>
         <Text>
           <Text color={T.success}>+{added}</Text>
           <Text dimColor> / </Text>
           <Text color={T.danger}>-{removed}</Text>
+          {' '}
         </Text>
       </Box>
 
       {diffRequest.riskReason ? (
-        <Text dimColor wrap="wrap">{diffRequest.riskReason}</Text>
+        <Text dimColor wrap="truncate">{' '}{diffRequest.riskReason}</Text>
       ) : null}
 
       {rows.length > 0 && (
-        <Box flexDirection="column" marginY={1}>
+        <Box flexDirection="column" marginY={1} paddingLeft={1}>
           {/* The gutter earns its width here: this is the screen where you are
               deciding whether to let the change happen. */}
           <DiffRows rows={rows} gutter />
         </Box>
       )}
 
-      <SelectInput
+      {/* No digits: this list is a safety decision. */}
+      <Choices
         items={choices}
         onSelect={(item) => {
           handleDiffResponse(item.value);
@@ -1273,8 +1342,8 @@ export function DiffApproval({
       {(hidden || expanded) && (
         <Text dimColor wrap="truncate">
           {expanded
-            ? '  d — collapse'
-            : '  d — show the rest of the diff'}
+            ? '   d — collapse'
+            : '   d — show the rest of the diff'}
         </Text>
       )}
     </Box>

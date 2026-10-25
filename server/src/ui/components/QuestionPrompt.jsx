@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import { normalizeQuestionSet, FREEFORM_VALUE } from '../../core/question.js';
 import { T } from '../theme.js';
+import { panelRoom, wrapLines } from '../panel.js';
+import { Panel, Choices } from './Panel.jsx';
 
 /**
  * The agent's `ask_question` prompt.
@@ -18,7 +19,7 @@ import { T } from '../theme.js';
  * InputBar hides itself whenever a menu is up, so this owns the keyboard while
  * it is mounted and there is no second useInput competing for the same keys.
  */
-export function QuestionPrompt({ payload, onAnswer, onCancel }) {
+export function QuestionPrompt({ payload, onAnswer, onCancel, width = 80, rows = 20 }) {
   const questions = normalizeQuestionSet(payload);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState([]);
@@ -52,41 +53,45 @@ export function QuestionPrompt({ payload, onAnswer, onCancel }) {
     setHighlighted(null);
   };
 
+  // Numbered, as Claude Code asks: a digit answers. The text field takes over
+  // the keyboard when "Something else" is chosen, so a digit typed there is
+  // text, not a choice.
   const items = [
     ...current.options.map((option, i) => ({
       key: `opt-${i}`,
-      label: `${i + 1}. ${option.label}`,
+      label: option.label,
       value: option.value,
       description: option.description,
     })),
-    { key: 'freeform', label: '✎ Something else…', value: FREEFORM_VALUE, description: 'Type your own answer.' },
+    { key: 'freeform', label: 'Something else…', value: FREEFORM_VALUE, description: 'Type your own answer.' },
   ];
 
   const active = highlighted ?? items[0];
+  // The question, then what is already answered, then the description line.
+  const question = wrapLines(current.question, width - 3, 3);
+  const { tight, room } = panelRoom({ rows, width, extra: question.length + answers.length + 2 });
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={T.menu} paddingX={1}>
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color={T.menu}>{current.header}</Text>
-        {questions.length > 1 && (
-          <Text dimColor>{step + 1} of {questions.length}</Text>
-        )}
-      </Box>
-      <Box marginBottom={1}><Text wrap="wrap">{current.question}</Text></Box>
+    <Panel width={width} tight={tight}
+      title={current.header}
+      status={questions.length > 1 ? `${step + 1} of ${questions.length}` : null}
+      keys={typing
+        ? `enter submit · esc ${current.options.length > 0 ? 'back to options' : 'dismiss'}`
+        : `↑↓ move · 1–${Math.min(9, items.length)} or enter select · esc dismiss`}>
+      {question.map((line, i) => <Text key={i} wrap="truncate">{` ${line}`}</Text>)}
 
       {/* What has already been answered, so the batch reads as one exchange. */}
-      {answers.length > 0 && (
-        <Box flexDirection="column" marginBottom={1}>
-          {answers.map((entry, i) => (
-            <Text key={i} dimColor wrap="truncate">✓ {entry.answer}</Text>
-          ))}
-        </Box>
-      )}
+      {answers.map((entry, i) => (
+        <Text key={`a${i}`} dimColor wrap="truncate">{' '}<Text color={T.success}>✔</Text>{` ${entry.answer}`}</Text>
+      ))}
+      <Text> </Text>
 
       {!typing && (
         <>
-          <SelectInput
+          <Choices
             key={step}
+            numbered
+            limit={room}
             items={items}
             onHighlight={(item) => setHighlighted(item)}
             onSelect={(item) => {
@@ -97,19 +102,14 @@ export function QuestionPrompt({ payload, onAnswer, onCancel }) {
               record(item.value);
             }}
           />
-          {active?.description ? (
-            <Box marginTop={1}><Text dimColor wrap="wrap">{active.description}</Text></Box>
-          ) : null}
-          <Box marginTop={1}>
-            <Text dimColor>↑↓ move · enter select · esc dismiss</Text>
-          </Box>
+          <Text dimColor wrap="truncate">{active?.description ? `   ↳ ${active.description}` : ' '}</Text>
         </>
       )}
 
       {typing && (
         <>
           <Box>
-            <Text color={T.menu}>{'> '}</Text>
+            <Text color={T.accent}>{' ❯ '}</Text>
             <TextInput
               value={draft}
               onChange={setDraft}
@@ -121,13 +121,9 @@ export function QuestionPrompt({ payload, onAnswer, onCancel }) {
               placeholder="Type your answer"
             />
           </Box>
-          <Box marginTop={1}>
-            <Text dimColor>
-              enter submit · esc {current.options.length > 0 ? 'back to options' : 'dismiss'}
-            </Text>
-          </Box>
+          <Text> </Text>
         </>
       )}
-    </Box>
+    </Panel>
   );
 }

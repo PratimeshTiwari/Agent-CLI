@@ -100,3 +100,23 @@ export function createScreenSpan({ rows }) {
 export function rewindSequence(top) {
   return `\x1b[${top};1H\x1b[J`;
 }
+
+/**
+ * How the screen is cleared on the way in.
+ *
+ * A newline per row scrolls whatever is visible into the scrollback, so the
+ * last session's footer and the shell line are one scroll away rather than
+ * gone (v5.24). VS Code's terminal is the exception: its sticky scroll pins
+ * the command line of the running command over the top row as soon as that
+ * line leaves the screen — so scrolling `% agent` away put it on top of the
+ * header's first row, cut in half (reported 2026-10-26 with a screenshot).
+ * There the visible screen is erased in place instead: the row VS Code marked
+ * as the command's start stays on screen (it now holds the header), so nothing
+ * is pinned until the transcript itself scrolls, which is what sticky scroll is
+ * for. The cost is that what was on screen is erased rather than kept; what was
+ * already in the scrollback stays.
+ */
+export function enterSequence({ rows = 24, env = process.env } = {}) {
+  if (env.TERM_PROGRAM === 'vscode') return '\x1b[H\x1b[J';
+  return '\n'.repeat(Math.max(1, rows)) + '\x1b[H';
+}

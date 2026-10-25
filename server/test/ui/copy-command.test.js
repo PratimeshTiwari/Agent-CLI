@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lastReply } from '../../src/ui/format.js';
+import { lastReply, lastCodeBlock } from '../../src/ui/format.js';
 import { handleSlashCommand } from '../../src/ui/hooks/use-slash-commands.js';
 
 test('the newest agent reply, skipping tool rows, notices and the user', () => {
@@ -38,9 +38,31 @@ test('with nothing to copy it says so, and never touches the clipboard', async (
   await handleSlashCommand('/copy', {
     agentLoop: { conversationHistory: [{ role: 'user', content: 'hi' }], commandRules: {} },
     wsServer: { clients: new Set() },
-    resetScreen() {}, setActiveMenu() {}, setIsProcessing() {}, setPendingImage() {},
+    resetScreen() {}, setActiveMenu() {}, setIsProcessing() {},
     setHistory: (f) => rows.push(...f([])),
   });
   assert.equal(rows.at(-1).content, '📋 No reply to copy yet.');
   assert.equal(rows.at(-2).content, '/copy', 'the command is echoed above its answer, as /theme does');
+});
+
+/*
+ * `/copy code` replaced ctrl+y (2026-10-26). The reply's raw text still holds
+ * any fenced tool call the agent made, and copying that instead of the code it
+ * showed would read as the command being broken.
+ */
+test('/copy code takes the last code block, never a fenced tool call', () => {
+  const call = '```json\n{"name": "read_file", "args": {"path": "a.js"}}\n```';
+  const history = [
+    { role: 'agent', content: 'Old:\n```js\nold()\n```' },
+    { role: 'agent', content: 'Try this:\n```bash\nnpm test\n```\nThen:\n' + call },
+    { role: 'system', type: 'tool_result', result: 'ok' },
+  ];
+  assert.deepEqual(lastCodeBlock(history), { lang: 'bash', code: 'npm test' });
+});
+
+test('/copy code with no code anywhere answers null', () => {
+  assert.equal(lastCodeBlock([{ role: 'agent', content: 'no code here' }]), null);
+  // Negative control: a JSON block that is not a tool call is code.
+  assert.deepEqual(lastCodeBlock([{ role: 'agent', content: '```json\n{"a": 1}\n```' }]),
+    { lang: 'json', code: '{"a": 1}' });
 });

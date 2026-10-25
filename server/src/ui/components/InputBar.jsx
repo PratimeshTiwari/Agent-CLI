@@ -36,6 +36,7 @@ export function InputBar({
   disconnectedText,
   focus,
   handleSubmit,
+  attachImage,
   input,
   isProcessing,
   steered = [],
@@ -61,6 +62,9 @@ export function InputBar({
   verbose,
   compact,
 }) {
+  // The filed-session row goes for good on the first keystroke (see its row).
+  const [filedDismissed, setFiledDismissed] = React.useState(false);
+  React.useEffect(() => { if (input) setFiledDismissed(true); }, [input]);
   const hasArtifacts = Boolean(artifacts?.task || artifacts?.review || artifacts?.walkthrough);
 
   /**
@@ -110,7 +114,7 @@ export function InputBar({
     // is a signal rather than a guess. The clipboard probe costs ~60ms and runs
     // only on this path, which is already the rare one.
     if (text === '' && hasClipboardImage()) {
-      handleSubmit('/paste-image');
+      attachImage();
       return;
     }
 
@@ -184,12 +188,19 @@ export function InputBar({
             already in, lists every conversation rather than the most recent
             one, and says per row whether the model still remembers it.
           */}
-          {filedSession && !isProcessing && history.length === 0 && (
+          {/*
+            A bullet, and gone the moment you type (v5.24 — the `↺` row was
+            reported as looking odd, and it outstayed its use: once you are
+            writing a message you have decided not to reopen anything).
+            Dismissed for good rather than while the box is empty, so deleting
+            what you typed does not bring it back.
+          */}
+          {filedSession && !filedDismissed && !isProcessing && history.length === 0 && (
             <Box marginBottom={1}>
               <Text dimColor wrap="truncate">
-                {'  ↺ previous conversation filed'}
-                {filedSession.turns ? `, ${filedSession.turns} turns` : ''}
-                {'  · '}
+                {'• Previous conversation filed'}
+                {filedSession.turns ? ` (${filedSession.turns} turns)` : ''}
+                {' · '}
                 <Text color={T.link}>/history</Text>
                 {' to reopen it'}
               </Text>
@@ -268,7 +279,11 @@ export function InputBar({
           {slashOpen && (
             <Box flexDirection="column" paddingX={1}>
               {slashMatches.map((cmd, idx) => (
-                <Text key={cmd.name} color={idx === slashSelected ? T.menu : T.muted} bold={idx === slashSelected}>
+                // Truncated: a description that wraps is a row drawn and not
+                // charged, and `/subagents`'s did at 80 columns (1 clear at 13
+                // rows under the pty, 2026-10-26).
+                <Text key={cmd.name} color={idx === slashSelected ? T.menu : T.muted} bold={idx === slashSelected}
+                  wrap="truncate">
                   {(idx === slashSelected ? '❯ ' : '  ') + `/${cmd.name}`.padEnd(16)}
                   <Text dimColor>{cmd.desc}</Text>
                 </Text>

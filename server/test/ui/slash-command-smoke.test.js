@@ -71,8 +71,6 @@ function harness() {
     setActiveMenu() {},
     setHistory: (f) => history.push(typeof f === 'function' ? f([]) : f),
     setIsProcessing() {},
-    setPendingImage() {},
-    pendingImage: null,
   });
 
   const lastMessage = () => {
@@ -140,14 +138,14 @@ describe('arguments do not break anything', () => {
    * a mistake.
    */
   const CASES = [
-    '/image remove', '/image /nonexistent/x.png',
     '/open', '/open nope.txt',
     '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools',
     '/name Ada', '/name',
+    '/subagents', '/subagents off', '/subagents on', '/config', '/copy code', '/shell', '/terminal',
     '/memory on', '/memory off',
     '/allowlist', '/allowlist add ls',
     '/effort pro', '/effort nonsense',
-    '/help extra args', '/context', '/plans', '/history', '/commands', '/skills',
+    '/help extra args', '/context', '/plans', '/plan show', '/history', '/commands', '/skills',
   ];
 
   test('none of them throws', async () => {

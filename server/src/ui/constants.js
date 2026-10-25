@@ -26,12 +26,6 @@ export const COMMAND_GROUPS = [
   ['agent', 'The agent itself'],
 ];
 
-/**
- * The handful `/help` leads with. Six groups of twenty-eight commands is
- * readable but not scannable; these are what people reach for mid-task.
- * Each must exist in `SLASH_COMMANDS` (asserted by test).
- */
-export const MOST_USED_COMMANDS = ['effort', 'diff', 'undo', 'compact', 'history'];
 
 export /** Slash commands offered by the palette, and the source `/help` prints from. */
 const SLASH_COMMANDS = [
@@ -40,8 +34,8 @@ const SLASH_COMMANDS = [
   { name: 'open', desc: 'Open a file in your editor', group: 'project' },
   { name: 'effort', desc: 'How hard to work, and which browser tab it expects', group: 'config' },
   { name: 'allowlist', desc: 'Manage auto-approved/blocked command rules', group: 'config' },
-  { name: 'config', desc: 'Which model implements, and which one reviews it', group: 'config' },
-  { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not', group: 'work' },
+  { name: 'subagents', desc: 'Subagents on or off — parallel tabs for research and review', group: 'config' },
+  { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not · `/plan show` previews the plan', group: 'work' },
   { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },
   { name: 'auto', desc: 'Auto Mode — safe edits apply automatically', group: 'work' },
   { name: 'workspace', desc: 'Where the agent works — and switch, which restarts', group: 'project' },
@@ -53,9 +47,9 @@ const SLASH_COMMANDS = [
   { name: 'reset', desc: 'Start this repo fresh — its .agent state goes to the trash', group: 'chat' },
   { name: 'undo', desc: 'Undo the last step/action', group: 'work' },
   { name: 'diff', desc: 'Show the last edit\'s diff', group: 'work' },
-  { name: 'copy', desc: 'Copy the last reply to the clipboard, as markdown', group: 'work' },
+  { name: 'copy', desc: 'Copy the last reply as markdown · `/copy code` for the last code block', group: 'work' },
+  { name: 'shell', desc: 'A scratch shell inside the agent (also `/terminal`)', group: 'project' },
   { name: 'skills', desc: 'List, create and open skills the agent can load', group: 'project' },
-  { name: 'image', desc: 'Attach an image — a path, bare for the clipboard, remove to drop it', group: 'work' },
   { name: 'plans', desc: 'Past plans, newest first', group: 'project' },
   { name: 'history', desc: 'Past conversations — pick one to reopen it', group: 'chat' },
   { name: 'commands', desc: 'Every shell command the agent has run, by day', group: 'audit' },

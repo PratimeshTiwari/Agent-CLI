@@ -92,12 +92,17 @@ describe('the groups themselves', () => {
 });
 
 describe('both callers render the same list', () => {
-  test('`/help` and the unknown-command reply share one renderer', () => {
+  test('`/help` and the unknown-command reply share one grouping', () => {
     // They had a renderer each, three characters apart in their padding. One
     // list cannot drift from itself; two always do.
     const src = readFileSync(new URL('../../src/ui/hooks/use-slash-commands.js', import.meta.url), 'utf8');
+    // Since 2026-10-26 `/help` is a menu drawn from `commandRows`, and
+    // `renderCommandList` groups through that same function — so there is still
+    // one grouping, used by both, and one text renderer, used here once.
     const calls = src.split('renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS)').length - 1;
-    assert.equal(calls, 2, 'one of the two call sites has grown its own renderer again');
+    assert.equal(calls, 1, 'a second call site has grown its own renderer again');
+    const format = readFileSync(new URL('../../src/ui/format.js', import.meta.url), 'utf8');
+    assert.match(format, /for \(const row of commandRows\(commands, groups\)\)/);
     assert.doesNotMatch(src, /SLASH_COMMANDS\s*\n?\s*\.map\(/,
       'a hand-rolled list is back beside the shared one');
   });

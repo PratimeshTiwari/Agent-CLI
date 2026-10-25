@@ -7,11 +7,11 @@ import { exitWithFarewell } from '../farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
 import { planReset, applyReset } from '../../core/reset.js';
-import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { canCopy, copyToClipboard } from '../clipboard.js';
-import { lastReply } from '../format.js';
+import { lastReply, lastCodeBlock } from '../format.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
+import { planBoxRow } from '../plan-box.js';
 import { listCommandDays, readCommands } from '../../core/command-log.js';
 import { resolveWorkspaceInput, validateWorkspace } from '../../core/workspaces.js';
 
@@ -46,7 +46,8 @@ export function resolveOpenTarget(workspace, target) {
   const abs = path.resolve(expanded.startsWith('/') ? expanded : path.join(workspace, expanded));
   return { abs, exists: fs.existsSync(abs) };
 }
-import { SLASH_COMMANDS, COMMAND_GROUPS, MOST_USED_COMMANDS } from '../constants.js';
+import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
+import { commandHelp } from '../help.js';
 import { AGENT_COMMANDS } from '../../core/slash-commands.js';
 import { oneLine, renderCommandList } from '../format.js';
 import { planResume } from '../../core/chat-thread.js';
@@ -104,8 +105,7 @@ export async function handleSlashCommand(query, {
   setActiveMenu,
   setHistory,
   setIsProcessing,
-  setPendingImage,
-  pendingImage,
+  openShell,
   confirmed = false,
 }) {
     const parts = query.slice(1).split(/\s+/);
@@ -129,7 +129,7 @@ export async function handleSlashCommand(query, {
             ...warning,
             onConfirm: () => handleSlashCommand(query, {
               agentLoop, wsServer, resetScreen, setActiveMenu, setHistory,
-              setIsProcessing, setPendingImage, confirmed: true,
+              setIsProcessing, openShell, confirmed: true,
             }),
           },
         });
@@ -138,36 +138,26 @@ export async function handleSlashCommand(query, {
       }
     }
 
-    // Generated from SLASH_COMMANDS, not written out beside it. The hand-kept
-    // copy had drifted twice — listing /init-skills and /paste-image after both
-    // were gone, and describing /memory as "view memory" while it toggled it —
-    // because nothing made the two lists agree.
+    /*
+     * A menu with three tabs (`ui/help.js`), not a block in the transcript: the
+     * old one was ~50 rows left in the scrollback on every `/help`. Built from
+     * SLASH_COMMANDS and KEY_ROWS, never written out beside them — the
+     * hand-kept copy had drifted twice, listing /init-skills and /paste-image
+     * after both were gone. `/shortcuts` opens on the Keys tab, and
+     * `/help <command>` answers for one command in the transcript.
+     */
     if (command === 'help' || command === 'shortcuts') {
-      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
-        role: 'assistant',
-        isLocal: true,
-        content: [
-          `**Most used**   ${MOST_USED_COMMANDS.map((c) => `/${c}`).join('  ·  ')}`,
-          '',
-          '### ⌨️  Keys',
-          '  shift+tab   plan → auto → strict',
-          '  ctrl+e      expand or collapse every step',
-          '  ctrl+t      shell',
-          '  ctrl+b      bring the Gemini tab to the front',
-          '  ctrl+u      clear the input   ·   ctrl+w   delete the last word',
-          '  ctrl+j      newline, without sending   ·   ↑ ↓   move a line, or recall',
-          '  ctrl+o      show or hide the task list',
-          '  ctrl+y      copy the last code block',
-          '  ctrl+x ctrl+s   steer the last queued message into the running turn',
-          '  esc         stop the run, or close a menu',
-          '  ctrl+c ×2   quit — prints how to resume',
-          '',
-          '### ⌨️  Commands',
-          renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS),
-          '',
-          '_Typing `/` filters this same list as you go. `/settings` shows what is configured._',
-        ].join('\n'),
-      }]);
+      if (command === 'help' && args.length > 0) {
+        const one = commandHelp(args[0]);
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
+          role: 'assistant',
+          isLocal: true,
+          content: one ?? `No such command: \`/${args[0].replace(/^\//, '')}\` — \`/help\` lists them.`,
+        }]);
+        setIsProcessing(false);
+        return;
+      }
+      setActiveMenu({ type: 'help', tab: command === 'shortcuts' ? 'keys' : 'general', cursor: 0 });
       setIsProcessing(false);
       return;
     }
@@ -501,7 +491,7 @@ export async function handleSlashCommand(query, {
 
     // Only the bare form opens the picker. `/config reviewer none` used to open
     // it too and throw the arguments away, so the command was unusable typed.
-    if (command === 'config' && args.length === 0) {
+    if ((command === 'subagents' || command === 'config') && args.length === 0) {
       setActiveMenu({ type: 'config' });
       setIsProcessing(false);
       return;
@@ -528,19 +518,39 @@ export async function handleSlashCommand(query, {
      * the terminal's and works, but over a long reply it copies wrapped,
      * indented lines. ctrl+y beside it copies only the last code block.
      */
+    // The scratch shell. It was ctrl+t until 2026-10-26 — a command is listed
+    // by `/`, a chord has to be remembered. One command, then back to the prompt.
+    if (command === 'shell' || command === 'terminal') {
+      if (openShell) {
+        openShell();
+      } else {
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+          { role: 'assistant', isLocal: true, content: 'No scratch shell on this surface.' }]);
+      }
+      setIsProcessing(false);
+      return;
+    }
+
     if (command === 'copy') {
       const say = (reply) => setHistory((prev) => [...prev,
         { role: 'user', content: query, isLocal: true },
         { role: 'assistant', content: reply, isLocal: true }]);
-      const text = lastReply(agentLoop.conversationHistory);
+      // `/copy code`: the last code block instead of the whole reply. It was
+      // ctrl+y until 2026-10-26.
+      const wantsCode = /^code$/i.test(args[0] || '');
+      const block = wantsCode ? lastCodeBlock(agentLoop.conversationHistory) : null;
+      const text = wantsCode ? block?.code : lastReply(agentLoop.conversationHistory);
       if (!text) {
-        say('📋 No reply to copy yet.');
+        say(wantsCode ? '📋 No code block in a reply yet.' : '📋 No reply to copy yet.');
       } else if (!canCopy()) {
         say('📋 Nothing here can reach the clipboard — install `xclip` or `wl-copy`.');
       } else {
         const ok = await copyToClipboard(text);
         const lines = text.split('\n').length;
-        say(ok ? `📋 Copied the last reply — ${lines} line${lines === 1 ? '' : 's'}.` : '📋 The clipboard command failed.');
+        const what = wantsCode
+          ? `the last code block${block.lang ? ` (${block.lang})` : ''}`
+          : 'the last reply';
+        say(ok ? `📋 Copied ${what} — ${lines} line${lines === 1 ? '' : 's'}.` : '📋 The clipboard command failed.');
       }
       setIsProcessing(false);
       return;
@@ -652,6 +662,22 @@ export async function handleSlashCommand(query, {
       }
 
       setActiveMenu({ type: 'commands', days, workspace: agentLoop.workspace });
+      setIsProcessing(false);
+      return;
+    }
+
+    /*
+     * `/plan show`: the current plan, in the box plan review draws. Bare
+     * `/plan` is still the mode switch — it falls through to the loop.
+     */
+    if (command === 'plan' && /^(show|preview)$/i.test(args[0] || '')) {
+      const box = planBoxRow(agentLoop.workspace);
+      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+        box || {
+          role: 'assistant', isLocal: true, timestamp: Date.now(),
+          content: 'No plan yet. In plan mode the agent writes one to '
+            + '`.agent/artifacts/implementation_plan.md` before a large change.',
+        }]);
       setIsProcessing(false);
       return;
     }
@@ -1136,88 +1162,6 @@ export async function handleSlashCommand(query, {
       await switchWorkspace(args.join(' '));
       return;
     }
-
-    if (command === 'image' || command === 'paste-image') {
-      /**
-       * Taking it back off.
-       *
-       * Reported from use: *"there is no option to remove image? how to do
-       * that?"* — and there was not. `setPendingImage(null)` ran in exactly one
-       * place, on submit, so once an image was attached the only ways to get
-       * rid of it were to send it or to restart the CLI. Attaching by accident
-       * meant your next prompt carried a base64 payload you did not want, into
-       * a browser composer, on a turn you had not budgeted for it.
-       *
-       * `remove` shadows a file of that name in the workspace, which is a
-       * trade worth making: `/image remove` is what people type, and the
-       * file-not-found path was the only thing it displaced.
-       */
-      if (args.length === 1 && ['remove', 'clear', 'off', 'none'].includes(args[0].toLowerCase())) {
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
-          role: 'assistant',
-          isLocal: true,
-          content: pendingImage
-            ? `🖼️ Image detached — ${pendingImage.path} will not be sent.`
-            : 'No image is attached.',
-        }]);
-        setPendingImage(null);
-        setIsProcessing(false);
-        return;
-      }
-
-      let finalFilePath = '';
-      let ext = '';
-      // `/image` with a path attaches that file; with nothing after it, the
-      // thing you meant is the screenshot you just took. Two commands for one
-      // idea is one too many, so the bare form reads the clipboard and
-      // `/paste-image` survives only as the name people already learned.
-      const fromClipboard = command === 'paste-image' || args.length === 0;
-      if (fromClipboard) {
-        if (!canReadClipboardImage()) {
-           setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ Clipboard image paste is only supported on macOS.' }]);
-           setIsProcessing(false); return;
-        }
-        // The module, not a copy of it. The copy that lived here wrote every
-        // paste to one fixed `clipboard-image.png`, so a second screenshot
-        // overwrote the first while it was still attached to an unsent prompt
-        // — the exact bug `readClipboardImage`'s per-copy name exists to stop.
-        const image = readClipboardImage(agentLoop.workspace);
-        if (!image) {
-          setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ No image found in clipboard.' }]);
-          setIsProcessing(false); return;
-        }
-        finalFilePath = image.path;
-        ext = path.extname(image.path).toLowerCase();
-      } else {
-        const { resolve, extname } = await import('path');
-        const { existsSync } = await import('fs');
-        finalFilePath = resolve(agentLoop.workspace, args.join(' '));
-        if (!existsSync(finalFilePath)) {
-           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `❌ File not found: ${finalFilePath}` }]);
-           setIsProcessing(false); return;
-        }
-        ext = extname(finalFilePath).toLowerCase();
-      }
-
-      try {
-        const { readFileSync } = await import('fs');
-        const imageBuffer = readFileSync(finalFilePath);
-        const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.tiff': 'image/tiff' };
-        const mime = mimeTypes[ext] || 'image/png';
-        setPendingImage({
-          base64: imageBuffer.toString('base64'),
-          mime,
-          path: finalFilePath,
-          sizeKB: Math.round(imageBuffer.length / 1024)
-        });
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `🖼️ Image attached: ${finalFilePath} (${Math.round(imageBuffer.length / 1024)}KB)\nType your prompt and the image will be included, or \`/image remove\` to drop it.` }]);
-      } catch (e) {
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `❌ Error reading image: ${e.message}` }]);
-      }
-      setIsProcessing(false);
-      return;
-    }
-
 
     // Handle standard agent loop commands
     // From the module that handles them, not a copy kept here. The copy is how

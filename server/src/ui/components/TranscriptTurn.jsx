@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -158,6 +159,10 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
  * the property `<Static>` requires and the turn around it does not have.
  */
 export function UserBar({ content, isLive, terminalWidth = 80, compact = false }) {
+  // The image block above the message is drawn as `⎿ [Image #1]` rows under
+  // it, each a link to the file (see ui/image-attach.js). Committed only: the
+  // live copy of the bar lasts a moment, and its rows are budgeted.
+  const { text, links } = foldImages(content);
   return (
     /*
      * A blank row **above** the bar, and it is the bar's to own.
@@ -185,7 +190,7 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
      * live frame that outgrows the viewport is the clear-and-repaint bug.
      */
     <Box flexDirection="column" marginTop={compact ? 0 : 1} marginBottom={1} width="100%">
-      {blockLines(userMessageText(content, isLive), terminalWidth, 2)
+      {blockLines(userMessageText(text, isLive), terminalWidth, 2)
         .map((line, i) => (
           // eslint-disable-next-line react/no-array-index-key
           /*
@@ -209,6 +214,11 @@ export function UserBar({ content, isLive, terminalWidth = 80, compact = false }
             <Text color={T.userFg} bold>{'  '}{line}</Text>
           </Text>
         ))}
+      {!isLive && [...links.keys()].map((n) => (
+        <Text key={`image-${n}`} dimColor wrap="truncate">
+          {'  ⎿  '}<Text underline>{linkImageTags(imageTag(n), links)}</Text>
+        </Text>
+      ))}
     </Box>
   );
 }
@@ -408,7 +418,57 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
      * it was reported: two `edit_file` rows on a turn that had said "don't
      * implement", both of them the checklist.
      */
+    /*
+     * An answered question, as Claude Code draws one: who answered, then each
+     * question with its answer under a `⎿`. One row while live — the frame is
+     * budgeted in rows — and the pairs once committed. `questionRows` says why
+     * this replaced the two half-rows it used to be.
+     */
+    if (act.toolName === 'ask_question' && act.result !== null && act.result !== undefined) {
+      const { head, rows } = questionRows(act.args, act.result, act.resultMsg || {});
+      if (isLive) {
+        return (
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{head.replace(/:$/, '')}</Text>
+            {rows.length > 1 ? <Text dimColor>{` · ${rows.length} questions`}</Text> : null}
+          </Text>
+        );
+      }
+      return (
+        <Box flexDirection="column" width="100%">
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{head}</Text>
+          </Text>
+          {rows.map((row, i) => (
+            <Text key={i} wrap="truncate">
+              <Text color={T.muted}>{i === 0 ? '  ⎿  ' : '     '}</Text>
+              <Text dimColor>{row}</Text>
+            </Text>
+          ))}
+        </Box>
+      );
+    }
     const artifact = act.success !== false && describeArtifactWrite(act.toolName, act.args);
+    // The plan file, said the way Claude Code says it — and how to read it,
+    // which is the half a `✓ plan.md updated` row never offered.
+    if (artifact?.plan) {
+      return (
+        <Box flexDirection="column" width="100%">
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{artifact.verb}</Text>
+          </Text>
+          {!isLive ? (
+            <Text wrap="truncate">
+              <Text color={T.muted}>{'  ⎿  '}</Text>
+              <Text dimColor>/plan show to preview</Text>
+            </Text>
+          ) : null}
+        </Box>
+      );
+    }
     if (artifact) {
       return (
         <Text wrap="truncate">
@@ -430,15 +490,19 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
           one line: the live frame is budgeted in rows, and committed rows cost
           scrollback, not frame.
         */}
-        <Box flexDirection="row">
+        {/* One Text, not a row of them: in a flex row Yoga shrinks every child
+            to fit, so a long subject squeezed the *name* and wrapped it —
+            `⏺ run_comma` over `nd`, reported with a screenshot 2026-10-26.
+            Inline, the line is cut from the right, and the name comes first. */}
+        <Text wrap="truncate">
           <Text color={failed ? T.danger : T.success}>{(failed ? '✗' : '⏺') + ' '}</Text>
           <Text bold>{act.toolName}</Text>
           {/* Which file, which pattern, which command. Without it two reads in
               one turn are the same row twice, which is how a turn reading four
               files reads as a turn that did nothing in particular. */}
-          {subject ? <Text color={T.muted} wrap="truncate">{' '}{subject}</Text> : null}
-          {isLive && summary ? <Text dimColor wrap="truncate"> · {summary}</Text> : null}
-        </Box>
+          {subject ? <Text color={T.muted}>{' '}{subject}</Text> : null}
+          {isLive && summary ? <Text dimColor> · {summary}</Text> : null}
+        </Text>
         {!isLive && summary ? (
           <Text wrap="truncate">
             <Text color={T.muted}>{'  ⎿  '}</Text>
@@ -516,6 +580,31 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     );
   }
 
+  /*
+   * The plan, in a box, under the path it lives at (`ui/plan-box.js`).
+   *
+   * The box needs an explicit width: inside `<Static>` Yoga sizes a box to its
+   * content, which is the Banner trap — and the markdown is rendered to the
+   * width *inside* the border and padding, or every line wraps one column late.
+   * `TurnRow` indents the row by two, which is the first of the subtractions.
+   */
+  if (act.type === 'plan_box') {
+    const boxWidth = Math.max(20, width - 2);
+    if (isLive) {
+      return (
+        <Text dimColor wrap="truncate">Plan file: {act.path}</Text>
+      );
+    }
+    return (
+      <Box flexDirection="column" width={boxWidth}>
+        <Text dimColor wrap="truncate">Plan file: {act.path}</Text>
+        <Box borderStyle="round" borderColor={T.review} paddingX={1} width={boxWidth}>
+          <Text wrap="wrap">{renderMarkdown(act.content, boxWidth - 4)}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   if (act.type === 'compaction') {
     return (
       <Box flexDirection="column" width="100%">
@@ -564,7 +653,10 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
   }
 
   if (act.type === 'image') {
-    return <Text dimColor>∙ Attached image: {act.content}</Text>;
+    // The file, not the path: a clipboard copy's path is ~110 characters of
+    // `.agent/tmp/` and wrapped across three rows. Older history only — `/image`
+    // now answers with a one-line note.
+    return <Text dimColor wrap="truncate">∙ Attached image: {String(act.content).split(/[\\/]/).pop()}</Text>;
   }
 
   return null;

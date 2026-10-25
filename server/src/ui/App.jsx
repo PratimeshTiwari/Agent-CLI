@@ -9,19 +9,20 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, contextMeter, disconnectedHint, elapsedLabel, extractCodeBlocks, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { loadImage, tagAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
+import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
+import { planBoxRow, findPlanFile } from './plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript.js';
 import { expandPastes, attachedPastes } from './paste.js';
 import { drainChatQueue } from './chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
-import { canCopy, copyToClipboard } from './clipboard.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
@@ -207,9 +208,36 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [mode, setMode] = useState(agentLoop.mode || 'plan');
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalInput, setTerminalInput] = useState('');
-  const [pendingImage, setPendingImage] = useState(null);
+  // Images attached with ctrl+v, each named in the prompt by its `[Image #n]`
+  // tag. One goes with a message only while its tag is in the text.
+  const [pendingImages, setPendingImages] = useState([]);
+  // One line in the status row for a moment, where the mode hint sits — what
+  // ctrl+v says when there is nothing to paste.
+  const [flash, setFlash] = useState(null);
+  const flashTimer = useRef(null);
+  const flashNote = React.useCallback((text) => {
+    clearTimeout(flashTimer.current);
+    setFlash(text);
+    flashTimer.current = setTimeout(() => setFlash(null), 3000);
+    flashTimer.current.unref?.();
+  }, []);
+  // ctrl+v: the clipboard's image into the prompt, as a tag where you are
+  // typing — Claude Code's shape, asked for 2026-10-26. No command row.
+  const attachImage = React.useCallback(() => {
+    const got = loadImage({ workspace: agentLoop.workspace });
+    if (!got.ok) { flashNote(got.reason); return; }
+    setPendingImages((prev) => [...prev, got.image]);
+    // At the caret, through the field's own edit path: a key already on its
+    // way must see the tag, or it types over it (see `PromptInput`'s `live`).
+    const put = (v, o) => tagAt(v, o, got.image.n);
+    if (cursorRef.current?.apply) cursorRef.current.apply(put);
+    else setInput((prev) => put(prev, prev.length).value);
+  }, [agentLoop, flashNote]);
   const [activeMenu, setActiveMenu] = useState(null);
   const [planReviewReady, setPlanReviewReady] = useState(false);
+  // Bumped on the loop's busy → idle edge (see `onIdle` below). Declared up
+  // here because the plan-review effect waits on it too, and it runs first.
+  const [idleTick, setIdleTick] = useState(0);
   const [walkthroughReady, setWalkthroughReady] = useState(false);
   const [artifacts, setArtifacts] = useState({ task: null, review: null, walkthrough: null });
 
@@ -589,14 +617,21 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * confirmation it would sit directly under "switching the browser to X" and
    * contradict it.
    */
+  /*
+   * Resolved here rather than inside, for both arguments: `modelMismatch` takes
+   * rung ids only (a retired word matches nothing, on purpose), `browserModels`
+   * is keyed by rung id, and `modelConfig.effort` can still be a pre-2026-09-20
+   * word on an old config. Passing it raw made the row silent on exactly those
+   * configs while the status bar read `effort: high` — found under the pty,
+   * 2026-10-26, with a config holding `standard`.
+   */
+  const effortRung = resolveEffort(agentLoop.modelConfig?.effort);
   const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight)
     ? null
     : modelMismatch(
-    agentLoop.modelConfig?.effort,
+    effortRung.id,
     agentLoop.modelOptions || [],
-    // Resolved here rather than inside: `browserModels` is keyed by rung id and
-    // `modelConfig.effort` can still be a pre-2026-09-20 word on an old config.
-    browserModelPin(agentLoop.modelConfig, resolveEffort(agentLoop.modelConfig?.effort).id),
+    browserModelPin(agentLoop.modelConfig, effortRung.id),
   );
   /*
    * What the browser's picker says is selected, or null when it has never been
@@ -633,13 +668,42 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // Steered prompts share the block (and its three rows) with queued ones.
   const waiting = queued.length + steered.length;
   const queuedRows = waiting === 0 ? 0 : Math.min(waiting, 3) + (waiting > 3 ? 1 : 0) + 1;
-  const liveBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
+  const frameBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
     - queuedRows
     - promptExtraRows
     - (slashOpen ? slashMatches.length : 0)
     - (extensionConnected ? 0 : 1)
     - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
+  /*
+   * The command approval box is drawn where the input box was, so the three
+   * rows the input is charged inside `reservedRows` are its own; everything
+   * past them comes out of the live turn. It used to come out of nothing — 15
+   * clears at 16 rows with a long command, all with the box up. The box may
+   * grow until the turn is down to one row, and `approvalLayout` fits it to
+   * that.
+   */
+  const INPUT_ROWS = 3;
+  const approval = activeMenu?.type === 'command_approval'
+    ? approvalLayout(activeMenu.payload, { width: terminalWidth, maxRows: INPUT_ROWS + frameBudget - 1 })
+    : null;
+  // What a menu drawn in place of the input may use: the input's own rows and
+  // the live frame's, which a menu opened between turns has to itself — and,
+  // between turns, the spinner row and its margin, which `reservedRows` counts
+  // and only a running turn draws (`InputBar`). Without them `/effort` showed
+  // two of its three rungs at 13 rows with four rows empty under the status bar.
+  //
+  // A menu opened *during* a turn — the agent's `ask_question` — shares the
+  // live frame with the turn, so it is charged the way the approval box is:
+  // the turn keeps one row and the menu has the rest. Before, both were given
+  // the whole of it: 25 `ESC[2J` at 13 and 16 rows while a question was up.
+  const menuMidTurn = Boolean(activeMenu) && activeMenu.type !== 'command_approval' && isProcessing;
+  const idleRows = isProcessing ? 0 : (isCompactHeight(terminalHeight) ? 1 : 2);
+  const menuRows = menuMidTurn
+    ? Math.max(3, INPUT_ROWS + frameBudget - 1)
+    : Math.max(3, frameBudget + INPUT_ROWS + idleRows);
+  const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0)
+    - (menuMidTurn ? menuRows - INPUT_ROWS : 0));
 
   /*
    * The running tool calls share the turn's rows. They were drawn under the
@@ -690,7 +754,15 @@ export function App({ agentLoop, wsServer, closing = false }) {
   useEffect(() => {
     if (isProcessing) return;
 
-    if (planReviewReady) {
+    /*
+     * Gated on the *loop* being idle as well, not only React's flag. The loop
+     * sends `tool_result` before `resolveDiff` writes the file, and React's copy
+     * can already be down then (prose with tool calls, v5.5) — so the review
+     * opened mid-turn, on a plan not yet on disk, and the box had nothing to
+     * show. Measured under the pty: menu up, "The agent has written a plan",
+     * no box. The idle edge (`onIdle`) lowers React's flag, which re-runs this.
+     */
+    if (planReviewReady && !agentLoop.isProcessing) {
       // Clear any verdict left over from a previous review before opening this
       // one. The companion writes plan-approval.json whenever its lenses are
       // clicked, including when no review is running; the poller below only
@@ -701,14 +773,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
         if (fs.existsSync(stale)) fs.unlinkSync(stale);
       } catch (e) { /* nothing to clear */ }
 
-      setActiveMenu({ type: 'plan_review' });
+      // The plan itself, in a box under its path, before the menu that asks
+      // about it — and nothing when there is no plan file (`ui/plan-box.js`).
+      const box = planBoxRow(agentLoop.workspace);
+      if (box) setHistory((prev) => [...prev, box]);
+      setActiveMenu({ type: 'plan_review', path: box?.path || null });
       setPlanReviewReady(false);
       setFocus(FOCUS_INPUT);
       try {
-        const implPlanPath = paths.artifactPath(agentLoop.workspace, 'implementation_plan.md');
-        const simplePlanPath = paths.artifactPath(agentLoop.workspace, 'plan.md');
-        const planPath = fs.existsSync(implPlanPath) ? implPlanPath : simplePlanPath;
-        exec(`"${agentLoop.editor || 'code'}" "${planPath}" || open "${planPath}" || xdg-open "${planPath}"`);
+        const planPath = findPlanFile(agentLoop.workspace);
+        if (planPath) exec(`"${agentLoop.editor || 'code'}" "${planPath}" || open "${planPath}" || xdg-open "${planPath}"`);
       } catch (e) {}
     }
 
@@ -772,7 +846,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // `history.length`: a finished tool now joins the transcript as it lands,
     // so this re-reads the checklist after every step — the status bar's
     // `tasks 3/5` would otherwise sit at its value from the start of the turn.
-  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length]);
+  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length, idleTick]);
 
   // The thinking line. One row, rewritten on a calm cadence — the old 75ms
   // typewriter plus a 10ms per-character reveal of the whole reply is what made
@@ -934,8 +1008,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
         setActiveMenu,
         setHistory,
         setIsProcessing: turnInFlight ? () => {} : setIsProcessing,
-        setPendingImage,
-        pendingImage,
+        openShell: () => { setTerminalOpen(true); setFocus(FOCUS_TERMINAL); },
       });
       return;
     }
@@ -955,9 +1028,14 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // transcript keeps the marker form, so a 500-line paste never becomes a
     // 500-row user message in the live frame.
     let messageContent = expandPastes(query, pastes);
-    if (pendingImage) {
-      messageContent = `[Image attached: ${pendingImage.path} (${pendingImage.sizeKB}KB, ${pendingImage.mime})]\n\n<image_data>\ndata:${pendingImage.mime};base64,${pendingImage.base64}\n</image_data>\n\n${messageContent}`;
-      setPendingImage(null);
+    // Only the images whose tags are still in the text: deleting a tag is how
+    // one is taken off. The echo carries the block as the loop will record it,
+    // so the screen draws the same `⎿ [Image #1]` link now and after a resume.
+    const images = imagesInText(query, pendingImages);
+    const shownQuery = recordedImageBlock(images) + query;
+    if (images.length) {
+      messageContent = imagePromptBlock(images) + messageContent;
+      setPendingImages((prev) => prev.filter((img) => !images.includes(img)));
     }
 
     // Optimistically update the UI so the user sees their prompt immediately
@@ -972,7 +1050,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // image data stripped as the loop strips it. The echo shows the marker; the
     // merge needs the sent form to know the two are one message (see
     // mergeLoopHistory), or a prompt with a marker is drawn twice.
-    setHistory(prev => [...prev, { role: 'user', content: query, timestamp: Date.now(), __echo: true, __sent: stripImageData(messageContent) }]);
+    setHistory(prev => [...prev, { role: 'user', content: shownQuery, timestamp: Date.now(), __echo: true, __sent: stripImageData(messageContent) }]);
 
     const callbacks = buildAgentCallbacks({
       agentLoop,
@@ -1010,7 +1088,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * loop's busy → idle edge, wherever it is written from. The busy flag comes
    * down with it — the turn is over, and a spinner must not outlive it.
    */
-  const [idleTick, setIdleTick] = useState(0);
   useEffect(() => agentLoop.onIdle?.(() => {
     setIsProcessing(false);
     setIdleTick((n) => n + 1);
@@ -1083,17 +1160,22 @@ export function App({ agentLoop, wsServer, closing = false }) {
     return () => { hotkeys.off('interrupt', onInterrupt); clearTimeout(timer); };
   }, []);
 
+  const retiredKey = (key, command) => setHistory((prev) => [...prev, {
+    role: 'assistant', isLocal: true, timestamp: Date.now(),
+    content: `\`${key}\` is now \`${command}\`.`,
+  }]);
+
   // The ctrl+ chords never reach Ink — see ui/hotkeys.js. They are inert while a
   // diff or a menu is up, so nothing can act behind a question the user has not
   // answered yet.
   useHotkeys({
     expand: toggleVerbose,
     artifacts: () => setArtifactsOpen((open) => !open),
-    terminal: () => setTerminalOpen((prev) => {
-      setFocus(prev ? FOCUS_INPUT : FOCUS_TERMINAL);
-      return !prev;
-    }),
-    'paste-image': () => handleSubmit('/paste-image'),
+    // ctrl+t and ctrl+y became `/shell` and `/copy code` (2026-10-26). The
+    // bytes are still taken off stdin — an unhandled chord types its letter
+    // into the prompt — and say where the thing went, once per press.
+    terminal: () => retiredKey('ctrl+t', '/shell'),
+    'paste-image': attachImage,
 
     /*
      * ctrl+x ctrl+s: the last queued prompt goes into the running turn instead
@@ -1127,47 +1209,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     },
     'delete-word': () => setInput((value) => value.replace(/\s*\S+\s*$/, '')),
 
-    /**
-     * The last code block in the transcript, onto the clipboard.
-     *
-     * Drag-select is still the primary way to copy and `format.js` un-indented
-     * the blocks so that it works. This is the shortcut for the case people
-     * actually hit — the reply just arrived and the code in it is the point.
-     *
-     * "Last" means the last block of the most recent message that has one,
-     * searched backwards: an agent turn is commonly followed by tool results
-     * and notices, and copying nothing because the newest message happens to be
-     * "✔ read_file" would read as the chord being broken.
-     */
-    'copy-code': () => {
-      // Appended, never replacing: <Static> counts what it has printed by
-      // index, so a transcript that gets shorter makes Ink skip that many turns
-      // permanently. Same `isLocal` shape as every other UI-only message.
-      const notify = (text) => setHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: text, isLocal: true, timestamp: Date.now() },
-      ]);
-
-      if (!canCopy()) {
-        notify('📋 Nothing here can reach the clipboard — install `xclip` or `wl-copy`.');
-        return;
-      }
-      let found = null;
-      for (let i = history.length - 1; i >= 0 && !found; i -= 1) {
-        const blocks = extractCodeBlocks(history[i]?.content);
-        if (blocks.length) found = blocks[blocks.length - 1];
-      }
-      if (!found) {
-        notify('📋 No code block in the transcript yet.');
-        return;
-      }
-      copyToClipboard(found.code).then((ok) => {
-        const lines = found.code.split('\n').length;
-        notify(ok
-          ? `📋 Copied ${lines} line${lines === 1 ? '' : 's'}${found.lang ? ` of ${found.lang}` : ''}.`
-          : '📋 The clipboard command failed.');
-      });
-    },
+    'copy-code': () => retiredKey('ctrl+y', '/copy code'),
   }, !diffRequest && !activeMenu);
 
   useKeyBindings({
@@ -1355,22 +1397,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
               <Text dimColor>{'  —  /update to pull'}</Text>
             </Text>
           )}
-          {/*
-            The model the prompt is written for, against the one the tab is on.
-            Both names, because "wrong model" without saying which is a warning
-            you cannot act on — and `ctrl+b` is the key that shows the tab, so
-            the row carries the fix rather than only the complaint.
-          */}
-          {mismatch && (
-            <Text color={T.attention} wrap="truncate">
-              {'⚠ browser is on '}<Text bold>{mismatch.current}</Text>
-              {', this rung wants '}<Text bold>{mismatch.wanted}</Text>
-              <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
-            </Text>
-          )}
-
-          {/* The in-flight turn — the only transcript rows Ink repaints. */}
-          {liveTurns.map((turn) => (
+          {/* The in-flight turn — the only transcript rows Ink repaints. Not
+              while a menu it raised is up (the agent's question): the menu is
+              what is being waited on, and at 13 rows the two together were 15
+              `ESC[2J` — the turn's margins are more than the one row it keeps. */}
+          {!menuMidTurn && liveTurns.map((turn) => (
             <TranscriptTurn
               key={turn.id}
               turn={turn}
@@ -1430,7 +1461,29 @@ export function App({ agentLoop, wsServer, closing = false }) {
             setFocus={setFocus}
             mode={mode}
             terminalHeight={terminalHeight}
+            width={terminalWidth}
           />
+
+          {/*
+            The model the prompt is written for, against the one the tab is on.
+            Both names, because "wrong model" without saying which is a warning
+            you cannot act on — and `ctrl+b` is the key that shows the tab, so
+            the row carries the fix rather than only the complaint.
+
+            Directly above the input, in a slot of its own (2026-10-26). It used
+            to sit at the top of the live frame, above the in-flight turn, so it
+            appeared over a turn's rows mid-turn and moved with them — reported
+            as "looks odd". Here it stays put while the turn above it grows.
+            Still one truncated row charged through `noticeRows`, so the frame
+            budget is unchanged; the part to keep is on the left.
+          */}
+          {mismatch && (
+            <Text color={T.attention} wrap="truncate">
+              {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
+              {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
+              <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
+            </Text>
+          )}
 
           <InputBar
             queued={queued}
@@ -1445,6 +1498,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             disconnectedText={disconnectedHint({ port: wsServer?.port, everConnected: everConnectedRef.current })}
             focus={focus}
             handleSubmit={handleSubmit}
+            attachImage={attachImage}
             input={input}
             isProcessing={isProcessing}
             isThinkingTooLong={isThinkingTooLong}
@@ -1480,6 +1534,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
             setActiveMenu={setActiveMenu}
             agentLoop={agentLoop}
             terminalWidth={terminalWidth}
+            approval={approval}
+            menuRows={menuRows}
             handleSubmit={handleSubmit}
             mode={mode}
             setFocus={setFocus}
@@ -1518,7 +1574,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
         row already separated the bar from the prompt, and the line was drawing
         a boundary that was never in doubt.
       */}
-      <Box marginTop={compact ? 0 : 1} paddingX={1} flexDirection="row" justifyContent="space-between" width="100%">
+      {/*
+        Flush with the input's rules at both ends (v5.24). It was indented two
+        on the left (padding plus a leading space) and one on the right, so it
+        sat visibly right of the `❯` above it — reported as "slightly off".
+      */}
+      <Box marginTop={compact ? 0 : 1} flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
           {/*
@@ -1528,10 +1589,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
             reported as looking bad, and a lost connection already says so in
             the input box (`disconnectedHint`).
           */}
-          <Text color={modeColor(mode)}>{' '}{modeLine(mode)}</Text>
+          <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
-            : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
+            : flash
+              ? <Text color={T.attention}>{'  ·  '}{flash}</Text>
+              : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
           {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
         </Text>
         </Box>
@@ -1543,15 +1606,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
             only when something is waiting and takes no room otherwise.
           */}
           {attachedCount > 0 ? `${attachedCount} paste${attachedCount === 1 ? '' : 's'}  ·  ` : ''}
-          {/*
-            An attached image had no representation anywhere. The transcript
-            said so once and scrolled away, so the only way to know one was
-            armed was to remember attaching it — and the only way to find out
-            was to send it. Same shape as the pastes beside it: one field in a
-            row that is already drawn and already budgeted, costing nothing
-            when there is no image.
-          */}
-          {pendingImage ? <Text color={T.attention}>{'1 image  ·  '}</Text> : ''}
           {runningTasks > 0 ? <Text color={T.attention}>{runningTasks} bg{'  ·  '}</Text> : ''}
           {/*
             The checklist while a turn runs, when its panel is not drawn (it

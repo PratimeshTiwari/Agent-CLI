@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractHotkeys, HOTKEYS } from '../../src/ui/hotkeys.js';
+import { readFileSync } from 'node:fs';
+import { extractHotkeys, dispatchInOrder, HOTKEYS } from '../../src/ui/hotkeys.js';
 
 const CTRL_E = '\x05';
 const CTRL_O = '\x0f';
@@ -118,4 +119,42 @@ test('the task list is on ctrl+o, and nothing is bound to ctrl+g', async () => {
   const { HOTKEYS } = await import('../../src/ui/hotkeys.js');
   assert.equal(HOTKEYS['\x0f'], 'artifacts');
   assert.equal(HOTKEYS['\x07'], undefined);
+});
+
+/*
+ * Text and chords go out in the order they were typed.
+ *
+ * Measured under the pty, 2026-10-26: on a busy event loop `ook at` and a
+ * ctrl+v arrived in one read, the chord was dispatched before the text, and
+ * the `[Image #1]` tag went in after the `l`. Each write is followed by a
+ * deferral, so Ink has read the text before the chord runs.
+ */
+test('dispatchInOrder: a chord runs after the text in front of it', () => {
+  const log = [];
+  const deferred = [];
+  const io = {
+    write: (t) => log.push(`write:${JSON.stringify(t)}`),
+    emit: (n) => log.push(`emit:${n}`),
+    defer: (fn) => deferred.push(fn),
+  };
+  dispatchInOrder(extractHotkeys('ook at\x16please\r').parts, io);
+  assert.deepEqual(log, ['write:"ook at"'], 'nothing after the text runs in the same turn');
+  while (deferred.length) deferred.shift()();
+  assert.deepEqual(log, ['write:"ook at"', 'emit:paste-image', 'write:"please"', 'write:"\\r"']);
+});
+
+// Control: chords with no text in front of them still run at once, and a
+// chunk with no chords is one write, as before.
+test('dispatchInOrder: leading chords are immediate; plain text is one write', () => {
+  const log = [];
+  const io = { write: (t) => log.push(t), emit: (n) => log.push(n), defer: () => assert.fail('nothing to defer') };
+  dispatchInOrder(extractHotkeys('\x05\x0f').parts, io);
+  dispatchInOrder(extractHotkeys('hello').parts, io);
+  assert.deepEqual(log, [HOTKEYS['\x05'], HOTKEYS['\x0f'], 'hello']);
+});
+
+test('cli-ui dispatches from the ordered parts', () => {
+  const ui = readFileSync(new URL('../../src/ui/cli-ui.jsx', import.meta.url), 'utf8');
+  assert.match(ui, /dispatchInOrder\(stripped\.parts,/);
+  assert.ok(!/for \(const name of stripped\.hotkeys\)/.test(ui), 'chords first, text after, is the race');
 });

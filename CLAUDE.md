@@ -782,8 +782,12 @@ and the turn keeps its two rows. Measured under the pty: 0 clears after approval
 24 rows. The run also showed the approval *decision* row repeating the whole command — a system
 row wraps, so a one-line `for` loop drew four rows charged as one — and that row now names only
 the decision. **Not done:** moving a running command to the background (`ctrl+b` is the browser
-key, and it needs `exec`'s process handed to `TaskManager`). **Still open:** the approval box
-itself is taller than a 13-row terminal (9 clears while it is up, on `main` too).
+key, and it needs `exec`'s process handed to `TaskManager`). **The approval box fits since
+v5.24** (`approvalLayout`, `format.js`): it is drawn where the input was and was charged as the
+input's three rows while drawing fifteen with a long command — 15 clears at 16 rows. Every row is
+decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
+reason, directory, then the border, never the command; a cut command says so on the title row. 0
+clears at 10, 13, 16 and 24 rows.
 
 **Large files and documents (v5.10).** Reported from the work laptop: simple edits in
 1,000–2,000-line files went badly, and building a Confluence document from several files
@@ -1603,15 +1607,25 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   and saves nothing**: the context is identical when the task arrives, plus the
   model's acknowledgements. Make turn 0 smaller; do not spread it out.
 
-- **An attached image can be taken off again, and says that it is on.**
-  Reported from use: *"there is no option to remove image? how to do that?"* —
-  and there was not. `setPendingImage(null)` ran in exactly one place, on
-  submit, so once attached the only ways to be rid of it were to send it or
-  restart. It had no representation either: the transcript said so once and
-  scrolled away, so the only way to find out an image was armed was to send it.
-  `/image remove` detaches, and the status row carries `1 image` beside the
-  paste count — the same field pattern, in a row that is already drawn and
-  already budgeted, costing nothing when there is no image.
+- **An image is a tag in the prompt, Claude Code's way (v5.24, `ui/image-attach.js`).**
+  ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
+  an image goes with a message only while its tag is in the text, so backspace — which takes a
+  tag in one press — is how it comes off. `/image` and `/paste-image` are gone, and so is the
+  status-bar count: the tag *is* the representation. Each image is sent as a
+  `[Image #n: <path>] (KB, mime)` header plus its `<image_data>` block; the tab lifts every
+  block out and pastes the files **on their own, before the text**, and no longer waits five
+  seconds for a text paste that could never land because an image was in it. The record keeps
+  the header without the data, which is what lets the sent message draw `⎿ [Image #n]` rows
+  as OSC 8 links to the file (cmd+click — not mouse tracking) on a resume too.
+
+  **Two races had to go before a tag survived the next key.** The field's handlers edited the
+  *render's* `value`, so on a busy event loop several keys landed between renders and each
+  edited the same stale text; and `cli-ui` dispatched chords before the text in the same chunk.
+  Under the pty, `look at` + ctrl+v + `please` sent `look atplease` with no image. `PromptInput`
+  now reads `live` (text and caret, ahead of the render) and takes outside text through
+  `cursorRef.apply`; `dispatchInOrder` writes text, then defers everything after it a turn, so
+  Ink has read it before the chord runs. **A component that reads its props inside an input
+  handler is a stale closure waiting for a slow frame.**
 
 - **A menu opened from `/settings` must not answer in the transcript.** `returnTo` is the
   settings page, so setting it back reopens that page *on top of* whatever the command just
@@ -1756,6 +1770,23 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   calling `setTheme` on highlight; esc restores `original`; enter saves to
   `~/.agent/settings.json` (`core/user-settings.js` — per person, not per repo) and reprints the
   transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
+- **Every menu is a `Panel` (v5.24, `ui/panel.js`, `components/Panel.jsx`).** Asked for 2026-10-26:
+  the boxes "do not follow a common design theme". `/help`'s shape for all of them — a rule, a
+  title, at most two dim lines, `Choices` (`❯`, a dim second column, `✔` on the current one,
+  `1.`–`9.` where a digit may answer, never on an approval), one line of keys. No borders:
+  `panel.test.js` fails on a `borderStyle` in `Menus.jsx`. `panelRoom` sheds spacing, then the
+  description, never a choice. A menu opened **mid-turn** (`ask_question`) is charged like the
+  approval box and hides the live turn — 25 `ESC[2J` at 13 and 16 rows before, 0 now; an idle
+  menu also gets the spinner's rows. Menus at 13 rows: 13 clears on the previous commit, 0 now;
+  10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
+  (`enterSequence`), because a command line scrolled off screen is pinned over the header by
+  sticky scroll.
+- **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
+  child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
+  creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
+  box's top rule in scrollback. `OSASCRIPT_STDIO` in `ui/clipboard-image.js`. The same release
+  stopped the meter counting an image's base64 (`promptCharge`: a 650 KB screenshot read `0%
+  until auto-compact`).
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
   exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
   app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup
@@ -1775,6 +1806,10 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   means adding it to `HOTKEYS`, not to `useKeyBindings`. **Never a chord another app owns system-wide:** the task
   list was on ctrl+g until 10-24, and Chrome's Gemini panel takes Ctrl+G on macOS before the
   terminal sees it — pressing it opened Chrome. It is ctrl+o now.
+  **A retired chord stays in `HOTKEYS` (v5.24).** `ctrl+t` became `/shell` and `ctrl+y` became
+  `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
+  hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
+  saying where the thing went.
 - **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
   bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
   forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps

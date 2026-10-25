@@ -112,9 +112,7 @@ The status line says which one is on, the way Claude Code does: `⏸ plan mode o
 | `ctrl+x` `ctrl+s` | steer the last queued message into the running turn instead of waiting |
 | `ctrl+e` | expand or collapse every step |
 | `ctrl+o` | show or hide the task list |
-| `ctrl+y` | copy the last code block |
 | `ctrl+b` | bring the Gemini tab to the front |
-| `ctrl+t` | a shell |
 | `ctrl+j` | newline without sending |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
@@ -133,7 +131,8 @@ long pastes collapse to a marker. `/image` attaches an image (bare for the clipb
 | `/effort low·medium·high` | how hard to work; switches the Gemini model picker to match |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
-| `/copy` | the last reply, as markdown, to the clipboard |
+| `/copy` | the last reply, as markdown, to the clipboard — `/copy code` for the last code block |
+| `/shell` | a scratch shell, one command, then back to the prompt |
 | `/compact` | summarise the conversation now (it also happens on its own, with a progress bar) |
 | `/history` | past conversations — pick one to reopen |
 | `/settings` | everything that is set, on one page |

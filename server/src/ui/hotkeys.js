@@ -22,15 +22,16 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { splitTrailingEnter } from './enter-splitter.js';
 
 /** Chord byte -> event name. */
 export const HOTKEYS = {
   '\x05': 'expand',       // ctrl+e — expand/collapse the transcript
-  '\x14': 'terminal',     // ctrl+t — the scratch shell
+  '\x14': 'terminal',     // ctrl+t — retired for /shell; still taken so no stray "t"
   '\x16': 'paste-image',  // ctrl+v — attach an image from the clipboard
   '\x15': 'clear-input',  // ctrl+u — wipe the prompt, as readline has always done
   '\x17': 'delete-word',  // ctrl+w — delete the word behind the cursor
-  '\x19': 'copy-code',    // ctrl+y — the last code block in the transcript
+  '\x19': 'copy-code',    // ctrl+y — retired for /copy code; still taken so no stray "y"
   // ctrl+o — the task list. Was ctrl+g, which Chrome takes system-wide on macOS
   // for its own Gemini panel: pressing it in the terminal opened Chrome instead.
   '\x0f': 'artifacts',
@@ -97,12 +98,18 @@ export const hotkeys = new EventEmitter();
  *
  * @param {string} text - one raw stdin chunk
  * @param {{inPaste: boolean}} [state] - carried between chunks
- * @returns {{text: string, hotkeys: string[], state: {inPaste: boolean}}}
+ * `parts` is the same chunk in the order it was typed — text and chords
+ * interleaved — which is what cli-ui dispatches from. `text` and `hotkeys` are
+ * the two halves on their own.
+ *
+ * @returns {{text: string, hotkeys: string[], parts: Array<{text: string} | {hotkey: string}>, state: {inPaste: boolean}}}
  */
 export function extractHotkeys(text, state) {
   let inPaste = state?.inPaste ?? false;
   const found = [];
+  const parts = [];
   let out = '';
+  let run = '';
   let i = 0;
 
   while (i < text.length) {
@@ -110,6 +117,7 @@ export function extractHotkeys(text, state) {
       if (text.startsWith(PASTE_END, i)) {
         inPaste = false;
         out += PASTE_END;
+        run += PASTE_END;
         i += PASTE_END.length;
         continue;
       }
@@ -117,19 +125,56 @@ export function extractHotkeys(text, state) {
       if (text.startsWith(PASTE_START, i)) {
         inPaste = true;
         out += PASTE_START;
+        run += PASTE_START;
         i += PASTE_START.length;
         continue;
       }
       const name = HOTKEYS[text[i]];
       if (name) {
+        if (run) parts.push({ text: run });
+        run = '';
         found.push(name);
+        parts.push({ hotkey: name });
         i += 1;
         continue;
       }
     }
     out += text[i];
+    run += text[i];
     i += 1;
   }
+  if (run) parts.push({ text: run });
 
-  return { text: out, hotkeys: found, state: { inPaste } };
+  return { text: out, hotkeys: found, parts, state: { inPaste } };
+}
+
+/**
+ * Text and chords from one chunk, in the order they were typed.
+ *
+ * Chords used to fire first and the chunk's text after, which is fine until a
+ * busy event loop delivers `ook at` and a ctrl+v in one read: the tag went in
+ * after the `l` and the text after it. Measured under the pty, 2026-10-26. So
+ * text is written to Ink and everything after it waits one turn — Ink reads on
+ * `readable`, which fires before `setImmediate` — the same deferral the
+ * trailing Enter has always used, for the same reason: Ink's read() drains
+ * everything buffered at once, so two immediate writes would arrive as the
+ * single chunk this is here to take apart.
+ *
+ * @param {Array<{text: string} | {hotkey: string}>} parts - `extractHotkeys().parts`
+ * @param {{write: (text: string) => void, emit: (name: string) => void, defer?: (fn: () => void) => void}} io
+ */
+export function dispatchInOrder(parts, { write, emit, defer = setImmediate }) {
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.hotkey) { emit(part.hotkey); continue; }
+    const rest = parts.slice(i + 1);
+    if (part.enter) write(part.enter);
+    else {
+      const [text, enter] = splitTrailingEnter(part.text);
+      write(text);
+      if (enter) rest.unshift({ enter });
+    }
+    if (rest.length) defer(() => dispatchInOrder(rest, { write, emit, defer }));
+    return;
+  }
 }

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createScreenSpan, rewindSequence, CURSOR_REPORT } from '../../src/ui/screen-span.js';
+import { createScreenSpan, rewindSequence, CURSOR_REPORT, enterSequence } from '../../src/ui/screen-span.js';
 import { exitText, exitWithFarewell, registerInk, registerScreen, _resetFarewell, CLEAR_SCREEN } from '../../src/ui/farewell.js';
 import { SessionStore } from '../../src/storage/session-store.js';
 import { mkdtempSync } from 'node:fs';
@@ -88,4 +88,15 @@ test('exit asks the row before unmounting, while raw mode still hides the answer
 test('startup no longer clears the screen — the launch line is what exit returns to', () => {
   const src = readFileSync(join(here, '../../src/ui/cli-ui.jsx'), 'utf8');
   assert.doesNotMatch(src, /console\.clear\(\)\s*;/);
+});
+
+test('enterSequence', async (t) => {
+  await t.test('scrolls the screen into the scrollback, one newline per row', () => {
+    assert.equal(enterSequence({ rows: 5, env: {} }), '\n\n\n\n\n\x1b[H');
+  });
+  await t.test('erases in place in VS Code, where a scrolled-off command line is pinned over the header', () => {
+    const seq = enterSequence({ rows: 30, env: { TERM_PROGRAM: 'vscode' } });
+    assert.equal(seq, '\x1b[H\x1b[J');
+    assert.ok(!seq.includes('\n'), 'any newline here can scroll the command line off screen');
+  });
 });

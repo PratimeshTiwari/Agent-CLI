@@ -7,6 +7,8 @@
 
 import { marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
+import { normalizeQuestionSet } from '../core/question.js';
+import { commandRows } from './help.js';
 
 /**
  * `tab` indents lists *and* code blocks, and the two wanted different things.
@@ -205,7 +207,7 @@ const dedent = (code, indent) => (indent
 /**
  * The fenced code blocks in a reply, in the order they appear.
  *
- * Exported because `ctrl+y` copies the last one, and reaching into a rendered
+ * Exported because `/copy code` copies the last one, and reaching into a rendered
  * string to find it again would mean parsing the rules back out of prose that
  * may legitimately contain them.
  *
@@ -854,6 +856,66 @@ export function fsEventRow(paths) {
 }
 
 /**
+ * An answered `ask_question`, drawn the way Claude Code draws one:
+ *
+ *     ● User answered the agent's questions:
+ *       ⎿  · Which database? → Postgres
+ *          · Keep the old table? → No
+ *
+ * It used to be drawn twice and say half of it both times — `⏺ ask_question ·
+ * User answered: Postgres` from the loop's record, and a `[System: You
+ * answered: Postgres]` row the screen added on its own, which a reprint or a
+ * resume never had. Neither showed the question, so a scrollback of answers
+ * read as a list of words.
+ *
+ * The pairs come from the result turn (`answers`, since v5.24). Older history
+ * has only the string the model was sent, so they are recovered from that and
+ * the call's own arguments: the single shape names no question, and the batch
+ * shape carries each one beside its answer.
+ *
+ * @param {object} args the call's arguments, as the model sent them
+ * @param {*} result the result the model was sent
+ * @param {{answers?: Array<{question: string, answer: string}>, declined?: boolean}} [turn]
+ * @returns {{head: string, rows: string[]}}
+ */
+export function questionRows(args, result, turn = {}) {
+  const text = typeof result === 'string' ? result : '';
+  if (turn.declined || /dismissed the question without answering/.test(text)) {
+    return { head: 'User declined to answer', rows: [] };
+  }
+  // A stop while the question was up (App's esc path).
+  if (text === 'Cancelled by user') return { head: 'Question cancelled', rows: [] };
+
+  let pairs = Array.isArray(turn.answers) && turn.answers.length ? turn.answers : null;
+  if (!pairs) {
+    const batch = [...text.matchAll(/^\d+\.\s+(.*)\n\s*→\s*(.*)$/gm)];
+    if (batch.length) {
+      pairs = batch.map((m) => ({ question: m[1], answer: m[2] }));
+    } else {
+      const single = /^User answered:\s*([\s\S]*)$/.exec(text);
+      const asked = normalizeQuestionSet(args || {})[0];
+      // `normalizeQuestion` invents a placeholder for a question with no text;
+      // naming that would be naming nothing.
+      const named = clean(args?.question) || clean(args?.questions?.[0]?.question)
+        || clean(args?.questions?.[0]);
+      const question = named ? asked.question : '';
+      pairs = [{ question, answer: single ? single[1] : text }];
+    }
+  }
+
+  const line = (value) => oneLine(value, 400);
+  const rows = pairs.map((p) => (p.question
+    ? `· ${line(p.question)} → ${line(p.answer)}`
+    : `· ${line(p.answer)}`));
+  return {
+    head: `User answered the agent's question${pairs.length === 1 ? '' : 's'}:`,
+    rows,
+  };
+}
+
+const clean = (value) => (typeof value === 'string' ? value.trim() : '');
+
+/**
  * The command list, grouped, for `/help` and for "no such command".
  *
  * **One renderer because there were two lists.** `/help` built its own and the
@@ -874,12 +936,13 @@ export function fsEventRow(paths) {
  */
 export function renderCommandList(commands, groups) {
   const width = Math.max(...commands.map((c) => c.name.length));
-  const known = new Set(groups.map(([key]) => key));
-  const sections = [...groups, ['', 'Other']]
-    .map(([key, heading]) => [heading, commands.filter((c) => (key
-      ? c.group === key
-      : !known.has(c.group)))])
-    .filter(([, list]) => list.length > 0);
+  // Grouped by `commandRows`, the same function `/help`'s Commands tab draws
+  // from, so the two cannot disagree about which command is where.
+  const sections = [];
+  for (const row of commandRows(commands, groups)) {
+    if (row.kind === 'heading') sections.push([row.text, []]);
+    else sections.at(-1)[1].push(row);
+  }
 
   const out = [];
   for (const [heading, list] of sections) {
@@ -1028,6 +1091,29 @@ export function elapsedLabel(ms) {
 }
 
 /**
+ * The last code block the agent wrote, for `/copy code` (which replaced
+ * `ctrl+y`, 2026-10-26: a command is something `/` lists, a chord is something
+ * you have to remember).
+ *
+ * Searched backwards through the agent's replies, newest block first, because
+ * a reply is commonly followed by tool rounds with no code in them. A fenced
+ * tool call is skipped: the reply's raw text still holds it, and copying the
+ * call the agent made instead of the code it showed would read as broken.
+ *
+ * @returns {{lang: string, code: string} | null}
+ */
+export function lastCodeBlock(history = []) {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const t = history[i];
+    if (t?.role !== 'agent' || t.parseError || typeof t.content !== 'string') continue;
+    const blocks = extractCodeBlocks(t.content)
+      .filter((b) => !(/^json$/i.test(b.lang) && /"name"\s*:/.test(b.code)));
+    if (blocks.length) return blocks[blocks.length - 1];
+  }
+  return null;
+}
+
+/**
  * The last thing the agent said, as the markdown it wrote — what `/copy` puts
  * on the clipboard. The rendered transcript is ANSI and wrapped, so a drag-
  * select over a long reply copies escape-free text broken at the terminal's
@@ -1045,4 +1131,57 @@ export function lastReply(history = []) {
     }
   }
   return null;
+}
+
+/**
+ * The command approval box, laid out to the rows it may have.
+ *
+ * It is drawn where the input box was, and was charged as the input's three
+ * rows — while it drew borders, a padded title, a command that wraps, the
+ * directory and the reason, which wrap too, and four options. With a long
+ * command that was fifteen rows or more against three, and the in-flight turn
+ * above it kept its whole budget, so the frame outgrew a 16-row terminal and
+ * cleared on every render while the box was up. Measured under the pty,
+ * 2026-10-26: 15 `ESC[2J` at 16 rows, all with the box on screen.
+ *
+ * So every row is decided here, pre-wrapped at the panel's width and drawn
+ * truncated, and App charges `rows` against the live turn. What gives way
+ * first is the gap above the choices, then the reason, then the directory,
+ * then the rule — **never the command**, which is the thing being approved. When even the
+ * command does not fit, the title says how much of it is not shown rather
+ * than hiding it (on the title row, because a row of its own is the row there
+ * is no room for).
+ *
+ * Since 2026-10-26 it is drawn like every other menu (`ui/panel.js`): a rule
+ * in the risk colour and no border, which is two rows and four columns back.
+ *
+ * @param {{command?: string, cwd?: string, riskReason?: string}} payload
+ * @param {{width?: number, maxRows?: number}} [room]
+ * @returns {{command: string[], hidden: number, ruled: boolean, cwd: boolean, reason: boolean, padded: boolean, rows: number}}
+ */
+export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } = {}) {
+  const RULE = 1;
+  const TITLE = 1;
+  const OPTIONS = 4;
+  const inner = Math.max(10, width - 2);                       // the panel's one-column indent
+  const all = [];
+  String(payload.command ?? '').split('\n').forEach((line, i) => {
+    let rest = (i === 0 ? 'Command: ' : '  ') + line;
+    while (rest.length > inner) { all.push(rest.slice(0, inner)); rest = `  ${rest.slice(inner)}`; }
+    all.push(rest);
+  });
+  let room = maxRows - TITLE - OPTIONS;
+  const shown = Math.max(1, Math.min(all.length, room));
+  room -= shown;
+  // The rule is the last thing to go before the command: at the smallest
+  // heights it is the row the old borderless fallback did not spend.
+  const ruled = room >= RULE;
+  room -= ruled ? RULE : 0;
+  const cwd = room >= 1 && Boolean(payload.cwd);
+  room -= cwd ? 1 : 0;
+  const reason = room >= 1 && Boolean(payload.riskReason);
+  room -= reason ? 1 : 0;
+  const padded = room >= 1;
+  const rows = (ruled ? RULE : 0) + TITLE + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 1 : 0) + OPTIONS;
+  return { command: all.slice(0, shown), hidden: all.length - shown, ruled, cwd, reason, padded, rows };
 }
