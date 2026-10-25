@@ -7,6 +7,7 @@ import { QuestionPrompt } from './QuestionPrompt.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
 import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
+import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
@@ -65,6 +66,7 @@ export function Menus({
   setActiveMenu,
   agentLoop,
   terminalWidth = 80,
+  menuRows = 20,
   approval = null,
   handleSubmit,
   mode,
@@ -116,6 +118,34 @@ export function Menus({
       const next = (at + step + SETTING_GROUPS.length) % SETTING_GROUPS.length;
       setActiveMenu({ ...activeMenu, group: SETTING_GROUPS[next], query: '' });
       return;
+    }
+
+    // `/help`: ←/→ or tab between the tabs, ↑/↓ over the commands, enter puts
+    // the selected one in the prompt. Esc closes, below, like every menu.
+    if (activeMenu?.type === 'help') {
+      if (key.tab || key.leftArrow || key.rightArrow) {
+        const step = key.leftArrow || (key.tab && key.shift) ? -1 : 1;
+        setActiveMenu({ ...activeMenu, tab: nextTab(activeMenu.tab, step), cursor: 0 });
+        return;
+      }
+      // ↑/↓ select on Commands and scroll the other two, over the positions
+      // the page itself says it has at this size.
+      if (key.upArrow || key.downArrow) {
+        const { count } = helpPage({
+          tab: activeMenu.tab, cursor: activeMenu.cursor, width: terminalWidth,
+          rows: Math.max(1, menuRows - HELP_CHROME_ROWS),
+        });
+        const cursor = Math.max(0, Math.min(count - 1, (activeMenu.cursor || 0) + (key.upArrow ? -1 : 1)));
+        setActiveMenu({ ...activeMenu, cursor });
+        return;
+      }
+      if (key.return && activeMenu.tab === 'commands') {
+        const name = commandRows().filter((r) => r.kind === 'command')[activeMenu.cursor || 0]?.name;
+        setActiveMenu(null);
+        setFocus(FOCUS_INPUT);
+        if (name) setInputAtEnd(`/${name} `);
+        return;
+      }
     }
 
     if (!key.escape) return;
@@ -177,6 +207,62 @@ export function Menus({
             }}
           />
         )}
+
+        {/*
+          `/help`: box-less, like Claude Code's — a rule, the tabs, the page and
+          one line of keys. Fitted to `menuRows` by `helpPage`, every row
+          truncated, so it is exactly the height it was given.
+        */}
+        {activeMenu?.type === 'help' && (() => {
+          const page = helpPage({
+            tab: activeMenu.tab,
+            cursor: activeMenu.cursor,
+            width: terminalWidth,
+            rows: Math.max(1, menuRows - HELP_CHROME_ROWS),
+          });
+          return (
+            <Box flexDirection="column">
+              <Text color={T.muted} wrap="truncate">{'─'.repeat(Math.max(1, terminalWidth))}</Text>
+              <Text wrap="truncate">
+                {HELP_TABS.map(([id, label], i) => (
+                  <React.Fragment key={id}>
+                    {i > 0 ? '   ' : ' '}
+                    {id === activeMenu.tab
+                      ? <Text bold inverse>{` ${label} `}</Text>
+                      : <Text dimColor>{` ${label} `}</Text>}
+                  </React.Fragment>
+                ))}
+              </Text>
+              <Text> </Text>
+              {page.lines.map((line, i) => {
+                // Headings in the accent, names plain, what they do dimmed —
+                // three weights, so the two columns read apart at a glance.
+                if (line.kind === 'heading') return <Text key={i} bold color={T.accent} wrap="truncate">{` ${line.text}`}</Text>;
+                if (line.kind === 'more') return <Text key={i} color={T.muted} wrap="truncate">{`   ${line.text}`}</Text>;
+                if (line.kind === 'blank') return <Text key={i}> </Text>;
+                if (line.name) {
+                  const rest = line.text.slice(line.name.length);
+                  const lead = line.kind === 'command' ? (line.selected ? ' ❯  ' : '    ') : ' ';
+                  return (
+                    <Text key={i} wrap="truncate">
+                      <Text color={line.selected ? T.accent : undefined} bold={line.selected}>{lead}{line.name}</Text>
+                      {line.selected
+                        ? <Text color={T.accent}>{rest}</Text>
+                        : <Text dimColor>{rest}</Text>}
+                    </Text>
+                  );
+                }
+                return <Text key={i} wrap="truncate">{` ${line.text}`}</Text>;
+              })}
+              <Text> </Text>
+              <Text dimColor wrap="truncate">
+                {activeMenu.tab === 'commands'
+                  ? ' ←/→ tabs · ↑↓ move · enter puts it in the prompt · esc close'
+                  : ' ←/→ or tab to switch · ↑↓ scroll · esc close'}
+              </Text>
+            </Box>
+          );
+        })()}
 
         {activeMenu?.type === 'command_approval' && (
           /*

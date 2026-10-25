@@ -8,6 +8,7 @@
 import { marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { normalizeQuestionSet } from '../core/question.js';
+import { commandRows } from './help.js';
 
 /**
  * `tab` indents lists *and* code blocks, and the two wanted different things.
@@ -935,12 +936,13 @@ const clean = (value) => (typeof value === 'string' ? value.trim() : '');
  */
 export function renderCommandList(commands, groups) {
   const width = Math.max(...commands.map((c) => c.name.length));
-  const known = new Set(groups.map(([key]) => key));
-  const sections = [...groups, ['', 'Other']]
-    .map(([key, heading]) => [heading, commands.filter((c) => (key
-      ? c.group === key
-      : !known.has(c.group)))])
-    .filter(([, list]) => list.length > 0);
+  // Grouped by `commandRows`, the same function `/help`'s Commands tab draws
+  // from, so the two cannot disagree about which command is where.
+  const sections = [];
+  for (const row of commandRows(commands, groups)) {
+    if (row.kind === 'heading') sections.push([row.text, []]);
+    else sections.at(-1)[1].push(row);
+  }
 
   const out = [];
   for (const [heading, list] of sections) {

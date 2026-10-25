@@ -46,7 +46,8 @@ export function resolveOpenTarget(workspace, target) {
   const abs = path.resolve(expanded.startsWith('/') ? expanded : path.join(workspace, expanded));
   return { abs, exists: fs.existsSync(abs) };
 }
-import { SLASH_COMMANDS, COMMAND_GROUPS, MOST_USED_COMMANDS } from '../constants.js';
+import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
+import { commandHelp } from '../help.js';
 import { AGENT_COMMANDS } from '../../core/slash-commands.js';
 import { oneLine, renderCommandList } from '../format.js';
 import { planResume } from '../../core/chat-thread.js';
@@ -137,34 +138,26 @@ export async function handleSlashCommand(query, {
       }
     }
 
-    // Generated from SLASH_COMMANDS, not written out beside it. The hand-kept
-    // copy had drifted twice — listing /init-skills and /paste-image after both
-    // were gone, and describing /memory as "view memory" while it toggled it —
-    // because nothing made the two lists agree.
+    /*
+     * A menu with three tabs (`ui/help.js`), not a block in the transcript: the
+     * old one was ~50 rows left in the scrollback on every `/help`. Built from
+     * SLASH_COMMANDS and KEY_ROWS, never written out beside them — the
+     * hand-kept copy had drifted twice, listing /init-skills and /paste-image
+     * after both were gone. `/shortcuts` opens on the Keys tab, and
+     * `/help <command>` answers for one command in the transcript.
+     */
     if (command === 'help' || command === 'shortcuts') {
-      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
-        role: 'assistant',
-        isLocal: true,
-        content: [
-          `**Most used**   ${MOST_USED_COMMANDS.map((c) => `/${c}`).join('  ·  ')}`,
-          '',
-          '### ⌨️  Keys',
-          '  shift+tab   plan → auto → strict',
-          '  ctrl+e      expand or collapse every step',
-          '  ctrl+b      bring the Gemini tab to the front',
-          '  ctrl+u      clear the input   ·   ctrl+w   delete the last word',
-          '  ctrl+j      newline, without sending   ·   ↑ ↓   move a line, or recall',
-          '  ctrl+o      show or hide the task list',
-          '  ctrl+x ctrl+s   steer the last queued message into the running turn',
-          '  esc         stop the run, or close a menu',
-          '  ctrl+c ×2   quit — prints how to resume',
-          '',
-          '### ⌨️  Commands',
-          renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS),
-          '',
-          '_Typing `/` filters this same list as you go. `/settings` shows what is configured._',
-        ].join('\n'),
-      }]);
+      if (command === 'help' && args.length > 0) {
+        const one = commandHelp(args[0]);
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
+          role: 'assistant',
+          isLocal: true,
+          content: one ?? `No such command: \`/${args[0].replace(/^\//, '')}\` — \`/help\` lists them.`,
+        }]);
+        setIsProcessing(false);
+        return;
+      }
+      setActiveMenu({ type: 'help', tab: command === 'shortcuts' ? 'keys' : 'general', cursor: 0 });
       setIsProcessing(false);
       return;
     }

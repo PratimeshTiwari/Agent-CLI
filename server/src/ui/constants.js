@@ -26,12 +26,6 @@ export const COMMAND_GROUPS = [
   ['agent', 'The agent itself'],
 ];
 
-/**
- * The handful `/help` leads with. Six groups of twenty-eight commands is
- * readable but not scannable; these are what people reach for mid-task.
- * Each must exist in `SLASH_COMMANDS` (asserted by test).
- */
-export const MOST_USED_COMMANDS = ['effort', 'diff', 'undo', 'compact', 'history'];
 
 export /** Slash commands offered by the palette, and the source `/help` prints from. */
 const SLASH_COMMANDS = [

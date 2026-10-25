@@ -41,14 +41,6 @@ test('the row', () => {
   assert.equal(compactionRow(undefined), '✻ Conversation compacted · ctrl+e for the summary');
 });
 
-// `/help` leads with these; one that is renamed or removed would advertise a
-// command that answers "No such command".
-test('every most-used command exists', async () => {
-  const { MOST_USED_COMMANDS, SLASH_COMMANDS } = await import('../../src/ui/constants.js');
-  const names = new Set(SLASH_COMMANDS.map((c) => c.name));
-  for (const c of MOST_USED_COMMANDS) assert.ok(names.has(c), `/${c}`);
-});
-
 test('an unparseable tool call is its prose and one row, not the JSON and a paragraph', () => {
   const { items, actions } = parseTurnActions(turn([
     { role: 'agent', content: 'Reading the builder.\n```json\n{"name": "read_file", "args": {"path": "a```json\n```', parseError: 'Expected , or }', attempt: 1, maxAttempts: 2 },

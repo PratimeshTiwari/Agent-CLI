@@ -688,6 +688,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
     ? approvalLayout(activeMenu.payload, { width: terminalWidth, maxRows: INPUT_ROWS + frameBudget - 1 })
     : null;
   const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0));
+  // What a menu drawn in place of the input may use: the input's own rows and
+  // the live frame's, which a menu opened between turns has to itself.
+  const menuRows = Math.max(3, frameBudget + INPUT_ROWS);
 
   /*
    * The running tool calls share the turn's rows. They were drawn under the
@@ -1515,6 +1518,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             agentLoop={agentLoop}
             terminalWidth={terminalWidth}
             approval={approval}
+            menuRows={menuRows}
             handleSubmit={handleSubmit}
             mode={mode}
             setFocus={setFocus}
