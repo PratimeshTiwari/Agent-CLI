@@ -30,7 +30,7 @@ const LONG = '/private/tmp/claude-501/-Users-someone-Documents-A-Project/02d5390
 describe('the report says what is feeding the prompt', () => {
   test('sources appear alongside the sizes', async () => {
     const { message } = await report([{ path: '/w/AGENT.md', bytes: 3943, state: 'loaded' }]);
-    assert.match(message, /Tokens/);
+    assert.match(message, /tokens/);
     assert.match(message, /Feeding the prompt/);
     assert.match(message, /AGENT\.md/);
   });
