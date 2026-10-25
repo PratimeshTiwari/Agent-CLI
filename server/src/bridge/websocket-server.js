@@ -14,6 +14,7 @@
  * }
  */
 
+import { savePastedImages } from '../core/panel-images.js';
 import { WebSocketServer as WS } from 'ws';
 import { randomUUID, randomBytes, timingSafeEqual } from 'crypto';
 import fs from 'fs';
@@ -960,8 +961,9 @@ export class WebSocketServer {
       }),
     };
 
-    // Feed into agent loop
-    await this.agentLoop.handleUserMessage(content, callbacks);
+    // Feed into agent loop — with any image pasted in the panel saved to a
+    // file first, so it is recorded and linked like a terminal one.
+    await this.agentLoop.handleUserMessage(savePastedImages(content, this.agentLoop.workspace), callbacks);
   }
 
   async _handleSlashCommand(clientId, messageId, payload) {

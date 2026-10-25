@@ -56,7 +56,7 @@ test('a sent prompt is recorded as its own', () => {
 
 test('user_turn draws unless it is the panel\'s own', () => {
   const body = arm('user_turn');
-  assert.match(body, /takeOwnEcho\(content\)/);
+  assert.match(body, /takeOwnEcho\(foldImageHeader\(content\)\)/);
   assert.match(body, /appendMessage\('user', foldImageHeader\(content\)\)/);
 });
 

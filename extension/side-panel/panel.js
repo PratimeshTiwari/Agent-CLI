@@ -60,8 +60,12 @@ function setupEventListeners() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+      return;
     }
+    backspaceTag(e);
   });
+  // An image on the clipboard goes in as an `[Image #n]` tag.
+  commandInput.addEventListener('paste', onPasteImage);
 
   // Auto-resize textarea, and light the send button once there is something
   // to send. Muted-until-useful was half the idea; without this half the
@@ -502,6 +506,71 @@ function foldImageHeader(text) {
   return s.replace(/^(?:\[Image #\d+: [^\]\n]+\][^\n]*\n<image_data>[^\n]*?<\/image_data>\n?)+\n*/, '');
 }
 
+/*
+ * Images pasted into the box, the way the terminal takes them (2026-10-26).
+ *
+ * A pasted image puts `[Image #n]` at the caret; it goes with the message only
+ * while its tag is in the text, and backspace takes a tag in one press. On send
+ * each one becomes the same block the terminal sends — a header, then its
+ * `<image_data>` — with `pasted` where the terminal names the file, because a
+ * panel cannot write one. The server writes it and puts the real path in, so
+ * from there a panel image is recorded, linked and resumed like a terminal one.
+ */
+let pastedImages = [];
+let pastedCount = 0;
+const imageTag = (n) => `[Image #${n}]`;
+
+function insertAtCaret(el, text) {
+  const from = el.selectionStart ?? el.value.length;
+  const to = el.selectionEnd ?? from;
+  const before = el.value.slice(0, from);
+  const after = el.value.slice(to);
+  const put = `${before && !/\s$/.test(before) ? ' ' : ''}${text}${/^\s/.test(after) ? '' : ' '}`;
+  el.value = before + put + after;
+  el.setSelectionRange(from + put.length, from + put.length);
+}
+
+function onPasteImage(e) {
+  const files = [...(e.clipboardData?.items || [])]
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (!files.length) return;            // text pastes as text
+  e.preventDefault();
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      pastedCount += 1;
+      pastedImages.push({ n: pastedCount, dataUrl: reader.result, mime: file.type, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
+      insertAtCaret(commandInput, imageTag(pastedCount));
+      commandInput.dispatchEvent(new Event('input'));
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+function backspaceTag(e) {
+  if (e.key !== 'Backspace') return;
+  const el = commandInput;
+  if (el.selectionStart !== el.selectionEnd) return;
+  const at = el.selectionStart;
+  const m = /\[Image #\d+\] ?$/.exec(el.value.slice(0, at));
+  if (!m) return;
+  e.preventDefault();
+  el.value = el.value.slice(0, m.index) + el.value.slice(at);
+  el.setSelectionRange(m.index, m.index);
+  el.dispatchEvent(new Event('input'));
+}
+
+/** The images whose tags are in `content`, as the block that goes in front of it. */
+function imageBlock(content) {
+  const used = pastedImages.filter((img) => content.includes(imageTag(img.n)));
+  const block = used.length
+    ? `${used.map((img) => `[Image #${img.n}: pasted] (${img.sizeKB}KB, ${img.mime})\n<image_data>\n${img.dataUrl}\n</image_data>`).join('\n')}\n\n`
+    : '';
+  return { used, block };
+}
+
 function sendMessage() {
   const content = commandInput.value.trim();
   if (!content || isWaitingForResponse) return;
@@ -542,10 +611,12 @@ function sendMessage() {
   appendMessage('user', content);
   ownSends.push(content);
 
-  // Send to service worker → server
+  // Send to service worker → server, with the images whose tags it carries.
+  const { used, block } = imageBlock(content);
+  pastedImages = pastedImages.filter((img) => !used.includes(img));
   chrome.runtime.sendMessage({
     type: 'user_message',
-    payload: { content },
+    payload: { content: block + content },
   });
 
   // Clear input
@@ -1164,7 +1235,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // A prompt typed somewhere else — the terminal, or the other panel.
     case 'user_turn': {
       const content = String(payload?.content ?? '');
-      if (!content || takeOwnEcho(content)) break;
+      // Compared folded: the loop echoes an image prompt with its headers,
+      // and the panel recorded what it drew — the text with the tags.
+      if (!content || takeOwnEcho(foldImageHeader(content))) break;
       if (welcomeMessage) welcomeMessage.remove();
       removeThinking();
       appendMessage('user', foldImageHeader(content));

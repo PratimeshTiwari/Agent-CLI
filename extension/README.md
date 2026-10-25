@@ -131,6 +131,10 @@ per-change history below.
   A prompt with an image waited five seconds for its text to land, every time.
   Every image in a prompt is pasted now, not only the first, and the panel
   draws a recorded image prompt as `[Image]` rather than its header.
+- **Paste an image into the panel.** It goes in as `[Image #1]` where you are
+  typing, is sent only while that tag is in the text, and backspace removes the
+  tag in one press — the same as the terminal. The agent saves it under
+  `.agent/tmp/`, so the terminal's transcript links to it too.
 
 ### 1.49.0 — 2026-10-25
 
