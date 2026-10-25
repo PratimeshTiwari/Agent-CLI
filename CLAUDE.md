@@ -1756,6 +1756,12 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   calling `setTheme` on highlight; esc restores `original`; enter saves to
   `~/.agent/settings.json` (`core/user-settings.js` — per person, not per repo) and reprints the
   transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
+- **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
+  child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
+  creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
+  box's top rule in scrollback. `OSASCRIPT_STDIO` in `ui/clipboard-image.js`. The same release
+  stopped the meter counting an image's base64 (`promptCharge`: a 650 KB screenshot read `0%
+  until auto-compact`) and made `/image` answer `[Image #1] attached · 635 KB`, local, one row.
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
   exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
   app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup

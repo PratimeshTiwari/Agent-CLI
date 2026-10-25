@@ -163,7 +163,7 @@ import { resolveEffort, effortFromConfig } from './effort.js';
 import { planModelSwitch, browserModelPin } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
-import { stripImageData } from './prompt-builder.js';
+import { stripImageData, promptCharge } from './prompt-builder.js';
 import { validateWorkspace } from './workspaces.js';
 import { z } from 'zod';
 import { SessionStore } from '../storage/session-store.js';
@@ -2498,7 +2498,7 @@ export class AgentLoop {
         resolve(result);
       };
       this._threadAsk = ask;
-      this.contextChars += prompt.length;
+      this.contextChars += promptCharge(prompt);
       this._enqueueExtensionRequest({
         prompt,
         expectResponse: true,
@@ -2511,7 +2511,7 @@ export class AgentLoop {
     this._threadAsk = null; // anything still owed to a side question is not this
     // Create a promise that will be resolved when we get the Gemini response
     this.pendingGeminiResponse = true;
-    this.contextChars += prompt.length;
+    this.contextChars += promptCharge(prompt);
 
     /**
      * Kept verbatim, because a resend cannot be a rebuild.

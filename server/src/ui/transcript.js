@@ -350,8 +350,10 @@ export function parseTurnActions(turn) {
 
   // Derived, never accumulated in parallel: two lists that are supposed to
   // agree are two lists that will one day not.
+  // `image` is `/image` saying what it attached — a command's answer, not
+  // work. Counted, it drew `Worked · 1 action` under `/paste-image`.
   const actions = items.filter((i) => i.type !== 'text' && i.type !== 'compaction'
-    && i.type !== 'parse_error' && i.type !== 'plan_box');
+    && i.type !== 'parse_error' && i.type !== 'plan_box' && i.type !== 'image');
   const finalMessages = items.filter((i) => i.type === 'text');
   return { items, actions, finalMessages };
 }

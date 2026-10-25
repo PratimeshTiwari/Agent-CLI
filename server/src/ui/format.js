@@ -1089,16 +1089,6 @@ export function elapsedLabel(ms) {
 }
 
 /**
- * The last thing the agent said, as the markdown it wrote — what `/copy` puts
- * on the clipboard. The rendered transcript is ANSI and wrapped, so a drag-
- * select over a long reply copies escape-free text broken at the terminal's
- * width; this is the source instead. Skips a reply that failed to parse (it is
- * the model's broken JSON, not an answer) and empty prose.
- *
- * @param {object[]} history - the loop's `conversationHistory`
- * @returns {string|null}
- */
-/**
  * The last code block the agent wrote, for `/copy code` (which replaced
  * `ctrl+y`, 2026-10-26: a command is something `/` lists, a chord is something
  * you have to remember).
@@ -1121,6 +1111,16 @@ export function lastCodeBlock(history = []) {
   return null;
 }
 
+/**
+ * The last thing the agent said, as the markdown it wrote — what `/copy` puts
+ * on the clipboard. The rendered transcript is ANSI and wrapped, so a drag-
+ * select over a long reply copies escape-free text broken at the terminal's
+ * width; this is the source instead. Skips a reply that failed to parse (it is
+ * the model's broken JSON, not an answer) and empty prose.
+ *
+ * @param {object[]} history - the loop's `conversationHistory`
+ * @returns {string|null}
+ */
 export function lastReply(history = []) {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const t = history[i];
@@ -1129,4 +1129,36 @@ export function lastReply(history = []) {
     }
   }
   return null;
+}
+
+/**
+ * The one-line note `/image` answers with, and the tag its prompt carries.
+ *
+ * `[Image #1]`, the way Claude Code names an attachment — no emoji, no path
+ * (owner, 2026-10-26: "keep it simple and minimal"). The path was ~110
+ * characters of `.agent/tmp/` that wrapped across three rows, and nobody reads
+ * it: the image is identified by being the one you just attached.
+ */
+export const imageTag = (n) => `[Image #${n}]`;
+
+export function imageAttachedNote(n, bytes) {
+  const kb = Math.max(1, Math.round((bytes || 0) / 1024));
+  return `${imageTag(n)} attached · ${kb} KB · \`/image remove\` to drop it`;
+}
+
+/**
+ * A recorded prompt with an image in it, as the user row draws it.
+ *
+ * The loop records what was sent, image data stripped: an `[Image attached:
+ * <path> (KB, mime)]` line and an `<image_data>` placeholder above the
+ * message. The live echo shows `[Image #1] …` instead, so a resumed or reprinted
+ * session drew the same prompt as three rows with the full path in them. The
+ * number is not recorded, so a folded one reads `[Image]`.
+ */
+export function foldImageHeader(content) {
+  const text = String(content ?? '');
+  if (!text.startsWith('[Image attached:')) return content;
+  return text
+    .replace(/^\[Image attached:[^\n]*\]\s*/, '[Image] ')
+    .replace(/<image_data>[\s\S]*?<\/image_data>\s*/, '');
 }

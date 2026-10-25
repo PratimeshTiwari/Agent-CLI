@@ -9,7 +9,11 @@ import { describeDestructive } from '../destructive.js';
 import { planReset, applyReset } from '../../core/reset.js';
 import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { canCopy, copyToClipboard } from '../clipboard.js';
-import { lastReply, lastCodeBlock } from '../format.js';
+import { lastReply, lastCodeBlock, imageAttachedNote, imageTag } from '../format.js';
+
+// Numbered per session, as Claude Code numbers them. Module state on purpose:
+// it outlives a remount of App (a theme change reprints) and resets on restart.
+let imagesAttached = 0;
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
 import { planBoxRow } from '../plan-box.js';
@@ -1193,7 +1197,7 @@ export async function handleSlashCommand(query, {
           role: 'assistant',
           isLocal: true,
           content: pendingImage
-            ? `🖼️ Image detached — ${pendingImage.path} will not be sent.`
+            ? `${imageTag(pendingImage.n)} removed — it will not be sent.`
             : 'No image is attached.',
         }]);
         setPendingImage(null);
@@ -1210,7 +1214,7 @@ export async function handleSlashCommand(query, {
       const fromClipboard = command === 'paste-image' || args.length === 0;
       if (fromClipboard) {
         if (!canReadClipboardImage()) {
-           setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ Clipboard image paste is only supported on macOS.' }]);
+           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: 'Clipboard image paste is only supported on macOS. `/image <path>` attaches a file.' }]);
            setIsProcessing(false); return;
         }
         // The module, not a copy of it. The copy that lived here wrote every
@@ -1219,7 +1223,7 @@ export async function handleSlashCommand(query, {
         // — the exact bug `readClipboardImage`'s per-copy name exists to stop.
         const image = readClipboardImage(agentLoop.workspace);
         if (!image) {
-          setHistory(prev => [...prev, { role: 'assistant', content: '⚠️ No image found in clipboard.' }]);
+          setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: 'No image on the clipboard. Copy one, or `/image <path>` to attach a file.' }]);
           setIsProcessing(false); return;
         }
         finalFilePath = image.path;
@@ -1229,7 +1233,7 @@ export async function handleSlashCommand(query, {
         const { existsSync } = await import('fs');
         finalFilePath = resolve(agentLoop.workspace, args.join(' '));
         if (!existsSync(finalFilePath)) {
-           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `❌ File not found: ${finalFilePath}` }]);
+           setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: `No such file: ${finalFilePath}` }]);
            setIsProcessing(false); return;
         }
         ext = extname(finalFilePath).toLowerCase();
@@ -1240,15 +1244,24 @@ export async function handleSlashCommand(query, {
         const imageBuffer = readFileSync(finalFilePath);
         const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.tiff': 'image/tiff' };
         const mime = mimeTypes[ext] || 'image/png';
+        imagesAttached += 1;
         setPendingImage({
+          n: imagesAttached,
           base64: imageBuffer.toString('base64'),
           mime,
           path: finalFilePath,
           sizeKB: Math.round(imageBuffer.length / 1024)
         });
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `🖼️ Image attached: ${finalFilePath} (${Math.round(imageBuffer.length / 1024)}KB)\nType your prompt and the image will be included, or \`/image remove\` to drop it.` }]);
+        // Local, and one line. It was an unmarked row holding the full path,
+        // which wrapped across three rows (reported with a screenshot,
+        // 2026-10-26); see `imageAttachedNote`.
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
+          role: 'assistant',
+          isLocal: true,
+          content: imageAttachedNote(imagesAttached, imageBuffer.length),
+        }]);
       } catch (e) {
-        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', content: `❌ Error reading image: ${e.message}` }]);
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, { role: 'assistant', isLocal: true, content: `Could not read the image: ${e.message}` }]);
       }
       setIsProcessing(false);
       return;

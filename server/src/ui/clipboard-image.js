@@ -35,10 +35,22 @@ const FORMATS = [
   { flavour: 'TIFF picture', ext: '.tiff', mime: 'image/tiff' },
 ];
 
-/** Run osascript, or return null. Never throws. */
+/**
+ * Run osascript, or return null. Never throws.
+ *
+ * **stderr is captured, never inherited.** `execFileSync` hands a child's
+ * stderr to ours unless told otherwise, and ours is the terminal Ink is
+ * drawing on. Reading a screenshot makes osascript print `*** Error creating a
+ * JP2 color space: falling back to sRGB` twice — two rows Ink never wrote, so
+ * its next erase missed by two and left the input box's top rule stranded in
+ * scrollback above `/paste-image` (reported with a screenshot, reproduced under
+ * the pty, 2026-10-26). Any child spawned while Ink is up needs the same.
+ */
+export const OSASCRIPT_STDIO = ['ignore', 'pipe', 'pipe'];
+
 function osascript(script, { timeout = 10_000 } = {}) {
   try {
-    return execFileSync('osascript', ['-e', script], { encoding: 'utf-8', timeout }).trim();
+    return execFileSync('osascript', ['-e', script], { encoding: 'utf-8', timeout, stdio: OSASCRIPT_STDIO }).trim();
   } catch {
     return null;
   }

@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, foldImageHeader } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -17,6 +17,7 @@ import { T } from '../theme.js';
  */
 function userMessageText(content, isLive) {
   const max = isLive ? 3 : 12;
+  content = foldImageHeader(content);
   const lines = String(content ?? '').split('\n');
   if (lines.length <= max) return content;
   return `${lines.slice(0, max).join('\n')}\n… +${lines.length - max} more lines`;
@@ -639,7 +640,10 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
   }
 
   if (act.type === 'image') {
-    return <Text dimColor>∙ Attached image: {act.content}</Text>;
+    // The file, not the path: a clipboard copy's path is ~110 characters of
+    // `.agent/tmp/` and wrapped across three rows. Older history only — `/image`
+    // now answers with a one-line note.
+    return <Text dimColor wrap="truncate">∙ Attached image: {String(act.content).split(/[\\/]/).pop()}</Text>;
   }
 
   return null;

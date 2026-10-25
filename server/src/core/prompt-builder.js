@@ -1361,3 +1361,23 @@ export function stripImageData(text) {
     '<image_data>(the image was delivered to the chat tab)</image_data>',
   );
 }
+
+/**
+ * What a prompt costs the context meter, in characters.
+ *
+ * Its length, except that an inlined image counts as what Gemini charges for
+ * one rather than as its base64. Counted raw, a 650 KB screenshot was ~870k
+ * characters — the meter read `0% until auto-compact` the moment it was
+ * attached, and the next message would have compacted a fresh session
+ * (measured under the pty, 2026-10-26). Gemini bills an image at a few hundred
+ * tokens whatever its file size; `IMAGE_CHARGE_CHARS` is that, in the meter's
+ * four-characters-a-token unit.
+ */
+export const IMAGE_CHARGE_CHARS = 258 * 4;
+
+export function promptCharge(prompt) {
+  const text = String(prompt ?? '');
+  const images = (text.match(/<image_data>\n?data:[^\n]+\n?<\/image_data>/g) || []).length;
+  if (!images) return text.length;
+  return stripImageData(text).length + images * IMAGE_CHARGE_CHARS;
+}

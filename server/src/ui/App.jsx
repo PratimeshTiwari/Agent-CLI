@@ -9,7 +9,7 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { contextField, imageTag, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -969,6 +969,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // transcript keeps the marker form, so a 500-line paste never becomes a
     // 500-row user message in the live frame.
     let messageContent = expandPastes(query, pastes);
+    // The echo names the image the way the attach note did, so the prompt reads
+    // `[Image #1] what is this` and you can see it went with this message.
+    const shownQuery = pendingImage ? `${imageTag(pendingImage.n ?? 1)} ${query}` : query;
     if (pendingImage) {
       messageContent = `[Image attached: ${pendingImage.path} (${pendingImage.sizeKB}KB, ${pendingImage.mime})]\n\n<image_data>\ndata:${pendingImage.mime};base64,${pendingImage.base64}\n</image_data>\n\n${messageContent}`;
       setPendingImage(null);
@@ -986,7 +989,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // image data stripped as the loop strips it. The echo shows the marker; the
     // merge needs the sent form to know the two are one message (see
     // mergeLoopHistory), or a prompt with a marker is drawn twice.
-    setHistory(prev => [...prev, { role: 'user', content: query, timestamp: Date.now(), __echo: true, __sent: stripImageData(messageContent) }]);
+    setHistory(prev => [...prev, { role: 'user', content: shownQuery, timestamp: Date.now(), __echo: true, __sent: stripImageData(messageContent) }]);
 
     const callbacks = buildAgentCallbacks({
       agentLoop,
@@ -1534,7 +1537,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             row that is already drawn and already budgeted, costing nothing
             when there is no image.
           */}
-          {pendingImage ? <Text color={T.attention}>{'1 image  ·  '}</Text> : ''}
+          {pendingImage ? <Text color={T.attention}>{`${imageTag(pendingImage.n ?? 1)}  ·  `}</Text> : ''}
           {runningTasks > 0 ? <Text color={T.attention}>{runningTasks} bg{'  ·  '}</Text> : ''}
           {/*
             The checklist while a turn runs, when its panel is not drawn (it
