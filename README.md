@@ -35,6 +35,19 @@ the same chat, moves to a fresh one, and carries on: one line in the transcript,
 
 ![A compacted conversation](docs/images/compaction.svg)
 
+**Every setting on one page** — `/settings` has three tabs (`←/→` moves between them). Each
+value is coloured by kind: on is green, off is dim, the mode wears its own colour. Typing filters
+across all three tabs.
+
+![The settings page](docs/images/settings.svg)
+
+**Effort is a slider** — `/effort` puts Faster on the left and Smarter on the right. `←/→` moves
+the marker, which names the Gemini model that level switches the tab to, and `enter` sets it. The
+reply is one line, `⚙ effort  High → Medium · switching to Gemini Flash`, plus a warning only if
+the browser could not switch.
+
+![The effort slider](docs/images/effort.svg)
+
 *Screenshots are real terminal frames from the project's test harness, replayed through a terminal
 emulator; the editor in the second one is an illustration.*
 
@@ -122,13 +135,14 @@ Light (tuned palettes), colour-blind versions of both (blue and orange instead o
 repos (`~/.agent/settings.json`); `NO_COLOR` always means Mono.
 
 Messages typed while the agent is working are **queued** and sent when it finishes. Paste freely —
-long pastes collapse to a marker. `/image` attaches an image (bare for the clipboard).
+long pastes collapse to a marker. `ctrl+v` with an image on the clipboard puts `[Image #1]` in
+the prompt; backspace over the tag takes the image off.
 
 ### Commands worth knowing
 
 | Command | |
 | --- | --- |
-| `/effort low·medium·high` | how hard to work; switches the Gemini model picker to match |
+| `/effort` | how hard to work, on a slider; switches the Gemini model picker to match |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
 | `/copy` | the last reply, as markdown, to the clipboard — `/copy code` for the last code block |
@@ -136,6 +150,8 @@ long pastes collapse to a marker. `/image` attaches an image (bare for the clipb
 | `/compact` | summarise the conversation now (it also happens on its own, with a progress bar) |
 | `/history` | past conversations — pick one to reopen |
 | `/settings` | everything that is set, on one page |
+| `/context` | what is in the window and which files feed the prompt |
+| `/subagents on·off` | parallel tabs for research and review |
 | `/theme` | colours — Dark, Light, colour-blind, Terminal (the classic look) or Mono; previews as you move |
 | `/logs` | what has been failing · `/logs extension` for how long the browser takes |
 | `/reset` | start this repo fresh — its `.agent` state goes to `~/.agent/trash`, nothing deleted |
