@@ -294,7 +294,10 @@ export function parseTurnActions(turn) {
       }
       lastFsStep = sIdx;
     } else if (msg.role === 'system') {
-      if (msg.type === 'command_output') {
+      if (msg.type === 'steer') {
+        // A message the person sent into the running turn (AgentLoop.steer).
+        pushAction({ type: 'steer', id: `turn_${turn.id}_act_${sIdx}`, content: msg.content, msg });
+      } else if (msg.type === 'command_output') {
         pushAction({
           type: 'command_output',
           id: `turn_${turn.id}_act_${sIdx}`,

@@ -388,7 +388,7 @@ export class PromptBuilder {
     return prompt('pro-handover-review');
   }
 
-  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '') {
+  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '') {
     const failures = results.filter((r) => r.failed);
 
     /**
@@ -493,6 +493,18 @@ export class PromptBuilder {
      */
     const held = withheld ? ['', withheld] : [];
 
+    /*
+     * The person spoke while the model worked (`AgentLoop.steer`). Last before
+     * the instruction, because it outranks the plan the model was following,
+     * and explained here rather than in the system prompt: it is rare, and the
+     * system prompt is the payload this project works hardest to keep small.
+     */
+    const steered = steer
+      ? ['', `<user_steer>\n${steer}\n</user_steer>`,
+        'The user sent this while you were working. Where it conflicts with your plan, it wins: '
+        + 'change course now, and say in one line what you changed.']
+      : [];
+
     return [
       '<tool_results>',
       ...body,
@@ -500,6 +512,7 @@ export class PromptBuilder {
       ...evidence,
       ...review,
       ...held,
+      ...steered,
       '',
       instruction,
     ].join('\n');

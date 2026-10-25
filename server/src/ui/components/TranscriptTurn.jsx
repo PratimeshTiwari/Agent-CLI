@@ -546,6 +546,15 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
     );
   }
 
+  if (act.type === 'steer') {
+    // One row, truncated: the person typed it a moment ago and knows the rest.
+    return (
+      <Text wrap="truncate">
+        <Text color={T.accent}>{'↳ steered: '}</Text>{oneLine(act.content, 200)}
+      </Text>
+    );
+  }
+
   if (act.type === 'system') {
     return (
       <Box width="100%">

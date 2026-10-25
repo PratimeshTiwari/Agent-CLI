@@ -5,6 +5,7 @@ import { stripImageData } from '../core/prompt-builder.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
+import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
@@ -19,7 +20,7 @@ import { expandPastes, attachedPastes } from './paste.js';
 import { drainChatQueue } from './chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
-import { hotkeys, EXIT_WINDOW_MS } from './hotkeys.js';
+import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
 import { canCopy, copyToClipboard } from './clipboard.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
@@ -54,7 +55,7 @@ import { T } from './theme.js';
  */
 const SESSION_STARTED_AT = Date.now();
 
-export function App({ agentLoop, wsServer }) {
+export function App({ agentLoop, wsServer, closing = false }) {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState([...agentLoop.conversationHistory]);
 
@@ -108,6 +109,10 @@ export function App({ agentLoop, wsServer }) {
    * at a time — is the thing that makes the rest of it tractable.
    */
   const [queued, setQueued] = useState([]);
+  // Prompts steered into the running turn (ctrl+x ctrl+s), shown until the
+  // loop delivers them with the next tool results — see AgentLoop.steer.
+  const [steered, setSteered] = useState([]);
+  const steerGate = useRef(chordGate());
   const [tasks, setTasks] = useState([]);
 
   /*
@@ -625,7 +630,9 @@ export function App({ agentLoop, wsServer }) {
    * single queued prompt put the frame over the viewport: 28 full clears in
    * one harness run, on `main`, before v5.12.
    */
-  const queuedRows = queued.length === 0 ? 0 : Math.min(queued.length, 3) + (queued.length > 3 ? 1 : 0) + 1;
+  // Steered prompts share the block (and its three rows) with queued ones.
+  const waiting = queued.length + steered.length;
+  const queuedRows = waiting === 0 ? 0 : Math.min(waiting, 3) + (waiting > 3 ? 1 : 0) + 1;
   const liveBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
     - queuedRows
     - promptExtraRows
@@ -875,6 +882,7 @@ export function App({ agentLoop, wsServer }) {
       // Stopping means stopping. A queue that outlives the stop would start
       // the next prompt the moment the user thought they had halted it.
       setQueued([]);
+      setSteered([]); // the loop dropped its copy in noteUserStop
       // `:stop` never reaches the model, so its echo is local — counting it as
       // loop history would shift the merge by one and cost a turn on screen.
       setHistory(prev => [
@@ -979,6 +987,7 @@ export function App({ agentLoop, wsServer }) {
       setPlanReviewReady,
       setStatus,
       setWalkthroughReady,
+      setSteered,
       wsServer,
     });
 
@@ -1005,6 +1014,11 @@ export function App({ agentLoop, wsServer }) {
   useEffect(() => agentLoop.onIdle?.(() => {
     setIsProcessing(false);
     setIdleTick((n) => n + 1);
+    // A steer the turn ended before delivering is the next message — first in
+    // line, since it was typed before anything still queued behind it.
+    const leftover = agentLoop.takeSteers?.() || [];
+    setSteered([]);
+    if (leftover.length) setQueued((q) => [...leftover, ...q]);
   }), [agentLoop]);
 
   useEffect(() => {
@@ -1080,6 +1094,21 @@ export function App({ agentLoop, wsServer }) {
       return !prev;
     }),
     'paste-image': () => handleSubmit('/paste-image'),
+
+    /*
+     * ctrl+x ctrl+s: the last queued prompt goes into the running turn instead
+     * of waiting for it to end. Queueing stays the default — a steer changes
+     * what the model is doing mid-task, so it is asked for, never assumed.
+     */
+    'steer-arm': () => steerGate.current.arm(),
+    steer: () => {
+      if (!steerGate.current.fire()) return;
+      if (queued.length === 0) return;
+      const text = expandPastes(queued[queued.length - 1], pastes);
+      if (!agentLoop.steer?.(text)) return; // no turn to steer: it drains as usual
+      setQueued((q) => q.slice(0, -1));
+      setSteered((s) => [...s, queued[queued.length - 1]]);
+    },
 
     // The model picker, a stalled turn, a tab that was minimised — the three
     // times you need that tab and have to go hunting through windows for it.
@@ -1296,6 +1325,8 @@ export function App({ agentLoop, wsServer }) {
           );
         }}
       </Static>
+      {/* Exit's goodbye replaces the live frame; the scrollback stays (cli-ui.jsx, Root). */}
+      {closing ? <Goodbye /> : (<>
 
           {/*
             Notices, at the top of everything Ink can repaint.
@@ -1403,6 +1434,7 @@ export function App({ agentLoop, wsServer }) {
 
           <InputBar
             queued={queued}
+            steered={steered}
             filedSession={agentLoop.filedSession}
             history={history}
             setPaletteSuppressed={setPaletteSuppressed}
@@ -1553,6 +1585,7 @@ export function App({ agentLoop, wsServer }) {
         </Text>
         </Box>
       </Box>
+      </>)}
     </Box>
   );
 }

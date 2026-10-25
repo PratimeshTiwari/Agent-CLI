@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { farewellText, farewellFor, wantsDim, exitWithFarewell, registerInk, _resetFarewell } from '../../src/ui/farewell.js';
+import { farewellText, farewellFor, wantsDim, exitWithFarewell, exitText, registerInk, _resetFarewell, CLEAR_SCREEN } from '../../src/ui/farewell.js';
 import { SessionStore } from '../../src/storage/session-store.js';
 import { AgentLoop } from '../../src/core/agent-loop.js';
 
@@ -96,30 +96,40 @@ test('re-filing a resumed conversation updates its row instead of adding a copy'
   assert.equal(rows[0].turns, 2, 'the newest record wins');
 });
 
-test('exit: erase the live frame, unmount, then the command — and never clear the screen', async () => {
+test('exit: erase the live frame, unmount, clear the screen, then the command', async () => {
   _resetFarewell();
   const order = [];
   registerInk({ clear: () => order.push('clear'), unmount: () => order.push('unmount') });
   const store = new SessionStore(ws());
   say(store, 'hello');
-  const out = { write: (s) => order.push(s) };
+  const out = { isTTY: true, write: (s) => order.push(s) };
   const codes = [];
   await exitWithFarewell({ agentLoop: { sessionStore: store }, out, exit: (c) => codes.push(c) });
   await exitWithFarewell({ agentLoop: { sessionStore: store }, out, exit: (c) => codes.push(c) });
 
-  assert.deepEqual(order.slice(0, 2), ['clear', 'unmount'], 'unmounting first repaints the prompt box into the scrollback');
-  assert.doesNotMatch(order[2], /\x1b\[2J|\x1b\[3J/, 'the transcript must survive exit, like Claude Code');
+  assert.deepEqual(order.slice(0, 2), ['clear', 'unmount'], 'unmounting first repaints the prompt box over the clear');
+  assert.ok(order[2].startsWith(CLEAR_SCREEN), 'the agent screen goes, like Claude Code');
+  assert.match(order[2], /^\x1b\[2J\x1b\[3J\x1b\[H\x1b\[2mResume this session with:/, 'at the top, no blank row above it');
   assert.match(order[2], /agent --resume /);
   assert.deepEqual(codes, [0], 'a second ctrl+c during shutdown does not print it twice');
   _resetFarewell();
 });
 
-test('exit with nothing to resume: one blank row, no words', async () => {
+test('exit with nothing to resume: a clean screen, no words', async () => {
   _resetFarewell();
   registerInk({ clear() {}, unmount() {} });
   const written = [];
   // Only a slash command was run: rows on screen, but no conversation.
-  await exitWithFarewell({ agentLoop: { sessionStore: new SessionStore(ws()) }, out: { write: (s) => written.push(s) }, exit: () => {} });
-  assert.deepEqual(written, ['\n'], 'the prompt sat flush against the last row');
+  await exitWithFarewell({ agentLoop: { sessionStore: new SessionStore(ws()) }, out: { isTTY: true, write: (s) => written.push(s) }, exit: () => {} });
+  assert.deepEqual(written, [CLEAR_SCREEN]);
   _resetFarewell();
+});
+
+test('exit into a pipe: the footer alone, never escape codes', () => {
+  const store = new SessionStore(ws());
+  say(store, 'hello');
+  const text = exitText({ sessionStore: store }, { isTTY: false });
+  assert.doesNotMatch(text, /\x1b/);
+  assert.match(text, /^\nResume this session with:\nagent --resume /);
+  assert.equal(exitText({ sessionStore: new SessionStore(ws()) }, { isTTY: false }), '');
 });

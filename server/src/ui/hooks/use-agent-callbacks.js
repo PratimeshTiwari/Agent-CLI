@@ -53,6 +53,7 @@ export function buildAgentCallbacks({
   setPlanReviewReady,
   setStatus,
   setWalkthroughReady,
+  setSteered,
   wsServer,
 }) {
   /*
@@ -122,6 +123,9 @@ export function buildAgentCallbacks({
         // thinking cycle may paint over — the same switch a running tool uses.
         isToolRunningRef.current = Boolean(msg.payload?.progress);
         reassertBusy();
+      } else if (msg.type === 'steer_delivered') {
+        // In the prompt now; the transcript row comes with the next merge.
+        setSteered?.([]);
       } else if (msg.type === 'tool_call') {
         setStatus(`Running ${msg.payload.name}...`);
         reassertBusy();

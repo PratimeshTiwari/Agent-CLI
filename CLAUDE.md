@@ -1190,10 +1190,17 @@ extension adds the command with nothing bound, and the shortcut silently does no
 the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
-**Exit keeps the transcript and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; no clear
-since v5.20).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
+**Exit clears and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; kept the transcript in
+v5.20–v5.22; since v5.23 it erases back to the shell line that launched it, nothing at all when
+there was no conversation).** Startup asks the cursor row (`ESC[6n`) before the first frame and no
+longer `console.clear()`s; `ui/screen-span.js` follows every byte written (stdout.write is wrapped)
+and moves that row up on each scroll; exit asks again and rewinds only if the two agree — else (the
+launch line scrolled off, ctrl+e cleared, no answer) it clears screen and scrollback and puts the
+footer at the top. The reports are matched out of stdin before Ink sees them. The pty driver answers
+`ESC[6n` from a live pyte screen (`NO_DSR=1` for the fallback). An *exact* Claude Code exit for a
+session longer than one screen needs the alternate screen, which costs native scrollback. Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
 (erases only the live frame and syncs its log, so the final render on unmount writes nothing),
-unmounts, then prints Claude Code's footer (v5.21: `Resume this session with:` and the command on
+unmounts, clears screen and scrollback, then prints Claude Code's footer at the top (v5.21: `Resume this session with:` and the command on
 a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
 no conversation. Dim is gated on a TTY, not on `NO_COLOR`, as the `mono` palette is. The id is
 `SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
@@ -1491,6 +1498,17 @@ queue, press nothing and it is gone, which is the cancel nobody had to invent a 
 when the box is empty: half a typed sentence must not be replaced by something queued a minute
 ago.
 
+**`ctrl+x ctrl+s` steers instead (v5.23).** Asked for on 2026-10-25: queue by default, steer on
+request. The last queued prompt goes to `AgentLoop.steer`; the next tool-results prompt carries it
+as `<user_steer>` with a one-line explanation inline (not in the system prompt — rare, and that is
+the payload kept small), and the loop records a `type: 'steer'` turn drawn as `↳ steered:`. A turn
+that ends with no further tool round never builds that prompt, so the idle edge hands the steer back
+(`takeSteers`) as the next message — first in line. `noteUserStop` drops steers;
+`abortExtensionWork` does not, because it also runs on error paths where the message is still
+wanted. Both bytes are in `HOTKEYS` (raw mode clears IXON, so ctrl+s arrives instead of freezing
+the terminal), and `chordGate` allows 1.5 s between them. Pty: delivered, drawn, and the fallback
+sent as a message; 0 clears at 10, 13, 24 rows.
+
 ## Gotchas
 
 - **`server/src/index.js` is the bin and does nothing but re-spawn `main.js` under `tsx`** —
@@ -1693,6 +1711,15 @@ ago.
   had removed as rendering badly — chosen back knowingly; the plan's M3 set is the fallback. The
   header's text column needs an **explicit width**: inside `<Static>` Yoga sizes it to content and
   `wrap="truncate"` then wraps instead. `/copy` (same release) copies the last reply's markdown.
+
+- **The header draws in on every start, and exit says goodbye (v5.23, `ui/intro.js`,
+  `components/Intro.jsx`).** `Root` shows `Intro` — the banner with a `frame`: the mark sweeps in,
+  the name types out, the dim lines arrive, ~440 ms — then mounts App, whose `<Static>` writes the
+  same header at the same position. On exit `farewell.js` awaits the registered outro (capped at
+  `OUTRO_CAP_MS`): App swaps its live frame for `❯ Goodbye.`, then the clear and the footer.
+  **App must draw the goodbye itself** — swapping App out for it left Ink laying out the Static App
+  had owned, ~90 blank rows a frame, the transcript pushed off screen. TTY only, ≥16 rows for the
+  intro, off under `AGENT_CLI_NO_ANIMATION` or `CI`. Pty: 1 `ESC[2J` (the exit's own) at 13, 16, 24.
 
 - **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
   `ui/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
