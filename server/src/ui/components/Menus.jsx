@@ -435,6 +435,11 @@ export function Menus({
           const lead = (text) => ' '.repeat(Math.max(1, s.indent + Math.floor((s.span - text.length) / 2)));
           const tick = marked.id === current ? '  ✔ current' : '';
           const { tight } = fit('', 5);
+          // A blank row each side of the model line (owner, 2026-10-26: "fix
+          // spacing between effort, model name and description, just a bit"),
+          // when the panel has the two rows; rule + title + gap + gap + keys
+          // + the five slider rows + these two is 12.
+          const airy = !tight && menuRows >= 12;
           let used = 0;
           return (
             <Panel width={W} title="Effort" tight={tight}
@@ -460,10 +465,12 @@ export function Menus({
                   );
                 })}
               </Text>
+              {airy ? <Text> </Text> : null}
               <Text wrap="truncate">
                 {lead(marked.browser + tick)}{marked.browser}
                 {tick ? <Text color={T.success}>{tick}</Text> : null}
               </Text>
+              {airy ? <Text> </Text> : null}
               <Text dimColor wrap="truncate">{lead(marked.blurb)}{marked.blurb}</Text>
             </Panel>
           );
