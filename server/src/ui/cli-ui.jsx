@@ -3,7 +3,8 @@ import { render } from 'ink';
 import { PassThrough } from 'node:stream';
 import { splitTrailingEnter } from './enter-splitter.js';
 import { extractHotkeys, hotkeys, interruptGate } from './hotkeys.js';
-import { registerInk, registerOutro, exitWithFarewell } from './farewell.js';
+import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './farewell.js';
+import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR } from './screen-span.js';
 import { App } from './App.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
@@ -82,7 +83,30 @@ export class CliUI {
   }
 
   start() {
-    console.clear();
+    // No clear on the way in: the shell line that launched the agent stays
+    // above the header, as Claude Code's does, and exit erases back to it
+    // (screen-span.js). `console.clear()` here used to wipe it.
+    const ttyIO = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    const span = ttyIO ? createScreenSpan({ rows: process.stdout.rows }) : null;
+    let cursorWaiter = null;
+    if (span) {
+      const write = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (chunk, ...rest) => {
+        try { span.feed(chunk); } catch { /* following the cursor must never stop output */ }
+        return write(chunk, ...rest);
+      };
+      process.stdout.on('resize', () => span.resize(process.stdout.rows));
+      registerScreen({
+        span,
+        // Exit's question. The answer comes back on stdin, taken out below
+        // before Ink can type it into the prompt.
+        askRow: (timeoutMs) => new Promise((resolve) => {
+          const timer = setTimeout(() => { cursorWaiter = null; resolve(null); }, timeoutMs);
+          cursorWaiter = (row) => { clearTimeout(timer); cursorWaiter = null; resolve(row); };
+          write(ASK_CURSOR);
+        }),
+      });
+    }
 
     // A terminal left in a tracking mode by a previous crashed run would still
     // be spraying mouse reports into our stdin, and Ink has no parser for them:
@@ -97,7 +121,19 @@ export class CliUI {
     const interrupt = interruptGate();
 
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
+    process.stdin.on('data', (raw) => {
+      // Cursor reports are answers to our own questions, never keys.
+      let chunk = String(raw);
+      if (span) {
+        let m;
+        while ((m = chunk.match(CURSOR_REPORT))) {
+          const row = Number(m[1]);
+          if (cursorWaiter) cursorWaiter(row);
+          else span.start(row);
+          chunk = chunk.replace(m[0], '');
+        }
+        if (!chunk) return;
+      }
       // Application chords come out first and are dispatched on the side. They
       // must never reach Ink: `ink-text-input` types any key it does not
       // recognise straight into the prompt, so ctrl+e used to leave an "e"
@@ -126,6 +162,14 @@ export class CliUI {
     // Before the first frame: a theme applied after it would draw the banner in
     // the old colours, and <Static> never repaints it.
     setTheme(startupTheme(process.env, loadUserSettings().theme));
+
+    // Where the session begins: asked before the first frame, in raw mode so
+    // the answer is neither echoed nor held for a newline. Ink turns raw mode
+    // on itself a moment later; the answer is matched out of stdin above.
+    if (span) {
+      try { process.stdin.setRawMode?.(true); } catch { /* then exit clears instead */ }
+      process.stdout.write(ASK_CURSOR);
+    }
 
     const tty = Boolean(process.stdout.isTTY);
     const animate = animationAllowed({ isTTY: tty, rows: process.stdout.rows || 0 });

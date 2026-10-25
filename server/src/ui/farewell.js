@@ -35,10 +35,20 @@
  * plain `node --test` can import it.
  */
 import { leave } from '../core/restart.js';
+import { rewindSequence } from './screen-span.js';
 
 
 let ink = null;
 let outro = null;
+let screen = null;
+
+/** cli-ui hands over what it knows about the screen: the span and a way to ask the cursor row. */
+export function registerScreen(s) {
+  screen = s;
+}
+
+/** How long exit waits for the terminal to say where the cursor is. */
+export const ASK_ROW_MS = 200;
 
 /** Root hands over its goodbye: a function whose promise settles when it has played. */
 export function registerOutro(fn) {
@@ -114,18 +124,27 @@ export function farewellFor(agentLoop, { cwd = process.cwd(), dim = false } = {}
 export const CLEAR_SCREEN = '\x1b[2J\x1b[3J\x1b[H';
 
 /**
- * What exit writes (2026-10-25, the owner's third call on this): the agent's
- * screen goes, the way Claude Code closes, and the resume command is all that
- * is left at the top — or nothing at all when there was no conversation.
+ * What exit writes (2026-10-25, the owner's third and fourth calls on this):
+ * the session's rows go and the shell's stay — the line that launched the
+ * agent, a blank row, the resume command — the way Claude Code closes; nothing
+ * at all when there was no conversation. That needs the row the session began
+ * on (`screen-span.js`); when it is unknown or has scrolled away, the screen
+ * and scrollback are cleared and the footer goes at the top.
  * Cleared only into a terminal; a pipe or a file gets the footer alone, since
  * escape codes there are garbage and there is no screen to give back.
  */
-export function exitText(agentLoop, out = process.stdout) {
+export function exitText(agentLoop, out = process.stdout, { rewindTo = null } = {}) {
   const tty = Boolean(out?.isTTY);
   const footer = farewellFor(agentLoop, { dim: wantsDim(out) });
-  // The footer's leading blank row separates it from a transcript; on a
-  // cleared screen there is nothing above it to separate from.
-  return tty ? CLEAR_SCREEN + footer.replace(/^\n/, '') : footer;
+  if (!tty) return footer;
+  // Claude Code's exit: erase back to the shell line that launched us, then
+  // a blank row, the label and the command. Nothing at all with no
+  // conversation — the shell prompt comes back right under that line.
+  if (rewindTo) return rewindSequence(rewindTo) + footer;
+  // Where we started is unknown or gone (scrolled off, the app cleared the
+  // screen, the terminal never answered): clear, and the footer goes at the
+  // top — its leading blank row separates it from nothing there.
+  return CLEAR_SCREEN + footer.replace(/^\n/, '');
 }
 
 let leaving = false;
@@ -145,8 +164,13 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
     } catch { /* going anyway */ }
   }
   try { ink?.clear?.(); } catch { /* going anyway */ }
+  // Asked while Ink still holds raw mode, so the answer is not echoed.
+  let rewindTo = null;
+  if (screen && out?.isTTY) {
+    try { rewindTo = screen.span.rewindTo(await screen.askRow(ASK_ROW_MS)); } catch { rewindTo = null; }
+  }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  try { out.write(exitText(agentLoop, out)); } catch { /* going anyway */ }
+  try { out.write(exitText(agentLoop, out, { rewindTo })); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }
@@ -156,4 +180,5 @@ export function _resetFarewell() {
   leaving = false;
   ink = null;
   outro = null;
+  screen = null;
 }

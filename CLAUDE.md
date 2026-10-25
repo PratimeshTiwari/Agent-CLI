@@ -1191,8 +1191,14 @@ the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbo
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
 **Exit clears and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; kept the transcript in
-v5.20–v5.22, cleared again in v5.23 on the owner's call — screen and scrollback, TTY only, nothing
-at all when there was no conversation).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
+v5.20–v5.22; since v5.23 it erases back to the shell line that launched it, nothing at all when
+there was no conversation).** Startup asks the cursor row (`ESC[6n`) before the first frame and no
+longer `console.clear()`s; `ui/screen-span.js` follows every byte written (stdout.write is wrapped)
+and moves that row up on each scroll; exit asks again and rewinds only if the two agree — else (the
+launch line scrolled off, ctrl+e cleared, no answer) it clears screen and scrollback and puts the
+footer at the top. The reports are matched out of stdin before Ink sees them. The pty driver answers
+`ESC[6n` from a live pyte screen (`NO_DSR=1` for the fallback). An *exact* Claude Code exit for a
+session longer than one screen needs the alternate screen, which costs native scrollback. Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
 (erases only the live frame and syncs its log, so the final render on unmount writes nothing),
 unmounts, clears screen and scrollback, then prints Claude Code's footer at the top (v5.21: `Resume this session with:` and the command on
 a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
