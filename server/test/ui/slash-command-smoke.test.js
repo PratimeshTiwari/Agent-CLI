@@ -147,7 +147,7 @@ describe('arguments do not break anything', () => {
     '/memory on', '/memory off',
     '/allowlist', '/allowlist add ls',
     '/effort pro', '/effort nonsense',
-    '/help extra args', '/context', '/plans', '/history', '/commands', '/skills',
+    '/help extra args', '/context', '/plans', '/plan show', '/history', '/commands', '/skills',
   ];
 
   test('none of them throws', async () => {

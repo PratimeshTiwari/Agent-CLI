@@ -12,6 +12,7 @@ import { canCopy, copyToClipboard } from '../clipboard.js';
 import { lastReply } from '../format.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
+import { planBoxRow } from '../plan-box.js';
 import { listCommandDays, readCommands } from '../../core/command-log.js';
 import { resolveWorkspaceInput, validateWorkspace } from '../../core/workspaces.js';
 
@@ -652,6 +653,22 @@ export async function handleSlashCommand(query, {
       }
 
       setActiveMenu({ type: 'commands', days, workspace: agentLoop.workspace });
+      setIsProcessing(false);
+      return;
+    }
+
+    /*
+     * `/plan show`: the current plan, in the box plan review draws. Bare
+     * `/plan` is still the mode switch — it falls through to the loop.
+     */
+    if (command === 'plan' && /^(show|preview)$/i.test(args[0] || '')) {
+      const box = planBoxRow(agentLoop.workspace);
+      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+        box || {
+          role: 'assistant', isLocal: true, timestamp: Date.now(),
+          content: 'No plan yet. In plan mode the agent writes one to '
+            + '`.agent/artifacts/implementation_plan.md` before a large change.',
+        }]);
       setIsProcessing(false);
       return;
     }

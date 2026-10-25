@@ -7,6 +7,7 @@
 
 import { marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
+import { normalizeQuestionSet } from '../core/question.js';
 
 /**
  * `tab` indents lists *and* code blocks, and the two wanted different things.
@@ -852,6 +853,66 @@ export function fsEventRow(paths) {
   if (named.length === 0) return '∙ a file changed on disk';
   return `∙ changed on disk — ${named.join(', ')}`;
 }
+
+/**
+ * An answered `ask_question`, drawn the way Claude Code draws one:
+ *
+ *     ● User answered the agent's questions:
+ *       ⎿  · Which database? → Postgres
+ *          · Keep the old table? → No
+ *
+ * It used to be drawn twice and say half of it both times — `⏺ ask_question ·
+ * User answered: Postgres` from the loop's record, and a `[System: You
+ * answered: Postgres]` row the screen added on its own, which a reprint or a
+ * resume never had. Neither showed the question, so a scrollback of answers
+ * read as a list of words.
+ *
+ * The pairs come from the result turn (`answers`, since v5.24). Older history
+ * has only the string the model was sent, so they are recovered from that and
+ * the call's own arguments: the single shape names no question, and the batch
+ * shape carries each one beside its answer.
+ *
+ * @param {object} args the call's arguments, as the model sent them
+ * @param {*} result the result the model was sent
+ * @param {{answers?: Array<{question: string, answer: string}>, declined?: boolean}} [turn]
+ * @returns {{head: string, rows: string[]}}
+ */
+export function questionRows(args, result, turn = {}) {
+  const text = typeof result === 'string' ? result : '';
+  if (turn.declined || /dismissed the question without answering/.test(text)) {
+    return { head: 'User declined to answer', rows: [] };
+  }
+  // A stop while the question was up (App's esc path).
+  if (text === 'Cancelled by user') return { head: 'Question cancelled', rows: [] };
+
+  let pairs = Array.isArray(turn.answers) && turn.answers.length ? turn.answers : null;
+  if (!pairs) {
+    const batch = [...text.matchAll(/^\d+\.\s+(.*)\n\s*→\s*(.*)$/gm)];
+    if (batch.length) {
+      pairs = batch.map((m) => ({ question: m[1], answer: m[2] }));
+    } else {
+      const single = /^User answered:\s*([\s\S]*)$/.exec(text);
+      const asked = normalizeQuestionSet(args || {})[0];
+      // `normalizeQuestion` invents a placeholder for a question with no text;
+      // naming that would be naming nothing.
+      const named = clean(args?.question) || clean(args?.questions?.[0]?.question)
+        || clean(args?.questions?.[0]);
+      const question = named ? asked.question : '';
+      pairs = [{ question, answer: single ? single[1] : text }];
+    }
+  }
+
+  const line = (value) => oneLine(value, 400);
+  const rows = pairs.map((p) => (p.question
+    ? `· ${line(p.question)} → ${line(p.answer)}`
+    : `· ${line(p.answer)}`));
+  return {
+    head: `User answered the agent's question${pairs.length === 1 ? '' : 's'}:`,
+    rows,
+  };
+}
+
+const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 
 /**
  * The command list, grouped, for `/help` and for "no such command".

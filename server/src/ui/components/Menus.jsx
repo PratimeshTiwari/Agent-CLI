@@ -163,17 +163,15 @@ export function Menus({
             payload={activeMenu.payload}
             onAnswer={(entries) => {
               setActiveMenu(null);
+              // The answer is drawn by the `ask_question` row, from the result
+              // turn (`questionRows`). A row added here as well was the same
+              // answer twice, and the only copy a reprint or resume lost.
               agentLoop.answerQuestion(entries);
-              const summary = entries.length === 1
-                ? `You answered: ${entries[0].answer}`
-                : entries.map((e, i) => `${i + 1}. ${e.answer}`).join('  ');
-              setHistory(prev => [...prev, { role: 'system', content: `[System: ${summary}]` }]);
               setFocus(FOCUS_INPUT);
             }}
             onCancel={() => {
               setActiveMenu(null);
               agentLoop.cancelQuestion();
-              setHistory(prev => [...prev, { role: 'system', content: '[System: You dismissed the question. The agent will proceed on its own assumption.]' }]);
               setFocus(FOCUS_INPUT);
             }}
           />
@@ -259,8 +257,10 @@ export function Menus({
 
         {activeMenu?.type === 'plan_review' && (
           <Box flexDirection="column" borderStyle="single" borderColor={T.review} padding={1}>
-            <Text bold color={T.menu}>Implementation plan ready for review</Text>
-            <Text>The agent has created an implementation_plan.md artifact.</Text>
+            <Text bold color={T.menu}>Plan ready for review</Text>
+            <Text wrap="truncate">
+              {activeMenu.path ? `It is shown above, and saved at ${activeMenu.path}.` : 'The agent has written a plan.'}
+            </Text>
             <SelectInput
               items={[
                 { label: 'Proceed with Implementation Plan', value: 'accept' },

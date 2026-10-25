@@ -496,8 +496,10 @@ describe('describeArtifactWrite', () => {
 
   it('another artifact says which file', () => {
     assert.deepStrictEqual(
-      describeArtifactWrite('edit_file', { path: '.agent/artifacts/plan.md', edits: [] }),
-      { verb: 'plan.md updated', detail: '' },
+      // Not plan.md: the plan files are drawn as `● Updated plan` since v5.24
+      // (test/ui/plan-box.test.js).
+      describeArtifactWrite('edit_file', { path: '.agent/artifacts/walkthrough.md', edits: [] }),
+      { verb: 'walkthrough.md updated', detail: '' },
     );
   });
 });

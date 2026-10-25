@@ -1497,8 +1497,19 @@ export class AgentLoop {
       result = `User answered: ${answer}`;
     }
 
-    this.pendingQuestionResolve({ success: true, result });
+    /*
+     * The pairs, for the screen. The model reads `result`, which is unchanged;
+     * the transcript draws `· question → answer` from these, the way Claude
+     * Code does. A side panel answers with a bare string, so its question is
+     * the one `ask_question` recorded when it asked.
+     */
+    const answers = Array.isArray(answer)
+      ? answer.map((e) => ({ question: String(e?.question ?? ''), answer: String(e?.answer ?? '') }))
+      : [{ question: this.pendingQuestions?.[0]?.question || '', answer: String(answer ?? '') }];
+
+    this.pendingQuestionResolve({ success: true, result, answers });
     this.pendingQuestionResolve = null;
+    this.pendingQuestions = null;
   }
 
   /**
@@ -1515,8 +1526,10 @@ export class AgentLoop {
         success: true,
         result: 'The user dismissed the question without answering. Do not ask it again. '
           + 'Choose the most reasonable interpretation, state it explicitly as an assumption, and continue.',
+        declined: true,
       });
       this.pendingQuestionResolve = null;
+      this.pendingQuestions = null;
     }
   }
 
@@ -2713,6 +2726,9 @@ export class AgentLoop {
         // The answer is used either way; this keeps the record of which ones
         // arrived that way, so the row can eventually say so.
         ...(result.unstructured ? { unstructured: true } : {}),
+        // `ask_question`: what was asked and answered, so the row can say it.
+        ...(Array.isArray(result.answers) ? { answers: result.answers } : {}),
+        ...(result.declined ? { declined: true } : {}),
         timestamp: Date.now(),
       };
       this.conversationHistory.push(resultTurn);

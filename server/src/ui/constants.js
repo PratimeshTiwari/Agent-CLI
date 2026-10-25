@@ -41,7 +41,7 @@ const SLASH_COMMANDS = [
   { name: 'effort', desc: 'How hard to work, and which browser tab it expects', group: 'config' },
   { name: 'allowlist', desc: 'Manage auto-approved/blocked command rules', group: 'config' },
   { name: 'config', desc: 'Which model implements, and which one reviews it', group: 'config' },
-  { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not', group: 'work' },
+  { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not · `/plan show` previews the plan', group: 'work' },
   { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },
   { name: 'auto', desc: 'Auto Mode — safe edits apply automatically', group: 'work' },
   { name: 'workspace', desc: 'Where the agent works — and switch, which restarts', group: 'project' },

@@ -15,6 +15,7 @@ import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reserve
 import { resolveEffort } from '../core/effort.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
+import { planBoxRow, findPlanFile } from './plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript.js';
 import { expandPastes, attachedPastes } from './paste.js';
 import { drainChatQueue } from './chat-queue.js';
@@ -210,6 +211,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [pendingImage, setPendingImage] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
   const [planReviewReady, setPlanReviewReady] = useState(false);
+  // Bumped on the loop's busy → idle edge (see `onIdle` below). Declared up
+  // here because the plan-review effect waits on it too, and it runs first.
+  const [idleTick, setIdleTick] = useState(0);
   const [walkthroughReady, setWalkthroughReady] = useState(false);
   const [artifacts, setArtifacts] = useState({ task: null, review: null, walkthrough: null });
 
@@ -690,7 +694,15 @@ export function App({ agentLoop, wsServer, closing = false }) {
   useEffect(() => {
     if (isProcessing) return;
 
-    if (planReviewReady) {
+    /*
+     * Gated on the *loop* being idle as well, not only React's flag. The loop
+     * sends `tool_result` before `resolveDiff` writes the file, and React's copy
+     * can already be down then (prose with tool calls, v5.5) — so the review
+     * opened mid-turn, on a plan not yet on disk, and the box had nothing to
+     * show. Measured under the pty: menu up, "The agent has written a plan",
+     * no box. The idle edge (`onIdle`) lowers React's flag, which re-runs this.
+     */
+    if (planReviewReady && !agentLoop.isProcessing) {
       // Clear any verdict left over from a previous review before opening this
       // one. The companion writes plan-approval.json whenever its lenses are
       // clicked, including when no review is running; the poller below only
@@ -701,14 +713,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
         if (fs.existsSync(stale)) fs.unlinkSync(stale);
       } catch (e) { /* nothing to clear */ }
 
-      setActiveMenu({ type: 'plan_review' });
+      // The plan itself, in a box under its path, before the menu that asks
+      // about it — and nothing when there is no plan file (`ui/plan-box.js`).
+      const box = planBoxRow(agentLoop.workspace);
+      if (box) setHistory((prev) => [...prev, box]);
+      setActiveMenu({ type: 'plan_review', path: box?.path || null });
       setPlanReviewReady(false);
       setFocus(FOCUS_INPUT);
       try {
-        const implPlanPath = paths.artifactPath(agentLoop.workspace, 'implementation_plan.md');
-        const simplePlanPath = paths.artifactPath(agentLoop.workspace, 'plan.md');
-        const planPath = fs.existsSync(implPlanPath) ? implPlanPath : simplePlanPath;
-        exec(`"${agentLoop.editor || 'code'}" "${planPath}" || open "${planPath}" || xdg-open "${planPath}"`);
+        const planPath = findPlanFile(agentLoop.workspace);
+        if (planPath) exec(`"${agentLoop.editor || 'code'}" "${planPath}" || open "${planPath}" || xdg-open "${planPath}"`);
       } catch (e) {}
     }
 
@@ -772,7 +786,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // `history.length`: a finished tool now joins the transcript as it lands,
     // so this re-reads the checklist after every step — the status bar's
     // `tasks 3/5` would otherwise sit at its value from the start of the turn.
-  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length]);
+  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length, idleTick]);
 
   // The thinking line. One row, rewritten on a calm cadence — the old 75ms
   // typewriter plus a 10ms per-character reveal of the whole reply is what made
@@ -1010,7 +1024,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * loop's busy → idle edge, wherever it is written from. The busy flag comes
    * down with it — the turn is over, and a spinner must not outlive it.
    */
-  const [idleTick, setIdleTick] = useState(0);
   useEffect(() => agentLoop.onIdle?.(() => {
     setIsProcessing(false);
     setIdleTick((n) => n + 1);

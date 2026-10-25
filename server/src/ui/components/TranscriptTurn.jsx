@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -408,7 +408,57 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
      * it was reported: two `edit_file` rows on a turn that had said "don't
      * implement", both of them the checklist.
      */
+    /*
+     * An answered question, as Claude Code draws one: who answered, then each
+     * question with its answer under a `⎿`. One row while live — the frame is
+     * budgeted in rows — and the pairs once committed. `questionRows` says why
+     * this replaced the two half-rows it used to be.
+     */
+    if (act.toolName === 'ask_question' && act.result !== null && act.result !== undefined) {
+      const { head, rows } = questionRows(act.args, act.result, act.resultMsg || {});
+      if (isLive) {
+        return (
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{head.replace(/:$/, '')}</Text>
+            {rows.length > 1 ? <Text dimColor>{` · ${rows.length} questions`}</Text> : null}
+          </Text>
+        );
+      }
+      return (
+        <Box flexDirection="column" width="100%">
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{head}</Text>
+          </Text>
+          {rows.map((row, i) => (
+            <Text key={i} wrap="truncate">
+              <Text color={T.muted}>{i === 0 ? '  ⎿  ' : '     '}</Text>
+              <Text dimColor>{row}</Text>
+            </Text>
+          ))}
+        </Box>
+      );
+    }
     const artifact = act.success !== false && describeArtifactWrite(act.toolName, act.args);
+    // The plan file, said the way Claude Code says it — and how to read it,
+    // which is the half a `✓ plan.md updated` row never offered.
+    if (artifact?.plan) {
+      return (
+        <Box flexDirection="column" width="100%">
+          <Text wrap="truncate">
+            <Text color={T.success}>{'● '}</Text>
+            <Text bold>{artifact.verb}</Text>
+          </Text>
+          {!isLive ? (
+            <Text wrap="truncate">
+              <Text color={T.muted}>{'  ⎿  '}</Text>
+              <Text dimColor>/plan show to preview</Text>
+            </Text>
+          ) : null}
+        </Box>
+      );
+    }
     if (artifact) {
       return (
         <Text wrap="truncate">
@@ -512,6 +562,31 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
             <Text dimColor wrap="wrap">{clampForDisplay(act.raw, limit.lines, limit.chars)}</Text>
           </Box>
         )}
+      </Box>
+    );
+  }
+
+  /*
+   * The plan, in a box, under the path it lives at (`ui/plan-box.js`).
+   *
+   * The box needs an explicit width: inside `<Static>` Yoga sizes a box to its
+   * content, which is the Banner trap — and the markdown is rendered to the
+   * width *inside* the border and padding, or every line wraps one column late.
+   * `TurnRow` indents the row by two, which is the first of the subtractions.
+   */
+  if (act.type === 'plan_box') {
+    const boxWidth = Math.max(20, width - 2);
+    if (isLive) {
+      return (
+        <Text dimColor wrap="truncate">Plan file: {act.path}</Text>
+      );
+    }
+    return (
+      <Box flexDirection="column" width={boxWidth}>
+        <Text dimColor wrap="truncate">Plan file: {act.path}</Text>
+        <Box borderStyle="round" borderColor={T.review} paddingX={1} width={boxWidth}>
+          <Text wrap="wrap">{renderMarkdown(act.content, boxWidth - 4)}</Text>
+        </Box>
       </Box>
     );
   }

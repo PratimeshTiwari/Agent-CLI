@@ -1,0 +1,93 @@
+/**
+ * The plan in a box, and the row that says it changed.
+ *
+ * Asked for with a screenshot of Claude Code: `Plan file: <path>` above the
+ * plan in a box, **nothing when there is no plan file**, and each write drawn
+ * as `● Updated plan ⎿ /plan show to preview`.
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { planBoxRow, findPlanFile } from '../../src/ui/plan-box.js';
+import { describeArtifactWrite, parseTurnActions, isPlanFile } from '../../src/ui/transcript.js';
+
+function workspace() {
+  const ws = mkdtempSync(join(tmpdir(), 'plan-box-'));
+  mkdirSync(join(ws, '.agent', 'artifacts'), { recursive: true });
+  return ws;
+}
+
+describe('planBoxRow', () => {
+  test('no plan file: no row', () => {
+    const ws = workspace();
+    assert.equal(planBoxRow(ws), null);
+    assert.equal(findPlanFile(ws), null);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('an empty plan file: no row', () => {
+    const ws = workspace();
+    writeFileSync(join(ws, '.agent', 'artifacts', 'implementation_plan.md'), '  \n');
+    assert.equal(planBoxRow(ws), null);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('a plan: the row carries the path relative to the workspace and the text', () => {
+    const ws = workspace();
+    writeFileSync(join(ws, '.agent', 'artifacts', 'implementation_plan.md'), '# Plan\n\n1. do it\n');
+    const row = planBoxRow(ws);
+    assert.equal(row.kind, 'plan_box');
+    assert.equal(row.isLocal, true);
+    assert.equal(row.path, join('.agent', 'artifacts', 'implementation_plan.md'));
+    assert.equal(row.content, '# Plan\n\n1. do it');
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('plan.md is used when there is no implementation_plan.md', () => {
+    const ws = workspace();
+    writeFileSync(join(ws, '.agent', 'artifacts', 'plan.md'), 'small plan');
+    assert.equal(planBoxRow(ws).path, join('.agent', 'artifacts', 'plan.md'));
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('implementation_plan.md wins when both exist, as plan review always chose', () => {
+    const ws = workspace();
+    writeFileSync(join(ws, '.agent', 'artifacts', 'plan.md'), 'old');
+    writeFileSync(join(ws, '.agent', 'artifacts', 'implementation_plan.md'), 'new');
+    assert.equal(planBoxRow(ws).content, 'new');
+    rmSync(ws, { recursive: true, force: true });
+  });
+});
+
+describe('the transcript', () => {
+  test('a plan_box row is drawn as a plan, and is not counted as work', () => {
+    const turn = {
+      id: 1,
+      steps: [{ role: 'assistant', isLocal: true, kind: 'plan_box', path: 'p.md', content: '# P' }],
+    };
+    const { items, actions, finalMessages } = parseTurnActions(turn);
+    assert.equal(items[0].type, 'plan_box');
+    assert.equal(items[0].content, '# P');
+    assert.equal(actions.length, 0, '"Worked for … · 1 action" would count a document as work');
+    assert.equal(finalMessages.length, 0, 'and it must not be drawn a second time as prose');
+  });
+
+  test('writing the plan reads "Wrote plan", editing it "Updated plan"', () => {
+    const p = '.agent/artifacts/implementation_plan.md';
+    assert.deepEqual(describeArtifactWrite('create_file', { path: p, content: '# x' }),
+      { verb: 'Wrote plan', detail: '', plan: true });
+    assert.deepEqual(describeArtifactWrite('edit_file', { path: p, edits: [] }),
+      { verb: 'Updated plan', detail: '', plan: true });
+  });
+
+  // Negative controls: the plan row must not spread to other artifacts, or to a
+  // file merely *named* like a plan outside the artifacts directory.
+  test('other artifacts and other plan.md files are not plans', () => {
+    assert.equal(describeArtifactWrite('edit_file', { path: '.agent/artifacts/task.md', edits: [] }).plan,
+      undefined);
+    assert.equal(describeArtifactWrite('edit_file', { path: 'docs/plan.md', edits: [] }), null);
+    assert.equal(isPlanFile('docs/notes.md'), false);
+  });
+});
