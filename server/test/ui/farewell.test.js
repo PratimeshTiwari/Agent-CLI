@@ -113,3 +113,13 @@ test('exit: erase the live frame, unmount, then the command — and never clear 
   assert.deepEqual(codes, [0], 'a second ctrl+c during shutdown does not print it twice');
   _resetFarewell();
 });
+
+test('exit with nothing to resume: one blank row, no words', async () => {
+  _resetFarewell();
+  registerInk({ clear() {}, unmount() {} });
+  const written = [];
+  // Only a slash command was run: rows on screen, but no conversation.
+  await exitWithFarewell({ agentLoop: { sessionStore: new SessionStore(ws()) }, out: { write: (s) => written.push(s) }, exit: () => {} });
+  assert.deepEqual(written, ['\n'], 'the prompt sat flush against the last row');
+  _resetFarewell();
+});

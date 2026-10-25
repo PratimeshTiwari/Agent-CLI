@@ -66,6 +66,27 @@ function Gap({ show }) {
   return show ? <Text> </Text> : null;
 }
 
+/** The roles a person meets most, in the order a turn meets them. */
+const SWATCH_ROLES = ['accent', 'success', 'danger', 'attention', 'strict'];
+
+/**
+ * A theme's colours, beside its name in the list, on the background the
+ * palette was designed for — so `Light` shows its dark inks on white even in a
+ * dark terminal, which is the comparison a person is actually making. Costs no
+ * rows, so it is there at every height; the preview box under the list is not.
+ */
+function Swatch({ name }) {
+  const palette = PALETTES[name] || {};
+  if (name === 'mono') return <Text dimColor>plain text — bold and dim only</Text>;
+  const bg = PALETTE_INFO[name]?.background || undefined;
+  return (
+    <Text backgroundColor={bg}>
+      {' '}
+      {SWATCH_ROLES.map((role) => <Text key={role} color={palette[role] ?? undefined}>■ </Text>)}
+    </Text>
+  );
+}
+
 export function Onboarding({ agentLoop, wsServer, onDone }) {
   const { rows, columns } = useTerminalSize();
   const layout = onboardingLayout(rows);
@@ -76,7 +97,7 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
   const [enteredAt, setEnteredAt] = useState(0);
   const [originalTheme] = useState(themeName);
   const [themeAt, setThemeAt] = useState(themeName);
-  const [name, setName] = useState(agentLoop?.agentName || '');
+  const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [status, setStatus] = useState(() => extensionStatus(wsServer));
   const [copied, setCopied] = useState(null);
@@ -195,6 +216,13 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
         <SelectInput
           initialIndex={Math.max(0, names.indexOf(originalTheme))}
           items={names.map((n) => ({ label: PALETTE_INFO[n].label.padEnd(labelWidth), value: n }))}
+          itemComponent={({ isSelected, label, value }) => (
+            <Text wrap="truncate">
+              <Text color={isSelected ? (T.menu ?? undefined) : undefined} bold={isSelected}>{label}</Text>
+              {'  '}<Swatch name={value} />
+              {value === originalTheme ? <Text dimColor>{'  current'}</Text> : null}
+            </Text>
+          )}
           onHighlight={(item) => { setTheme(item.value); setThemeAt(item.value); }}
           onSelect={(item) => {
             setTheme(item.value);
@@ -221,6 +249,20 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
             </Text>
           </Box>
         )}
+        {layout.themeSample && (
+          /* Too short for the box: the same idea in two rows. */
+          <Box flexDirection="column" marginTop={spaced ? 1 : 0}>
+            <Text wrap="truncate">
+              {'  '}<Text color={T.success ?? undefined}>⏺ </Text><Text bold>edit_file</Text>
+              <Text color={T.success ?? undefined}> +1 </Text><Text color={T.danger ?? undefined}>−1</Text>
+              {'   '}<Text color={T.danger ?? undefined}>✗ </Text><Text bold>run_command</Text><Text color={T.danger ?? undefined}> exit 1</Text>
+            </Text>
+            <Text wrap="truncate">
+              {'  '}<Text color={T.accent ?? undefined}>{FRAMES[tick % FRAMES.length]} Running npm test…</Text>
+              {'   '}<Text color={T.plan ?? undefined}>⏸ plan</Text>{'  '}<Text color={T.auto ?? undefined}>⏵⏵ auto</Text>
+            </Text>
+          </Box>
+        )}
         <Gap show={spaced} />
         <Hint>↑↓ preview · enter choose · esc keep current · later: /theme</Hint>
       </Box>
@@ -228,18 +270,29 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
   }
 
   if (screen === 'name') {
-    const shown = name.trim() || 'Agent CLI';
+    /*
+     * The field starts empty, with the name it will keep written into the
+     * placeholder. It used to start filled with the current name, which read
+     * as a label rather than something to type into — reported with a
+     * screenshot of `❯ AGENT CLI` and no sign it could be changed.
+     */
+    const current = agentLoop?.agentName || 'Agent CLI';
+    const shown = name.trim() || current;
     return (
       <Box flexDirection="column" width={width}>
         <Header step={step} since={since} columns={columns} />
         <Gap show={spaced} />
         <Text bold wrap="truncate">What should your agent be called?</Text>
+        <Text dimColor wrap="truncate">
+          {'Default: Agent CLI'}{agentLoop?.agentName ? `  ·  now: ${agentLoop.agentName}` : ''}
+        </Text>
         <Gap show={spaced} />
-        <Box>
+        {/* Ruled like the main prompt, so it reads as a place to type. */}
+        <Box borderStyle="single" borderLeft={false} borderRight={false} borderColor={T.accent ?? undefined}>
           <Text color={T.accent ?? undefined} bold>{'❯ '}</Text>
           <TextInput
             value={name}
-            placeholder="Agent CLI"
+            placeholder={`Type a name, or press enter to keep ${current}`}
             onChange={(v) => { setName(v); setNameError(''); }}
             onSubmit={saveName}
           />
@@ -254,7 +307,7 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
           </>
         )}
         <Gap show={spaced} />
-        <Hint>enter save · esc keep {agentLoop?.agentName ? `"${agentLoop.agentName}"` : 'the default'} · later: /name</Hint>
+        <Hint>enter save · esc keep {`"${current}"`} · later: /name</Hint>
       </Box>
     );
   }

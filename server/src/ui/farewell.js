@@ -109,7 +109,10 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
   // unmount — whose final render then has nothing left to write.
   try { ink?.clear?.(); } catch { /* going anyway */ }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  try { out.write(farewellFor(agentLoop, { dim: wantsDim(out) })); } catch { /* going anyway */ }
+  // With nothing to resume, one blank row and nothing else: the shell prompt
+  // sat flush against the last transcript row, which read as cramped next to
+  // Claude Code, which always leaves that row.
+  try { out.write(farewellFor(agentLoop, { dim: wantsDim(out) }) || '\n'); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }

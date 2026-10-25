@@ -106,10 +106,15 @@ export function onboardingLayout(rows = 24) {
   const compact = room < 16;
   // Fixed rows per screen, with and without the blank spacers.
   // The splash always fits (6 rows compact, 8 spaced) and has nothing to drop.
-  const fixed = compact ? { theme: 10, name: 5 } : { theme: 14, name: 9 };
+  // theme: header, title, six palettes, blurb, hint (+ four spacers).
+  // name: header, title, default, the ruled field (3), count, hint (+ three).
+  const fixed = compact ? { theme: 10, name: 8 } : { theme: 13, name: 11 };
+  const themePreview = room >= fixed.theme + (compact ? 7 : 8);
   return {
     compact,
-    themePreview: room >= fixed.theme + (compact ? 6 : 7),
+    themePreview,
+    // Too short for the preview box: a two-row sample, if even that fits.
+    themeSample: !themePreview && room >= fixed.theme + (compact ? 2 : 3),
     // The banner header the name will appear in: four rows, plus a spacer.
     namePreview: room >= fixed.name + (compact ? 4 : 5),
   };
