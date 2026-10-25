@@ -1,6 +1,11 @@
 /**
  * Leaving the CLI: keep the session on screen and say how to come back.
  *
+ * **It clears again (2026-10-25, later the same day):** *"it should show the
+ * resume conversation line and clear the agent chat … exactly how claude code
+ * closes the conversation and none if no convo"*. See `exitText`. The two
+ * paragraphs below are the version that kept the transcript.
+ *
  * **It no longer clears (2026-10-25).** It did, on request, and the request
  * changed on seeing it: *"our agent just clears the terminal … unlike Claude
  * where the work is visible"*. Claude Code erases only its own prompt box and
@@ -96,6 +101,24 @@ export function farewellFor(agentLoop, { cwd = process.cwd(), dim = false } = {}
   return farewellText(id, { workspace: agentLoop?.workspace, cwd, dim });
 }
 
+/** `clear`: screen, scrollback, cursor home. */
+export const CLEAR_SCREEN = '\x1b[2J\x1b[3J\x1b[H';
+
+/**
+ * What exit writes (2026-10-25, the owner's third call on this): the agent's
+ * screen goes, the way Claude Code closes, and the resume command is all that
+ * is left at the top — or nothing at all when there was no conversation.
+ * Cleared only into a terminal; a pipe or a file gets the footer alone, since
+ * escape codes there are garbage and there is no screen to give back.
+ */
+export function exitText(agentLoop, out = process.stdout) {
+  const tty = Boolean(out?.isTTY);
+  const footer = farewellFor(agentLoop, { dim: wantsDim(out) });
+  // The footer's leading blank row separates it from a transcript; on a
+  // cleared screen there is nothing above it to separate from.
+  return tty ? CLEAR_SCREEN + footer.replace(/^\n/, '') : footer;
+}
+
 let leaving = false;
 
 /**
@@ -109,10 +132,7 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
   // unmount — whose final render then has nothing left to write.
   try { ink?.clear?.(); } catch { /* going anyway */ }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  // With nothing to resume, one blank row and nothing else: the shell prompt
-  // sat flush against the last transcript row, which read as cramped next to
-  // Claude Code, which always leaves that row.
-  try { out.write(farewellFor(agentLoop, { dim: wantsDim(out) }) || '\n'); } catch { /* going anyway */ }
+  try { out.write(exitText(agentLoop, out)); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }

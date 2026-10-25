@@ -1190,10 +1190,11 @@ extension adds the command with nothing bound, and the shortcut silently does no
 the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
-**Exit keeps the transcript and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; no clear
-since v5.20).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
+**Exit clears and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; kept the transcript in
+v5.20–v5.22, cleared again in v5.23 on the owner's call — screen and scrollback, TTY only, nothing
+at all when there was no conversation).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
 (erases only the live frame and syncs its log, so the final render on unmount writes nothing),
-unmounts, then prints Claude Code's footer (v5.21: `Resume this session with:` and the command on
+unmounts, clears screen and scrollback, then prints Claude Code's footer at the top (v5.21: `Resume this session with:` and the command on
 a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
 no conversation. Dim is gated on a TTY, not on `NO_COLOR`, as the `mono` palette is. The id is
 `SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
