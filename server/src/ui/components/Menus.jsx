@@ -7,7 +7,7 @@ import { rowsFromPatch } from '../diff-preview.js';
 import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
-import { panelRoom, wrapLines, cutStart } from '../panel.js';
+import { panelRoom, wrapLines, cutStart, settingTone } from '../panel.js';
 import { sliderLayout } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
@@ -257,7 +257,7 @@ export function Menus({
                   <React.Fragment key={id}>
                     {i > 0 ? '   ' : ' '}
                     {id === activeMenu.tab
-                      ? <Text bold inverse>{` ${label} `}</Text>
+                      ? <Text bold inverse color={T.menu}>{` ${label} `}</Text>
                       : <Text dimColor>{` ${label} `}</Text>}
                   </React.Fragment>
                 ))}
@@ -678,7 +678,7 @@ export function Menus({
                 <React.Fragment key={name}>
                   {i > 0 ? '   ' : ' '}
                   {name === group && !query
-                    ? <Text bold inverse>{` ${name} `}</Text>
+                    ? <Text bold inverse color={T.menu}>{` ${name} `}</Text>
                     : <Text dimColor>{` ${name} `}</Text>}
                 </React.Fragment>
               ))}
@@ -709,6 +709,7 @@ export function Menus({
                     // the list where it has the whole line.
                     label: row.label,
                     detail: oneLine(row.value, VALUE_MAX),
+                    tone: settingTone(row),
                     value: row.run || '',
                     key: row.label,
                   }))}

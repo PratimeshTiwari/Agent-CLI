@@ -3327,7 +3327,9 @@ export class AgentLoop {
     const meter = '▰'.repeat(on) + '▱'.repeat(cells - on);
     const edits = [pending && `${pending} pending`, applied && `${applied} applied`].filter(Boolean);
     const home = os.homedir();
-    const where = this.workspace.startsWith(`${home}/`) ? `~${this.workspace.slice(home.length)}` : this.workspace;
+    const tilde = this.workspace.startsWith(`${home}/`) ? `~${this.workspace.slice(home.length)}` : this.workspace;
+    // Cut from the left, like the source labels below: the end names the repo.
+    const where = tilde.length <= 80 ? tilde : `…${tilde.slice(-79)}`;
     const rows = [
       ['tokens', `~${k(used)} of ${k(limit)} · everything sent to the tab`],
       ['turns', `${turns}${edits.length ? ` · edits ${edits.join(', ')}` : ''}`],
@@ -3373,7 +3375,7 @@ export class AgentLoop {
     const sourceLines = sources.length
       ? ['', '', '**Feeding the prompt**', '', ...sources.map((r, i) => {
         const head = `  ${mark(r.state)} ${labels[i].padEnd(width)}  `;
-        const detail = r.state === 'loaded' ? r.detail : `${r.state} — ${r.detail}`;
+        const detail = r.state === 'loaded' ? r.detail : `${r.state} · ${r.detail}`;
         const room = Math.max(12, LINE_MAX - head.length);
         return head + (detail.length <= room ? detail : `${detail.slice(0, room - 1)}…`);
       })]
