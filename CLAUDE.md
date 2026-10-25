@@ -1684,6 +1684,27 @@ ago.
   The later `pollNow()` 401 at `github-poller.js:147` always worked; only the
   startup one was unreachable.
 
+- **The startup look is Look A (v5.22, chosen 2026-10-25 from
+  `.agent/artifacts/plans/2026-10-25-startup-look.md`).** A four-row `❯` mark in block characters
+  with name, byline, workspace and `/help` beside it (`Banner.jsx` `Header`), replacing six rows of
+  figlet — `figfont.js`, `banner-text.js` and `Standard.flf` are deleted. The input is ruled above
+  and below with no sides (`borderLeft/Right={false}`), so a drag-select no longer copies `│`; same
+  three rows. The mode line carries Claude Code's glyphs (`MODE_GLYPHS`: `⏸` `⏵⏵` `⏹`), which v5.20
+  had removed as rendering badly — chosen back knowingly; the plan's M3 set is the fallback. The
+  header's text column needs an **explicit width**: inside `<Static>` Yoga sizes it to content and
+  `wrap="truncate"` then wraps instead. `/copy` (same release) copies the last reply's markdown.
+
+- **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
+  `ui/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
+  (Load-unpacked steps with this checkout's real `extension/` path; spinner → `✔ Connected`).
+  `Root` in `cli-ui.jsx` switches — never both mounted — so the banner App commits to `<Static>`
+  has the chosen theme and name. "First" is `welcomed` absent from `~/.agent/settings.json` and an
+  empty `~/.agent/workspaces/`; it is `'pending'` until setup ends (a ctrl+c halfway shows it
+  again) and an install with history is marked `true` unseen. `main.js` must decide before
+  `new AgentLoop` — the session store creates `workspaces/<slug>` — and `welcome.test.js` pins it.
+  The screens are live frames: `onboardingLayout` drops the theme preview and the name preview, then
+  spacing by height. Pty: 0 clears at 12, 16, 20, 30 rows.
+
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80

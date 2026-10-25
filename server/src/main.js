@@ -33,6 +33,8 @@ import { TaskManager } from './core/task-manager.js';
 import { logError } from './core/error-log.js';
 import { recoverMissingDependency, explainFailure, clearAttempt } from './core/dep-recovery.js';
 import { RESTART_EXIT_CODE } from './core/restart.js';
+import { loadUserSettings, saveUserSettings } from './core/user-settings.js';
+import { firstRunState } from './ui/welcome.js';
 
 /**
  * This file's own directory, at module scope.
@@ -171,6 +173,12 @@ async function main() {
   }
 
   const configHome = ensureConfigDir();
+
+  // Before the loop exists: its session store creates this workspace's folder
+  // under workspaces/, and an empty workspaces/ is what says "first start".
+  // 'pending' until setup ends, so a ctrl+c halfway brings it back next time.
+  const firstRun = firstRunState({ settings: loadUserSettings(), workspacesDir: resolve(configHome, 'workspaces') });
+  if (firstRun.write !== null) saveUserSettings({ welcomed: firstRun.write });
   
   // Verify workspace exists
   if (!existsSync(config.workspace)) {
@@ -308,7 +316,7 @@ async function main() {
 
   // Start CLI UI
   const { CliUI } = await import('./ui/cli-ui.jsx');
-  const cli = new CliUI(agentLoop, wsServer);
+  const cli = new CliUI(agentLoop, wsServer, { welcome: firstRun.show });
   cli.start();
 
   /**

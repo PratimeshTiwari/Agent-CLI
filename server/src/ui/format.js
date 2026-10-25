@@ -441,7 +441,8 @@ export function shortenPath(p, max) {
   if (p.length <= max) return p;
   const parts = p.split('/');
   if (parts.length < 3) return `…${p.slice(-(max - 1))}`;
-  const head = parts[0] || '/';
+  // '' for an absolute path, so it comes out `/…/tail` — `'/'` here gave `//…/`.
+  const head = parts[0];
   let tail = parts[parts.length - 1];
   for (let i = parts.length - 2; i > 0; i--) {
     const next = `${parts[i]}/${tail}`;
@@ -969,16 +970,23 @@ export function contextMeter(pct, cells = 5) {
 }
 
 /**
- * The mode, said the way Claude Code says it, for the status line:
- * `auto mode on` / `plan mode on` / `strict plan mode on`.
- * Replaced a label on the input border, which read as floating above the box.
- * Plain words: the `⏵⏵` / `⏸` glyphs Claude Code uses render as a thick
- * `▮▮` in common terminal fonts and were reported as looking bad.
+ * The mode, said the way Claude Code says it, for the status line, with
+ * Claude Code's glyphs: `⏸ plan mode on`, `⏵⏵ auto mode on`, `⏹ strict plan
+ * mode on`. Replaced a label on the input border, which read as floating above
+ * the box.
+ *
+ * v5.20 dropped the glyphs — `⏸` drew as a thick `▮▮` in the owner's font and
+ * was reported as looking bad. They came back by choice on 2026-10-25 (Look A
+ * with M2, `.agent/artifacts/plans/2026-10-25-startup-look.md`), risk known.
+ * If they are rejected again, the plan's M3 set (`‖`, `⏵⏵`, `■`) has no emoji
+ * forms; change `MODE_GLYPHS` only.
  */
+export const MODE_GLYPHS = { plan: '⏸', auto: '⏵⏵', strict: '⏹' };
+
 export function modeLine(mode) {
-  if (mode === 'auto') return 'auto mode on';
-  if (mode === 'strict') return 'strict plan mode on';
-  return 'plan mode on';
+  if (mode === 'auto') return `${MODE_GLYPHS.auto} auto mode on`;
+  if (mode === 'strict') return `${MODE_GLYPHS.strict} strict plan mode on`;
+  return `${MODE_GLYPHS.plan} plan mode on`;
 }
 
 /** How many output lines a running command shows under its row. */
@@ -1017,4 +1025,24 @@ export function elapsedLabel(ms) {
   const s = Math.max(0, Math.floor((ms || 0) / 1000));
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * The last thing the agent said, as the markdown it wrote — what `/copy` puts
+ * on the clipboard. The rendered transcript is ANSI and wrapped, so a drag-
+ * select over a long reply copies escape-free text broken at the terminal's
+ * width; this is the source instead. Skips a reply that failed to parse (it is
+ * the model's broken JSON, not an answer) and empty prose.
+ *
+ * @param {object[]} history - the loop's `conversationHistory`
+ * @returns {string|null}
+ */
+export function lastReply(history = []) {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const t = history[i];
+    if (t?.role === 'agent' && !t.parseError && typeof t.content === 'string' && t.content.trim()) {
+      return t.content.trim();
+    }
+  }
+  return null;
 }

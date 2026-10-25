@@ -78,7 +78,14 @@ cd ~/code/your-project
 agent
 ```
 
-The status line shows the mode — `plan mode on (shift+tab to cycle)` — and the input box says so if
+![First-start setup: choosing a theme with a live preview](docs/images/setup.svg)
+
+The very first start walks you through setup, one screen per step: pick a theme (previewed live
+as you move), name the agent (the banner previewed as you type), and connect Chrome (the exact folder
+to load, and a spinner that turns into **Connected** when the extension dials in). Enter goes on,
+esc skips. Later: `/theme` and `/name`.
+
+The status line shows the mode — `⏸ plan mode on (shift+tab to cycle)` — and the input box says so if
 the extension is not connected. Type a request and press Enter. To pick up where you left off:
 `agent --continue`, or `agent --resume <id>` (printed under the transcript when you exit).
 
@@ -86,8 +93,8 @@ the extension is not connected. Type a request and press Enter. To pick up where
 
 ### Modes — `shift+tab` cycles them
 
-The status line says which one is on, the way Claude Code does: `plan mode on`,
-`auto mode on`, `strict plan mode on`. The input box's border takes the mode's colour.
+The status line says which one is on, the way Claude Code does: `⏸ plan mode on`,
+`⏵⏵ auto mode on`, `⏹ strict plan mode on`. The rules above and below the input take the mode's colour.
 
 | Mode | Edits | Commands |
 | --- | --- | --- |
@@ -125,6 +132,7 @@ long pastes collapse to a marker. `/image` attaches an image (bare for the clipb
 | `/effort low·medium·high` | how hard to work; switches the Gemini model picker to match |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
+| `/copy` | the last reply, as markdown, to the clipboard |
 | `/compact` | summarise the conversation now (it also happens on its own, with a progress bar) |
 | `/history` | past conversations — pick one to reopen |
 | `/settings` | everything that is set, on one page |

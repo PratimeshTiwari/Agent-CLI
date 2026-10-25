@@ -28,6 +28,7 @@ test('the summary row truncates rather than wraps', () => {
 test('a path keeps its project and its file name', () => {
   assert.equal(shortenPath('apps/billing/app/models/invoices/line_item.rb', 30), 'apps/…/invoices/line_item.rb');
   assert.equal(shortenPath('short/path.rb', 30), 'short/path.rb');
+  assert.equal(shortenPath('/private/tmp/scratch/harness/uiws', 24), '/…/scratch/harness/uiws', 'not //…/');
   assert.ok(shortenPath('apps/billing/app/models/invoices/line_item.rb', 12).length <= 12);
 });
 
@@ -39,9 +40,9 @@ test('the queued row says how to take a prompt back', () => {
 
 test('the mode is said in the status line, Claude Code style', async () => {
   const { modeLine } = await import('../../src/ui/format.js');
-  assert.equal(modeLine('auto'), 'auto mode on');
-  assert.equal(modeLine('plan'), 'plan mode on');
-  assert.equal(modeLine('strict'), 'strict plan mode on');
+  assert.equal(modeLine('auto'), '⏵⏵ auto mode on');
+  assert.equal(modeLine('plan'), '⏸ plan mode on');
+  assert.equal(modeLine('strict'), '⏹ strict plan mode on');
   assert.match(src('ui/App.jsx'), /modeLine\(mode\)/);
   assert.match(src('ui/App.jsx'), /\(shift\+tab to cycle\)/);
   assert.doesNotMatch(src('ui/components/InputBar.jsx'), /borderTop=\{false\}/, 'the label on the border is gone');

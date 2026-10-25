@@ -8,6 +8,8 @@ import { createSkill, listSkills, skillSearchPath } from '../../core/skills.js';
 import { describeDestructive } from '../destructive.js';
 import { planReset, applyReset } from '../../core/reset.js';
 import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
+import { canCopy, copyToClipboard } from '../clipboard.js';
+import { lastReply } from '../format.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
 import { listCommandDays, readCommands } from '../../core/command-log.js';
@@ -519,6 +521,30 @@ export async function handleSlashCommand(query, {
      * not the repo. The transcript is reprinted in the new colours — committed
      * rows belong to the terminal and cannot be recoloured in place.
      */
+    /*
+     * The last reply, as markdown, to the clipboard. Asked for on 2026-10-25
+     * as the one piece of the copy/paste plan worth building: drag-select is
+     * the terminal's and works, but over a long reply it copies wrapped,
+     * indented lines. ctrl+y beside it copies only the last code block.
+     */
+    if (command === 'copy') {
+      const say = (reply) => setHistory((prev) => [...prev,
+        { role: 'user', content: query, isLocal: true },
+        { role: 'assistant', content: reply, isLocal: true }]);
+      const text = lastReply(agentLoop.conversationHistory);
+      if (!text) {
+        say('📋 No reply to copy yet.');
+      } else if (!canCopy()) {
+        say('📋 Nothing here can reach the clipboard — install `xclip` or `wl-copy`.');
+      } else {
+        const ok = await copyToClipboard(text);
+        const lines = text.split('\n').length;
+        say(ok ? `📋 Copied the last reply — ${lines} line${lines === 1 ? '' : 's'}.` : '📋 The clipboard command failed.');
+      }
+      setIsProcessing(false);
+      return;
+    }
+
     if (command === 'theme') {
       if (args.length === 0) {
         setActiveMenu({ type: 'theme', original: themeName(), at: themeName() });
