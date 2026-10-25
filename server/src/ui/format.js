@@ -206,7 +206,7 @@ const dedent = (code, indent) => (indent
 /**
  * The fenced code blocks in a reply, in the order they appear.
  *
- * Exported because `ctrl+y` copies the last one, and reaching into a rendered
+ * Exported because `/copy code` copies the last one, and reaching into a rendered
  * string to find it again would mean parsing the rules back out of prose that
  * may legitimately contain them.
  *
@@ -1098,6 +1098,29 @@ export function elapsedLabel(ms) {
  * @param {object[]} history - the loop's `conversationHistory`
  * @returns {string|null}
  */
+/**
+ * The last code block the agent wrote, for `/copy code` (which replaced
+ * `ctrl+y`, 2026-10-26: a command is something `/` lists, a chord is something
+ * you have to remember).
+ *
+ * Searched backwards through the agent's replies, newest block first, because
+ * a reply is commonly followed by tool rounds with no code in them. A fenced
+ * tool call is skipped: the reply's raw text still holds it, and copying the
+ * call the agent made instead of the code it showed would read as broken.
+ *
+ * @returns {{lang: string, code: string} | null}
+ */
+export function lastCodeBlock(history = []) {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const t = history[i];
+    if (t?.role !== 'agent' || t.parseError || typeof t.content !== 'string') continue;
+    const blocks = extractCodeBlocks(t.content)
+      .filter((b) => !(/^json$/i.test(b.lang) && /"name"\s*:/.test(b.code)));
+    if (blocks.length) return blocks[blocks.length - 1];
+  }
+  return null;
+}
+
 export function lastReply(history = []) {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const t = history[i];

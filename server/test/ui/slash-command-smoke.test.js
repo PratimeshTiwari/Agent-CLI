@@ -144,6 +144,7 @@ describe('arguments do not break anything', () => {
     '/open', '/open nope.txt',
     '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools',
     '/name Ada', '/name',
+    '/subagents', '/subagents off', '/subagents on', '/config', '/copy code', '/shell', '/terminal',
     '/memory on', '/memory off',
     '/allowlist', '/allowlist add ls',
     '/effort pro', '/effort nonsense',

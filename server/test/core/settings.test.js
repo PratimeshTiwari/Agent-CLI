@@ -19,7 +19,10 @@ test('describeSettings', async (t) => {
   await t.test('reports the values actually in force', () => {
     const rows = describeSettings(loop());
     assert.equal(row(rows, 'Effort').value, 'high');
-    assert.equal(row(rows, 'Main model').value, 'gemini');
+    // Gone (v5.24): there is one model, and `/config main` had set nothing
+    // since the second provider was removed.
+    assert.equal(row(rows, 'Main model'), undefined);
+    assert.equal(row(rows, 'Subagents').run, '/subagents');
     assert.equal(row(rows, 'Edit approval').value, 'plan');
     assert.equal(row(rows, 'Memory').value, 'on');
   });

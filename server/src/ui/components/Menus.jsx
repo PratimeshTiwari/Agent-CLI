@@ -438,7 +438,7 @@ export function Menus({
         */}
         {activeMenu?.type === 'config' && (() => {
           const on = agentLoop.subagentsEnabled;
-          const run = async (args) => { await applyAndReturn(activeMenu, 'config', args); };
+          const run = async (args) => { await applyAndReturn(activeMenu, 'subagents', args); };
 
           return (
             <Box flexDirection="column" borderStyle="single" borderColor={T.menu} padding={1}>
@@ -607,7 +607,7 @@ export function Menus({
                       setActiveMenu({ type: 'effort', returnTo: back });
                       return;
                     }
-                    if (item.value === '/config') {
+                    if (item.value === '/subagents') {
                       setActiveMenu({ type: 'config', returnTo: back });
                       return;
                     }

@@ -1775,6 +1775,10 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   means adding it to `HOTKEYS`, not to `useKeyBindings`. **Never a chord another app owns system-wide:** the task
   list was on ctrl+g until 10-24, and Chrome's Gemini panel takes Ctrl+G on macOS before the
   terminal sees it — pressing it opened Chrome. It is ctrl+o now.
+  **A retired chord stays in `HOTKEYS` (v5.24).** `ctrl+t` became `/shell` and `ctrl+y` became
+  `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
+  hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
+  saying where the thing went.
 - **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
   bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
   forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps

@@ -9,7 +9,7 @@ import { describeDestructive } from '../destructive.js';
 import { planReset, applyReset } from '../../core/reset.js';
 import { canReadClipboardImage, readClipboardImage } from '../clipboard-image.js';
 import { canCopy, copyToClipboard } from '../clipboard.js';
-import { lastReply } from '../format.js';
+import { lastReply, lastCodeBlock } from '../format.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../core/error-log.js';
 import { listPlans } from '../../core/plan-archive.js';
 import { planBoxRow } from '../plan-box.js';
@@ -107,6 +107,7 @@ export async function handleSlashCommand(query, {
   setIsProcessing,
   setPendingImage,
   pendingImage,
+  openShell,
   confirmed = false,
 }) {
     const parts = query.slice(1).split(/\s+/);
@@ -130,7 +131,7 @@ export async function handleSlashCommand(query, {
             ...warning,
             onConfirm: () => handleSlashCommand(query, {
               agentLoop, wsServer, resetScreen, setActiveMenu, setHistory,
-              setIsProcessing, setPendingImage, confirmed: true,
+              setIsProcessing, setPendingImage, openShell, confirmed: true,
             }),
           },
         });
@@ -153,12 +154,10 @@ export async function handleSlashCommand(query, {
           '### ⌨️  Keys',
           '  shift+tab   plan → auto → strict',
           '  ctrl+e      expand or collapse every step',
-          '  ctrl+t      shell',
           '  ctrl+b      bring the Gemini tab to the front',
           '  ctrl+u      clear the input   ·   ctrl+w   delete the last word',
           '  ctrl+j      newline, without sending   ·   ↑ ↓   move a line, or recall',
           '  ctrl+o      show or hide the task list',
-          '  ctrl+y      copy the last code block',
           '  ctrl+x ctrl+s   steer the last queued message into the running turn',
           '  esc         stop the run, or close a menu',
           '  ctrl+c ×2   quit — prints how to resume',
@@ -502,7 +501,7 @@ export async function handleSlashCommand(query, {
 
     // Only the bare form opens the picker. `/config reviewer none` used to open
     // it too and throw the arguments away, so the command was unusable typed.
-    if (command === 'config' && args.length === 0) {
+    if ((command === 'subagents' || command === 'config') && args.length === 0) {
       setActiveMenu({ type: 'config' });
       setIsProcessing(false);
       return;
@@ -529,19 +528,39 @@ export async function handleSlashCommand(query, {
      * the terminal's and works, but over a long reply it copies wrapped,
      * indented lines. ctrl+y beside it copies only the last code block.
      */
+    // The scratch shell. It was ctrl+t until 2026-10-26 — a command is listed
+    // by `/`, a chord has to be remembered. One command, then back to the prompt.
+    if (command === 'shell' || command === 'terminal') {
+      if (openShell) {
+        openShell();
+      } else {
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+          { role: 'assistant', isLocal: true, content: 'No scratch shell on this surface.' }]);
+      }
+      setIsProcessing(false);
+      return;
+    }
+
     if (command === 'copy') {
       const say = (reply) => setHistory((prev) => [...prev,
         { role: 'user', content: query, isLocal: true },
         { role: 'assistant', content: reply, isLocal: true }]);
-      const text = lastReply(agentLoop.conversationHistory);
+      // `/copy code`: the last code block instead of the whole reply. It was
+      // ctrl+y until 2026-10-26.
+      const wantsCode = /^code$/i.test(args[0] || '');
+      const block = wantsCode ? lastCodeBlock(agentLoop.conversationHistory) : null;
+      const text = wantsCode ? block?.code : lastReply(agentLoop.conversationHistory);
       if (!text) {
-        say('📋 No reply to copy yet.');
+        say(wantsCode ? '📋 No code block in a reply yet.' : '📋 No reply to copy yet.');
       } else if (!canCopy()) {
         say('📋 Nothing here can reach the clipboard — install `xclip` or `wl-copy`.');
       } else {
         const ok = await copyToClipboard(text);
         const lines = text.split('\n').length;
-        say(ok ? `📋 Copied the last reply — ${lines} line${lines === 1 ? '' : 's'}.` : '📋 The clipboard command failed.');
+        const what = wantsCode
+          ? `the last code block${block.lang ? ` (${block.lang})` : ''}`
+          : 'the last reply';
+        say(ok ? `📋 Copied ${what} — ${lines} line${lines === 1 ? '' : 's'}.` : '📋 The clipboard command failed.');
       }
       setIsProcessing(false);
       return;

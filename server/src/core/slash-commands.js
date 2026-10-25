@@ -55,7 +55,7 @@ export const MAX_AGENT_NAME = 20;
  * so adding one and forgetting the other fails the build rather than the user.
  */
 export const AGENT_COMMANDS = new Set([
-  'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'name', 'clear', 'context', 'new',
+  'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
   'workspace',
 ]);
@@ -204,13 +204,15 @@ export async function handleSlashCommand(loop, command, args) {
      * `_loadConfig` folds an old config into this.
      */
     case 'mode':
-    case 'config': {
+    case 'config':
+    case 'subagents': {
       const word = String(args?.[0] || '').toLowerCase();
       const value = String(args?.[1] ?? '').toLowerCase();
       const OFF = ['off', 'none', 'no', 'false', 'solo'];
       const ON = ['on', 'yes', 'true', 'gemini', 'duo'];
 
-      // `/config off` as well as `/config subagents off`: the noun is the only
+      // `/subagents off` as well as `/subagents subagents off` (the old `/config`
+      // form): the noun is the only
       // thing this command has, so requiring it is ceremony.
       const asked = ['subagents', 'subagent', 'reviewer'].includes(word) ? value : word;
 
@@ -235,15 +237,16 @@ export async function handleSlashCommand(loop, command, args) {
         };
       }
 
-      const renamed = command === 'mode'
-        ? '_(`/mode` is now `/config` — there is one model, so the only question left is '
-          + 'whether it can delegate.)_\n\n'
-        : '';
+      // Both older names still work, and say once what the command is called now.
+      // `/config` only ever toggled subagents, and its description had claimed
+      // more since the second provider was removed.
+      const renamed = command === 'subagents' ? ''
+        : `_(\`/${command}\` is now \`/subagents\` — it is the one thing it sets.)_\n\n`;
       return {
         message: `${renamed}### 🌐 Subagents: ${loop.subagentsEnabled ? '**on**' : '**off**'}\n\n`
           + '  `ask_subagent` opens a second tab of this model with an empty context.\n'
           + '  Roles: `research` (explore), `review` (read a change cold), `task` (an errand).\n\n'
-          + '_`/config subagents on` · `/config subagents off`_',
+          + '_`/subagents on` · `/subagents off`_',
       };
     }
 

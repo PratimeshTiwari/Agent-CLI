@@ -26,11 +26,11 @@ import { EventEmitter } from 'node:events';
 /** Chord byte -> event name. */
 export const HOTKEYS = {
   '\x05': 'expand',       // ctrl+e — expand/collapse the transcript
-  '\x14': 'terminal',     // ctrl+t — the scratch shell
+  '\x14': 'terminal',     // ctrl+t — retired for /shell; still taken so no stray "t"
   '\x16': 'paste-image',  // ctrl+v — attach an image from the clipboard
   '\x15': 'clear-input',  // ctrl+u — wipe the prompt, as readline has always done
   '\x17': 'delete-word',  // ctrl+w — delete the word behind the cursor
-  '\x19': 'copy-code',    // ctrl+y — the last code block in the transcript
+  '\x19': 'copy-code',    // ctrl+y — retired for /copy code; still taken so no stray "y"
   // ctrl+o — the task list. Was ctrl+g, which Chrome takes system-wide on macOS
   // for its own Gemini panel: pressing it in the terminal opened Chrome instead.
   '\x0f': 'artifacts',

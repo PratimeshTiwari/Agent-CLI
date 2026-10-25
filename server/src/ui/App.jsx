@@ -9,7 +9,7 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, contextMeter, disconnectedHint, elapsedLabel, extractCodeBlocks, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -22,7 +22,6 @@ import { drainChatQueue } from './chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
-import { canCopy, copyToClipboard } from './clipboard.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
@@ -950,6 +949,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
         setIsProcessing: turnInFlight ? () => {} : setIsProcessing,
         setPendingImage,
         pendingImage,
+        openShell: () => { setTerminalOpen(true); setFocus(FOCUS_TERMINAL); },
       });
       return;
     }
@@ -1096,16 +1096,21 @@ export function App({ agentLoop, wsServer, closing = false }) {
     return () => { hotkeys.off('interrupt', onInterrupt); clearTimeout(timer); };
   }, []);
 
+  const retiredKey = (key, command) => setHistory((prev) => [...prev, {
+    role: 'assistant', isLocal: true, timestamp: Date.now(),
+    content: `\`${key}\` is now \`${command}\`.`,
+  }]);
+
   // The ctrl+ chords never reach Ink — see ui/hotkeys.js. They are inert while a
   // diff or a menu is up, so nothing can act behind a question the user has not
   // answered yet.
   useHotkeys({
     expand: toggleVerbose,
     artifacts: () => setArtifactsOpen((open) => !open),
-    terminal: () => setTerminalOpen((prev) => {
-      setFocus(prev ? FOCUS_INPUT : FOCUS_TERMINAL);
-      return !prev;
-    }),
+    // ctrl+t and ctrl+y became `/shell` and `/copy code` (2026-10-26). The
+    // bytes are still taken off stdin — an unhandled chord types its letter
+    // into the prompt — and say where the thing went, once per press.
+    terminal: () => retiredKey('ctrl+t', '/shell'),
     'paste-image': () => handleSubmit('/paste-image'),
 
     /*
@@ -1140,47 +1145,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     },
     'delete-word': () => setInput((value) => value.replace(/\s*\S+\s*$/, '')),
 
-    /**
-     * The last code block in the transcript, onto the clipboard.
-     *
-     * Drag-select is still the primary way to copy and `format.js` un-indented
-     * the blocks so that it works. This is the shortcut for the case people
-     * actually hit — the reply just arrived and the code in it is the point.
-     *
-     * "Last" means the last block of the most recent message that has one,
-     * searched backwards: an agent turn is commonly followed by tool results
-     * and notices, and copying nothing because the newest message happens to be
-     * "✔ read_file" would read as the chord being broken.
-     */
-    'copy-code': () => {
-      // Appended, never replacing: <Static> counts what it has printed by
-      // index, so a transcript that gets shorter makes Ink skip that many turns
-      // permanently. Same `isLocal` shape as every other UI-only message.
-      const notify = (text) => setHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: text, isLocal: true, timestamp: Date.now() },
-      ]);
-
-      if (!canCopy()) {
-        notify('📋 Nothing here can reach the clipboard — install `xclip` or `wl-copy`.');
-        return;
-      }
-      let found = null;
-      for (let i = history.length - 1; i >= 0 && !found; i -= 1) {
-        const blocks = extractCodeBlocks(history[i]?.content);
-        if (blocks.length) found = blocks[blocks.length - 1];
-      }
-      if (!found) {
-        notify('📋 No code block in the transcript yet.');
-        return;
-      }
-      copyToClipboard(found.code).then((ok) => {
-        const lines = found.code.split('\n').length;
-        notify(ok
-          ? `📋 Copied ${lines} line${lines === 1 ? '' : 's'}${found.lang ? ` of ${found.lang}` : ''}.`
-          : '📋 The clipboard command failed.');
-      });
-    },
+    'copy-code': () => retiredKey('ctrl+y', '/copy code'),
   }, !diffRequest && !activeMenu);
 
   useKeyBindings({
