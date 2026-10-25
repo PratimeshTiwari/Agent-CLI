@@ -97,7 +97,7 @@ export function revealColumns(tick, width, perTick = 4) {
  * the terminal makes Ink clear and repaint on every render (CLAUDE.md, "The
  * live frame must never outgrow the viewport") — here, with a spinner ticking,
  * that is twelve full clears a second. So the decorative blocks go first: the
- * big lettering, then the theme preview, then the blank rows between blocks.
+ * theme preview and the name's banner preview, then the blank rows between blocks.
  * The numbers are the rows each screen measures to under the pty; the frame
  * must stay at least one row short of the terminal.
  */
@@ -105,13 +105,12 @@ export function onboardingLayout(rows = 24) {
   const room = rows - 1;
   const compact = room < 16;
   // Fixed rows per screen, with and without the blank spacers.
-  const fixed = compact
-    ? { welcome: 4, theme: 10, name: 5, chrome: 7 }
-    : { welcome: 7, theme: 14, name: 9, chrome: 12 };
+  // The splash always fits (6 rows compact, 8 spaced) and has nothing to drop.
+  const fixed = compact ? { theme: 10, name: 5 } : { theme: 14, name: 9 };
   return {
     compact,
-    welcomeWordmark: room >= fixed.welcome + 7,
     themePreview: room >= fixed.theme + (compact ? 6 : 7),
-    nameWordmark: room >= fixed.name + (compact ? 6 : 7),
+    // The banner header the name will appear in: four rows, plus a spacer.
+    namePreview: room >= fixed.name + (compact ? 4 : 5),
   };
 }

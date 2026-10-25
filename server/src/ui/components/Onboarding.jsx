@@ -4,9 +4,8 @@ import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import { exec } from 'child_process';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
-import { Wordmark } from './Banner.jsx';
+import { Header as BannerHeader, Mark, MARK } from './Banner.jsx';
 import { FRAMES } from './RunningLine.jsx';
-import { bannerText } from '../banner-text.js';
 import { copyToClipboard } from '../clipboard.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
@@ -154,18 +153,23 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
   const width = Math.min(columns, 76);
 
   if (screen === SPLASH) {
-    const mark = bannerText('Agent CLI');
-    const markWidth = Math.max(...mark.split('\n').map((l) => l.length));
+    // The mark draws in a column a tick, then the greeting types itself out.
+    const markWidth = MARK[0].length;
+    const title = 'Welcome to Agent CLI';
+    const typed = revealColumns(tick - markWidth, title.length, 2);
     return (
       <Box flexDirection="column" width={width}>
-        {layout.welcomeWordmark && (
-          <>
-            <Wordmark text={mark} reveal={revealColumns(tick, markWidth)} truncate />
-            <Gap show={spaced} />
-          </>
-        )}
-        <Text bold wrap="truncate">Welcome to Agent CLI</Text>
-        <Text dimColor wrap="truncate">A coding agent that works through Gemini in your own browser. No API key.</Text>
+        <Box flexDirection="row">
+          <Box flexDirection="column" width={markWidth + 3} flexShrink={0}>
+            <Mark reveal={revealColumns(tick, markWidth, 1)} />
+          </Box>
+          <Box flexDirection="column" flexShrink={1}>
+            <Text bold wrap="truncate">{title.slice(0, typed) || ' '}</Text>
+            <Text dimColor wrap="truncate">Developed by Pratimesh Tiwari</Text>
+            <Text dimColor wrap="truncate">A coding agent that works through Gemini</Text>
+            <Text dimColor wrap="truncate">in your own browser. No API key.</Text>
+          </Box>
+        </Box>
         <Gap show={spaced} />
         <Text wrap="truncate">Three quick steps: <Text bold>theme</Text>, <Text bold>name</Text>, and <Text bold>connecting Chrome</Text>.</Text>
         <Gap show={spaced} />
@@ -241,12 +245,12 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
           />
         </Box>
         <Text dimColor={!nameError} color={nameError ? (T.danger ?? undefined) : undefined} wrap="truncate">
-          {nameError || `${name.trim().length}/${MAX_AGENT_NAME} · drawn in the banner like this:`}
+          {nameError || `${name.trim().length}/${MAX_AGENT_NAME} · your banner will read:`}
         </Text>
-        {layout.nameWordmark && (
+        {layout.namePreview && (
           <>
             <Gap show={spaced} />
-            <Wordmark text={bannerText(shown.slice(0, MAX_AGENT_NAME))} truncate />
+            <BannerHeader name={shown.slice(0, MAX_AGENT_NAME)} where={tildify(agentLoop?.workspace || '')} models="gemini" columns={width} />
           </>
         )}
         <Gap show={spaced} />

@@ -27,7 +27,6 @@ import { isSlowCommand } from '../core/slash-commands.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
-import { bannerText } from './banner-text.js';
 import * as paths from '../core/paths.js';
 import { T } from './theme.js';
 
@@ -62,17 +61,12 @@ export function App({ agentLoop, wsServer }) {
 
   const [activeToolCalls, setActiveToolCalls] = useState([]);
   /**
-   * The wordmark, rendered once.
+   * The agent's name for the banner, read once.
    *
-   * This was two reads of the same config and two renders of the same string
-   * — a synchronous one to seed the state and an async `figlet.text` in an
-   * effect that recomputed it on mount and set it again. The async half was
-   * pure duplicate work: the value was already correct before it ran.
-   *
-   * `figlet` itself is gone; `ui/figfont.js` renders the one font this app
-   * uses, verified byte-for-byte against figlet across 25,110 strings.
+   * It was rendered as six rows of figlet until v5.22; the banner now shows a
+   * fixed mark with the name as plain text beside it (`Banner.jsx`).
    */
-  const [agentNameAscii] = useState(() => {
+  const [agentName] = useState(() => {
     let name = 'Agent CLI';
     try {
       const configPath = paths.configPath(agentLoop.workspace);
@@ -92,11 +86,7 @@ export function App({ agentLoop, wsServer }) {
         if (custom) name = custom;
       }
     } catch (e) {}
-    try {
-      return bannerText(name) || name;
-    } catch (e) {
-      return name;
-    }
+    return name;
   });
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1268,7 +1258,7 @@ export function App({ agentLoop, wsServer }) {
       <Static key={staticEpoch} items={staticItems}>
         {(row) => {
           if (row.isBanner) {
-            return <Banner key={row.id} agentLoop={agentLoop} agentNameAscii={agentNameAscii} />;
+            return <Banner key={row.id} agentLoop={agentLoop} agentName={agentName} />;
           }
           if (row.kind === 'user') {
             return (
@@ -1506,7 +1496,7 @@ export function App({ agentLoop, wsServer }) {
             reported as looking bad, and a lost connection already says so in
             the input box (`disconnectedHint`).
           */}
-          <Text color={modeColor(mode)}>{'  '}{modeLine(mode)}</Text>
+          <Text color={modeColor(mode)}>{' '}{modeLine(mode)}</Text>
           {exitArmed
             ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
             : <Text dimColor>{' (shift+tab to cycle)'}</Text>}

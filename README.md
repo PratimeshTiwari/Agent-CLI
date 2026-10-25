@@ -79,11 +79,11 @@ agent
 ```
 
 The very first start walks you through setup, one screen per step: pick a theme (previewed live
-as you move), name the agent (its banner drawn as you type), and connect Chrome (the exact folder
+as you move), name the agent (the banner previewed as you type), and connect Chrome (the exact folder
 to load, and a spinner that turns into **Connected** when the extension dials in). Enter goes on,
 esc skips. Later: `/theme` and `/name`.
 
-The status line shows the mode — `plan mode on (shift+tab to cycle)` — and the input box says so if
+The status line shows the mode — `⏸ plan mode on (shift+tab to cycle)` — and the input box says so if
 the extension is not connected. Type a request and press Enter. To pick up where you left off:
 `agent --continue`, or `agent --resume <id>` (printed under the transcript when you exit).
 
@@ -91,8 +91,8 @@ the extension is not connected. Type a request and press Enter. To pick up where
 
 ### Modes — `shift+tab` cycles them
 
-The status line says which one is on, the way Claude Code does: `plan mode on`,
-`auto mode on`, `strict plan mode on`. The input box's border takes the mode's colour.
+The status line says which one is on, the way Claude Code does: `⏸ plan mode on`,
+`⏵⏵ auto mode on`, `⏹ strict plan mode on`. The rules above and below the input take the mode's colour.
 
 | Mode | Edits | Commands |
 | --- | --- | --- |

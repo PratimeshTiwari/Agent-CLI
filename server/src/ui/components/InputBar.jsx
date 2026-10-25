@@ -274,14 +274,21 @@ export function InputBar({
             screen rendered as a footnote, for two rows of frame budget. The
             border is already the most visible line here and it costs nothing.
           */}
+          {/*
+            A rule above and a rule below, no sides (Look A, 2026-10-25 —
+            Claude Code's shape). The side borders were copied with the text:
+            drag-select a multi-line prompt and every line began with `│`.
+            Same three rows as the box, so the frame budget is unchanged.
+          */}
           <Box
             flexDirection="row"
-            borderStyle="round"
+            borderStyle="single"
+            borderLeft={false}
+            borderRight={false}
             borderColor={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}
-            paddingX={1}
             width="100%"
           >
-            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}>{'> '}</Text>
+            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}>{'❯ '}</Text>
             <PromptInput
               focus={focus === FOCUS_INPUT}
               value={input}

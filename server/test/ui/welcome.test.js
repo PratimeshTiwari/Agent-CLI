@@ -79,10 +79,10 @@ test('the splash reveal stops at the full width', () => {
 
 test('decoration is dropped as the terminal gets shorter, spacing last of all', () => {
   const tall = onboardingLayout(40);
-  assert.deepEqual([tall.compact, tall.welcomeWordmark, tall.themePreview, tall.nameWordmark], [false, true, true, true]);
+  assert.deepEqual([tall.compact, tall.themePreview, tall.namePreview], [false, true, true]);
   const mid = onboardingLayout(20);
   assert.equal(mid.themePreview, false, 'the theme screen with its preview is 21 rows');
-  assert.equal(mid.welcomeWordmark, true);
+  assert.equal(mid.namePreview, true);
   const short = onboardingLayout(12);
   assert.equal(short.compact, true);
 });
