@@ -78,6 +78,8 @@ cd ~/code/your-project
 agent
 ```
 
+![First-start setup: choosing a theme with a live preview](docs/images/setup.svg)
+
 The very first start walks you through setup, one screen per step: pick a theme (previewed live
 as you move), name the agent (the banner previewed as you type), and connect Chrome (the exact folder
 to load, and a spinner that turns into **Connected** when the extension dials in). Enter goes on,
@@ -130,6 +132,7 @@ long pastes collapse to a marker. `/image` attaches an image (bare for the clipb
 | `/effort low·medium·high` | how hard to work; switches the Gemini model picker to match |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
+| `/copy` | the last reply, as markdown, to the clipboard |
 | `/compact` | summarise the conversation now (it also happens on its own, with a progress bar) |
 | `/history` | past conversations — pick one to reopen |
 | `/settings` | everything that is set, on one page |

@@ -77,7 +77,8 @@ const SWATCH_ROLES = ['accent', 'success', 'danger', 'attention', 'strict'];
  */
 function Swatch({ name }) {
   const palette = PALETTES[name] || {};
-  if (name === 'mono') return <Text dimColor>plain text — bold and dim only</Text>;
+  // A leading space, as the strips have, so the column lines up.
+  if (name === 'mono') return <Text dimColor>{' '}plain text — bold and dim only</Text>;
   const bg = PALETTE_INFO[name]?.background || undefined;
   return (
     <Text backgroundColor={bg}>
