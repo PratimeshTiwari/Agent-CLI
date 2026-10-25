@@ -8,7 +8,7 @@ import { Banner } from './components/Banner.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { contextField, contextMeter, disconnectedHint, extractCodeBlocks, modeLine, taskProgress, workBreakdown } from './format.js';
+import { contextField, contextMeter, disconnectedHint, elapsedLabel, extractCodeBlocks, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -653,10 +653,10 @@ export function App({ agentLoop, wsServer }) {
   // The turn keeps two rows — its newest step and the `so far` tally — and the
   // list is the first thing to go: the thinking line under it already names
   // the tool that is running. Keeping one measured a clear at 14x72.
-  const runningMargin = compact ? 0 : 1;
-  const runningFits = Math.min(activeToolCalls.length, Math.floor(liveBudget / 2), liveBudget - 2 - runningMargin);
-  const runningCalls = runningFits > 0 ? activeToolCalls.slice(-runningFits) : [];
-  const runningRows = runningCalls.length === 0 ? 0 : runningCalls.length + runningMargin;
+  // A running command's output lines are charged here too — see runningLayout.
+  const running = runningLayout(activeToolCalls, liveBudget, { compact });
+  const runningCalls = running.calls;
+  const runningRows = running.rows;
   const turnBudget = Math.max(1, liveBudget - runningRows);
 
   /**
@@ -1372,11 +1372,34 @@ export function App({ agentLoop, wsServer }) {
           */}
           {runningCalls.length > 0 && (
             <Box flexDirection="column" marginBottom={compact ? 0 : 1}>
-              {runningCalls.map((call) => (
-                <Text key={call.id} color={T.accent} wrap="truncate">
-                  {'  '}◌{' '}{call.name}
-                </Text>
-              ))}
+              {runningCalls.map((call) => {
+                /*
+                 * One row per call, everything on it truncated from the right
+                 * — so the name and subject, which say *what* is running,
+                 * come first, and the age and hidden-line count after.
+                 */
+                const subject = subjectOf(call.name, call.args);
+                const lines = running.outputFor === call.id ? running.output : [];
+                const hidden = (call.outputTotal || 0) - lines.length;
+                const meta = [
+                  call.runningSince ? elapsedLabel(Date.now() - call.runningSince) : null,
+                  hidden > 0 ? `+${hidden} line${hidden === 1 ? '' : 's'}` : null,
+                ].filter(Boolean).join(' · ');
+                return (
+                  <React.Fragment key={call.id}>
+                    <Text color={T.accent} wrap="truncate">
+                      {'  '}◌{' '}{call.name}
+                      {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
+                      {meta ? <Text dimColor>{` · ${meta}`}</Text> : null}
+                    </Text>
+                    {lines.map((line, i) => (
+                      <Text key={i} dimColor wrap="truncate">
+                        {i === 0 ? '    ⎿  ' : '       '}{line || ' '}
+                      </Text>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </Box>
           )}
 

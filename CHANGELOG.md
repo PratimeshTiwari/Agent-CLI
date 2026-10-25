@@ -14,10 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84)
+### v5 — 2026-10-19 … 2026-10-25 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#85](https://github.com/PratimeshTiwari/Agent-CLI/pull/85)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.21 | 2026-10-25 | `v5.21/exit-footer-and-live-command-output` | [#85](https://github.com/PratimeshTiwari/Agent-CLI/pull/85) | v5.21: live output under a running command; Claude Code's exit footer |
 | v5.20 | 2026-10-25 | `v5.20/exit-keeps-transcript-compact-on-send` | [#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) | v5.20: exit keeps the transcript; auto-compaction waits for your next message; spacing and bullets |
 | v5.19 | 2026-10-25 | `v5.19/release-history` | [#83](https://github.com/PratimeshTiwari/Agent-CLI/pull/83) | v5.19: release history with dates, branches and PR links; current README screenshots |
 | v5.18 | 2026-10-24 | `v5.18/thinking-waits` | [#82](https://github.com/PratimeshTiwari/Agent-CLI/pull/82) | v5.18: replies no longer dropped while Gemini thinks; interrupted tool calls salvaged |
@@ -128,6 +129,12 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | Beta v1 | 2026-08-26 | `beta-v1` | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1) | feat: smart context management, robust image support, and extension s… |
 
 ## v5 in detail
+
+### v5.21 — 2026-10-25 · [PR #85](https://github.com/PratimeshTiwari/Agent-CLI/pull/85) · `v5.21/exit-footer-and-live-command-output`
+
+- A running command shows its last five lines under its row, with how long it has been running and how many lines are hidden (`◌ run_command npm test · 12s · +340 lines`), like Claude Code's Bash rows. On a short terminal the lines are dropped first; the model's result is unchanged.
+- After you approve a command, the transcript says only what you decided. It repeated the whole command, which wrapped over several rows and made the screen flicker on short terminals.
+- Exit prints Claude Code's footer: `Resume this session with:` and the command on its own line, dim, with the shell prompt directly under it.
 
 ### v5.20 — 2026-10-25 · [PR #84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) · `v5.20/exit-keeps-transcript-compact-on-send`
 

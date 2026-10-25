@@ -72,6 +72,27 @@ export function buildAgentCallbacks({
     sendToPanel: (msg) => {
       noteActivity();
       /*
+       * A running command's tail is the terminal's alone. Four messages a
+       * second for the length of a build, to a side panel that draws none of
+       * them, is a service worker never allowed to idle — the cost CLAUDE.md
+       * records the 3-second nudge paying. Still counts as activity above:
+       * a command printing output is not a silent turn.
+       */
+      if (msg.type === 'tool_output') {
+        const { name, lines, total } = msg.payload || {};
+        setActiveToolCalls((prev) => {
+          const idx = prev.findIndex((c) => c.result === undefined && c.name === name);
+          if (idx < 0) return prev;
+          const next = prev.slice();
+          // The clock starts at the first view, which the loop sends as the
+          // command starts — not at `tool_call`, which arrives before the
+          // approval prompt and would count the time spent deciding.
+          next[idx] = { ...prev[idx], output: lines, outputTotal: total, runningSince: prev[idx].runningSince ?? Date.now() };
+          return next;
+        });
+        return true;
+      }
+      /*
        * Kept, and returned. The CLI's copy of this dropped the answer on the
        * floor, so `_toExtension` could not tell "the browser did not reply"
        * from "there was no browser to ask" — the ambiguity that made the model

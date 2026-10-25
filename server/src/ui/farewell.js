@@ -40,20 +40,44 @@ export function registerInk(instance) {
 }
 
 /**
- * What is left in the terminal.
+ * What is left in the terminal — Claude Code's footer, line for line:
+ *
+ *     (blank)
+ *     Resume this session with:
+ *     agent --resume <id>
+ *
+ * Dim, flush left, and the shell prompt directly under it. The command is on a
+ * line of its own because that line is the one you select and copy; it used to
+ * share a line with the label, indented and at full brightness, with a blank
+ * line after — the footnote read as louder than the work above it.
  *
  * `--workspace` is added only when the workspace is not where you are
  * standing, because `agent` takes its workspace from the current directory
  * and a command that resumes nothing from here is the wrong offer.
  *
  * @param {string|null} id - the live conversation's id, null when there is none worth resuming
+ * @param {object} [opts]
+ * @param {boolean} [opts.dim] - wrap each line in SGR dim. Ink is unmounted by
+ *   now, so this is a raw escape; the caller decides whether the stream wants it.
  */
-export function farewellText(id, { workspace = null, cwd = process.cwd() } = {}) {
+export function farewellText(id, { workspace = null, cwd = process.cwd(), dim = false } = {}) {
   // Nothing worth resuming: say nothing. The screen above already shows
   // that nothing happened, and a sentence about it is noise on every exit.
   if (!id) return '';
   const where = workspace && workspace !== cwd ? ` --workspace ${quoteIfNeeded(workspace)}` : '';
-  return `\n  Resume this conversation with: agent --resume ${id}${where}\n\n`;
+  // Per line rather than around the block, so a terminal that resets SGR at a
+  // newline (some do) still draws the second line dim.
+  const paint = (line) => (dim ? `\x1b[2m${line}\x1b[22m` : line);
+  return `\n${paint('Resume this session with:')}\n${paint(`agent --resume ${id}${where}`)}\n`;
+}
+
+/**
+ * Dim only into a terminal, never into a pipe or a file. Not gated on
+ * `NO_COLOR`: dim is an attribute rather than a colour, and the `mono` palette
+ * that `NO_COLOR` selects keeps bold and dim for the same reason.
+ */
+export function wantsDim(out = process.stdout) {
+  return Boolean(out?.isTTY);
 }
 
 function quoteIfNeeded(p) {
@@ -61,7 +85,7 @@ function quoteIfNeeded(p) {
 }
 
 /** The farewell for this loop's conversation. Allocates its live id if needed. */
-export function farewellFor(agentLoop, cwd = process.cwd()) {
+export function farewellFor(agentLoop, { cwd = process.cwd(), dim = false } = {}) {
   const store = agentLoop?.sessionStore;
   let id = null;
   try {
@@ -69,7 +93,7 @@ export function farewellFor(agentLoop, cwd = process.cwd()) {
   } catch {
     id = null; // a farewell must never stop the exit
   }
-  return farewellText(id, { workspace: agentLoop?.workspace, cwd });
+  return farewellText(id, { workspace: agentLoop?.workspace, cwd, dim });
 }
 
 let leaving = false;
@@ -85,7 +109,7 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
   // unmount — whose final render then has nothing left to write.
   try { ink?.clear?.(); } catch { /* going anyway */ }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  try { out.write(farewellFor(agentLoop)); } catch { /* going anyway */ }
+  try { out.write(farewellFor(agentLoop, { dim: wantsDim(out) })); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }

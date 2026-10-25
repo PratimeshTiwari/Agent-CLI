@@ -768,6 +768,23 @@ pipes included. On this repo `parseToolCall|tool_call|extractToolCalls|handleToo
 131 KB file three times. Identifier-only alternation is searched as alternatives now, and says so
 in the result; a literal `a || b` or a shell pipe is still searched as written.
 
+**A running command shows its last five lines (v5.21), like Claude Code's Bash rows.** `run_command`
+was silent until it exited. `exec` keeps collecting exactly as before — the model's result cannot
+change because the screen watches — and listeners on the child's streams feed `core/output-tail.js`,
+which turns chunks into finished lines (a partial line is shown and replaced; `\r` progress bars
+show only what a terminal would; ANSI and control bytes stripped) and throttles to 4/s, leading and
+trailing edge. The loop sends `tool_output`; the UI keeps it to itself (a side panel that draws
+none of it would otherwise wake the service worker four times a second). The row reads
+`◌ run_command <cmd> · 12s · +340 lines`, the clock starting when the command does rather than
+at `tool_call`, which precedes the approval prompt. **The lines are charged to the live budget in
+`runningLayout`** (`format.js`), after the call rows, so a short terminal drops output before a call
+and the turn keeps its two rows. Measured under the pty: 0 clears after approval at 10, 13, 16 and
+24 rows. The run also showed the approval *decision* row repeating the whole command — a system
+row wraps, so a one-line `for` loop drew four rows charged as one — and that row now names only
+the decision. **Not done:** moving a running command to the background (`ctrl+b` is the browser
+key, and it needs `exec`'s process handed to `TaskManager`). **Still open:** the approval box
+itself is taller than a 13-row terminal (9 clears while it is up, on `main` too).
+
 **Large files and documents (v5.10).** Reported from the work laptop: simple edits in
 1,000–2,000-line files went badly, and building a Confluence document from several files
 struggled at the highest effort. Measured on this repo: two 800-line reads in one reply (~86k
@@ -1176,7 +1193,9 @@ unreadable) and the server's `shortcutNotice` says to set it at `chrome://extens
 **Exit keeps the transcript and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; no clear
 since v5.20).** Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
 (erases only the live frame and syncs its log, so the final render on unmount writes nothing),
-unmounts, then prints one line — or nothing, when there was no conversation, like Claude Code. The id is
+unmounts, then prints Claude Code's footer (v5.21: `Resume this session with:` and the command on
+a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
+no conversation. Dim is gated on a TTY, not on `NO_COLOR`, as the `mono` palette is. The id is
 `SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
 `rollover`, so the id at exit is the id in `/history`; `--resume <live id>` before it is filed
 behaves as `--continue`, and a resumed conversation keeps its id (`listSessions` keeps the
