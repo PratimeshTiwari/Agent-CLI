@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { EFFORT_LEVELS, DEFAULT_EFFORT, resolveEffort, isEffort, effortFromConfig, foldEffort } from '../../src/core/effort.js';
 
 test('the ladder', async (t) => {
-  await t.test('has exactly the three states that mean something', () => {
-    assert.deepEqual(EFFORT_LEVELS.map((e) => e.id), ['low', 'medium', 'high']);
+  // Max (v5.26) is High's prompt on a heavier model, so it is a fourth rung
+  // and not a fourth prompt — see the next test but one.
+  await t.test('has exactly the four states that mean something', () => {
+    assert.deepEqual(EFFORT_LEVELS.map((e) => e.id), ['low', 'medium', 'high', 'max']);
   });
 
   // The old shape was 3 tiers x 3 levels. Six of those nine combinations either
@@ -23,13 +25,16 @@ test('the ladder', async (t) => {
     for (const e of EFFORT_LEVELS) assert.match(e.browser, /^Gemini /);
   });
 
-  await t.test('one pro rung, and it is the old `standard` profile', () => {
+  await t.test('one pro profile, and it is the old `standard` one', () => {
+    // High and Max share it: the owner's "pro and argon will share a same
+    // prompt". Max differs only in the tab it names.
     const pro = EFFORT_LEVELS.filter((e) => e.tier === 'pro');
-    assert.equal(pro.length, 1);
+    assert.deepEqual(pro.map((e) => e.id), ['high', 'max']);
     // `level` is what `_getReasoningInstructions` branches on. Pointing it at
     // 'deep' would silently add the critical-analysis phase and the assumption
     // ledger, which were declined on output cost, not prompt cost.
-    assert.equal(pro[0].level, 'standard');
+    for (const e of pro) assert.equal(e.level, 'standard', e.id);
+    assert.notEqual(pro[0].browser, pro[1].browser, 'two rungs on one tab would be one rung');
   });
 
   await t.test('the id and the tier agree, so `/effort pro` is not a near-miss', () => {

@@ -8,7 +8,7 @@ import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
 import { panelRoom, wrapLines, cutStart, settingTone } from '../panel.js';
-import { sliderLayout } from '../effort-slider.js';
+import { sliderLayout, stopModel } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
@@ -433,6 +433,9 @@ export function Menus({
           const pad = ' '.repeat(s.indent);
           // The spaces that centre `text` under the bar.
           const lead = (text) => ' '.repeat(Math.max(1, s.indent + Math.floor((s.span - text.length) / 2)));
+          // Each stop names the model it maps to on this account (C2).
+          const stops = EFFORT_LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
+          const model = stops[at];
           const tick = marked.id === current ? '  ✔ current' : '';
           const { tight } = fit('', 5);
           // A blank row each side of the model line (owner, 2026-10-26: "fix
@@ -460,14 +463,14 @@ export function Menus({
                       {gap}
                       {i === at
                         ? <Text bold color={T.accent}>{label.text}</Text>
-                        : <Text dimColor={EFFORT_LEVELS[i].id !== current}>{label.text}</Text>}
+                        : <Text dimColor={EFFORT_LEVELS[i].id !== current || !stops[i].available}>{label.text}</Text>}
                     </React.Fragment>
                   );
                 })}
               </Text>
               {airy ? <Text> </Text> : null}
-              <Text wrap="truncate">
-                {lead(marked.browser + tick)}{marked.browser}
+              <Text wrap="truncate" dimColor={!model.available}>
+                {lead(model.text + tick)}{model.text}
                 {tick ? <Text color={T.success}>{tick}</Text> : null}
               </Text>
               {airy ? <Text> </Text> : null}

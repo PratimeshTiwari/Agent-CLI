@@ -90,6 +90,25 @@ export const EFFORT_LEVELS = [
     browser: 'Gemini Pro',
     blurb: 'Plan first, then investigate, implement and verify — with a cold review of the diff.',
   },
+  /*
+   * **Max is High's prompt on a heavier model (v5.26).** Owner, 2026-10-26:
+   * Argon is on a few accounts and most have only Pro; where it exists offer
+   * both, and *"pro and argon will share a same prompt i.e high effort"*. So the
+   * profile is `pro` and every prompt is byte-identical to High's — the rung
+   * exists to choose a tab, not a prompt. On an account without Argon,
+   * `pickModelFor('max')` finds nothing and `/effort max` says so and changes
+   * nothing; it never lands on Pro in silence.
+   */
+  {
+    id: 'max',
+    contextBudget: 96000,
+    name: 'Max',
+    label: '🏔 Max',
+    tier: 'pro',
+    level: 'standard',
+    browser: 'Gemini Argon',
+    blurb: 'Same prompt as High, on Argon — for accounts that have it.',
+  },
 ];
 
 export const DEFAULT_EFFORT = 'high';
@@ -134,6 +153,19 @@ export function resolveEffort(id) {
   return BY_ID.get(word)
     || BY_ID.get(RETIRED_RUNGS[word])
     || BY_ID.get(DEFAULT_EFFORT);
+}
+
+/**
+ * The rung whose prompt this rung sends — the first one with the same profile.
+ *
+ * Max sends High's prompt, byte for byte: the system prompt names its rung
+ * (`Effort: high — …`), so building from `max` would differ by that line and
+ * nothing else, and the owner's rule is one prompt for Pro and Argon. The rung
+ * still matters everywhere else — the tab it names, the record on the reply.
+ */
+export function promptRung(id) {
+  const r = resolveEffort(id);
+  return EFFORT_LEVELS.find((e) => e.tier === r.tier && e.level === r.level).id;
 }
 
 /** Is this a real rung? Used to tell `/effort deep` from `/effort deeply`. */

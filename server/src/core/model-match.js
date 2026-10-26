@@ -99,21 +99,24 @@ function byPickerOrder(effortId, options) {
   if (!knowsModes && options.length < 2) return null;
 
   /*
-   * Position, and nothing else.
+   * Pro by name, when the picker has one; position otherwise.
    *
-   * The picker lists its models lightest-first — confirmed by cycling it with
-   * the browser's own shortcut, which walks them in that order and wraps from
-   * the heaviest back to the lightest. So the ladder maps straight onto the
-   * list and **no product name is needed for any rung**: the owner reports that
-   * Flash-Lite and Flash are renamed across accounts and that even Pro carries
-   * a version that moves.
+   * This was position and nothing else — low the first model, high the last,
+   * medium the one before last — and the `\bpro\b` anchor had been removed as
+   * a third answer to one question. Argon brought it back (v5.26): on the few
+   * accounts that have it, it is a **model** listed after Pro, so "high = the
+   * last" moved High onto Argon, Medium onto Pro with the short prompt, and
+   * left Flash unreachable. Pro is the one name that does not drift (the
+   * owner's words, above), so it anchors the ladder again and Max takes
+   * whatever sits past it.
    *
-   * This used to be two passes — position when `isMode` was available, a
-   * `\bpro\b` anchor when it was not — and the anchor is gone. It could only
-   * help a build that reports no modes *and* still calls its top model Pro,
-   * which is a narrower case than the word lists it sat in front of, and it
-   * bought a third answer for the same question.
+   * With no entry named Pro the old positional rule runs unchanged and Max is
+   * unavailable — so every three-model account maps exactly as before, which
+   * `model-match.test.js` pins rung by rung.
    */
+  const anchored = byProAnchor(models);
+  if (anchored) return anchored[effortId] || null;
+
   if (effortId === 'low') return models[0];
   if (effortId === 'high') return models[models.length - 1];
   // The rung below the heaviest. Clamped, never wrapped: on a two-entry plan
@@ -121,6 +124,23 @@ function byPickerOrder(effortId, options) {
   // would send it to the heaviest — the pairing CLAUDE.md calls the worst.
   if (effortId === 'medium') return models[Math.max(0, models.length - 2)];
   return null;
+}
+
+/**
+ * The ladder over a picker that names Pro: `{ low, medium, high, max }`, or null.
+ *
+ * Max is the model named Argon wherever it sits, else the first model after
+ * Pro; it is taken out before the others are placed, so an Argon listed
+ * *before* Pro cannot become Medium. `max` is null when there is neither.
+ */
+function byProAnchor(models) {
+  const isArgon = (m) => /\bargon\b/i.test(m.label);
+  const pro = models.find((m) => /\bpro\b/i.test(m.label) && !isArgon(m));
+  if (!pro) return null;
+  const max = models.find(isArgon) || models[models.indexOf(pro) + 1] || null;
+  const ladder = models.filter((m) => m !== max);
+  const at = ladder.indexOf(pro);
+  return { low: ladder[0], medium: ladder[Math.max(0, at - 1)], high: pro, max };
 }
 
 /**
@@ -341,4 +361,47 @@ export function planModelSwitch(effortId, models = [], pin = '') {
   }
 
   return { action: 'switch', model: pick.model, ...pinFields, reason: pick.why };
+}
+
+/**
+ * Which rung the tab's own model answers to — the reverse of `pickModelFor`.
+ *
+ * Owner, 2026-10-26: *"if there is model mismatch, send the prompt as per the
+ * current model selected"*. The prompt used to follow the setting alone, so a
+ * tab left on Flash with effort High got the 25k pro prompt — the long prompt
+ * to the model that handles long prompts worst, which this file's header names
+ * as the case it exists to prevent. The setting can be wrong about the tab; the
+ * picker's `selected` cannot.
+ *
+ * The rung is whichever one `pickModelFor` would send to the selected entry, so
+ * the two directions cannot disagree, pins included. On a short picker several
+ * rungs land on one model (two entries: low and medium are both the first), and
+ * then the setting wins if it is among them, else the one nearest it.
+ *
+ * @param {Array} models   what the picker offers, as last reported
+ * @param {string} setting the rung id the user chose
+ * @param {object} [modelConfig] for `browserModels` pins
+ * @returns {string|null} a rung id, or null when nothing is selected or the
+ *   selected entry is no rung's model (a mode such as Extended thinking)
+ */
+export function rungForModel(models = [], setting = '', modelConfig = {}) {
+  const options = (models || []).filter((m) => m && m.label);
+  const current = options.find((m) => m.selected);
+  if (!current) return null;
+
+  const ids = EFFORT_LEVELS.map((e) => e.id);
+  const hits = ids.filter((id) => {
+    const pick = pickModelFor(id, options, browserModelPin(modelConfig, id));
+    return pick?.model.label === current.label;
+  });
+  if (hits.length === 0) return null;
+  if (hits.includes(setting)) return setting;
+
+  // Nearest on the ladder; a tie goes to the cheaper rung, the safer prompt for
+  // a model we could not place exactly.
+  const at = ids.indexOf(setting);
+  if (at < 0) return hits[0];
+  return hits.reduce((best, id) => (
+    Math.abs(ids.indexOf(id) - at) < Math.abs(ids.indexOf(best) - at) ? id : best
+  ));
 }

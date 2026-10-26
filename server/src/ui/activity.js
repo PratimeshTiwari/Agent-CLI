@@ -12,6 +12,8 @@
  * times a second, and a setState per chunk is the re-render storm App.jsx
  * avoids during streaming. The UI samples this once a second instead.
  */
+import { resolveEffort } from '../core/effort.js';
+
 let lastAt = Date.now();
 
 export function noteActivity(now = Date.now()) {
@@ -23,11 +25,11 @@ export function lastActivityAt() {
 }
 
 /**
- * Seconds of silence before the tab advice is worth showing. High effort runs
- * on Pro, which routinely thinks for half a minute before its first word.
+ * Seconds of silence before the tab advice is worth showing. High and Max run
+ * on Pro and Argon, which routinely think for half a minute before a first word.
  */
 export function slowAfterMs(effortId) {
-  return effortId === 'high' ? 60_000 : 30_000;
+  return resolveEffort(effortId).tier === 'pro' ? 60_000 : 30_000;
 }
 
 /** Silent long enough? Counted from the later of the turn start and the last message. */

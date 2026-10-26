@@ -182,6 +182,42 @@ describe('a wrong word is rejected, not ignored', () => {
     h.cleanup();
   });
 
+  /*
+   * Max on an account without Argon (v5.26): the owner's rule is that it never
+   * lands on Pro in silence, so it says why and the rung stays where it was.
+   */
+  test('/effort max without Argon says so and stays on the current rung', async () => {
+    const h = harness();
+    h.loop.modelOptions = [
+      { label: '3.1 Flash-Lite', isMode: false }, { label: '3 Flash', isMode: false },
+      { label: '3.1 Pro', isMode: false, selected: true },
+    ];
+    let switched = null;
+    h.loop.switchModelTo = (label) => { switched = label; };
+    await h.run('/effort max');
+    assert.match(h.lastMessage(), /Argon is not available on this account/);
+    assert.equal(h.loop.modelConfig.effort, 'high');
+    assert.equal(switched, null, 'it switched the tab anyway');
+
+    // Control: the account that has it.
+    h.loop.modelOptions.push({ label: '4 Argon', isMode: false });
+    await h.run('/effort max');
+    assert.equal(h.loop.modelConfig.effort, 'max');
+    assert.equal(switched, '4 Argon');
+    h.cleanup();
+  });
+
+  test('/effort max before the picker is read asks, and waits', async () => {
+    const h = harness();
+    let asked = false;
+    h.loop.requestModelOptions = () => { asked = true; };
+    await h.run('/effort max');
+    assert.equal(h.loop.modelConfig.effort, 'high');
+    assert.ok(asked, 'nothing asked the tab which models it has');
+    assert.match(h.lastMessage(), /try `\/effort max` again/);
+    h.cleanup();
+  });
+
   test('a valid one still applies, silently on the rejection front', async () => {
     const h = harness();
     await h.run('/effort lite');

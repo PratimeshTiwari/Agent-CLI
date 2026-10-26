@@ -159,8 +159,8 @@ import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory } from './compaction.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS } from './tool-catalog.js';
-import { resolveEffort, effortFromConfig } from './effort.js';
-import { planModelSwitch, browserModelPin } from './model-match.js';
+import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
+import { planModelSwitch, browserModelPin, rungForModel } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
 import { stripImageData, stripImageHeaders, promptCharge } from './prompt-builder.js';
@@ -580,7 +580,7 @@ export class AgentLoop {
         userMessage: content,
         mode: this.mode,
         subagents: this.subagentsEnabled,
-        modelConfig: this.modelConfig,
+        modelConfig: this._promptConfig(),
         objective: this.currentObjective,
       });
 
@@ -772,6 +772,11 @@ export class AgentLoop {
         role: 'agent',
         content: cleanContent.trim(),
         effort: this.modelConfig?.effort || null,
+        // What was actually sent, and to what (C0). They part company whenever
+        // the tab is not on the rung's model, and Pro and Argon share a prompt,
+        // so only `model` can tell those two apart afterwards.
+        promptEffort: this._promptEffort(),
+        model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
         timestamp: Date.now(),
       };
       this.conversationHistory.push(agentTurn);
@@ -1040,7 +1045,7 @@ export class AgentLoop {
       userMessage: this.currentObjective,
       mode: this.mode,
       subagents: this.subagentsEnabled,
-      modelConfig: this.modelConfig,
+      modelConfig: this._promptConfig(),
       objective: this.currentObjective,
     }), this.callbacks);
     return true;
@@ -1297,7 +1302,7 @@ export class AgentLoop {
       userMessage: prompt,
       mode: this.mode,
       subagents: this.subagentsEnabled,
-      modelConfig: this.modelConfig,
+      modelConfig: this._promptConfig(),
       objective: this.currentObjective,
     }), this.callbacks);
   }
@@ -1732,6 +1737,48 @@ export class AgentLoop {
    * call phase 6 made about `topology`: a value that has to track another is
    * read, not kept.
    */
+  /**
+   * The rung the next prompt is written for: the tab's model, else the setting.
+   *
+   * Owner, 2026-10-26: *"if there is model mismatch, send the prompt as per the
+   * current model selected"*. `modelConfig.effort` is what you chose and is
+   * never rewritten here; `/effort` still moves the tab. This only decides
+   * which prompt goes out while the two disagree — see `rungForModel`.
+   *
+   * The setting stands when the picker has not been read, when nothing in it is
+   * selected, when the selected entry is a mode, and while a switch is in
+   * flight: the list then still holds the tab's *previous* model, and the tab is
+   * a second away from the one the setting names.
+   */
+  _promptEffort() {
+    const setting = resolveEffort(this.modelConfig?.effort).id;
+    if (this._switchInFlight) return setting;
+    return rungForModel(this.modelOptions || [], setting, this.modelConfig) || setting;
+  }
+
+  /**
+   * `modelConfig` for a prompt build, with the rung `_promptEffort` chose.
+   *
+   * **The thread is re-taught only when the tier moves.** A chat that learned
+   * the pro prompt and is now on Flash needs the flash one, which means a full
+   * prompt — `resetPromptState()`, as `/effort` used to call on every change.
+   * But Pro → Argon (one profile) and High → Medium on a tab that stayed on
+   * Flash (one prompt, before and after) change nothing the model reads, and a
+   * full turn-0 payload into a thread that already has it is the repeated
+   * payload Gemini's filters react to. So the builder records the tier the
+   * thread last received, and only a different one resets.
+   */
+  _promptConfig() {
+    const effort = this._promptEffort();
+    const tier = resolveEffort(effort).tier;
+    const pb = this.promptBuilder;
+    if (pb) {
+      if (pb.promptTier && pb.promptTier !== tier) pb.resetPromptState?.();
+      pb.promptTier = tier;
+    }
+    return { ...this.modelConfig, effort: promptRung(effort) };
+  }
+
   get contextLimit() {
     return resolveEffort(this.modelConfig?.effort).contextBudget;
   }
@@ -1792,7 +1839,7 @@ export class AgentLoop {
         ? `✓ tab on ${switchedTo}`
         : `! Browser model is still ${switchedTo || 'unknown'} — asked for ${requested}.`
           + `\n  Change it by hand in the Gemini tab (ctrl+b opens it). `
-          + 'The prompt here already changed.');
+          + 'Until then the prompt follows the tab.');
       return;
     }
 
@@ -1860,7 +1907,7 @@ export class AgentLoop {
     return current
       ? `Continuing on ${current.label} — last seen selected in the tab. `
         + 'Change it there by hand if you want a different one (ctrl+b opens it). '
-        + 'The prompt here already changed.'
+        + 'Until then the prompt follows the tab.'
       : 'The effort here already changed; the browser model is unknown. '
         + 'ctrl+b opens the tab so you can set it by hand.';
   }
@@ -2220,7 +2267,7 @@ export class AgentLoop {
     const changed = [...MUTATING_TOOLS].some((t) => (this._turnEvidence?.get(t) || 0) > 0);
     if (!changed) return '';
 
-    const block = this.promptBuilder.buildHandoverBlock?.(this.modelConfig?.effort) || '';
+    const block = this.promptBuilder.buildHandoverBlock?.(promptRung(this._promptEffort())) || '';
     if (block) this._handoverSent = true;
     return block;
   }

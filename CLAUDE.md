@@ -617,6 +617,26 @@ filters and A/B-test modals. Prompt content is also tiered by `modelTier`
 (`lite` / `flash` / `pro` — renamed 2026-09-20 to the picker's own words) via
 `_getReasoningInstructions`.
 
+**The prompt follows the tab, not the setting (v5.26, `AgentLoop._promptEffort`).** Every build
+goes through `_promptConfig()`, which uses the rung whose model is selected in the picker
+(`rungForModel`, the reverse of `pickModelFor`, pins included) and falls back to
+`modelConfig.effort` when the picker is unread, the selection is a mode, or a switch is in flight.
+The setting is never rewritten. The thread is re-taught (`resetPromptState`) only when the
+**tier** moves, which `promptBuilder.promptTier` records, so `/effort` no longer resets on its
+own. Each reply records `effort`, `promptEffort` and `model`. The first review of the rungs is
+in `.agent/artifacts/plans/2026-10-26-effort-review.md`.
+
+**Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
+labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old
+"High = the last model" rule it took High, Medium landed on Pro, and Flash became unreachable.
+`byProAnchor` finds Pro by name again; Max is the model named Argon, else the first model after
+Pro. With no Pro in the list the positional rule runs unchanged and Max is unavailable, so every
+three-model account maps exactly as before (pinned in `model-match.test.js`). `/effort max`
+without Argon answers `stays <rung> · Argon is not available on this account` and changes
+nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
+slider's model line names what the marked stop maps to on this account (`stopModel` in
+`ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local

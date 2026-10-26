@@ -50,3 +50,29 @@ test('the menu moves it with ←/→ and draws no list', () => {
   assert.match(effort.slice(0, 4000), /sliderLayout\(/);
   assert.match(menus, /activeMenu\?\.type === 'effort'[\s\S]{0,400}leftArrow/);
 });
+
+/*
+ * C2: the line under the bar names the model the marked stop maps to on this
+ * account, and Max says it is not available before it is chosen.
+ */
+test('each stop names its model on this account', async () => {
+  const { stopModel } = await import('../../src/ui/effort-slider.js');
+  const rung = (id) => EFFORT_LEVELS.find((e) => e.id === id);
+  const m = (label) => ({ label, isMode: false });
+  const four = [m('3.5 Flash-Lite'), m('3.8 Flash'), m('3.1 Pro'), m('4 Argon')];
+  assert.deepEqual(EFFORT_LEVELS.map((e) => stopModel(e, four).text),
+    ['3.5 Flash-Lite', '3.8 Flash', '3.1 Pro', '4 Argon']);
+  assert.deepEqual(stopModel(rung('max'), four.slice(0, 3)),
+    { text: 'not available on this account', available: false });
+  // Before the picker reports, the rung's own text, as before.
+  assert.deepEqual(stopModel(rung('max'), null), { text: 'Gemini Argon', available: true });
+});
+
+test('the menu draws the stop\'s model, dimmed when unavailable', () => {
+  const menus = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
+  const block = menus.slice(menus.indexOf("activeMenu?.type === 'effort' && (() =>"));
+  assert.match(block, /stopModel\(e, agentLoop\.modelOptions, agentLoop\.modelConfig\)/);
+  assert.match(block, /dimColor=\{!model\.available\}/);
+  assert.doesNotMatch(block.slice(0, block.indexOf('</Panel>')), /marked\.browser/,
+    'the generic family name is back under the bar');
+});
