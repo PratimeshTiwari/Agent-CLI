@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  modelMismatch, pickModelFor, planModelSwitch, explainModelMismatch, browserModelPin,
+  modelMismatch, pickModelFor, planModelSwitch, explainModelMismatch, browserModelPin, rungForModel,
 } from '../../src/core/model-match.js';
 import { EFFORT_LEVELS } from '../../src/core/effort.js';
 import { AgentLoop } from '../../src/core/agent-loop.js';
@@ -658,6 +658,18 @@ describe('Max and Argon', () => {
     assert.deepEqual(ladder(THREE.map(({ isMode, ...rest }) => rest)), today);
     assert.deepEqual(ladder(OWNER_PLAN), { low: '3.5 Flash-Lite', medium: '3.8 Flash', high: '3.1 Pro', max: null });
     assert.deepEqual(ladder(LEAN_PLAN), { low: '3.8 Flash', medium: '3.8 Flash', high: '3.1 Pro', max: null });
+  });
+
+  test('the work plan (#91): Flash, Thinking, Pro and no divider', () => {
+    // From the owner's screenshot, 2026-10-26. "Thinking" is a model here, not
+    // a mode: the extension marks modes by the menu's divider, and this menu has
+    // none. Nothing is named Argon and nothing follows Pro, so there is no Max.
+    const WORK = [m('3.6 Flash', { selected: true }), m('3.8 Thinking'), m('3.1 Pro')];
+    const want = { low: '3.6 Flash', medium: '3.8 Thinking', high: '3.1 Pro', max: null };
+    assert.deepEqual(ladder(WORK), want);
+    assert.deepEqual(ladder(WORK.map(({ isMode, ...rest }) => rest)), want, 'nor by the word test');
+    assert.equal(planModelSwitch('max', WORK).action, 'unavailable');
+    assert.equal(rungForModel(WORK, 'high'), 'low', 'the prompt follows the tab on Flash');
   });
 
   test('Argon after Pro: each rung gets its own model', () => {
