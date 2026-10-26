@@ -10,6 +10,32 @@
  * Pure and `.js`, so `node --test` can import it: every row is laid out here
  * at an exact width, and the menu only colours it.
  */
+import { pickModelFor, browserModelPin } from '../core/model-match.js';
+
+/**
+ * The model a stop would put the tab on, on this account (C2).
+ *
+ * The line under the bar used to print the rung's `browser` text — `Gemini
+ * Pro`, `Gemini Argon` — which names a family, not the picker entry, and says
+ * nothing about whether this account has it. Max is the case where that
+ * matters: on most accounts there is no Argon, and the stop should say so
+ * before it is chosen rather than after.
+ *
+ * Before the picker has reported, the rung's own text is all there is, and it
+ * is shown as before.
+ *
+ * @returns {{text: string, available: boolean}}
+ */
+export function stopModel(rung, models = [], modelConfig = {}) {
+  const options = (models || []).filter((m) => m && m.label);
+  if (options.length === 0) return { text: rung.browser, available: true };
+  const pick = pickModelFor(rung.id, options, browserModelPin(modelConfig, rung.id));
+  if (pick) return { text: pick.model.label, available: true };
+  return {
+    text: rung.id === 'max' ? 'not available on this account' : 'nothing on this account suits it',
+    available: false,
+  };
+}
 
 /**
  * @param {{levels: Array<{id: string, name: string}>, at: number, width: number}} view

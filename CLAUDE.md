@@ -633,7 +633,9 @@ labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26
 Pro. With no Pro in the list the positional rule runs unchanged and Max is unavailable, so every
 three-model account maps exactly as before (pinned in `model-match.test.js`). `/effort max`
 without Argon answers `stays <rung> · Argon is not available on this account` and changes
-nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung.
+nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
+slider's model line names what the marked stop maps to on this account (`stopModel` in
+`ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
 
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
