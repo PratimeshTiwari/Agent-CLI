@@ -159,7 +159,7 @@ import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory } from './compaction.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS } from './tool-catalog.js';
-import { resolveEffort, effortFromConfig } from './effort.js';
+import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
 import { planModelSwitch, browserModelPin, rungForModel } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
@@ -1776,7 +1776,7 @@ export class AgentLoop {
       if (pb.promptTier && pb.promptTier !== tier) pb.resetPromptState?.();
       pb.promptTier = tier;
     }
-    return { ...this.modelConfig, effort };
+    return { ...this.modelConfig, effort: promptRung(effort) };
   }
 
   get contextLimit() {
@@ -2267,7 +2267,7 @@ export class AgentLoop {
     const changed = [...MUTATING_TOOLS].some((t) => (this._turnEvidence?.get(t) || 0) > 0);
     if (!changed) return '';
 
-    const block = this.promptBuilder.buildHandoverBlock?.(this._promptEffort()) || '';
+    const block = this.promptBuilder.buildHandoverBlock?.(promptRung(this._promptEffort())) || '';
     if (block) this._handoverSent = true;
     return block;
   }

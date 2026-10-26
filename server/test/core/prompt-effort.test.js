@@ -168,3 +168,33 @@ describe('the reply records what was sent', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('Max sends High\'s prompt', () => {
+  const FOUR = (selected) => ['3.1 Flash-Lite', '3 Flash', '3.1 Pro', '4 Argon']
+    .map((label) => ({ label, isMode: false, selected: label === selected }));
+
+  test('Pro and Argon build byte-identical prompts, in every mode', () => {
+    for (const mode of ['plan', 'auto', 'strict']) {
+      for (const subagents of [true, false]) {
+        const a = loopOn('high', FOUR('3.1 Pro'));
+        const b = loopOn('max', FOUR('4 Argon'));
+        const args = (l) => ({ userMessage: 'hi', mode, subagents, modelConfig: l._promptConfig() });
+        assert.equal(b.l._promptEffort(), 'max', 'control: the Argon tab is read as Max');
+        // Two temp workspaces, so the paths differ; everything else must not.
+        const text = (x) => x.l.promptBuilder.buildPrompt(args(x.l)).split(x.l.workspace).join('<ws>');
+        assert.equal(text(a), text(b),
+          `${mode} / subagents ${subagents}`);
+        a.done(); b.done();
+      }
+    }
+  });
+
+  test('Pro → Argon does not re-teach the thread', () => {
+    const { l, build, done } = loopOn('high', FOUR('3.1 Pro'));
+    build();
+    l.modelConfig.effort = 'max';
+    l.modelOptions = FOUR('4 Argon');
+    assert.doesNotMatch(build(), /<system_state/);
+    done();
+  });
+});

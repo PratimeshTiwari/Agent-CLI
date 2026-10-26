@@ -21,7 +21,7 @@ import path from 'path';
 import * as paths from './paths.js';
 import { EFFORT_LEVELS, resolveEffort, foldEffort } from './effort.js';
 import { logError } from './error-log.js';
-import { planModelSwitch, browserModelPin } from './model-match.js';
+import { planModelSwitch, browserModelPin, pickModelFor } from './model-match.js';
 
 /**
  * How long a name the banner can take.
@@ -404,6 +404,27 @@ export async function handleSlashCommand(loop, command, args) {
       if (wanted && foldEffort(wanted)) {
         const chosen = resolveEffort(wanted);
         const before = resolveEffort(loop.modelConfig.effort);
+
+        /*
+         * Max is a rung only where there is a model for it. Most accounts have
+         * Pro and no Argon, and there `/effort max` says so and changes nothing
+         * — the owner's rule is that it never lands on Pro in silence, and a
+         * setting of Max on a Pro tab would be exactly that with a different
+         * label on the status bar. An unread picker cannot answer either way,
+         * so it is asked and the setting waits rather than guessing.
+         */
+        if (chosen.id === 'max' && before.id !== 'max') {
+          const offered = (loop.modelOptions || []).filter((m) => m && m.label);
+          if (!pickModelFor('max', offered, browserModelPin(loop.modelConfig, 'max'))) {
+            if (!offered.length) loop.requestModelOptions?.(true);
+            return {
+              message: `${renamed}⚙ effort  stays **${before.name}** · `
+                + (offered.length
+                  ? 'Argon is not available on this account'
+                  : 'the tab has not said which models it has yet — try `/effort max` again in a moment'),
+            };
+          }
+        }
         loop.modelConfig.effort = chosen.id;
         loop._saveConfig();
         // No `resetPromptState()` here any more. The prompt follows the tab

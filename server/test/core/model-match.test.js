@@ -39,8 +39,10 @@ describe('pickModelFor — decide by what an option is for, not what it is calle
    * to "Asking the browser". Collapsing five rungs to three broke exactly this
    * and nothing else caught it.
    */
+  // Max excepted: it is unavailable on a plan with no Argon, by design — the
+  // Argon describe block below covers it.
   test('every rung on the ladder can pick something', () => {
-    for (const e of EFFORT_LEVELS) {
+    for (const e of EFFORT_LEVELS.filter((r) => r.id !== 'max')) {
       assert.ok(pickModelFor(e.id, OWNER_PLAN), `${e.id} matched nothing in the owner's plan`);
       assert.ok(pickModelFor(e.id, LEAN_PLAN), `${e.id} matched nothing in the lean plan`);
     }
@@ -630,5 +632,67 @@ describe('requestModelOptions — silence gets written down', () => {
     assert.match(asked.said[0], /never answered/);
     assert.match(asked.said[0], /ctrl\+b/);
     assert.equal(asked.loop._pendingEffortSwitch, null, 'and it is not left pending');
+  });
+});
+
+/**
+ * Max and Argon (v5.26).
+ *
+ * Argon is a model on a few accounts, listed after Pro. Under the old "high =
+ * the last model" rule it would have taken High, pushed Medium onto Pro with
+ * the short prompt, and left Flash unreachable. Pro anchors the ladder by name
+ * again; Max takes Argon, or whatever sits past Pro.
+ */
+describe('Max and Argon', () => {
+  const pick = (id, list, pin) => pickModelFor(id, list, pin)?.model.label ?? null;
+  const ladder = (list) => Object.fromEntries(EFFORT_LEVELS.map((e) => [e.id, pick(e.id, list)]));
+  const m = (label, extra = {}) => ({ label, isMode: false, ...extra });
+  const THREE = [m('3.1 Flash-Lite'), m('3 Flash'), m('3.1 Pro'), { label: 'Extended thinking', isMode: true }];
+  const FOUR = [m('3.1 Flash-Lite'), m('3 Flash'), m('3.1 Pro'), m('4 Argon'), { label: 'Extended thinking', isMode: true }];
+
+  test('a three-model account maps exactly as today, and has no Max', () => {
+    const today = { low: '3.1 Flash-Lite', medium: '3 Flash', high: '3.1 Pro', max: null };
+    assert.deepEqual(ladder(THREE), today);
+    // The same without isMode, read by the old word test, and on the owner's
+    // labelled plan.
+    assert.deepEqual(ladder(THREE.map(({ isMode, ...rest }) => rest)), today);
+    assert.deepEqual(ladder(OWNER_PLAN), { low: '3.5 Flash-Lite', medium: '3.8 Flash', high: '3.1 Pro', max: null });
+    assert.deepEqual(ladder(LEAN_PLAN), { low: '3.8 Flash', medium: '3.8 Flash', high: '3.1 Pro', max: null });
+  });
+
+  test('Argon after Pro: each rung gets its own model', () => {
+    assert.deepEqual(ladder(FOUR), { low: '3.1 Flash-Lite', medium: '3 Flash', high: '3.1 Pro', max: '4 Argon' });
+  });
+
+  test('Argon is found by name wherever it sits', () => {
+    const before = [m('3.1 Flash-Lite'), m('3 Flash'), m('Argon'), m('3.1 Pro')];
+    assert.deepEqual(ladder(before), { low: '3.1 Flash-Lite', medium: '3 Flash', high: '3.1 Pro', max: 'Argon' });
+    const first = [m('Argon'), m('3 Flash'), m('3.1 Pro')];
+    assert.equal(pick('low', first), '3 Flash', 'Argon listed first must not become Low');
+  });
+
+  test('an unnamed model after Pro is Max', () => {
+    assert.deepEqual(ladder([m('3 Flash'), m('3.1 Pro'), m('Ultra 2')]),
+      { low: '3 Flash', medium: '3 Flash', high: '3.1 Pro', max: 'Ultra 2' });
+  });
+
+  test('a mode is never Max', () => {
+    assert.equal(pick('max', THREE), null);
+    assert.equal(pick('max', THREE.map(({ isMode, ...rest }) => rest)), null, 'nor by the word test');
+  });
+
+  test('no entry named Pro: the positional rule, unchanged, and no Max', () => {
+    const noPro = [m('Swift'), m('Balanced'), m('Deep')];
+    assert.deepEqual(ladder(noPro), { low: 'Swift', medium: 'Balanced', high: 'Deep', max: null });
+  });
+
+  test('a pin for max is honoured, and read from browserModels.max', () => {
+    assert.equal(browserModelPin({ browserModels: { max: 'Ultra' } }, 'max'), 'Ultra');
+    assert.equal(pick('max', [...THREE, m('Ultra')], 'Ultra'), 'Ultra');
+  });
+
+  test('planModelSwitch says unavailable for Max without Argon', () => {
+    assert.equal(planModelSwitch('max', THREE).action, 'unavailable');
+    assert.equal(planModelSwitch('max', FOUR).action, 'switch');
   });
 });
