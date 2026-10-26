@@ -601,11 +601,12 @@ export function lineDelta(patch) {
  * capped by BOTH line count and total characters — long single lines wrap into
  * many rows and are the real cause of tearing.
  */
-export function clampForDisplay(value, maxLines = 15, maxChars = 1200) {
+export function clampForDisplay(value, maxLines = 15, maxChars = 1200, { hint = '' } = {}) {
   let text = typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
   if (typeof text !== 'string') return '';
 
   let clipped = false;
+  const total = text.split('\n').length;
   const lines = text.split('\n');
   if (lines.length > maxLines) {
     text = lines.slice(0, maxLines).join('\n');
@@ -615,7 +616,12 @@ export function clampForDisplay(value, maxLines = 15, maxChars = 1200) {
     text = text.slice(0, maxChars);
     clipped = true;
   }
-  return clipped ? `${text}\n... [truncated]` : text;
+  if (!clipped) return text;
+  // Claude Code's marker: how much is hidden, and the key that shows it. It
+  // said `... [truncated]`, which reads as gone — ctrl+e always had the rest.
+  const hidden = total - text.split('\n').length;
+  const what = hidden > 0 ? `… +${hidden} line${hidden === 1 ? '' : 's'}` : '… cut';
+  return `${text}\n${what}${hint ? ` (${hint})` : ''}`;
 }
 
 /**
@@ -629,7 +635,7 @@ export function clampForDisplay(value, maxLines = 15, maxChars = 1200) {
  * @returns {string|null} null when this is not a shell result, so the caller
  *   can fall back to the generic renderer.
  */
-export function formatCommandResult(result, maxLines = 20) {
+export function formatCommandResult(result, maxLines = 20, { hint = '' } = {}) {
   if (!result || typeof result !== 'object') return null;
   const isShellResult = typeof result.exitCode === 'number'
     && ('stdout' in result || 'stderr' in result);
@@ -640,7 +646,7 @@ export function formatCommandResult(result, maxLines = 20) {
 
   const body = [result.stdout, result.stderr].filter((p) => p && p.trim()).join('\n').trimEnd();
   if (body) {
-    lines.push(clampForDisplay(body, maxLines, maxLines * 200));
+    lines.push(clampForDisplay(body, maxLines, maxLines * 200, { hint }));
   } else if (!result.timedOut) {
     lines.push('(no output)');
   }
