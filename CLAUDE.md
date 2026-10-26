@@ -1818,6 +1818,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
   (`enterSequence`), because a command line scrolled off screen is pinned over the header by
   sticky scroll.
+- **`/settings` is a list of switches (v5.27, Option C′, `ui/settings-view.js`,
+  `components/SettingsList.jsx`).** The owner's pick from `.agent/artifacts/plans/2026-10-27-settings-redesign.md`.
+  A row with `control` is a switch (`● on  ○ off`) or a ladder (`◂ high ▸`), and ←/→ set it in place
+  through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
+  sees every change. ←/→ are spatial and never wrap. The hint is on the selected row and drops below
+  70 columns. The filter stays on top, underlined; printable keys go to it, and **tabs are on tab
+  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Startup and
+  Command rules (`OPENS_CHOOSER`). Values are plain except a switch's active state and a read-only
+  `attention`; `Choices` no longer recolours the selected row's detail in any menu. Pty: 0 clears at
+  13×90, 24×100 and 24×60.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input

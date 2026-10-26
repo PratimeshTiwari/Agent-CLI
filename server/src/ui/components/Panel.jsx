@@ -117,9 +117,11 @@ export function Choices({
             <Text color={sel ? T.accent : item.colour} bold={sel}>{label}</Text>
             {item.detail ? (
               // `text` is the terminal's own foreground, never the palette's
-              // white, which vanishes on a light background.
-              <Text color={sel ? T.accent : item.tone && item.tone !== 'text' ? T[item.tone] : undefined}
-                dimColor={!sel && (!item.tone || item.tone === 'muted')}>{'  '}{item.detail}</Text>
+              // white, which vanishes on a light background. The selected row
+              // does not recolour it: only the label takes the accent, or the
+              // row you are on is the hardest one to read (owner, 2026-10-27).
+              <Text color={item.tone && item.tone !== 'text' ? T[item.tone] : undefined}
+                dimColor={!item.tone || item.tone === 'muted'}>{'  '}{item.detail}</Text>
             ) : null}
             {item.current ? <Text color={T.success}>{'  ✔'}</Text> : null}
           </Text>

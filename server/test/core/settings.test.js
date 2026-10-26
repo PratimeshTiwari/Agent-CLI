@@ -92,7 +92,7 @@ test('filterSettings', async (t) => {
   await t.test('matches the hint', () => {
     const on = describeSettings(loop({ modelConfig: { main: 'gemini', subagents: true } }));
     assert.ok(filterSettings(on, 'review').some((r) => r.label === 'Subagents'));
-    assert.ok(filterSettings(rows, 'delegated').some((r) => r.label === 'Subagents'));
+    assert.ok(filterSettings(rows, 'one tab does').some((r) => r.label === 'Subagents'));
   });
 
   await t.test('case does not matter', () => {

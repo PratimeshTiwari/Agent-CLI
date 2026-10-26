@@ -7,13 +7,15 @@ import { rowsFromPatch } from '../diff-preview.js';
 import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
-import { panelRoom, wrapLines, cutStart, settingTone } from '../panel.js';
+import { panelRoom, wrapLines, cutStart } from '../panel.js';
+import { filterUnderline, settingsKeys, stepValue } from '../settings-view.js';
 import { sliderLayout, stopModel } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
+import { SettingsList } from './SettingsList.jsx';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
-import { describeSettings, filterSettings, settingsChanged, SETTING_GROUPS, VALUE_MAX } from '../../core/settings.js';
+import { describeSettings, filterSettings, settingsChanged, SETTING_GROUPS } from '../../core/settings.js';
 import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
@@ -30,23 +32,12 @@ import { saveUserSettings } from '../../core/user-settings.js';
  * approval that could be triggered by a stray 'y' in typed text is how edits
  * used to get applied without anyone agreeing to them.
  */
-/** Settings rows that are a switch, not a choice. Flipped without leaving the page. */
 /**
- * Change a setting, and put the answer where it can actually be read.
- *
- * Every one of these used to set `activeMenu` back to `returnTo` and then push
- * the command's reply into the transcript — and when a menu was opened *from
- * `/settings`*, `returnTo` is the settings page, so the page reopened on top
- * of the message. The setting changed and the confirmation was invisible,
- * which is indistinguishable from nothing having happened. `/effort`,
- * `/config` and the whole allowlist screen had it.
- *
- * So: when there is a page to go back to, go back to it and say nothing — the
- * row you are looking at is the confirmation, and it re-reads live state. When
- * there is not, close and let the transcript answer, which is where a reply
- * belongs when nothing is covering it.
+ * Settings rows whose Enter opens a chooser rather than stepping the value:
+ * each choice there needs its cost said beside it (Effort, Startup), or the
+ * value is a list (Command rules). ←/→ still change them in place.
  */
-const TOGGLES = new Set(['/plan', '/auto', '/memory on', '/memory off', '/allowlist enable', '/allowlist disable']);
+const OPENS_CHOOSER = new Set(['/effort', '/startup', '/allowlist']);
 
 /** A session's own timestamp, formatted, or '' when it has none. */
 function stampOf(session) {
@@ -79,12 +70,23 @@ export function Menus({
   setInputAtEnd,
   resetScreen,
 }) {
+  // `/settings` changes, run one after another (see `step` on that page).
+  const settingsChain = React.useRef(Promise.resolve());
+
   /**
-   * Run a setting change and land somewhere it can be seen. See TOGGLES above.
+   * Change a setting, and put the answer where it can actually be read.
    *
-   * Back to the page it came from, saying nothing, because the row *is* the
-   * confirmation and it re-reads live state. Only when there is no page to go
-   * back to does the transcript get the reply — there, nothing is covering it.
+   * Every one of these used to set `activeMenu` back to `returnTo` and then push
+   * the command's reply into the transcript — and when a menu was opened *from
+   * `/settings`*, `returnTo` is the settings page, so the page reopened on top
+   * of the message. The setting changed and the confirmation was invisible,
+   * which is indistinguishable from nothing having happened. `/effort`,
+   * `/config` and the whole allowlist screen had it.
+   *
+   * So: when there is a page to go back to, go back to it and say nothing — the
+   * row you are looking at is the confirmation, and it re-reads live state. When
+   * there is not, close and let the transcript answer, which is where a reply
+   * belongs when nothing is covering it.
    */
   const applyAndReturn = React.useCallback(async (menu, command, args) => {
     const result = await agentLoop.handleSlashCommand(command, args);
@@ -118,15 +120,13 @@ export function Menus({
     // its cursor, and not shift+tab alone, which is the global mode toggle
     // everywhere else — inside a menu the agent's own bindings are inert, so
     // tab is free here and nowhere else.
-    // ←/→ too (asked for 2026-10-26, as on /help), but only while the filter
-    // is empty: with text in it they move its cursor, which is what they mean
-    // to someone editing a word.
-    const arrows = (key.leftArrow || key.rightArrow) && !activeMenu?.query;
-    if ((key.tab || arrows) && activeMenu?.type === 'settings' && activeMenu.view !== 'leaving') {
-      const step = key.shift || key.leftArrow ? -1 : 1;
+    // ←/→ were tabs too until v5.27; they change the selected value now
+    // (`SettingsList`), so tab and shift+tab are the only way across.
+    if (key.tab && activeMenu?.type === 'settings' && activeMenu.view !== 'leaving') {
+      const step = key.shift ? -1 : 1;
       const at = Math.max(0, SETTING_GROUPS.indexOf(activeMenu.group || SETTING_GROUPS[0]));
       const next = (at + step + SETTING_GROUPS.length) % SETTING_GROUPS.length;
-      setActiveMenu({ ...activeMenu, group: SETTING_GROUPS[next], query: '', at: 0 });
+      setActiveMenu({ ...activeMenu, group: SETTING_GROUPS[next], query: '', at: 0, notes: {} });
       return;
     }
 
@@ -704,60 +704,100 @@ export function Menus({
           }
 
           // ── The page ───────────────────────────────────────────────
-          // Tabs drawn as `/help` draws them. The list lives in Ink's
-          // repainted frame, so it gets the rows the panel can spare and says
-          // how much it is not showing.
-          const selected = matches[Math.min(activeMenu.at || 0, Math.max(0, matches.length - 1))];
-          // the filter row and the hint row
-          const { tight, room } = fit('', 2);
+          // Option C′ (`ui/settings-view.js`): the filter on top, underlined;
+          // switches and ladders that ←/→ change in place; the hint on the
+          // selected row. Tabs drawn as `/help` draws them.
+          const stops = Object.fromEntries(EFFORT_LEVELS.map((e) =>
+            [e.id, stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig)]));
+          const pending = activeMenu.pending || {};
+          const shown = matches.map((row) => {
+            const value = pending[row.label] ?? row.value;
+            if (row.label !== 'Effort') return { ...row, value };
+            // Your model, not the rung's generic one — what the slider says.
+            return {
+              ...row, value,
+              hint: `runs on ${stops[value]?.text ?? row.hint}`,
+              skip: stops.max?.available === false ? ['max'] : [],
+            };
+          });
+          // The filter row, and its underline where there is room for it: the
+          // underline is the first thing a short terminal gives up.
+          const showLine = menuRows >= 16;
+          const { tight, room } = fit('', showLine ? 2 : 1);
+          const line = filterUnderline(query);
           const tabs = (
             <Text wrap="truncate">
-              {SETTING_GROUPS.map((name, i) => (
+              {query ? <Text color={T.accent}>{' all tabs'}</Text> : SETTING_GROUPS.map((name, i) => (
                 <React.Fragment key={name}>
                   {i > 0 ? '   ' : ' '}
-                  {name === group && !query
+                  {name === group
                     ? <Text bold inverse color={T.menu}>{` ${name} `}</Text>
                     : <Text dimColor>{` ${name} `}</Text>}
                 </React.Fragment>
               ))}
-              {query ? <Text color={T.accent}>{'   all tabs'}</Text> : null}
             </Text>
           );
 
+          // Set a value by the command that owns it, in order: a second press
+          // before the first has answered steps from what the row *shows*,
+          // which is `pending`, not from the value still on the loop.
+          const step = (row, value) => {
+            setActiveMenu((m) => ({ ...m, pending: { ...(m.pending || {}), [row.label]: value }, notes: {} }));
+            settingsChain.current = settingsChain.current.then(async () => {
+              const [command, ...args] = row.restore(value).slice(1).split(' ');
+              let reply = '';
+              try {
+                reply = (await agentLoop.handleSlashCommand(command, args))?.message || '';
+              } catch (err) {
+                reply = err?.message || String(err);
+              }
+              const now = describeSettings(agentLoop).find((r) => r.label === row.label)?.value;
+              setActiveMenu((m) => {
+                if (m?.type !== 'settings') return m;
+                const { [row.label]: _done, ...rest } = m.pending || {};
+                // Refused (`/effort max` with no Argon): the reply says why,
+                // on the row, where the eye already is.
+                const notes = now === value ? m.notes : { [row.label]: oneLine(reply.replace(/\*\*|`|^⚙\s*/g, ''), 120) };
+                return { ...m, pending: rest, notes };
+              });
+            });
+          };
+
           return (
-            <Panel width={W} head={tabs} tight={tight}
-              keys={`type to filter · ←/→ tabs · ↑↓ move · enter change · esc ${query ? 'clear' : 'close'}`}>
-              <Box>
-                <Text color={query ? T.accent : T.muted}>{' ⌕ '}</Text>
-                <TextInput
-                  value={query}
-                  placeholder="filter…"
-                  onChange={(value) => setActiveMenu((m) => ({ ...m, query: value, at: 0 }))}
-                />
-              </Box>
-              {matches.length === 0 ? (
+            <Panel width={W} head={tabs} tight={tight} keys={settingsKeys({ query })}>
+              <Text wrap="truncate">
+                <Text color={query ? T.accent : T.muted}>{'  ⌕ '}</Text>
+                {query ? <Text>{query}<Text color={T.accent}>▏</Text></Text> : <Text dimColor>filter…</Text>}
+              </Text>
+              {showLine ? (
+                <Text color={line.role === 'accent' ? T.accent : T.muted} wrap="truncate">{`  ${line.text}`}</Text>
+              ) : null}
+              {shown.length === 0 ? (
                 <Text dimColor wrap="truncate">{`   nothing matches “${query}”`}</Text>
               ) : (
-                <Choices
-                  limit={room}
-                  initialIndex={activeMenu.at || 0}
-                  items={matches.map((row) => ({
-                    // Two columns and nothing else. The hint is only ever
-                    // wanted for the row you are looking at, so it sits under
-                    // the list where it has the whole line.
-                    label: row.label,
-                    detail: oneLine(row.value, VALUE_MAX),
-                    tone: settingTone(row),
-                    value: row.run || '',
-                    key: row.label,
-                  }))}
-                  onHighlight={(item) => {
-                    const at = matches.findIndex((r) => r.label === item.key);
-                    if (at >= 0 && at !== activeMenu.at) setActiveMenu((m) => ({ ...m, at }));
-                  }}
-                  onSelect={async (item) => {
-                    if (!item.value) return;
-                    const back = { ...activeMenu, view: undefined, changes: undefined };
+                <SettingsList
+                  rows={shown}
+                  at={activeMenu.at || 0}
+                  width={W}
+                  room={room}
+                  query={query}
+                  notes={activeMenu.notes || {}}
+                  onMove={(at) => setActiveMenu((m) => ({ ...m, at, notes: {} }))}
+                  onQuery={(q) => setActiveMenu((m) => ({ ...m, query: q, at: 0, notes: {} }))}
+                  onStep={step}
+                  onSelect={async (picked) => {
+                    if (!picked.run) return;
+                    const back = { ...activeMenu, view: undefined, changes: undefined, notes: {} };
+
+                    // A switch or a ladder with nothing more to say changes in
+                    // place: enter is the next value, round to the first.
+                    // Subagents took a page and a paragraph to flip.
+                    if (picked.control && !OPENS_CHOOSER.has(picked.run)) {
+                      const next = stepValue(picked, 1, { skip: picked.skip })
+                        ?? picked.control.options.find((o) => !(picked.skip || []).includes(o));
+                      if (next != null && next !== picked.value) step(picked, next);
+                      return;
+                    }
 
                     // A row that needs a choice hands over to that chooser and
                     // gets the page back afterwards. Closing settings to make a
@@ -768,26 +808,21 @@ export function Menus({
                     // `/name` with no argument only prints the current name,
                     // so running it from here promised a change and delivered
                     // a paragraph — in the transcript, behind the page.
-                    const picked = matches.find((r) => r.label === item.key);
-                    if (picked?.edits === 'name') {
+                    if (picked.edits === 'name') {
                       setActiveMenu({
                         type: 'name', draft: agentLoop.agentName || '', returnTo: back,
                       });
                       return;
                     }
-                    if (item.value === '/effort') {
+                    if (picked.run === '/effort') {
                       setActiveMenu({ type: 'effort', returnTo: back });
                       return;
                     }
-                    if (item.value === '/subagents') {
-                      setActiveMenu({ type: 'config', returnTo: back });
-                      return;
-                    }
-                    if (item.value === '/startup') {
+                    if (picked.run === '/startup') {
                       setActiveMenu({ type: 'startup', returnTo: back });
                       return;
                     }
-                    if (item.value === '/allowlist') {
+                    if (picked.run === '/allowlist') {
                       setActiveMenu({ type: 'allowlist', rules: agentLoop.commandRules, returnTo: back });
                       return;
                     }
@@ -795,7 +830,7 @@ export function Menus({
                     // what `returnTo` needs: a menu raised by a slash command
                     // has no idea it was reached from the settings page, so
                     // escape closed everything instead of stepping back one.
-                    if (item.value === '/skills') {
+                    if (picked.run === '/skills') {
                       setActiveMenu({
                         type: 'skills',
                         skills: listSkills(agentLoop.workspace, agentLoop.skillFolders || []),
@@ -804,18 +839,10 @@ export function Menus({
                       });
                       return;
                     }
-                    if (item.value === '/commands') {
+                    if (picked.run === '/commands') {
                       const days = listCommandDays(agentLoop.workspace);
-                      if (days.length === 0) { setActiveMenu(null); setFocus(FOCUS_INPUT); handleSubmit(item.value); return; }
+                      if (days.length === 0) { setActiveMenu(null); setFocus(FOCUS_INPUT); handleSubmit(picked.run); return; }
                       setActiveMenu({ type: 'commands', days, workspace: agentLoop.workspace, returnTo: back });
-                      return;
-                    }
-
-                    // A row that is simply a switch flips where it stands.
-                    if (TOGGLES.has(item.value)) {
-                      await agentLoop.handleSlashCommand(item.value.slice(1).split(' ')[0],
-                        item.value.slice(1).split(' ').slice(1));
-                      setActiveMenu(back);
                       return;
                     }
 
@@ -824,16 +851,10 @@ export function Menus({
                     // a menu.
                     setActiveMenu(null);
                     setFocus(FOCUS_INPUT);
-                    handleSubmit(item.value);
+                    handleSubmit(picked.run);
                   }}
                 />
               )}
-              {/*
-                `↳` and a matching indent, rather than a blank row between: the
-                list is drawn inside Ink's repainted frame, where a row spent on
-                spacing is a row the viewport does not have.
-              */}
-              <Text dimColor wrap="truncate">{selected?.hint ? `   ↳ ${selected.hint}` : ' '}</Text>
             </Panel>
           );
         })()}
