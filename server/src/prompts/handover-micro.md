@@ -1,6 +1,6 @@
 ## BEFORE YOU FINISH
 
-Two lines, always, even when the change was one word:
+Three lines, whenever you changed something — even if the change was one word:
 
 - **Checklist:** if you wrote a `task.md`, every item `- [x]` — or name which
   are not. Its contents come back to you in `<task_checklist>` every turn.

@@ -352,16 +352,28 @@ export class PromptBuilder {
    * is ceremony people learn to skip — but "did you run it" and "what did you
    * not do" are worth asking at any size.
    *
-   * The flash rungs are unaffected: their handover is a few lines inside their
-   * own reasoning prompt, small enough that moving it would cost more in
-   * machinery than it saves in characters.
+   * The flash rungs get theirs here too since v5.27. It used to sit in their
+   * system prompt, ungated, and the C3 review (2026-10-26) counted Low ending
+   * 10 of 18 question-only turns with `Ran: not run` / `Not done: nothing`
+   * (Medium 3 of 12, High 2 of 32). The owner: "low and medium should not add
+   * the Ran/Not done". Same gate as pro: the first round that changed
+   * something, full once per chat and a pointer after.
    *
    * @param {string} effort
-   * @returns {string} '' for a rung that carries its own
+   * @returns {string}
    */
   buildHandoverBlock(effort) {
     const { tier, level } = resolveEffort(effort);
-    if (tier !== 'pro') return '';
+    if (tier !== 'pro') {
+      const short = tier === 'lite';
+      if (this.hasSeenHandover) {
+        return short
+          ? 'Before you finish: the Checklist / Ran / Not done lines.'
+          : 'Before you finish: Checklist, Read back, Ran, Not done — each with a real answer.';
+      }
+      this.hasSeenHandover = true;
+      return prompt(short ? 'handover-micro' : 'handover-short');
+    }
 
     /**
      * Full once per chat, a pointer after — the tool anchor's shape.
@@ -914,18 +926,13 @@ ${modelTier === 'pro' ? `## Communication
   /**
    * The flash tier's reasoning protocol: there is deliberately almost none.
    *
-   * The handover check is the exception, and it is two lines. Flash is the
-   * weakest model on the ladder, which makes it the *most* likely to report a
-   * thing as done without having looked — so excluding it, which was the first
-   * instinct, would have left the check off the rung that needs it most.
-   *
-   * Two lines rather than the pro tier's seven because this rung is 5.6k
-   * characters and its whole identity is being terse: the full review is +33%
-   * here against +11% on the tiers above, and a protocol that fights what the
-   * tier is for is one the model follows worse, not better.
+   * Its handover check (`handover-micro`) is not here: it arrives with the
+   * first round that changed something (`buildHandoverBlock`). Flash is the
+   * weakest model on the ladder, so it still gets one — only not on a turn
+   * that answered a question.
    */
   _getFlashInstructions() {
-    return `${prompt('reasoning-lite')}\n\n${prompt('handover-micro')}`;
+    return prompt('reasoning-lite');
   }
 
   /**
@@ -936,11 +943,11 @@ ${modelTier === 'pro' ? `## Communication
   /**
    * Flash-thinking: a three-phase protocol, still a short prompt.
    *
-   * The four-point handover, not the two-point one: this rung already has a
-   * protocol and a context budget twice Flash's, so the check costs ~2% here.
+   * Its four-point handover (`handover-short`) arrives with the first round
+   * that changed something, like every rung's (`buildHandoverBlock`).
    */
   _getFlashThinkingInstructions() {
-    return `${prompt('reasoning-flash')}\n\n${prompt('handover-short')}`;
+    return prompt('reasoning-flash');
   }
 
   /**

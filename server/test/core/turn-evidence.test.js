@@ -221,13 +221,17 @@ describe('the handover arrives when there is something to hand over', () => {
     assert.equal(l._dueHandover(), '');
   });
 
-  // The flash rungs carry their own, inline and much smaller. Sending them this
-  // one too would be the same text twice at the rung least able to afford it.
-  test('the flash rungs are left alone', () => {
+  // Since v5.27 the flash rungs' handover is gated the same way: it was in
+  // their system prompt, and Low ended 10 of 18 question-only turns with
+  // `Ran: not run` / `Not done: nothing`.
+  test('the flash rungs get theirs only after a change', () => {
     for (const effort of ['low', 'medium']) {
+      const asked = loop(effort);
+      assert.equal(asked._dueHandover(), '', `${effort}: a question has nothing to hand over`);
       const l = loop(effort);
       l._turnEvidence.set('edit_file', 1);
-      assert.equal(l._dueHandover(), '', effort);
+      assert.match(l._dueHandover(), /BEFORE YOU FINISH/, effort);
+      assert.doesNotMatch(l._dueHandover() || '', /BEFORE YOU FINISH/, `${effort}: once per turn`);
     }
   });
 
@@ -237,15 +241,15 @@ describe('the handover arrives when there is something to hand over', () => {
    * A retired name must land on the full one too — `_dueHandover` reads the
    * effort, and `brief` selecting the short version was the old behaviour.
    */
-  test('pro gets the full review; the flash rungs carry their own', () => {
+  test('pro gets the full review; the flash rungs their short ones', () => {
     const pro = loop('high'); pro._turnEvidence.set('edit_file', 1);
     assert.match(pro._dueHandover(), /THE HANDOVER REVIEW/);
 
-    // Not a gap: the flash rungs carry a few lines inside their own reasoning
-    // prompt, so a second block here would be the same words twice.
     for (const small of ['low', 'medium']) {
       const f = loop(small); f._turnEvidence.set('edit_file', 1);
-      assert.equal(f._dueHandover(), '', small);
+      const block = f._dueHandover();
+      assert.match(block, /BEFORE YOU FINISH/, small);
+      assert.doesNotMatch(block, /THE HANDOVER REVIEW/, small);
     }
 
     // A retired rung id must still reach the pro block rather than nothing.
