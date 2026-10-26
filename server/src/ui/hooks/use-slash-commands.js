@@ -57,7 +57,7 @@ import { summariseTraces, formatMs } from '../../core/trace-log.js';
 import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../core/channel-health.js';
 import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
-import { checkForUpdate, isDirty, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
+import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
 import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
@@ -307,10 +307,15 @@ export async function handleSlashCommand(query, {
         // Said here rather than after the pull is attempted: it is the one
         // thing that would stop this working, and knowing now is worth more
         // than finding out when you ask for it.
-        const dirty = await isDirty(agentLoop.agentSourceDir);
-        if (dirty) {
-          lines.push('! There are uncommitted changes in the agent\'s own repo, so this cannot',
-            'be pulled yet. Commit or stash them first — `/update` will not pull over your work.');
+        // Untracked files and a lockfile npm rewrote do not stop a pull
+        // (issue #90); anything else is named, so there is something to act on.
+        const tree = await treeState(agentLoop.agentSourceDir);
+        if (tree?.blocking.length) {
+          lines.push(`! Uncommitted changes in the agent's own repo: ${nameFiles(tree.blocking)}. `
+            + 'Commit or stash them first — `/update` will not pull over your work.');
+        } else if (tree?.regenerable.length) {
+          lines.push(`\`/update pull\` to take them. It puts back ${nameFiles(tree.regenerable)} first — `
+            + 'npm rewrote it, and the install after the pull writes it again.');
         } else {
           lines.push('`/update pull` to take them.');
         }
@@ -323,7 +328,8 @@ export async function handleSlashCommand(query, {
       if (!outcome.files.length) { say('✔ Already up to date.'); return; }
 
       const n = outcome.files.length;
-      const heading = `**Updated**  ${n} file${n === 1 ? '' : 's'} changed`;
+      const heading = `**Updated**  ${n} file${n === 1 ? '' : 's'} changed`
+        + (outcome.restored?.length ? ` · put back ${nameFiles(outcome.restored)}` : '');
       const lines = [];
 
       /**

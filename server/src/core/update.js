@@ -182,8 +182,67 @@ export async function checkForUpdate(dir) {
  * clean".
  */
 export async function isDirty(dir) {
-  const status = await git(dir, ['status', '--porcelain']);
-  return status === null ? null : status !== '';
+  const tree = await treeState(dir);
+  return tree === null ? null : tree.blocking.length > 0;
+}
+
+/**
+ * A lockfile npm rewrote is not anyone's work.
+ *
+ * Issue #90, from the work laptop: `/update` said "26 updates available" and
+ * refused, every time, over uncommitted changes nobody had made. `npm install`
+ * runs from `setup.sh`, from startup recovery and from `/update` itself, and an
+ * npm older or newer than the one that wrote `package-lock.json` rewrites it —
+ * so one install leaves the tree dirty for good, and the command that is meant
+ * to bring the checkout up to date can never run again.
+ */
+const REGENERABLE = /(^|\/)package-lock\.json$/;
+
+/**
+ * What in the tree stands between `/update` and a pull.
+ *
+ * **Untracked files do not count.** A fast-forward leaves them alone, and if it
+ * would add a file at the same path git refuses on its own and the pull reports
+ * that. They used to count, and one stray note in the checkout blocked every
+ * update.
+ *
+ * @returns {Promise<{blocking: string[], regenerable: string[]}|null>} the
+ *   changed tracked files, split into someone's work and npm's; `null` when the
+ *   status cannot be read.
+ */
+export async function treeState(dir) {
+  // -z: a path with a space or a quote is not escaped, and a rename is two
+  // entries (new, then old) rather than one with an arrow in it.
+  const status = await gitRaw(dir, ['status', '--porcelain', '-z', '--untracked-files=no']);
+  if (status === null) return null;
+  const entries = status.split('\0').filter(Boolean);
+  const blocking = [];
+  const regenerable = [];
+  for (let i = 0; i < entries.length; i++) {
+    const code = entries[i].slice(0, 2);
+    const file = entries[i].slice(3);
+    if (/[RC]/.test(code)) i++; // the rename's source path follows
+    // Only a modification can be put back. A deleted or renamed lockfile is a
+    // decision somebody made.
+    (REGENERABLE.test(file) && /^[ M]M$|^M $/.test(code) ? regenerable : blocking).push(file);
+  }
+  return { blocking, regenerable };
+}
+
+/** `git()` without the trim, which would eat the leading space of a ` M` row. */
+async function gitRaw(dir, args, { timeout = 5000 } = {}) {
+  try {
+    const { stdout } = await run('git', args, { cwd: dir, timeout, windowsHide: true });
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+/** At most `max` names, then how many more — for a message that has to fit a row or two. */
+export function nameFiles(files, max = 5) {
+  const shown = files.slice(0, max).map((f) => `\`${f}\``).join(', ');
+  return files.length > max ? `${shown} and ${files.length - max} more` : shown;
 }
 
 /**
@@ -240,23 +299,31 @@ export const needsInstall = (files = []) =>
  *
  * **Refuses on a dirty tree.** Someone's uncommitted work is not ours to
  * rebase, stash or clobber, and an update command that eats an afternoon's
- * edits is worse than no update command.
+ * edits is worse than no update command. The one exception is a lockfile npm
+ * rewrote (`treeState`): it is put back first, and `restored` says so.
  *
  * @returns {Promise<{ok: boolean, error?: string, from?: string, to?: string,
- *                     files?: string[], steps?: Array, install?: boolean}>}
+ *                     files?: string[], steps?: Array, install?: boolean,
+ *                     restored?: string[]}>}
  */
 export async function pullUpdate(dir) {
   const inRepo = await git(dir, ['rev-parse', '--is-inside-work-tree']);
   if (inRepo !== 'true') return { ok: false, error: 'The agent is not running from a git checkout.' };
 
-  const dirty = await isDirty(dir);
-  if (dirty === null) return { ok: false, error: 'Could not read the repository status.' };
-  if (dirty) {
+  const tree = await treeState(dir);
+  if (tree === null) return { ok: false, error: 'Could not read the repository status.' };
+  if (tree.blocking.length) {
     return {
       ok: false,
-      error: 'There are uncommitted changes in the agent\'s own repo. '
+      error: `Uncommitted changes in the agent's own repo: ${nameFiles(tree.blocking)}. `
         + 'Commit or stash them first — `/update` will not pull over your work.',
     };
+  }
+  // The install after the pull writes it again from the new package.json, so
+  // nothing is lost by putting it back.
+  const restored = tree.regenerable;
+  if (restored.length && (await git(dir, ['checkout', 'HEAD', '--', ...restored])) === null) {
+    return { ok: false, error: `Could not restore ${nameFiles(restored)} before pulling.` };
   }
 
   const from = await git(dir, ['rev-parse', 'HEAD']);
@@ -275,11 +342,11 @@ export async function pullUpdate(dir) {
   }
 
   const to = await git(dir, ['rev-parse', 'HEAD']);
-  if (from && to && from === to) return { ok: true, from, to, files: [], steps: [], install: false };
+  if (from && to && from === to) return { ok: true, from, to, files: [], steps: [], install: false, restored };
 
   const diff = await git(dir, ['diff', '--name-only', `${from}..${to}`]);
   const files = diff ? diff.split('\n').filter(Boolean) : [];
-  return { ok: true, from, to, files, steps: reloadSteps(files), install: needsInstall(files) };
+  return { ok: true, from, to, files, steps: reloadSteps(files), install: needsInstall(files), restored };
 }
 
 // ── The reminder that survives a restart ─────────────────────────────

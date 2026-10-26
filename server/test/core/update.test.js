@@ -20,7 +20,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   reloadSteps, needsInstall, checkForUpdate, pullUpdate,
-  savePendingReload, readPendingReload, clearPendingReload, isDirty,
+  savePendingReload, readPendingReload, clearPendingReload, isDirty, treeState, nameFiles,
 } from '../../src/core/update.js';
 
 const ids = (files) => reloadSteps(files).map((s) => s.id);
@@ -139,20 +139,111 @@ describe('pullUpdate refuses rather than clobbers', () => {
     assert.match(out.error, /not running from a git checkout/);
   });
 
-  test('a dirty tree is refused — uncommitted work is not ours to rebase', async () => {
-    // This repo is the checkout under test; dirty it and check the refusal.
-    const ws = process.cwd();
-    const probe = join(ws, `.update-probe-${Date.now()}`);
-    const { writeFileSync, rmSync: rm } = await import('fs');
-    writeFileSync(probe, 'x');
-    try {
-      const out = await pullUpdate(ws);
-      assert.equal(out.ok, false);
-      assert.match(out.error, /uncommitted changes/);
-      assert.match(out.error, /will not pull over your work/);
-    } finally {
-      rm(probe, { force: true });
-    }
+  // The dirty-tree cases are below, in throwaway repos. This one used to dirty
+  // the real checkout with an untracked file — which no longer blocks, so it
+  // would have pulled origin/main into the repo running the tests.
+});
+
+/**
+ * Issue #90: "26 updates available", then a refusal over uncommitted changes
+ * nobody had made, on every try. `npm install` rewrites `package-lock.json`
+ * under a different npm, and every install path here runs it.
+ */
+describe('what a dirty tree means to a pull', () => {
+  let origin, work, other;
+
+  const git = (dir, ...args) => execFileSync('git', args, {
+    cwd: dir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' },
+  });
+
+  const commit = (dir, name, body) => {
+    writeFileSync(join(dir, name), body);
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-m', name);
+  };
+
+  beforeEach(() => {
+    origin = mkdtempSync(join(tmpdir(), 'upd-origin-'));
+    work = mkdtempSync(join(tmpdir(), 'upd-work-'));
+    other = mkdtempSync(join(tmpdir(), 'upd-other-'));
+    git(origin, 'init', '--bare', '--initial-branch=main', '.');
+    git(work, 'clone', origin, '.');
+    commit(work, 'package-lock.json', '{"lockfileVersion": 3}\n');
+    commit(work, 'app.js', 'one\n');
+    git(work, 'push', '-u', 'origin', 'main');
+    // Something to pull.
+    git(other, 'clone', origin, '.');
+    commit(other, 'new.js', 'two\n');
+    git(other, 'push', 'origin', 'main');
+  });
+
+  afterEach(() => {
+    for (const d of [origin, work, other]) rmSync(d, { recursive: true, force: true });
+  });
+
+  test('a clean tree pulls', async () => {
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, true, out.error);
+    assert.deepEqual(out.files, ['new.js']);
+    assert.deepEqual(out.restored, []);
+  });
+
+  test('your edit is refused, and named', async () => {
+    writeFileSync(join(work, 'app.js'), 'mine\n');
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /`app\.js`/);
+    assert.match(out.error, /will not pull over your work/);
+    assert.equal(await isDirty(work), true);
+  });
+
+  test('a lockfile npm rewrote is put back, and the pull goes ahead', async () => {
+    writeFileSync(join(work, 'package-lock.json'), '{"lockfileVersion": 2}\n');
+    assert.equal(await isDirty(work), false, 'a rewritten lockfile still reads as your work');
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, true, out.error);
+    assert.deepEqual(out.restored, ['package-lock.json']);
+    assert.deepEqual(out.files, ['new.js']);
+  });
+
+  test('a lockfile beside your edit is not put back — the edit still refuses', async () => {
+    // Control: the exemption must not leak into "anything goes once npm ran".
+    writeFileSync(join(work, 'package-lock.json'), '{"lockfileVersion": 2}\n');
+    writeFileSync(join(work, 'app.js'), 'mine\n');
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /`app\.js`/);
+    assert.doesNotMatch(out.error, /package-lock/);
+    assert.equal(git(work, 'status', '--porcelain', 'package-lock.json').trim(), 'M package-lock.json',
+      'the lockfile was put back on a pull that never happened');
+  });
+
+  test('a deleted lockfile is somebody\'s decision', async () => {
+    rmSync(join(work, 'package-lock.json'));
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /`package-lock\.json`/);
+  });
+
+  test('an untracked file does not block', async () => {
+    writeFileSync(join(work, 'notes.txt'), 'x');
+    assert.equal(await isDirty(work), false);
+    const out = await pullUpdate(work);
+    assert.equal(out.ok, true, out.error);
+  });
+
+  test('treeState reads a path with a space', async () => {
+    commit(work, 'a b.js', '1\n');
+    writeFileSync(join(work, 'a b.js'), '2\n');
+    assert.deepEqual((await treeState(work)).blocking, ['a b.js']);
+  });
+
+  test('nameFiles caps the list', () => {
+    assert.equal(nameFiles(['a']), '`a`');
+    assert.equal(nameFiles(['a', 'b', 'c'], 2), '`a`, `b` and 1 more');
   });
 });
 
