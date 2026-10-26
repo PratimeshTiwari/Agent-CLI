@@ -105,9 +105,10 @@ export function describeSettings(agentLoop) {
       label: 'Startup',
       value: agentLoop?.startupMode === 'warm' ? 'warm' : 'cold',
       hint: agentLoop?.startupMode === 'warm'
-        ? 'setup prompt sent when Chrome connects — your first message goes alone'
-        : 'setup prompt goes with your first message — enter for warm',
-      run: agentLoop?.startupMode === 'warm' ? '/startup cold' : '/startup warm',
+        ? 'setup sent when Chrome connects — enter to compare'
+        : 'setup sent with your first message — enter to compare',
+      // The chooser, not a toggle: each choice needs its cost said next to it.
+      run: '/startup',
       restore: (value) => `/startup ${value}`,
     },
     {

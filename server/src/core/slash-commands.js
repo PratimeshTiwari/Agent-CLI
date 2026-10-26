@@ -184,7 +184,7 @@ export async function handleSlashCommand(loop, command, args) {
       const facts = loop.memoryManager.getAllMemories();
       const where = paths.memoryPath(loop.workspace);
       if (facts.length === 0) {
-        return { message: `Nothing remembered yet · facts land in \`${where}\`, an ordinary file you can edit` };
+        return { message: `Nothing remembered yet · facts land in \`${where}\`` };
       }
       return {
         message: `**Memory**  ${facts.length} fact${facts.length === 1 ? '' : 's'}`

@@ -617,6 +617,34 @@ export function Menus({
         })()}
 
         {/*
+          Warm or cold start (v5.27). Both choices explained where they are
+          chosen: "setup prompt" means nothing until it says what it is and
+          what each choice costs.
+        */}
+        {activeMenu?.type === 'startup' && (() => {
+          const warm = agentLoop.startupMode === 'warm';
+          const { sub, tight, room } = fit(
+            'Every new chat has to be sent the setup once: rules, tools, AGENT.md and memory, about 20k '
+              + 'characters. This decides when.',
+          );
+          return (
+            <Panel width={W} title="Startup" status={warm ? 'warm' : 'cold'} sub={sub} tight={tight}
+              keys="↑↓ move · 1–2 or enter choose · esc cancel">
+              <Choices
+                numbered
+                limit={room}
+                initialIndex={warm ? 1 : 0}
+                items={[
+                  { label: 'Cold', detail: 'sent with your first message · nothing extra, the first reply takes longer', value: 'cold', current: !warm },
+                  { label: 'Warm', detail: 'sent when Chrome connects and after /new · one extra Gemini message per start', value: 'warm', current: warm },
+                ]}
+                onSelect={(item) => applyAndReturn(activeMenu, 'startup', [item.value])}
+              />
+            </Panel>
+          );
+        })()}
+
+        {/*
           `/help` answers "what can I type?". This answers "how is this set up?",
           which had no answer — it was spread across /config, /effort, /memory,
           /allowlist and the status bar, one command per fact. Picking a row
@@ -753,6 +781,10 @@ export function Menus({
                     }
                     if (item.value === '/subagents') {
                       setActiveMenu({ type: 'config', returnTo: back });
+                      return;
+                    }
+                    if (item.value === '/startup') {
+                      setActiveMenu({ type: 'startup', returnTo: back });
                       return;
                     }
                     if (item.value === '/allowlist') {

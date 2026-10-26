@@ -185,7 +185,7 @@ test('the settings page lists it', async () => {
   l.startupMode = 'cold';
   const row = describeSettings(l).find((r) => r.label === 'Startup');
   assert.equal(row?.value, 'cold');
-  assert.equal(row.run, '/startup warm');
+  assert.equal(row.run, '/startup', 'enter opens the chooser that explains both');
   assert.ok(readFileSync(new URL('../../src/ui/constants.js', import.meta.url), 'utf8').includes("name: 'startup'"));
   done();
 });
