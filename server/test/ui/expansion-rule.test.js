@@ -60,5 +60,17 @@ test('the rule is applied, not merely declared', () => {
 // Collapsed rows were already short; the change must not have touched them,
 // or every summary line in the transcript grows.
 test('collapsed output is unchanged', () => {
-  assert.match(src, /if \(!verbose \|\| NOT_WORTH_EXPANDING\.has\(toolName\)\) return \{ lines: 6, chars: 400 \}/);
+  assert.match(src, /if \(NOT_WORTH_EXPANDING\.has\(toolName\)\) return \{ lines: 6, chars: 400, hint: '' \}/);
+  assert.match(src, /if \(!verbose\) return \{ lines: 6, chars: 400, hint: 'ctrl\+e to expand' \}/);
+});
+
+// The marker names the key only where the key shows more. A retrieval does not
+// expand, so offering ctrl+e there would be a promise ctrl+e does not keep.
+test('the expand hint is offered only where ctrl+e expands', () => {
+  const NOT = /if \(NOT_WORTH_EXPANDING\.has\(toolName\)\) return \{[^}]*hint: '' \}/;
+  assert.match(src, NOT, 'a read would offer ctrl+e and then not expand');
+  assert.ok(src.indexOf('NOT_WORTH_EXPANDING.has(toolName)) return') < src.indexOf("if (!verbose) return"),
+    'the retrieval rule must run before the collapsed rule, or reads get the hint');
+  assert.doesNotMatch(src, /clampForDisplay\(act\.\w+, limit\.lines, limit\.chars\)(?!,)/,
+    'a clamp site that does not pass the hint keeps the old silent marker');
 });

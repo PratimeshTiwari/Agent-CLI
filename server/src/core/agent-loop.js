@@ -175,6 +175,7 @@ import { requiresApproval, isBlockedOutright } from './tool-policy.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from './diff-approval.js';
 import { createOutputTail } from './output-tail.js';
+import { startupMode } from './user-settings.js';
 
 
 // Backstop for a prompt the extension never answers. Longer than the content
@@ -425,6 +426,11 @@ export class AgentLoop {
     this.chatThread = this._resumeOnConnect
       ? (this.sessionStore.getThread?.() || null)
       : null;
+    // Warm start (v5.27): `~/.agent/settings.json`, per person. Read once; the
+    // first extension to identify spends it (`warmUpOnConnect`).
+    this.startupMode = startupMode();
+    this._warmOnConnect = this.startupMode === 'warm';
+    this.warmState = null;
     this.pendingGeminiResponse = null;
     this.callbacks = null;
     this.isProcessing = false;
@@ -1350,11 +1356,24 @@ export class AgentLoop {
   _recordThread(url) {
     const thread = threadFromUrl(url);
     if (!thread?.id) return;
-    if (this.chatThread?.id === thread.id) return;
+    if (this.chatThread?.id === thread.id) {
+      // The warm-up's chat, now holding a real exchange: the disk can have it.
+      if (this._threadUnsaved && !this._warming) {
+        this._threadUnsaved = false;
+        this.sessionStore?.setThread?.(thread);
+      }
+      return;
+    }
 
     const previous = this.chatThread;
     this.chatThread = thread;
-    this.sessionStore?.setThread?.(thread);
+    /*
+     * A chat that only holds the warm-up is kept off disk. A session with no
+     * user turn is never filed, so if this process ended here `--continue`
+     * would pair the last filed conversation with a thread that never saw it.
+     */
+    if (this._warming) this._threadUnsaved = true;
+    else this.sessionStore?.setThread?.(thread);
 
     /**
      * A different conversation is a model that never saw the system prompt.
@@ -2330,6 +2349,7 @@ export class AgentLoop {
    */
   abortExtensionWork() {
     this._cancelScheduledRetry();
+    if (this._warming) this._warmCancelled = true;
     if (this._threadAsk) {
       const ask = this._threadAsk;
       this._threadAsk = null;
@@ -2528,6 +2548,106 @@ export class AgentLoop {
 
     if (this.promptBuilder) this.promptBuilder.pendingRecap = this.conversationHistory;
     return 'recap';
+  }
+
+  /**
+   * Warm start (v5.27, Part A of the 10-26 plan): teach the chat before the
+   * first message, so that message goes out as an ordinary short turn.
+   *
+   * Opt-in (`/startup warm`). It proves the bridge before anyone asks
+   * anything, and the model reads the ~23k-character setup while the person
+   * is still typing. It costs one Gemini message per launch.
+   *
+   * Skipped when the chat already has the prompt, when a turn is running, and
+   * when a conversation is in the tab or about to be described to it (a thread
+   * resume, a recap, a compaction hand-over) — those go with a real message.
+   *
+   * Busy while it runs, so a prompt typed meanwhile queues and goes out on the
+   * idle edge. The prompt is marked seen **only** on Gemini's answer; a
+   * timeout, an error or esc resets it, so the worst case is a cold start.
+   *
+   * @returns {Promise<'ready'|'failed'|'cancelled'|'skipped'>}
+   */
+  async warmUp({ timeoutMs = 90_000, waitForModelsMs = 4000 } = {}) {
+    const pb = this.promptBuilder;
+    if (!pb || pb.hasSeenSystemPrompt || this.isProcessing || this._warming) return 'skipped';
+    if (this.chatThread?.id || pb.pendingRecap?.length || pb.pendingCompactedContext) return 'skipped';
+
+    this._warming = true;
+    this._warmCancelled = false;
+    this.warmState = 'warming';
+    this.isProcessing = true;
+    this._emitWarm();
+    this.callbacks?.sendToPanel?.({
+      id: randomUUID(),
+      type: 'status',
+      payload: { message: 'Getting ready — sending the setup prompt…', progress: { step: 1, of: 1 } },
+      timestamp: Date.now(),
+    });
+
+    const startedAt = Date.now();
+    let outcome = 'failed';
+    try {
+      // The prompt follows the tab (C0), and the picker is asked 1.5s after
+      // identify. Wait for its answer, briefly; without one the setting decides.
+      const until = Date.now() + waitForModelsMs;
+      while (!(this.modelOptions || []).length && Date.now() < until && !this._warmCancelled) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (this._warmCancelled) {
+        outcome = 'cancelled';
+      } else {
+        const prompt = pb.buildWarmup({
+          mode: this.mode, subagents: this.subagentsEnabled, modelConfig: this._promptConfig(),
+        });
+        const asked = await this._askThread(prompt, { timeoutMs });
+        outcome = asked.ok ? 'ready' : asked.cancelled ? 'cancelled' : 'failed';
+      }
+    } catch {
+      outcome = 'failed';
+    }
+
+    if (outcome === 'ready') {
+      pb.markSystemPromptSeen();
+      pb.noteMessageSent();
+    } else {
+      pb.resetPromptState();
+    }
+    this._warming = false;
+    this.warmState = outcome;
+    this._emitWarm();
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'warm_up',
+      message: outcome === 'ready' ? 'Setup prompt sent before the first message'
+        : `Warm-up ${outcome} — the first message carries the setup`,
+      meta: { outcome, ms: Date.now() - startedAt },
+    });
+    // Last: the idle edge drains whatever was typed while this ran.
+    this.isProcessing = false;
+    return outcome;
+  }
+
+  /**
+   * Told when a warm-up starts and ends. The UI cannot rely on the status
+   * message for this: Chrome usually connects before the app has attached its
+   * callbacks, so that message goes only to the side panel.
+   */
+  onWarm(fn) {
+    (this._warmListeners ||= new Set()).add(fn);
+    return () => this._warmListeners.delete(fn);
+  }
+
+  _emitWarm() {
+    for (const fn of this._warmListeners || []) {
+      try { fn(this.warmState); } catch { /* a listener must not stop the warm-up */ }
+    }
+  }
+
+  /** The first extension to identify starts the warm-up, once per launch. */
+  warmUpOnConnect() {
+    if (!this._warmOnConnect) return null;
+    this._warmOnConnect = false;
+    return this.warmUp();
   }
 
   /**

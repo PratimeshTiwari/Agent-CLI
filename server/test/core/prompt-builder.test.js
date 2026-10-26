@@ -650,10 +650,15 @@ describe('every rung asks for a list, checks it, and reviews before finishing', 
     assert.doesNotMatch(pro('high'), /THE HANDOVER REVIEW|Read back:/);
   });
 
-  test('and the flash rungs still do, because theirs is small', () => {
+  /*
+   * Nor do the flash rungs since v5.27. Theirs sat in the system prompt,
+   * ungated, and Low ended 10 of 18 question-only turns with `Ran: not run`.
+   * Owner: "low and medium should not add the Ran/Not done".
+   */
+  test('nor do the flash rungs: theirs arrives with the first change', () => {
     for (const effort of ['low', 'medium']) {
-      assert.match(pro(effort), /BEFORE YOU FINISH/, effort);
-      assert.equal(pb().buildHandoverBlock(effort), '', `${effort} should not get a second one`);
+      assert.doesNotMatch(pro(effort), /BEFORE YOU FINISH/, effort);
+      assert.match(pb().buildHandoverBlock(effort), /BEFORE YOU FINISH/, `${effort} has no handover at all`);
     }
   });
 
@@ -669,13 +674,12 @@ describe('every rung asks for a list, checks it, and reviews before finishing', 
     // assert against the reminder.
     const blockFresh = (effort) => new PromptBuilder(ws, ws).buildHandoverBlock(effort);
 
-    assert.match(pro('low'), /BEFORE YOU FINISH/);
-    assert.doesNotMatch(pro('low'), /THE HANDOVER REVIEW/, 'the full review on a 5.6k prompt is +33%');
+    assert.match(blockFresh('low'), /BEFORE YOU FINISH/);
+    assert.doesNotMatch(blockFresh('low'), /THE HANDOVER REVIEW|Read back:/, 'the full review on a 5.6k prompt is +33%');
 
-    // flash-thinking carries the four-point version inside its own reasoning
-    // prompt, and gets no second block.
-    assert.match(pro('medium'), /Read back:/);
-    assert.doesNotMatch(pro('medium'), /THE HANDOVER REVIEW/);
+    // flash-thinking gets the four-point version.
+    assert.match(blockFresh('medium'), /Read back:/);
+    assert.doesNotMatch(blockFresh('medium'), /THE HANDOVER REVIEW/);
 
     assert.match(blockFresh('high'), /THE HANDOVER REVIEW/);
   });
@@ -717,10 +721,22 @@ describe('the handover review — asked for, so pin where it appears', () => {
   });
 
   test('the flash tiers never see the pro prompt, so they get their own', () => {
-    assert.doesNotMatch(pro('low'), /THE HANDOVER REVIEW/);
-    assert.doesNotMatch(pro('medium'), /THE HANDOVER REVIEW/);
-    assert.match(pro('low'), /BEFORE YOU FINISH/);
-    assert.match(pro('medium'), /BEFORE YOU FINISH/);
+    assert.doesNotMatch(block('low'), /THE HANDOVER REVIEW/);
+    assert.doesNotMatch(block('medium'), /THE HANDOVER REVIEW/);
+    assert.match(block('low'), /BEFORE YOU FINISH/);
+    assert.match(block('medium'), /BEFORE YOU FINISH/);
+  });
+
+  test('the flash tiers: full once per chat, a pointer after', () => {
+    for (const effort of ['low', 'medium']) {
+      const pb = new PromptBuilder(ws, ws);
+      const first = pb.buildHandoverBlock(effort);
+      const second = pb.buildHandoverBlock(effort);
+      assert.match(first, /BEFORE YOU FINISH/, effort);
+      assert.ok(second.length < 100 && /Not done/.test(second), `${effort}: ${second}`);
+      pb.resetPromptState();
+      assert.match(pb.buildHandoverBlock(effort), /BEFORE YOU FINISH/, `${effort}: a new chat gets it in full`);
+    }
   });
 
   /*

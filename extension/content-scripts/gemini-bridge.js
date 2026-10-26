@@ -2155,9 +2155,37 @@ function currentModelLabel() {
 }
 
 /** One option's label, its own description, and whether it is the current one. */
+/**
+ * An entry's text pieces, by element rather than by line: the name, then the
+ * purpose under it. Unwraps single-child wrappers until the entry splits into
+ * more than one text-bearing child, so markup inside the name stays whole.
+ * Icons are skipped — the selected entry's tick is a ligature (`check`).
+ */
+function modelOptionPieces(el) {
+  const isIcon = (n) => n.matches?.('mat-icon, svg, [aria-hidden="true"]');
+  let node = el;
+  for (let depth = 0; depth < 8 && node; depth++) {
+    const kids = [...(node.children || [])].filter((c) => !isIcon(c) && (c.textContent || '').trim());
+    if (kids.length === 1) { node = kids[0]; continue; }
+    return kids.map((c) => c.textContent.replace(/\s+/g, ' ').trim());
+  }
+  return [];
+}
+
 function describeModelOption(el) {
-  const lines = (el.innerText || el.textContent || '')
+  let lines = (el.innerText || el.textContent || '')
     .split('\n').map((l) => l.trim()).filter(Boolean);
+  /*
+   * `innerText` puts a line break between the name and the purpose only when
+   * the entry is laid out as two blocks. When it is not — a closing menu, a
+   * tab Chrome is not painting, or `textContent` here — the two came back as
+   * one line, and the status bar read "3.8 Flash All-around help" (reported
+   * 2026-10-27). Then the elements say where one ends and the other begins.
+   */
+  if (lines.length < 2) {
+    const pieces = modelOptionPieces(el);
+    if (pieces.length >= 2) lines = pieces;
+  }
 
   return {
     label: lines[0] || '',

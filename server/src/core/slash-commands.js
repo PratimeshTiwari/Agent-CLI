@@ -21,6 +21,7 @@ import path from 'path';
 import * as paths from './paths.js';
 import { EFFORT_LEVELS, resolveEffort, foldEffort } from './effort.js';
 import { logError } from './error-log.js';
+import { saveUserSettings } from './user-settings.js';
 import { planModelSwitch, browserModelPin, pickModelFor } from './model-match.js';
 
 /**
@@ -57,7 +58,7 @@ export const MAX_AGENT_NAME = 20;
 export const AGENT_COMMANDS = new Set([
   'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
-  'workspace',
+  'workspace', 'startup',
 ]);
 
 /**
@@ -183,7 +184,7 @@ export async function handleSlashCommand(loop, command, args) {
       const facts = loop.memoryManager.getAllMemories();
       const where = paths.memoryPath(loop.workspace);
       if (facts.length === 0) {
-        return { message: `Nothing remembered yet · facts land in \`${where}\`, an ordinary file you can edit` };
+        return { message: `Nothing remembered yet · facts land in \`${where}\`` };
       }
       return {
         message: `**Memory**  ${facts.length} fact${facts.length === 1 ? '' : 's'}`
@@ -214,6 +215,32 @@ export async function handleSlashCommand(loop, command, args) {
      * `reviewer <model>` and the single/duo topology it stood for are gone;
      * `_loadConfig` folds an old config into this.
      */
+    /**
+     * How a session starts (v5.27). `warm` sends the setup prompt when Chrome
+     * connects and after `/new`; `cold` sends it with the first message. Per
+     * person, in `~/.agent/settings.json`. Turning it on in a chat that has
+     * not been taught yet warms that chat now.
+     */
+    case 'startup': {
+      const asked = String(args?.[0] || '').toLowerCase();
+      const was = loop.startupMode === 'warm' ? 'warm' : 'cold';
+      if (asked !== 'warm' && asked !== 'cold') {
+        return {
+          message: `Startup is **${was}** · \`/startup ${was === 'warm' ? 'cold' : 'warm'}\` to change it`
+            + ' — warm sends the setup prompt when Chrome connects, so your first message goes alone',
+        };
+      }
+      const saved = saveUserSettings({ startupMode: asked });
+      loop.startupMode = asked;
+      let note = asked === 'warm' ? 'from the next start and every /new' : 'the setup goes with your first message';
+      if (asked === 'warm' && was !== 'warm' && !loop.promptBuilder?.hasSeenSystemPrompt && !loop.isProcessing) {
+        loop.warmUp?.();
+        note = 'sending the setup prompt now';
+      }
+      if (!saved) note += ' · this session only, settings.json could not be written';
+      return { message: changed('startup', was, asked, note) };
+    }
+
     case 'mode':
     case 'config':
     case 'subagents': {
@@ -305,7 +332,10 @@ export async function handleSlashCommand(loop, command, args) {
       // memory while everything else has moved on. `startNewChat` clears
       // `chatThread` itself and keeps the outgoing id as `previousThread` —
       // clearing it here first threw that away before it could be recorded.
-      loop.startNewChat?.();
+      // Warm start covers /new too: teach the fresh chat once it exists.
+      loop.startNewChat?.()?.then?.((ok) => {
+        if (ok && loop.startupMode === 'warm') loop.warmUp?.();
+      });
       // Name it. "The previous one is kept" is only useful if you can say
       // which one, and the id is the thing `--resume` takes.
       return {

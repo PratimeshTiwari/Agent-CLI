@@ -153,40 +153,9 @@ export class PromptBuilder {
 
     if (needsFullPrompt) {
       // First turn in this chat session — send everything
-      parts.push(`<system_state mode="${mode}" subagents="${subagents ? 'on' : 'off'}">`);
-      parts.push(this._buildSystemInstructions(mode, subagents, modelConfig));
-      parts.push(this._buildToolDefinitions(subagents, modelConfig));
-      
-      if (objective && objective.trim() !== userMessage.trim()) {
-        parts.push(`<current_objective>\n${objective}\n</current_objective>`);
-      }
-
-      // Workspace context removed to save tokens, rely on `search_files` tool instead.
-      if (this.agentMdContent) {
-        parts.push(`<agent_instructions>\n${this.agentMdContent}\n</agent_instructions>`);
-      }
-
-      // What the agent learned here on earlier runs. This is the half that was
-      // missing: `manage_memory` wrote facts to disk and no prompt ever carried
-      // them, so the model paid a tool call per fact and got nothing back.
-      const memory = this._loadMemory();
-      if (memory) {
-        parts.push(`<memory>\n${memory}\n</memory>`);
-      }
-
-      // Names and one-line descriptions only. The bodies stay on disk and are
-      // fetched with read_file when the model judges one relevant, so writing
-      // twenty skills costs twenty lines of prompt rather than twenty files of
-      // it — which matters when the prompt is retyped into a browser tab.
-      const skills = skillCatalogue(this.workspace, this._configuredSkillFolders());
-      if (skills) {
-        parts.push(`<skills>\n${skills}\n</skills>`);
-      }
-      parts.push(`</system_state>`);
-
-      this.hasSeenSystemPrompt = true;
-      this.messagesSinceRefresh = 0;
-      this.pendingToolRedeclare = false;
+      const asked = objective && objective.trim() !== userMessage.trim() ? objective : '';
+      parts.push(...this._systemStateParts({ mode, subagents, modelConfig, objective: asked }));
+      this.markSystemPromptSeen();
     } else if (needsToolRedeclare) {
       // The targeted repair: the framing and the full definitions, without
       // AGENT.md, memory or the skill catalogue, which the model never lost.
@@ -310,6 +279,68 @@ export class PromptBuilder {
   }
 
   /**
+   * The turn-0 block: instructions, tools, AGENT.md, memory, skills.
+   *
+   * One function for the two senders, so a warm-up teaches exactly what a cold
+   * first message would (`prompt-builder.test.js` compares them byte for byte).
+   */
+  _systemStateParts({ mode, subagents, modelConfig, objective = '' }) {
+    const parts = [];
+    parts.push(`<system_state mode="${mode}" subagents="${subagents ? 'on' : 'off'}">`);
+    parts.push(this._buildSystemInstructions(mode, subagents, modelConfig));
+    parts.push(this._buildToolDefinitions(subagents, modelConfig));
+
+    if (objective) {
+      parts.push(`<current_objective>\n${objective}\n</current_objective>`);
+    }
+
+    // Workspace context removed to save tokens, rely on `search_files` tool instead.
+    if (this.agentMdContent) {
+      parts.push(`<agent_instructions>\n${this.agentMdContent}\n</agent_instructions>`);
+    }
+
+    // What the agent learned here on earlier runs. This is the half that was
+    // missing: `manage_memory` wrote facts to disk and no prompt ever carried
+    // them, so the model paid a tool call per fact and got nothing back.
+    const memory = this._loadMemory();
+    if (memory) {
+      parts.push(`<memory>\n${memory}\n</memory>`);
+    }
+
+    // Names and one-line descriptions only. The bodies stay on disk and are
+    // fetched with read_file when the model judges one relevant, so writing
+    // twenty skills costs twenty lines of prompt rather than twenty files of
+    // it — which matters when the prompt is retyped into a browser tab.
+    const skills = skillCatalogue(this.workspace, this._configuredSkillFolders());
+    if (skills) {
+      parts.push(`<skills>\n${skills}\n</skills>`);
+    }
+    parts.push(`</system_state>`);
+    return parts;
+  }
+
+  /** The chat now holds the turn-0 block. */
+  markSystemPromptSeen() {
+    this.hasSeenSystemPrompt = true;
+    this.messagesSinceRefresh = 0;
+    this.pendingToolRedeclare = false;
+  }
+
+  /**
+   * Warm start (v5.27): the turn-0 block on its own, before anyone asks anything.
+   *
+   * Marks nothing. The caller marks the prompt seen only when Gemini answers
+   * (`AgentLoop.warmUp`); a timeout or an error leaves the builder as it was,
+   * so the first message carries the full prompt exactly as a cold start does.
+   */
+  buildWarmup({ mode = 'plan', subagents = true, modelConfig = {} } = {}) {
+    const parts = this._systemStateParts({ mode, subagents, modelConfig });
+    parts.push('This is setup, not a task: the next message is the first one from the user. '
+      + 'Reply with only: Ready.');
+    return '\u200B' + parts.join('\n\n');
+  }
+
+  /**
    * Record that a message was pushed to the tab outside buildPrompt (the joined
    * tool-result batch). The agent loop calls this once per message, not once per
    * result, so a parallel fan-out still counts as the one message it is.
@@ -352,16 +383,28 @@ export class PromptBuilder {
    * is ceremony people learn to skip — but "did you run it" and "what did you
    * not do" are worth asking at any size.
    *
-   * The flash rungs are unaffected: their handover is a few lines inside their
-   * own reasoning prompt, small enough that moving it would cost more in
-   * machinery than it saves in characters.
+   * The flash rungs get theirs here too since v5.27. It used to sit in their
+   * system prompt, ungated, and the C3 review (2026-10-26) counted Low ending
+   * 10 of 18 question-only turns with `Ran: not run` / `Not done: nothing`
+   * (Medium 3 of 12, High 2 of 32). The owner: "low and medium should not add
+   * the Ran/Not done". Same gate as pro: the first round that changed
+   * something, full once per chat and a pointer after.
    *
    * @param {string} effort
-   * @returns {string} '' for a rung that carries its own
+   * @returns {string}
    */
   buildHandoverBlock(effort) {
     const { tier, level } = resolveEffort(effort);
-    if (tier !== 'pro') return '';
+    if (tier !== 'pro') {
+      const short = tier === 'lite';
+      if (this.hasSeenHandover) {
+        return short
+          ? 'Before you finish: the Checklist / Ran / Not done lines.'
+          : 'Before you finish: Checklist, Read back, Ran, Not done — each with a real answer.';
+      }
+      this.hasSeenHandover = true;
+      return prompt(short ? 'handover-micro' : 'handover-short');
+    }
 
     /**
      * Full once per chat, a pointer after — the tool anchor's shape.
@@ -914,18 +957,13 @@ ${modelTier === 'pro' ? `## Communication
   /**
    * The flash tier's reasoning protocol: there is deliberately almost none.
    *
-   * The handover check is the exception, and it is two lines. Flash is the
-   * weakest model on the ladder, which makes it the *most* likely to report a
-   * thing as done without having looked — so excluding it, which was the first
-   * instinct, would have left the check off the rung that needs it most.
-   *
-   * Two lines rather than the pro tier's seven because this rung is 5.6k
-   * characters and its whole identity is being terse: the full review is +33%
-   * here against +11% on the tiers above, and a protocol that fights what the
-   * tier is for is one the model follows worse, not better.
+   * Its handover check (`handover-micro`) is not here: it arrives with the
+   * first round that changed something (`buildHandoverBlock`). Flash is the
+   * weakest model on the ladder, so it still gets one — only not on a turn
+   * that answered a question.
    */
   _getFlashInstructions() {
-    return `${prompt('reasoning-lite')}\n\n${prompt('handover-micro')}`;
+    return prompt('reasoning-lite');
   }
 
   /**
@@ -936,11 +974,11 @@ ${modelTier === 'pro' ? `## Communication
   /**
    * Flash-thinking: a three-phase protocol, still a short prompt.
    *
-   * The four-point handover, not the two-point one: this rung already has a
-   * protocol and a context budget twice Flash's, so the check costs ~2% here.
+   * Its four-point handover (`handover-short`) arrives with the first round
+   * that changed something, like every rung's (`buildHandoverBlock`).
    */
   _getFlashThinkingInstructions() {
-    return `${prompt('reasoning-flash')}\n\n${prompt('handover-short')}`;
+    return prompt('reasoning-flash');
   }
 
   /**

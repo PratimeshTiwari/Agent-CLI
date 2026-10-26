@@ -195,7 +195,12 @@ export function InputBar({
             Dismissed for good rather than while the box is empty, so deleting
             what you typed does not bring it back.
           */}
-          {filedSession && !filedDismissed && !isProcessing && history.length === 0 && (
+          {/*
+            `!input` as well as the dismissal: the effect that dismisses it runs
+            after the render, so for one frame the row (two rows, uncharged) sat
+            beside the `/` list it opened — 2 full clears at 13 rows.
+          */}
+          {filedSession && !filedDismissed && !input && !isProcessing && history.length === 0 && (
             <Box marginBottom={1}>
               <Text dimColor wrap="truncate">
                 {'• Previous conversation filed'}

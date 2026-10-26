@@ -394,8 +394,11 @@ const NOT_WORTH_EXPANDING = new Set([
 ]);
 
 const limitsFor = (isLive, verbose, toolName) => {
-  if (!verbose || NOT_WORTH_EXPANDING.has(toolName)) return { lines: 6, chars: 400 };
-  return isLive ? { lines: 20, chars: 1200 } : { lines: Infinity, chars: Infinity };
+  if (NOT_WORTH_EXPANDING.has(toolName)) return { lines: 6, chars: 400, hint: '' };
+  // The hint names the key only where pressing it shows more: a live step
+  // that is already expanded shows the rest when it commits.
+  if (!verbose) return { lines: 6, chars: 400, hint: 'ctrl+e to expand' };
+  return isLive ? { lines: 20, chars: 1200, hint: '' } : { lines: Infinity, chars: Infinity, hint: '' };
 };
 
 /** One step inside a turn. Collapsed to a line unless `verbose`. */
@@ -525,8 +528,8 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
                 and days later, showed it as a line of dim text. */}
             {diffRowsFor(act, width) ?? (
               <Text dimColor wrap="wrap">
-                {formatCommandResult(act.result, limit.lines)
-                  ?? clampForDisplay(act.result, limit.lines, limit.chars)}
+                {formatCommandResult(act.result, limit.lines, limit)
+                  ?? clampForDisplay(act.result, limit.lines, limit.chars, limit)}
               </Text>
             )}
           </Box>
@@ -541,7 +544,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
         <Text color={T.success}>{'⏺ '}<Text dimColor>{oneLine(act.result)}</Text></Text>
         {verbose && (
           <Box paddingLeft={2} width="100%">
-            <Text dimColor wrap="wrap">{clampForDisplay(act.result, limit.lines, limit.chars)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.result, limit.lines, limit.chars, limit)}</Text>
           </Box>
         )}
       </Box>
@@ -557,7 +560,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
           <Box paddingLeft={2} width="100%">
             {/* Thinking had no cap at all, so one long block in a running turn
                 could push the live frame past the viewport on its own. */}
-            <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars, limit)}</Text>
           </Box>
         )}
       </Box>
@@ -567,7 +570,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
   if (act.type === 'command_output') {
     return (
       <Box width="100%">
-        <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars)}</Text>
+        <Text dimColor wrap="wrap">{clampForDisplay(act.content, limit.lines, limit.chars, limit)}</Text>
       </Box>
     );
   }
@@ -578,8 +581,8 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
         <Text color={T.attention} wrap="truncate">{parseErrorRow(act.attempt, act.maxAttempts, verbose)}</Text>
         {verbose && (
           <Box marginLeft={2} flexDirection="column">
-            <Text dimColor wrap="wrap">{clampForDisplay(act.error, limit.lines, limit.chars)}</Text>
-            <Text dimColor wrap="wrap">{clampForDisplay(act.raw, limit.lines, limit.chars)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.error, limit.lines, limit.chars, limit)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.raw, limit.lines, limit.chars, limit)}</Text>
           </Box>
         )}
       </Box>
@@ -617,7 +620,7 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
         <Text dimColor wrap="truncate">{compactionRow(act.turns, verbose)}</Text>
         {verbose && act.summary && (
           <Box marginLeft={2}>
-            <Text dimColor wrap="wrap">{clampForDisplay(act.summary, limit.lines, limit.chars)}</Text>
+            <Text dimColor wrap="wrap">{clampForDisplay(act.summary, limit.lines, limit.chars, limit)}</Text>
           </Box>
         )}
       </Box>

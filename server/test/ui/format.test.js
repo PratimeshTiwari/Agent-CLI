@@ -59,16 +59,30 @@ describe('clampForDisplay', () => {
 
   it('clamps by line count', () => {
     const out = clampForDisplay('a\nb\nc\nd', 2);
-    assert.strictEqual(out, 'a\nb\n... [truncated]');
+    assert.strictEqual(out, 'a\nb\n… +2 lines');
   });
 
   it('clamps by character count — one long line is what actually tears the terminal', () => {
     const out = clampForDisplay('x'.repeat(50), 15, 10);
-    assert.strictEqual(out, `${'x'.repeat(10)}\n... [truncated]`);
+    assert.strictEqual(out, `${'x'.repeat(10)}\n… cut`);
   });
 
   it('pretty-prints non-strings', () => {
     assert.ok(clampForDisplay({ a: 1 }).includes('"a": 1'));
+  });
+
+  it('says how to see the rest, when asked to', () => {
+    // Reported: `$ ls` ended in `... [truncated]` with no way to see the rest.
+    const ls = Array.from({ length: 13 }, (_, i) => `f${i}`).join('\n');
+    assert.strictEqual(clampForDisplay(ls, 6, 400, { hint: 'ctrl+e to expand' }).split('\n').pop(),
+      '… +7 lines (ctrl+e to expand)');
+    assert.strictEqual(clampForDisplay('a\nb', 1).split('\n').pop(), '… +1 line', 'no hint, no key');
+    assert.strictEqual(clampForDisplay(ls, 20, 1200, { hint: 'ctrl+e to expand' }), ls, 'nothing cut, no marker');
+  });
+
+  it('a shell result carries the hint through', () => {
+    const out = formatCommandResult({ exitCode: 0, stdout: 'a\nb\nc', command: 'ls' }, 2, { hint: 'ctrl+e to expand' });
+    assert.match(out, /… \+1 line \(ctrl\+e to expand\)/);
   });
 });
 
@@ -101,7 +115,7 @@ describe('formatCommandResult — a shell result should look like a shell', () =
   test('clamps a wall of output', () => {
     const out = formatCommandResult({ command: 'cat big', exitCode: 0, stdout: 'line\n'.repeat(500) }, 5);
     assert.ok(out.split('\n').length < 12, 'must not paste 500 lines into the frame');
-    assert.match(out, /truncated/);
+    assert.match(out, /… \+495 lines$/, "says how much is hidden");
   });
 
   test('returns null for anything that is not a shell result', () => {

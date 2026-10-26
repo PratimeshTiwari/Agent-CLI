@@ -637,6 +637,18 @@ nothing. `promptRung` folds Max to High at build time, because the system prompt
 slider's model line names what the marked stop maps to on this account (`stopModel` in
 `ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
 
+**Warm start is opt-in (v5.27, `/startup warm|cold`, `AgentLoop.warmUp`).** Warm sends the turn-0
+block on its own when the first extension identifies (after `resumeThreadOnConnect`) and after
+`/new`, through `_askThread`, so the first message goes out as a short turn. It defaults to cold
+(owner: "warm should be not at default"), because it costs one Gemini message per launch. The
+prompt is marked seen only on Gemini's answer; a timeout, an error or esc resets it, so the worst
+case is a cold start. It is skipped when the chat already has the prompt, when a turn is running,
+or when a thread, recap or compaction hand-over is owed. A warm-up's thread is kept off disk until
+the first real reply (`_threadUnsaved`), or `--continue` could pair a filed conversation with a
+chat that never saw it. The UI learns of it through `onWarm`, not a status message: Chrome usually
+connects before App has attached its callbacks. Pty: prompt 0 is the setup, a message typed
+meanwhile queues and goes as the short turn, and 0 clears at 13 and 24 rows.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local
@@ -1806,6 +1818,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
   (`enterSequence`), because a command line scrolled off screen is pinned over the header by
   sticky scroll.
+- **`/settings` is a list of switches (v5.27, Option C′, `ui/settings-view.js`,
+  `components/SettingsList.jsx`).** The owner's pick from `.agent/artifacts/plans/2026-10-27-settings-redesign.md`.
+  A row with `control` is a switch (`● on  ○ off`) or a ladder (`◂ high ▸`), and ←/→ set it in place
+  through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
+  sees every change. ←/→ are spatial and never wrap. The hint is on the selected row and drops below
+  70 columns. The filter stays on top, underlined; printable keys go to it, and **tabs are on tab
+  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Startup and
+  Command rules (`OPENS_CHOOSER`). Values are plain except a switch's active state and a read-only
+  `attention`; `Choices` no longer recolours the selected row's detail in any menu. Pty: 0 clears at
+  13×90, 24×100 and 24×60.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input

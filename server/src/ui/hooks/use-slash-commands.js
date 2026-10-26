@@ -503,6 +503,14 @@ export async function handleSlashCommand(query, {
       return;
     }
 
+    // Bare `/startup` explains both choices before asking (owner, 2026-10-27:
+    // "it could be confusing for anyone"); `/startup warm|cold` still just sets.
+    if (command === 'startup' && args.length === 0) {
+      setActiveMenu({ type: 'startup' });
+      setIsProcessing(false);
+      return;
+    }
+
     // /model and /reasoning were two knobs with five meaningful combinations.
     // Both names still work — typing one you have used for months and being
     // told it does not exist is a worse trade than one line of redirection.

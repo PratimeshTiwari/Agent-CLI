@@ -16,11 +16,15 @@
  * @property {string} value   what it is set to, right now
  * @property {string} [hint]  the consequence, when the value alone is cryptic
  * @property {string} [run]   slash command to run when picked; absent = read-only
+ * @property {{kind: 'switch'|'ladder', options: string[]}} [control]
+ *           how ←/→ change it in place (v5.27, the C′ redesign); `restore(value)` is
+ *           the command that sets it, so there is still one way to change anything
  */
 
 import { MODES, nextMode, describeMode } from './modes.js';
 import fs from 'fs';
-import { resolveEffort } from './effort.js';
+import { resolveEffort, EFFORT_LEVELS } from './effort.js';
+import { loadUserSettings } from './user-settings.js';
 import { browserModelPin } from './model-match.js';
 import { expectedExtensionVersion } from './extension-version.js';
 import * as paths from './paths.js';
@@ -89,16 +93,30 @@ export function describeSettings(agentLoop) {
         : `browser tab: ${effort.browser}`,
       run: '/effort',
       restore: (value) => `/effort ${value}`,
+      control: { kind: 'ladder', options: EFFORT_LEVELS.map((e) => e.id) },
     },
     {
       group: 'Settings',
       label: 'Subagents',
       value: subagents ? 'on' : 'off',
       hint: subagents
-        ? 'parallel tabs with empty context — research, review, errands'
-        : 'one tab, start to finish — nothing can be delegated',
+        ? 'extra tabs can research or review in parallel'
+        : 'one tab does everything',
       run: '/subagents',
       restore: (value) => `/subagents ${value}`,
+      control: { kind: 'switch', options: ['on', 'off'] },
+    },
+    {
+      group: 'Settings',
+      label: 'Startup',
+      value: agentLoop?.startupMode === 'warm' ? 'warm' : 'cold',
+      hint: agentLoop?.startupMode === 'warm'
+        ? 'setup sent when Chrome connects — enter to compare'
+        : 'setup sent with your first message — enter to compare',
+      // The chooser, not a toggle: each choice needs its cost said next to it.
+      run: '/startup',
+      restore: (value) => `/startup ${value}`,
+      control: { kind: 'switch', options: ['warm', 'cold'] },
     },
     {
       group: 'Settings',
@@ -107,6 +125,7 @@ export function describeSettings(agentLoop) {
       hint: describeMode(agentLoop?.mode).split(' — ')[1],
       run: `/${nextMode(agentLoop?.mode)}`,
       restore: (value) => `/${value}`,
+      control: { kind: 'ladder', options: MODES },
     },
     {
       group: 'Settings',
@@ -117,6 +136,7 @@ export function describeSettings(agentLoop) {
       // list of facts, which is not what pressing Enter on a switch should do.
       run: memoryOn ? '/memory off' : '/memory on',
       restore: (value) => `/memory ${value}`,
+      control: { kind: 'switch', options: ['on', 'off'] },
     },
     {
       group: 'Settings',
@@ -125,6 +145,15 @@ export function describeSettings(agentLoop) {
       hint: `${rules.allow?.length || 0} allowed · ${rules.block?.length || 0} blocked — enter to browse them`,
       run: '/allowlist',
       restore: (value) => `/allowlist ${value === 'on' ? 'enable' : 'disable'}`,
+      control: { kind: 'switch', options: ['on', 'off'] },
+    },
+    {
+      group: 'Settings',
+      label: 'Theme',
+      // The saved choice, which is what `/theme` previews from. Per person.
+      value: safeRead(() => loadUserSettings().theme, null) || 'terminal',
+      hint: 'colours — enter to preview them',
+      run: '/theme',
     },
     {
       group: 'Settings',
