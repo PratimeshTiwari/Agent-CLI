@@ -50,3 +50,16 @@ test('the row is computed from the resolved rung, not the stored word', async ()
   const call = app.slice(app.indexOf(': modelMismatch('), app.indexOf(': modelMismatch(') + 80);
   assert.match(call, /modelMismatch\(\s*effortRung\.id,/);
 });
+
+/*
+ * C0: the prompt follows the tab, so "effort High wants Pro" stopped being the
+ * whole story — the Medium prompt is what goes out. The row says so, and keeps
+ * the old wording for the case where the setting's prompt still goes (a mode).
+ */
+test('it says which prompt is going out', () => {
+  const row = app.slice(app.indexOf('{mismatch && ('), app.indexOf('<InputBar\n'));
+  assert.match(row, /sentRung\.id !== effortRung\.id/);
+  assert.match(row, /' — sending the '\}<Text bold>\{sentRung\.name\}/);
+  assert.match(row, /effort \$\{effortRung\.name\} wants /, 'control: the mode case keeps its wording');
+  assert.match(app, /const sentRung = resolveEffort\(agentLoop\._promptEffort\?\.\(\)/);
+});

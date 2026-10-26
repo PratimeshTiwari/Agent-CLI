@@ -406,7 +406,11 @@ export async function handleSlashCommand(loop, command, args) {
         const before = resolveEffort(loop.modelConfig.effort);
         loop.modelConfig.effort = chosen.id;
         loop._saveConfig();
-        loop.promptBuilder.resetPromptState();
+        // No `resetPromptState()` here any more. The prompt follows the tab
+        // (`AgentLoop._promptConfig`), which re-teaches the thread when the
+        // tier the tab answers to actually moves — and only then. Resetting
+        // here re-sent the full prompt for a High → Medium change on a tab
+        // that stayed on Flash, where the model reads the same prompt after.
 
         // Switch the browser too, rather than asking the user to.
         //

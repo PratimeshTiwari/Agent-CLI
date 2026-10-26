@@ -617,6 +617,15 @@ filters and A/B-test modals. Prompt content is also tiered by `modelTier`
 (`lite` / `flash` / `pro` — renamed 2026-09-20 to the picker's own words) via
 `_getReasoningInstructions`.
 
+**The prompt follows the tab, not the setting (v5.26, `AgentLoop._promptEffort`).** Every build
+goes through `_promptConfig()`, which uses the rung whose model is selected in the picker
+(`rungForModel`, the reverse of `pickModelFor`, pins included) and falls back to
+`modelConfig.effort` when the picker is unread, the selection is a mode, or a switch is in flight.
+The setting is never rewritten. The thread is re-taught (`resetPromptState`) only when the
+**tier** moves, which `promptBuilder.promptTier` records, so `/effort` no longer resets on its
+own. Each reply records `effort`, `promptEffort` and `model`. The first review of the rungs is
+in `.agent/artifacts/plans/2026-10-26-effort-review.md`.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local

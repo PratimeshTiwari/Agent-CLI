@@ -626,6 +626,13 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * 2026-10-26, with a config holding `standard`.
    */
   const effortRung = resolveEffort(agentLoop.modelConfig?.effort);
+  /*
+   * The prompt follows the tab (`AgentLoop._promptEffort`), so on a mismatch the
+   * row says which prompt is going out rather than only what the setting wants.
+   * When the tab is on something no rung answers to — a mode — the setting's
+   * prompt goes, and the row says what the setting wants, as before.
+   */
+  const sentRung = resolveEffort(agentLoop._promptEffort?.() ?? effortRung.id);
   const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight)
     ? null
     : modelMismatch(
@@ -1482,8 +1489,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
           {mismatch && (
             <Text color={T.attention} wrap="truncate">
               {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
-              {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
-              <Text dimColor>{'  —  ctrl+b shows the tab'}</Text>
+              {sentRung.id !== effortRung.id ? (<>
+                {' — sending the '}<Text bold>{sentRung.name}</Text>{` prompt (effort ${effortRung.name})`}
+              </>) : (<>
+                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
+              </>)}
+              <Text dimColor>{'  ·  ctrl+b shows the tab'}</Text>
             </Text>
           )}
 

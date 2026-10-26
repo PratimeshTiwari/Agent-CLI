@@ -342,3 +342,46 @@ export function planModelSwitch(effortId, models = [], pin = '') {
 
   return { action: 'switch', model: pick.model, ...pinFields, reason: pick.why };
 }
+
+/**
+ * Which rung the tab's own model answers to — the reverse of `pickModelFor`.
+ *
+ * Owner, 2026-10-26: *"if there is model mismatch, send the prompt as per the
+ * current model selected"*. The prompt used to follow the setting alone, so a
+ * tab left on Flash with effort High got the 25k pro prompt — the long prompt
+ * to the model that handles long prompts worst, which this file's header names
+ * as the case it exists to prevent. The setting can be wrong about the tab; the
+ * picker's `selected` cannot.
+ *
+ * The rung is whichever one `pickModelFor` would send to the selected entry, so
+ * the two directions cannot disagree, pins included. On a short picker several
+ * rungs land on one model (two entries: low and medium are both the first), and
+ * then the setting wins if it is among them, else the one nearest it.
+ *
+ * @param {Array} models   what the picker offers, as last reported
+ * @param {string} setting the rung id the user chose
+ * @param {object} [modelConfig] for `browserModels` pins
+ * @returns {string|null} a rung id, or null when nothing is selected or the
+ *   selected entry is no rung's model (a mode such as Extended thinking)
+ */
+export function rungForModel(models = [], setting = '', modelConfig = {}) {
+  const options = (models || []).filter((m) => m && m.label);
+  const current = options.find((m) => m.selected);
+  if (!current) return null;
+
+  const ids = EFFORT_LEVELS.map((e) => e.id);
+  const hits = ids.filter((id) => {
+    const pick = pickModelFor(id, options, browserModelPin(modelConfig, id));
+    return pick?.model.label === current.label;
+  });
+  if (hits.length === 0) return null;
+  if (hits.includes(setting)) return setting;
+
+  // Nearest on the ladder; a tie goes to the cheaper rung, the safer prompt for
+  // a model we could not place exactly.
+  const at = ids.indexOf(setting);
+  if (at < 0) return hits[0];
+  return hits.reduce((best, id) => (
+    Math.abs(ids.indexOf(id) - at) < Math.abs(ids.indexOf(best) - at) ? id : best
+  ));
+}

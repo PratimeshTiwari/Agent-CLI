@@ -86,6 +86,7 @@ export class PromptBuilder {
     this.hasSeenSystemPrompt = false; // Has the current chat session received a system prompt?
     this.hasSeenHandover = false;     // ...and the full handover review, once
     this.pendingToolRedeclare = false; // Does the next prompt owe the model its tools back?
+    this.promptTier = null;            // The tier this chat was taught (AgentLoop._promptConfig)
   }
 
   /**
@@ -99,6 +100,8 @@ export class PromptBuilder {
     // A full prompt carries the definitions anyway, so any outstanding
     // redeclaration is already satisfied by the turn this reset causes.
     this.pendingToolRedeclare = false;
+    // The full prompt this causes teaches whichever tier goes out with it.
+    this.promptTier = null;
   }
 
   /**
