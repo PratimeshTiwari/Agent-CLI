@@ -102,6 +102,16 @@ export function describeSettings(agentLoop) {
     },
     {
       group: 'Settings',
+      label: 'Startup',
+      value: agentLoop?.startupMode === 'warm' ? 'warm' : 'cold',
+      hint: agentLoop?.startupMode === 'warm'
+        ? 'setup prompt sent when Chrome connects — your first message goes alone'
+        : 'setup prompt goes with your first message — enter for warm',
+      run: agentLoop?.startupMode === 'warm' ? '/startup cold' : '/startup warm',
+      restore: (value) => `/startup ${value}`,
+    },
+    {
+      group: 'Settings',
       label: 'Edit approval',
       value: MODES.includes(agentLoop?.mode) ? agentLoop.mode : 'plan',
       hint: describeMode(agentLoop?.mode).split(' — ')[1],

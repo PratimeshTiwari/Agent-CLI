@@ -153,40 +153,9 @@ export class PromptBuilder {
 
     if (needsFullPrompt) {
       // First turn in this chat session — send everything
-      parts.push(`<system_state mode="${mode}" subagents="${subagents ? 'on' : 'off'}">`);
-      parts.push(this._buildSystemInstructions(mode, subagents, modelConfig));
-      parts.push(this._buildToolDefinitions(subagents, modelConfig));
-      
-      if (objective && objective.trim() !== userMessage.trim()) {
-        parts.push(`<current_objective>\n${objective}\n</current_objective>`);
-      }
-
-      // Workspace context removed to save tokens, rely on `search_files` tool instead.
-      if (this.agentMdContent) {
-        parts.push(`<agent_instructions>\n${this.agentMdContent}\n</agent_instructions>`);
-      }
-
-      // What the agent learned here on earlier runs. This is the half that was
-      // missing: `manage_memory` wrote facts to disk and no prompt ever carried
-      // them, so the model paid a tool call per fact and got nothing back.
-      const memory = this._loadMemory();
-      if (memory) {
-        parts.push(`<memory>\n${memory}\n</memory>`);
-      }
-
-      // Names and one-line descriptions only. The bodies stay on disk and are
-      // fetched with read_file when the model judges one relevant, so writing
-      // twenty skills costs twenty lines of prompt rather than twenty files of
-      // it — which matters when the prompt is retyped into a browser tab.
-      const skills = skillCatalogue(this.workspace, this._configuredSkillFolders());
-      if (skills) {
-        parts.push(`<skills>\n${skills}\n</skills>`);
-      }
-      parts.push(`</system_state>`);
-
-      this.hasSeenSystemPrompt = true;
-      this.messagesSinceRefresh = 0;
-      this.pendingToolRedeclare = false;
+      const asked = objective && objective.trim() !== userMessage.trim() ? objective : '';
+      parts.push(...this._systemStateParts({ mode, subagents, modelConfig, objective: asked }));
+      this.markSystemPromptSeen();
     } else if (needsToolRedeclare) {
       // The targeted repair: the framing and the full definitions, without
       // AGENT.md, memory or the skill catalogue, which the model never lost.
@@ -306,6 +275,68 @@ export class PromptBuilder {
 
     this.messagesSinceRefresh++;
 
+    return '\u200B' + parts.join('\n\n');
+  }
+
+  /**
+   * The turn-0 block: instructions, tools, AGENT.md, memory, skills.
+   *
+   * One function for the two senders, so a warm-up teaches exactly what a cold
+   * first message would (`prompt-builder.test.js` compares them byte for byte).
+   */
+  _systemStateParts({ mode, subagents, modelConfig, objective = '' }) {
+    const parts = [];
+    parts.push(`<system_state mode="${mode}" subagents="${subagents ? 'on' : 'off'}">`);
+    parts.push(this._buildSystemInstructions(mode, subagents, modelConfig));
+    parts.push(this._buildToolDefinitions(subagents, modelConfig));
+
+    if (objective) {
+      parts.push(`<current_objective>\n${objective}\n</current_objective>`);
+    }
+
+    // Workspace context removed to save tokens, rely on `search_files` tool instead.
+    if (this.agentMdContent) {
+      parts.push(`<agent_instructions>\n${this.agentMdContent}\n</agent_instructions>`);
+    }
+
+    // What the agent learned here on earlier runs. This is the half that was
+    // missing: `manage_memory` wrote facts to disk and no prompt ever carried
+    // them, so the model paid a tool call per fact and got nothing back.
+    const memory = this._loadMemory();
+    if (memory) {
+      parts.push(`<memory>\n${memory}\n</memory>`);
+    }
+
+    // Names and one-line descriptions only. The bodies stay on disk and are
+    // fetched with read_file when the model judges one relevant, so writing
+    // twenty skills costs twenty lines of prompt rather than twenty files of
+    // it — which matters when the prompt is retyped into a browser tab.
+    const skills = skillCatalogue(this.workspace, this._configuredSkillFolders());
+    if (skills) {
+      parts.push(`<skills>\n${skills}\n</skills>`);
+    }
+    parts.push(`</system_state>`);
+    return parts;
+  }
+
+  /** The chat now holds the turn-0 block. */
+  markSystemPromptSeen() {
+    this.hasSeenSystemPrompt = true;
+    this.messagesSinceRefresh = 0;
+    this.pendingToolRedeclare = false;
+  }
+
+  /**
+   * Warm start (v5.27): the turn-0 block on its own, before anyone asks anything.
+   *
+   * Marks nothing. The caller marks the prompt seen only when Gemini answers
+   * (`AgentLoop.warmUp`); a timeout or an error leaves the builder as it was,
+   * so the first message carries the full prompt exactly as a cold start does.
+   */
+  buildWarmup({ mode = 'plan', subagents = true, modelConfig = {} } = {}) {
+    const parts = this._systemStateParts({ mode, subagents, modelConfig });
+    parts.push('This is setup, not a task: the next message is the first one from the user. '
+      + 'Reply with only: Ready.');
     return '\u200B' + parts.join('\n\n');
   }
 

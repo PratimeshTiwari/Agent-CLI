@@ -637,6 +637,18 @@ nothing. `promptRung` folds Max to High at build time, because the system prompt
 slider's model line names what the marked stop maps to on this account (`stopModel` in
 `ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
 
+**Warm start is opt-in (v5.27, `/startup warm|cold`, `AgentLoop.warmUp`).** Warm sends the turn-0
+block on its own when the first extension identifies (after `resumeThreadOnConnect`) and after
+`/new`, through `_askThread`, so the first message goes out as a short turn. It defaults to cold
+(owner: "warm should be not at default"), because it costs one Gemini message per launch. The
+prompt is marked seen only on Gemini's answer; a timeout, an error or esc resets it, so the worst
+case is a cold start. It is skipped when the chat already has the prompt, when a turn is running,
+or when a thread, recap or compaction hand-over is owed. A warm-up's thread is kept off disk until
+the first real reply (`_threadUnsaved`), or `--continue` could pair a filed conversation with a
+chat that never saw it. The UI learns of it through `onWarm`, not a status message: Chrome usually
+connects before App has attached its callbacks. Pty: prompt 0 is the setup, a message typed
+meanwhile queues and goes as the short turn, and 0 clears at 13 and 24 rows.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local

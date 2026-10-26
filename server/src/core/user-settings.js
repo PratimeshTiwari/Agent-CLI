@@ -36,3 +36,13 @@ export function saveUserSettings(patch) {
     return false;
   }
 }
+
+/**
+ * How a session starts (v5.27). `warm` sends the system prompt as soon as Chrome
+ * connects, so the first message goes out alone; `cold` sends it with the first
+ * message, as before. Cold unless chosen — owner, 2026-10-26: "warm should be
+ * not at default". It costs one Gemini message per launch.
+ */
+export function startupMode(settings = loadUserSettings()) {
+  return settings?.startupMode === 'warm' ? 'warm' : 'cold';
+}

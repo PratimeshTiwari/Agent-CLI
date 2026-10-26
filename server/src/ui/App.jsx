@@ -650,7 +650,15 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const browserModelLabel = (agentLoop.modelOptions || [])
     .find((m) => m && m.selected)?.label || null;
 
-  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0);
+  /*
+   * How the warm-up went (v5.27), until the first message is sent. Read off the
+   * loop: the idle edge that ends a warm-up re-renders this.
+   */
+  const warmNote = history.length === 0 && !isProcessing
+    && (agentLoop.warmState === 'ready' || agentLoop.warmState === 'failed') ? agentLoop.warmState : null;
+
+  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0)
+    + (warmNote ? 1 : 0);
 
   /**
    * What is left after the furniture — floored at one row, never at three.
@@ -1107,6 +1115,22 @@ export function App({ agentLoop, wsServer, closing = false }) {
     if (leftover.length) setQueued((q) => [...leftover, ...q]);
   }), [agentLoop]);
 
+  /*
+   * Warm start (v5.27): the busy row while the setup prompt is out, so esc
+   * stops it and a typed prompt shows as queued. Its own listener, because the
+   * warm-up usually begins before this component exists to receive a status.
+   */
+  useEffect(() => {
+    const show = (state) => {
+      if (state !== 'warming') return;
+      isToolRunningRef.current = true; // the line to show, not one to paint over
+      setStatus('Getting ready — sending the setup prompt…');
+      setIsProcessing(true);
+    };
+    if (agentLoop.warmState === 'warming') show('warming');
+    return agentLoop.onWarm?.(show);
+  }, [agentLoop]);
+
   useEffect(() => {
     if (queued.length === 0) return;
     if (isProcessing || agentLoop.isProcessing || diffRequest || activeMenu) return;
@@ -1486,6 +1510,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
             Still one truncated row charged through `noticeRows`, so the frame
             budget is unchanged; the part to keep is on the left.
           */}
+          {warmNote === 'ready' && (
+            <Text dimColor wrap="truncate">
+              <Text color={T.success}>{'✔ '}</Text>{'Ready — the setup prompt is in this chat; your first message goes alone'}
+            </Text>
+          )}
+          {warmNote === 'failed' && (
+            <Text dimColor wrap="truncate">
+              {'· Warm-up did not finish — your first message carries the setup, as on a cold start'}
+            </Text>
+          )}
           {mismatch && (
             <Text color={T.attention} wrap="truncate">
               {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>

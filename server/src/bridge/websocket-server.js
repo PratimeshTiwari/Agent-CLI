@@ -507,6 +507,10 @@ export class WebSocketServer {
             timestamp: Date.now(),
           });
         }
+
+        // Warm start (v5.27): after the resume, which decides whether there is
+        // a conversation to teach. Once per launch, and only when opted in.
+        this.agentLoop?.warmUpOnConnect?.();
       }
 
       /**
