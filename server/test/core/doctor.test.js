@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import {
   PACKAGES, TOOLS, REPO_ROOT, packageInfo, satisfies, compareVersions, readManifests, checkInstalled,
   problems, startupWarning, lookupLatest, checkHealth, formatReport, summaryLine, describePackage,
-  findImporters, runDoctorCli,
+  findImporters, runDoctorCli, installArgs, installPackage, listVersions, applyLatest, clip, newerCount, installTool, errorOutput, checkTools,
 } from '../../src/core/doctor.js';
 
 const SRC = new URL('../../src/', import.meta.url).pathname;
@@ -188,7 +188,7 @@ describe('what is shown', () => {
     assert.match(text, /required — the agent does not start without it/);
     assert.match(text, /optional — one feature stops working without it/);
     assert.match(text, /✗ unpdf\s+missing\s+1\.8\.1\s+read_file fails on PDFs/);
-    assert.match(text, /· rg\s+missing\s+optional\s+grep_search falls back/);
+    assert.match(text, /· rg\s+missing\s+optional\s+search is slower$/m);
     assert.match(summaryLine(report), /^✗ 1 missing · run `npm install` in /);
     done();
   });
@@ -222,4 +222,94 @@ test('the real repo: every tool is described, and the report builds offline', as
   assert.ok(TOOLS.every((t) => t.why && t.without));
   const report = await checkHealth({ root: REPO_ROOT, latest: false });
   assert.ok(formatReport(report).length > 10);
+});
+
+describe('changing a version from the menu', () => {
+  test('the range keeps its style: caret stays caret, tilde stays tilde, a pin stays exact', () => {
+    assert.deepEqual(installArgs({ name: 'ink', version: '7.2.0', workspace: 'server', range: '^7.1.1' }),
+      ['install', 'ink@7.2.0', '--workspace=server']);
+    assert.deepEqual(installArgs({ name: 'x', version: '1.2.9', workspace: 'server', range: '~1.2.0' }),
+      ['install', 'x@1.2.9', '--workspace=server', '--save-prefix=~']);
+    assert.deepEqual(installArgs({ name: 'unpdf', version: '1.4.0', workspace: 'server', range: '1.8.1' }),
+      ['install', 'unpdf@1.4.0', '--workspace=server', '--save-exact']);
+    assert.deepEqual(installArgs({ name: 'esbuild', version: '0.25.0', workspace: 'root', range: '^0.24.0' }),
+      ['install', 'esbuild@0.25.0'], 'the root is not a --workspace');
+  });
+
+  test('listVersions: newest first, prereleases only when one is installed, npm\'s reason when it fails', async () => {
+    const runner = async () => ({ stdout: JSON.stringify(['1.0.0', '1.10.0', '1.2.0', '2.0.0-beta.1']), stderr: '' });
+    assert.deepEqual((await listVersions('x', { runner })).versions, ['1.10.0', '1.2.0', '1.0.0']);
+    assert.equal((await listVersions('x', { runner, installed: '2.0.0-beta.1' })).versions[0], '2.0.0-beta.1');
+    const refused = async () => ({ stdout: '', stderr: 'npm error code E401\nnpm error Unable to authenticate', error: new Error('exit 1') });
+    assert.deepEqual(await listVersions('x', { runner: refused }), { ok: false, reason: 'code E401' });
+  });
+
+  test('installPackage judges by what is on disk afterwards, not by the exit code', async () => {
+    const { root, done } = fakeRepo({ deps: { ink: '^7.1.1' }, installed: { ink: '7.1.1' } });
+    const seen = [];
+    const lands = async (cmd, args) => {
+      seen.push([cmd, ...args]);
+      writeFileSync(join(root, 'node_modules', 'ink', 'package.json'), JSON.stringify({ name: 'ink', version: '7.2.0' }));
+      return { stdout: '', stderr: '' };
+    };
+    const ok = await installPackage({ name: 'ink', version: '7.2.0', workspace: 'server', range: '^7.1.1' }, { root, runner: lands });
+    assert.deepEqual(ok, { ok: true, installed: '7.2.0' });
+    assert.deepEqual(seen[0], ['npm', 'install', 'ink@7.2.0', '--workspace=server']);
+    const fails = async () => ({ stdout: '', stderr: 'npm error ETARGET No matching version', error: new Error('exit 1') });
+    const bad = await installPackage({ name: 'ink', version: '9.9.9', workspace: 'server', range: '^7.1.1' }, { root, runner: fails });
+    assert.equal(bad.ok, false);
+    assert.equal(bad.installed, '7.2.0', 'what is there now, so the page can say it');
+    assert.match(bad.error, /ETARGET/);
+    done();
+  });
+
+  test('applyLatest fills the column the menu opened without, and an unknown registry leaves it empty', () => {
+    const report = { groups: [{ workspace: 'server', packages: [{ name: 'ink', installed: '7.1.1' }, { name: 'ws', installed: '8.18.0' }] }], tools: [] };
+    const filled = applyLatest(report, { ok: true, latest: new Map([['ink', '7.3.0']]) });
+    assert.deepEqual(filled.groups[0].packages.map((p) => p.latest), ['7.3.0', '8.18.0']);
+    assert.equal(newerCount(filled), 1);
+    assert.equal(applyLatest(report, { ok: false, reason: 'E401' }).groups[0].packages[0].latest, undefined);
+    assert.equal(report.groups[0].packages[0].latest, undefined, 'the report it was given is not changed');
+  });
+
+  test('clip cuts to the width and leaves a short line alone', () => {
+    assert.equal(clip('abcdef', 4), 'abc…');
+    assert.equal(clip('abc', 4), 'abc');
+    assert.equal(clip('abcdef'), 'abcdef');
+  });
+});
+
+describe('installing a tool npm does not manage', () => {
+  test('each platform gets its own package manager, and Linux only a command to run by hand', async () => {
+    const missing = async () => ({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }), stdout: '', stderr: '' });
+    const rg = (platform) => checkTools({ platform, runner: missing }).then((t) => t.find((x) => x.name === 'rg'));
+    assert.deepEqual((await rg('darwin')).install, ['brew', ['install', 'ripgrep']]);
+    assert.equal((await rg('win32')).install[0], 'winget');
+    assert.equal((await rg('linux')).install, null, 'sudo wants a password the menu cannot ask for');
+    assert.equal((await rg('linux')).manual, 'sudo apt install ripgrep');
+  });
+
+  test('judged by running the tool afterwards; a missing brew is said in words', async () => {
+    const tool = { name: 'rg', install: ['brew', ['install', 'ripgrep']], manual: 'https://brew.sh, then brew install ripgrep' };
+    let installed = false;
+    const works = async (cmd) => (cmd === 'brew' ? ((installed = true), { stdout: '', stderr: '' })
+      : installed ? { stdout: 'ripgrep 14.1.1', stderr: '' } : { error: new Error('ENOENT'), stdout: '', stderr: '' });
+    assert.deepEqual(await installTool(tool, { runner: works }), { ok: true, version: '14.1.1' });
+    const noBrew = async () => ({ error: Object.assign(new Error('spawn brew ENOENT'), { code: 'ENOENT' }), stdout: '', stderr: '' });
+    const r = await installTool(tool, { runner: noBrew });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, 'brew is not installed — https://brew.sh, then brew install ripgrep');
+    const fails = async (cmd) => (cmd === 'brew'
+      ? { error: new Error('exit 1'), stdout: '==> Fetching ripgrep', stderr: 'Error: Permission denied @ dir_s_mkdir - /opt/homebrew/Cellar' }
+      : { error: new Error('ENOENT'), stdout: '', stderr: '' });
+    const f = await installTool(tool, { runner: fails });
+    assert.equal(f.error, 'Permission denied @ dir_s_mkdir - /opt/homebrew/Cellar');
+    assert.deepEqual(f.output, ['Error: Permission denied @ dir_s_mkdir - /opt/homebrew/Cellar', '==> Fetching ripgrep']);
+  });
+
+  test('errorOutput strips colour and keeps the tail', () => {
+    assert.deepEqual(errorOutput({ stderr: '\x1b[31mnpm error\x1b[39m code E401\n\n', stdout: '' }), ['npm error code E401']);
+    assert.equal(errorOutput({ stdout: Array.from({ length: 300 }, (_, i) => `l${i}`).join('\n') }).length, 200);
+    assert.deepEqual(errorOutput({ error: new Error('spawn npm EBADF') }), ['spawn npm EBADF']);
+  });
 });

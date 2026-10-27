@@ -59,8 +59,10 @@ import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
 import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
+import { claim, exclusive, INSTALL_SLOT } from '../../core/local-jobs.js';
 import {
-  checkHealth, checkInstalled, problems, formatReport, summaryLine, describePackage, findImporters, REPO_ROOT,
+  checkHealth, checkInstalled, problems, formatReport, summaryLine, findImporters, lookupLatest, applyLatest,
+  REPO_ROOT, clip,
 } from '../../core/doctor.js';
 import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
@@ -326,9 +328,19 @@ export async function handleSlashCommand(query, {
         return;
       }
 
-      const outcome = await pullUpdate(agentLoop.agentSourceDir);
-      if (!outcome.ok) { say(`! ${outcome.error}`); return; }
-      if (!outcome.files.length) { say('✔ Already up to date.'); return; }
+      // A pull and its install rewrite the checkout and node_modules, so they
+      // hold the one install slot (core/local-jobs.js) until both are done.
+      const slot = claim(INSTALL_SLOT, '/update pull');
+      if (!slot.ok) { say(`! \`${slot.holder}\` is still running — \`/update pull\` when it finishes.`); return; }
+      let outcome;
+      try {
+        outcome = await pullUpdate(agentLoop.agentSourceDir);
+      } catch (err) {
+        slot.release();
+        throw err;
+      }
+      if (!outcome.ok) { slot.release(); say(`! ${outcome.error}`); return; }
+      if (!outcome.files.length) { slot.release(); say('✔ Already up to date.'); return; }
 
       const n = outcome.files.length;
       const heading = `**Updated**  ${n} file${n === 1 ? '' : 's'} changed`
@@ -369,9 +381,13 @@ export async function handleSlashCommand(query, {
         // back for the summary, so the wait has something above it.
         say([heading, '', 'Dependencies moved, so installing them now…'].join('\n'));
         const root = installRoot(agentLoop.agentSourceDir);
-        installed = root
-          ? await installDependencies(root, { stdio: 'pipe' })
-          : { ok: false, error: 'Could not find a `package.json` to install from.' };
+        try {
+          installed = root
+            ? await installDependencies(root, { stdio: 'pipe' })
+            : { ok: false, error: 'Could not find a `package.json` to install from.' };
+        } finally {
+          slot.release();
+        }
 
         if (installed.ok) {
           lines.push('`npm install` done — dependencies are in sync.', '');
@@ -381,6 +397,7 @@ export async function handleSlashCommand(query, {
             'Run `npm install` by hand, then `/restart`.', '');
         }
       }
+      slot.release();
       if (!outcome.install) lines.unshift(heading, '');
       if (outcome.steps.length) {
         // Saved before the restart, and kept until acknowledged: the failure
@@ -648,8 +665,13 @@ export async function handleSlashCommand(query, {
     // into a prompt — it is for the person whose computer it is.
     /*
      * `/doctor`: what the agent needs installed, what is, and what is newer.
-     * `/doctor <package>` says why it is here; `/doctor fix` runs the install;
-     * `/doctor offline` skips the registry. See `core/doctor.js`.
+     * Since v5.30 a menu (`ui/doctor-view.js`): ↑↓ over packages, enter for
+     * why one is here and to update, or install another version; esc walks
+     * back to the list. It opens on what is installed — read from disk, no
+     * network — and the registry's answer fills in a second later, so the
+     * menu never waits on a slow company registry. `/doctor <package>` opens
+     * at that package; `/doctor fix` runs the install; `/doctor report` (or
+     * `offline`) prints the table, for pasting. See `core/doctor.js`.
      */
     if (command === 'doctor' || command === 'health') {
       const sub = (args[0] || '').toLowerCase();
@@ -666,9 +688,14 @@ export async function handleSlashCommand(query, {
           return;
         }
         const root = installRoot(REPO_ROOT);
-        const installed = root
-          ? await installDependencies(root, { stdio: 'pipe' })
-          : { ok: false, error: 'Could not find a `package.json` to install from.' };
+        const installed = await exclusive(INSTALL_SLOT, '/doctor fix', () => (root
+          ? installDependencies(root, { stdio: 'pipe' })
+          : { ok: false, error: 'Could not find a `package.json` to install from.' }));
+        if (installed.busy) {
+          say(`! \`${installed.busy}\` is still running — \`/doctor fix\` when it finishes.`);
+          setIsProcessing(false);
+          return;
+        }
         const after = problems(checkInstalled());
         say(installed.ok && after.length === 0
           ? `✔ \`npm install\` fixed ${before.map((p) => p.name).join(', ')} · \`/restart\` so the running agent loads ${before.length === 1 ? 'it' : 'them'}`
@@ -679,17 +706,37 @@ export async function handleSlashCommand(query, {
         return;
       }
 
-      const offline = sub === 'offline';
-      const name = sub && !offline ? args[0] : null;
-      const report = await checkHealth({ latest: !offline });
-      if (name) {
-        const lines = describePackage(name, report, { importers: findImporters(name) });
-        say(lines ? block(lines) : `\`${name}\` is not a package or tool this repo declares. \`/doctor\` lists them.`);
-      } else {
-        say(`**Health**  ${summaryLine(report)}\n\n${block(formatReport(report))}\n\n`
-          + '`/doctor <package>` says why it is here and what imports it · `/doctor fix` runs `npm install`');
+      if (sub === 'report' || sub === 'offline') {
+        const report = await checkHealth({ latest: sub !== 'offline' });
+        const width = Math.max(40, (process.stdout.columns || 100) - 4);
+        say(`**Health**  ${summaryLine(report)}\n\n${block(formatReport(report, { width }))}\n\n`
+          + clip('`/doctor` opens it as a menu · `/doctor fix` runs `npm install`', width));
+        setIsProcessing(false);
+        return;
       }
+
+      const report = await checkHealth({ latest: false });
+      let target = null;
+      if (sub) {
+        const tool = report.tools.find((t) => t.name === args[0]);
+        const group = report.groups.find((g) => g.packages.some((p) => p.name === args[0]));
+        target = tool ? { kind: 'tool', name: tool.name }
+          : group ? { kind: 'package', name: args[0], workspace: group.workspace } : null;
+        if (!target) {
+          say(`\`${args[0]}\` is not a package or tool this repo declares. \`/doctor\` lists them.`);
+          setIsProcessing(false);
+          return;
+        }
+      }
+      setActiveMenu({
+        type: 'doctor', report, view: target ? 'package' : 'home', target,
+        importers: target?.kind === 'package' && target.workspace === 'server' ? findImporters(target.name) : [],
+      });
       setIsProcessing(false);
+      // The registry, behind the open menu. A closed menu drops the answer.
+      lookupLatest().catch((err) => ({ ok: false, reason: err.message })).then((registry) => setActiveMenu((cur) => (cur?.type === 'doctor'
+        ? { ...cur, report: applyLatest({ ...cur.report, registry: null }, registry) }
+        : cur)));
       return;
     }
 

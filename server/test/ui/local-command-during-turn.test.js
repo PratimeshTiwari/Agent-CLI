@@ -61,7 +61,7 @@ test('a busy loop gets a no-op setIsProcessing', () => {
   const body = submitBody();
   assert.match(
     body,
-    /setIsProcessing:\s*turnInFlight\s*\?\s*\(\)\s*=>\s*\{\}\s*:\s*setIsProcessing/,
+    /setIsProcessing:\s*turnInFlight\s*\?\s*\(\)\s*=>\s*\{\}\s*:\s*settle/,
     'the slash handlers each call setIsProcessing(false); while the loop is busy '
     + 'that is a lie about a turn still in flight',
   );

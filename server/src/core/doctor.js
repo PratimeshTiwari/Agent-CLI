@@ -190,27 +190,33 @@ export const TOOLS = [
   {
     name: 'node', need: 'required', args: ['--version'],
     why: 'Runs everything.',
-    without: 'Nothing runs.',
+    without: 'Nothing runs.', short: 'nothing runs',
+    manual: { all: 'https://nodejs.org' },
   },
   {
     name: 'npm', need: 'required', args: ['--version'],
     why: 'Installs the packages above, and `/update` runs it after a pull.',
-    without: 'Packages cannot be installed or updated.',
+    without: 'Packages cannot be installed or updated.', short: 'packages cannot be installed',
+    manual: { all: 'it comes with Node: https://nodejs.org' },
   },
   {
     name: 'git', need: 'optional', args: ['--version'],
     why: '`/update` pulls the agent\'s own repo with it.',
-    without: '`/update` cannot check for or pull updates.',
+    without: '`/update` cannot check for or pull updates.', short: '/update cannot run',
+    install: { darwin: ['brew', ['install', 'git']], win32: ['winget', ['install', '--id', 'Git.Git', '-e']] },
+    manual: { darwin: 'xcode-select --install', linux: 'sudo apt install git', win32: 'https://git-scm.com' },
   },
   {
     name: 'rg', need: 'optional', args: ['--version'],
     why: 'ripgrep: grep_search uses it when present.',
-    without: 'grep_search falls back to a slower scan in Node.',
+    without: 'grep_search falls back to a slower scan in Node.', short: 'search is slower',
+    install: { darwin: ['brew', ['install', 'ripgrep']], win32: ['winget', ['install', '--id', 'BurntSushi.ripgrep.MSVC', '-e']] },
+    manual: { darwin: 'https://brew.sh, then brew install ripgrep', linux: 'sudo apt install ripgrep', win32: 'https://github.com/BurntSushi/ripgrep' },
   },
   {
     name: 'textutil', need: 'optional', platform: 'darwin', path: '/usr/bin/textutil',
     why: 'macOS\'s converter: read_file uses it for .doc, .rtf and .odt.',
-    without: 'Those three are refused with "save it as .docx or .pdf".',
+    without: 'Those three are refused with "save it as .docx or .pdf".', short: '.doc, .rtf, .odt refused',
   },
 ];
 
@@ -383,7 +389,13 @@ function run(cmd, args, { cwd, timeout = 3000 } = {}) {
 export async function checkTools({ platform = process.platform, runner = run, root = REPO_ROOT } = {}) {
   const engines = readJson(path.join(root, 'package.json'))?.engines?.node || null;
   return Promise.all(TOOLS.map(async (t) => {
-    const row = { name: t.name, tier: t.need, why: t.why, without: t.without, version: null, status: 'ok', note: null };
+    const row = {
+      name: t.name, tier: t.need, why: t.why, without: t.without, short: t.short, version: null, status: 'ok', note: null,
+      // How the menu offers to install it here: a command it can run, or one
+      // it can only name (sudo wants a password the menu cannot ask for).
+      install: t.install?.[platform] || null,
+      manual: t.manual?.[platform] || t.manual?.all || null,
+    };
     if (t.platform && t.platform !== platform) {
       return { ...row, status: 'n/a', note: 'macOS only' };
     }
@@ -442,14 +454,21 @@ export async function checkHealth({ root = REPO_ROOT, latest = true, runner = ru
     checkTools({ platform, runner, root }),
     latest ? lookupLatest({ root, runner }) : Promise.resolve(null),
   ]);
-  if (registry?.ok) {
-    for (const g of groups) {
-      for (const p of g.packages) {
-        p.latest = registry.latest.get(p.name) || (p.installed ? p.installed : null);
-      }
-    }
-  }
-  return { root, groups, tools, registry };
+  return applyLatest({ root, groups, tools, registry: null }, registry);
+}
+
+/**
+ * The registry's answer laid over a report, as a new report. Split out so the
+ * menu can open on what is installed and fill this in a second later.
+ * Absent from `npm outdated` means installed is latest.
+ */
+export function applyLatest(report, registry) {
+  if (!registry?.ok) return { ...report, registry };
+  const groups = report.groups.map((g) => ({
+    ...g,
+    packages: g.packages.map((p) => ({ ...p, latest: registry.latest.get(p.name) || p.installed || null })),
+  }));
+  return { ...report, groups, registry };
 }
 
 /* ----------------------------------------------------------------- output */
@@ -485,10 +504,10 @@ function worthAListing(p) {
  * row. A row that is not fine says what breaks, so the fix and the stakes are
  * on the same screen.
  */
-export function formatReport(report) {
+export function formatReport(report, { width = Infinity } = {}) {
   const lines = [];
-  const width = Math.max(10, ...report.groups.flatMap((g) => g.packages.map((p) => p.name.length)));
-  const W = { name: width + 2, have: 10, want: 10 };
+  const nameWidth = Math.max(10, ...report.groups.flatMap((g) => g.packages.map((p) => p.name.length)));
+  const W = { name: nameWidth + 2, have: 10, want: 10 };
 
   for (const g of report.groups) {
     lines.push(`${g.workspace === 'root' ? 'repo root' : g.workspace}/package.json`);
@@ -513,24 +532,36 @@ export function formatReport(report) {
   lines.push('tools');
   for (const t of report.tools) {
     const have = t.status === 'missing' ? 'missing' : t.status === 'n/a' ? '—' : t.version;
-    const tail = t.status === 'missing' ? t.without
+    const tail = t.status === 'missing' ? (t.short || firstSentence(t.without))
       : t.status === 'mismatch' ? `needs ${t.range}`
         : t.status === 'n/a' ? t.note : '';
     lines.push(`    ${toolMark(t)} ${pad(t.name, W.name)}${pad(have, W.have)}${pad(t.tier, W.want)}${tail}`.trimEnd());
   }
   lines.push('');
 
+  // One line, not a paragraph: what the registry said, or why it said nothing.
   const reg = report.registry;
-  if (reg && !reg.ok) lines.push(`Latest versions unknown: npm could not ask the registry (${reg.reason}).`);
+  if (reg && !reg.ok) lines.push(`latest unknown: ${reg.reason}`);
   if (reg?.ok) {
-    const behind = report.groups.flatMap((g) => g.packages).filter((p) => p.installed && p.latest && compareVersions(p.installed, p.latest) < 0);
-    const names = [...new Set(behind.map((p) => p.name))];
-    lines.push(names.length
-      ? `${names.length} with a newer release — an upgrade to choose, not a repair.`
-      : 'Everything is on its latest release.');
+    const n = newerCount(report);
+    lines.push(n ? `${n} with a newer release` : 'all on their latest release');
   }
   while (lines.at(-1) === '') lines.pop();
-  return lines;
+  // A wrapped row lands at column 0 and reads as a new entry; cut it instead.
+  return lines.map((l) => clip(l, width));
+}
+
+/** Distinct packages with a release newer than the one installed. */
+export function newerCount(report) {
+  const behind = report.groups.flatMap((g) => g.packages)
+    .filter((p) => p.installed && p.latest && compareVersions(p.installed, p.latest) < 0);
+  return new Set(behind.map((p) => p.name)).size;
+}
+
+/** Cut to `width` columns with an ellipsis; a no-op without a width. */
+export function clip(text, width = Infinity) {
+  const s = String(text ?? '');
+  return Number.isFinite(width) && s.length > width ? `${s.slice(0, Math.max(1, width - 1))}…` : s;
 }
 
 /** The one-line verdict, with the command that fixes it. */
@@ -623,7 +654,124 @@ export async function runDoctorCli(argv, { out = process.stdout, root = REPO_ROO
     out.write((lines ? lines.join('\n') : `${name} is not a package or tool this repo declares.`) + '\n');
     return lines ? 0 : 1;
   }
-  out.write(formatReport(report).map(paint).join('\n') + '\n\n' + paint(summaryLine(report)) + '\n');
-  if (!name) out.write('`agent doctor <package>` says why it is here and what imports it.\n');
+  const width = out.columns || Infinity;
+  out.write(formatReport(report, { width }).map(paint).join('\n') + '\n\n' + paint(summaryLine(report)) + '\n');
+  out.write(clip('agent doctor <package>: why it is used', width) + '\n');
   return problems(report.groups).some((p) => p.tier === 'required') ? 1 : 0;
+}
+
+/* ------------------------------------------------------- versions, install */
+
+/**
+ * Every published version of `name`, newest first — from the user's registry,
+ * through npm, for the same reason as `lookupLatest`. Prereleases are left out
+ * unless one is installed: a version list is for choosing a release.
+ *
+ * @returns {Promise<{ok: true, versions: string[]} | {ok: false, reason: string}>}
+ */
+export async function listVersions(name, { root = REPO_ROOT, runner = run, timeout = 25_000, installed = null } = {}) {
+  const r = await runner('npm', ['view', name, 'versions', '--json'], { cwd: root, timeout });
+  let parsed = null;
+  try { parsed = r.stdout.trim() ? JSON.parse(r.stdout) : null; } catch { parsed = null; }
+  if (!parsed || parsed.error) {
+    const reason = parsed?.error?.summary
+      || r.stderr.split('\n').map((l) => l.trim()).find(Boolean)
+      || (r.error?.killed ? `no answer in ${Math.round(timeout / 1000)}s` : r.error?.message) || 'no answer';
+    return { ok: false, reason: reason.replace(/^npm (ERR!|error)\s*/i, '') };
+  }
+  const all = Array.isArray(parsed) ? parsed : [parsed];
+  const keepPre = Boolean(parseVersion(installed)?.pre);
+  const versions = all.filter((v) => keepPre || !parseVersion(v)?.pre)
+    .sort((a, b) => compareVersions(b, a));
+  return { ok: true, versions };
+}
+
+/**
+ * What a failed command said, for the menu's "Show the error" page: stderr
+ * then stdout, colour codes stripped, the last `max` lines. Hidden until
+ * asked for — the page itself says one line.
+ */
+export function errorOutput({ stdout = '', stderr = '', error = null } = {}, max = 200) {
+  const text = [stderr, stdout].filter((x) => x && x.trim()).join('\n') || error?.message || '';
+  // eslint-disable-next-line no-control-regex
+  const lines = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/\r?\n/).map((l) => l.replace(/\s+$/, ''));
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  return lines.slice(-max);
+}
+
+/**
+ * Install a tool npm does not manage, with the platform's package manager —
+ * Homebrew on macOS, winget on Windows. Judged by running the tool afterwards.
+ * A package manager that is not there is said in words, with the way to do it
+ * by hand.
+ *
+ * @returns {Promise<{ok: boolean, version?: string|null, error?: string, output?: string[]}>}
+ */
+export async function installTool(tool, { runner = run, timeout = 600_000 } = {}) {
+  if (!tool?.install) return { ok: false, error: `no installer here — ${tool?.manual || 'install it by hand'}` };
+  const [cmd, args] = tool.install;
+  const r = await runner(cmd, args, { timeout });
+  const spec = TOOLS.find((t) => t.name === tool.name);
+  const after = await runner(tool.name, spec?.args || ['--version']);
+  if (!after.error) return { ok: true, version: after.stdout.match(/\d+\.\d+(\.\d+)?/)?.[0] || 'present' };
+  if (r.error?.code === 'ENOENT') {
+    return { ok: false, error: `${cmd} is not installed — ${tool.manual || 'install it by hand'}`, output: [] };
+  }
+  const output = errorOutput(r);
+  const line = output.find((l) => /error|fail/i.test(l)) || output[output.length - 1]
+    || (r.error?.killed ? `no answer in ${Math.round(timeout / 1000)}s` : r.error?.message) || `${cmd} finished, and ${tool.name} still does not run`;
+  return { ok: false, error: line.replace(/^(Error|npm (ERR!|error)):?\s*/i, ''), output };
+}
+
+/**
+ * Take a package out of a workspace's `package.json` and `node_modules` —
+ * offered only for the `unused` tier, where nothing imports it. Judged by the
+ * manifest afterwards, not by npm's exit code.
+ *
+ * @returns {Promise<{ok: boolean, error?: string, output?: string[]}>}
+ */
+export async function uninstallPackage({ name, workspace = 'server' }, { root = REPO_ROOT, runner = run, timeout = 300_000 } = {}) {
+  const args = ['uninstall', name];
+  if (workspace && workspace !== 'root') args.push(`--workspace=${workspace}`);
+  const r = await runner('npm', args, { cwd: root, timeout });
+  const manifest = readJson(path.join(workspace && workspace !== 'root' ? path.join(root, workspace) : root, 'package.json')) || {};
+  const still = Boolean(manifest.dependencies?.[name] || manifest.devDependencies?.[name]);
+  if (!still) return { ok: true };
+  const output = errorOutput(r);
+  return { ok: false, error: output.find((l) => /error|ERR!/i.test(l))?.replace(/^npm (ERR!|error)\s*/i, '') || `${name} is still in package.json`, output };
+}
+
+/**
+ * The `npm install` arguments that put `version` into `workspace` while keeping
+ * the range's style: `^` stays `^`, `~` stays `~`, an exact pin stays exact.
+ * `unpdf` is pinned exactly on purpose, and an update must not quietly turn
+ * that into a caret.
+ */
+export function installArgs({ name, version, workspace = 'server', range = '' }) {
+  const args = ['install', `${name}@${version}`];
+  if (workspace && workspace !== 'root' && workspace !== 'vscode-companion') args.push(`--workspace=${workspace}`);
+  const style = String(range).trim();
+  if (style.startsWith('~')) args.push('--save-prefix=~');
+  else if (!style.startsWith('^') && /^\d/.test(style)) args.push('--save-exact');
+  return args;
+}
+
+/**
+ * Install one package at one version. It rewrites `package.json` and the
+ * lockfile — a change to the agent, which is why it is only ever run from a
+ * choice someone made in the menu. Output is captured, never inherited: Ink
+ * owns the terminal.
+ *
+ * @returns {Promise<{ok: boolean, installed?: string|null, error?: string}>}
+ */
+export async function installPackage(spec, { root = REPO_ROOT, runner = run, timeout = 300_000 } = {}) {
+  const r = await runner('npm', installArgs(spec), { cwd: root, timeout });
+  const dir = spec.workspace && spec.workspace !== 'root' ? path.join(root, spec.workspace) : root;
+  const after = installedVersion(spec.name, dir, root)?.version || null;
+  if (r.error && after !== spec.version) {
+    const line = (r.stderr || r.error.message || '').split('\n').map((l) => l.trim()).filter(Boolean)
+      .find((l) => /error|ERR!/i.test(l)) || r.error.message;
+    return { ok: false, installed: after, error: String(line).replace(/^npm (ERR!|error)\s*/i, ''), output: errorOutput(r) };
+  }
+  return { ok: after === spec.version, installed: after, ...(after === spec.version ? {} : { error: `npm finished, and ${after || 'nothing'} is installed` }) };
 }

@@ -10,6 +10,7 @@ import { Intro, Goodbye } from './components/Intro.jsx';
 import { animationAllowed, OUTRO_MS } from './intro.js';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../core/user-settings.js';
+import { createProbeHold } from './ink-probe-hold.js';
 
 /**
  * The stream Ink reads: real stdin, with a trailing Enter delivered separately.
@@ -126,7 +127,9 @@ export class CliUI {
     const interrupt = interruptGate();
 
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (raw) => {
+    // Ink's kitty probe hands back, a second time, any key typed in its first
+    // 200 ms — see `ink-probe-hold.js`. Held until it is over.
+    const onKeys = (raw) => {
       // Cursor reports are answers to our own questions, never keys.
       let chunk = String(raw);
       if (span) {
@@ -158,7 +161,9 @@ export class CliUI {
           hotkeys.emit(name);
         },
       });
-    });
+    };
+    const probeHold = createProbeHold({ deliver: onKeys });
+    process.stdin.on('data', (raw) => probeHold.accept(raw));
 
     // Before the first frame: a theme applied after it would draw the banner in
     // the old colours, and <Static> never repaints it.
@@ -175,6 +180,7 @@ export class CliUI {
     const tty = Boolean(process.stdout.isTTY);
     const animate = animationAllowed({ isTTY: tty, rows: process.stdout.rows || 0 });
     const outro = animationAllowed({ isTTY: tty, rows: Infinity });
+    probeHold.start();
     const instance = render(<Root agentLoop={this.agentLoop} wsServer={this.wsServer} welcome={this.welcome}
       animate={animate} outro={outro} />, {
       stdin: inkStdin,

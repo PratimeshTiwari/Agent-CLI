@@ -878,6 +878,32 @@ and the slash palette now gives way to notice rows: it always offered six, which
 rows by one with that row up (2 `ESC[2J`). 0 extra clears at 10, 13, 24 rows. It found
 `ink-spinner`, declared and imported by nothing — listed as `unused`, not removed.
 
+**`/doctor` is a menu since v5.30 (`ui/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
+All · Required · Optional · Other · Tools (tab or ←/→). Enter opens a package: why, versions,
+importers, then actions: install what `package.json` wants, update to latest, choose a version (`npm
+view … versions`), **remove** for the `unused` tier. A missing tool gets its installer (`brew` on
+macOS, `winget` on Windows; Linux only names `sudo apt …`). A failed install says one line, and
+**Show the error** opens the installer's output. Esc goes back one view; only the list closes. It
+opens on disk state with no network, and `npm outdated` fills in behind it. A version install keeps
+the range's style (`installArgs`: `^`, `~`, exact). `/doctor report` prints the old table. **A change
+that breaks the next start is undone** (`core/doctor-guard.js`): manifests and lockfile are copied to
+`~/.agent/doctor-change.json` first; a start up 8 s confirms; a non-zero exit before that makes
+`index.js` restore, `npm install` and start again, once. The record holds the changing session's pid,
+because that session crashing proves nothing about the change. Not yet driven end to end: the unit
+tests fake the install.
+
+**Two things at once (v5.30).** Messages typed during a turn or the warm-up queue; local commands
+run beside the turn. Two gaps closed. Overlapping slow commands lowered each other's spinner, and a
+turn's: App counts them (`slowCommands`). And two `npm install`s could write one `node_modules`:
+`core/local-jobs.js` has one `install` slot, which `/doctor fix`, menu installs and `/update pull` take,
+and a second caller is told who holds it, not queued. **Ink 7.1.1 handles a key typed in its first
+200 ms twice**: kitty auto-detect adds a `data` listener beside Ink's reader and `unshift`s what it
+saw. A warm start at 13 rows (no intro) put the prompt in that window: `/` became `//`, "No such
+command: //help", on `main` too. `ui/ink-probe-hold.js` holds keys until the window has closed and
+passes the probe's reply through. The palette also lost the spinner's two rows during a turn (4
+clears at 13 rows on `/`). Settings rows for Theme and Workspace now open with `returnTo`, so esc
+steps back to settings. Pty: 0 clears at 13 and 24 on every path.
+
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
 that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the walker, so a `.jsx`

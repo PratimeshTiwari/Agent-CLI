@@ -14,10 +14,12 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-26 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#93](https://github.com/PratimeshTiwari/Agent-CLI/pull/93)
+### v5 — 2026-10-19 … 2026-10-27 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#95](https://github.com/PratimeshTiwari/Agent-CLI/pull/95)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.29 | 2026-10-27 | `v5.29/read-documents` | [#95](https://github.com/PratimeshTiwari/Agent-CLI/pull/95) | v5.29: read PDF, Word and PowerPoint; /doctor health check; README with project images |
+| v5.28 | 2026-10-27 | `v5.28/effort-mismatch` | [#94](https://github.com/PratimeshTiwari/Agent-CLI/pull/94) | v5.28: ask when the browser differs from the effort; step down on a failed switch or a quota |
 | v5.27 | 2026-10-26 | `v5.27/fixes-from-use` | [#93](https://github.com/PratimeshTiwari/Agent-CLI/pull/93) | v5.27: expandable output, gated Low/Medium handover, opt-in warm start; /settings as a list of switches |
 | v5.26 | 2026-10-26 | `v5.26/effort-argon` | [#92](https://github.com/PratimeshTiwari/Agent-CLI/pull/92) | v5.26: effort follows the tab, a Max rung for Argon, /update lockfile fix |
 | v5.25 | 2026-10-26 | `v5.25/effort-slider-quiet-replies` | [#89](https://github.com/PratimeshTiwari/Agent-CLI/pull/89) | v5.25: effort slider, one-line replies, quieter menus |

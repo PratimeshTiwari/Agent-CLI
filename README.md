@@ -71,9 +71,14 @@ with a reason rather than read as garbage.
 **A health check for the install** — `/doctor` lists every package the agent uses: whether it is
 **required** (the agent will not start without it) or **optional** (one feature stops working),
 the version installed, the one `package.json` wants and the latest on your registry. A missing
-package also shows one line at startup. `/doctor <package>` says why it is here, what breaks
-without it and which files import it; `/doctor fix` runs the install. `agent doctor` works from
-the shell even when the install is too broken to start.
+package also shows one line at startup. It is a menu: tabs for All, Required, Optional, Other
+and Tools; enter on a package says why it is here, what breaks without it and which files import
+it, and offers to install it, update it, pick any other version, or remove it if nothing uses
+it. A missing tool (`rg`, `git`) can be installed with Homebrew or winget. A failed install says
+one line, and the full error is a choice away. If a change stops the agent starting, the next
+start puts the previous `package.json` and lockfile back by itself. `/doctor fix` runs the
+install; `/doctor report` prints the table. `agent doctor` works from the shell even when the
+install is too broken to start.
 
 ![/doctor: installed, missing and newer, by tier](docs/images/doctor.svg)
 
@@ -172,7 +177,7 @@ the prompt; backspace over the tag takes the image off.
 | Command | |
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model picker to match |
-| `/doctor` | packages and tools: installed, missing, latest · `/doctor <package>` says why it is used |
+| `/doctor` | packages and tools as a menu: why each is used, install, update, pick a version, remove unused · `report` prints the table |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
 | `/copy` | the last reply, as markdown, to the clipboard — `/copy code` for the last code block |

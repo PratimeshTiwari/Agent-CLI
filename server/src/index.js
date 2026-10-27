@@ -23,6 +23,7 @@ import { homedir } from 'os';
 // finding; the shim is the consumer, so it imports rather than declares.
 export { RESTART_EXIT_CODE } from './core/restart.js';
 import { RESTART_EXIT_CODE } from './core/restart.js';
+import { shouldRevert, revertChange } from './core/doctor-guard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mainJs = resolve(__dirname, 'main.js');
@@ -98,6 +99,15 @@ for (let restarts = 0; ; restarts++) {
     env: { ...process.env, AGENT_CLI_SUPERVISED: '1' },
   });
 
+  // A start that broke after `/doctor` changed a package: put it back, once,
+  // and start again (`core/doctor-guard.js`).
+  if (result.status !== RESTART_EXIT_CODE && shouldRevert(result.status, process.env, result.pid)) {
+    const { ok, changes, error } = revertChange({ env: process.env });
+    console.error(ok
+      ? `↶ The agent did not start after /doctor changed ${changes.join(', ')}. Put back the previous package.json and lockfile; starting again.`
+      : `✗ The agent did not start after /doctor changed ${changes.join(', ')}, and putting it back failed: ${error}`);
+    if (ok) continue;
+  }
   if (result.status !== RESTART_EXIT_CODE) {
     process.exit(result.status ?? 0);
   }
