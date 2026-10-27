@@ -176,6 +176,7 @@ import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from './diff-approval.js';
 import { createOutputTail } from './output-tail.js';
 import { startupMode } from './user-settings.js';
+import { describeMismatch, ensureRung, describeFailedSwitch, lowerRung, mismatchPolicy } from './model-fallback.js';
 
 
 // Backstop for a prompt the extension never answers. Longer than the content
@@ -431,6 +432,12 @@ export class AgentLoop {
     this.startupMode = startupMode();
     this._warmOnConnect = this.startupMode === 'warm';
     this.warmState = null;
+    // v5.28 (`core/model-fallback.js`): the rung a failed switch or a quota
+    // stepped down to, for the rest of the session; disagreements the user
+    // chose to send through anyway; and switches waiting on the picker's word.
+    this.effortFallback = null;
+    this._mismatchAcks = new Set();
+    this._switchWaiters = [];
     this.pendingGeminiResponse = null;
     this.callbacks = null;
     this.isProcessing = false;
@@ -475,7 +482,7 @@ export class AgentLoop {
   /**
    * Handle a user message from the side panel.
    */
-  async handleUserMessage(content, callbacks) {
+  async handleUserMessage(content, callbacks, options = {}) {
     if (this.isProcessing) {
       callbacks.sendToPanel({
         id: randomUUID(),
@@ -512,6 +519,20 @@ export class AgentLoop {
     if (this._wantsCompaction()) {
       await this._runCompaction({ beforeMessage: true });
       // esc during the summary: the stop covers the message too.
+      if (!this.isProcessing) return;
+    }
+    /*
+     * The tab onto the effort's model before anything is typed (v5.28): the
+     * user chose "switch" when asked (`options.switchTo`), or `/effort
+     * mismatch switch` says always. Busy flag already up, so a prompt typed
+     * meanwhile queues and esc cancels the wait.
+     */
+    const switchTo = options.switchTo
+      ?? (mismatchPolicy(this.modelConfig) === 'switch' && !this.effortFallback
+        ? describeMismatch(this.modelConfig?.effort, this.modelOptions || [], this.modelConfig)?.setting
+        : null);
+    if (switchTo) {
+      await this.ensureRungForTurn(switchTo, 'switch');
       if (!this.isProcessing) return;
     }
     try {
@@ -551,6 +572,7 @@ export class AgentLoop {
       this.currentObjective = stripImageHeaders(remembered);
       // One tool-amnesia retry per user turn; see handleGeminiResponse.
       this._deniedToolsOnce = false;
+      this._steppedDownThisTurn = false;
       /**
        * What this turn has actually done, for the model to read back.
        *
@@ -983,6 +1005,7 @@ export class AgentLoop {
     deniedToolsOnce: this._deniedToolsOnce,
     hasObjective: Boolean(this.currentObjective),
     hasLastPrompt: Boolean(this._lastMainPrompt),
+    canStepDown: !this._steppedDownThisTurn && Boolean(lowerRung(this._promptEffort())),
   });
 
   if (verdict.kind === 'quota') {
@@ -1000,6 +1023,24 @@ export class AgentLoop {
       message: cleanContent.trim().slice(0, 200),
       meta: { attempt: verdict.attempt, delayMs: verdict.delayMs ?? null },
     });
+  }
+
+  if (verdict.action === 'step_down') {
+    this._steppedDownThisTurn = true;
+    const from = resolveEffort(this._promptEffort());
+    const on = (this.modelOptions || []).find((m) => m?.selected)?.label || from.browser;
+    this._noticeRow(`✗ ${on} is at its limit · stepping down a rung`);
+    // The prompt that hit the limit, verbatim, as the provider retry sends it:
+    // a rebuild would lose the tool results it carried.
+    const prompt = stripImageData(this._lastMainPrompt);
+    (async () => {
+      const result = await this.ensureRungForTurn(lowerRung(from.id), 'quota', { wanted: from.id });
+      if (!this.isProcessing || result.cancelled) return;
+      // Sent even when no step landed: the tab answers at its limit again, and
+      // `_steppedDownThisTurn` shows that reply as it is.
+      this._sendToGemini(prompt, this.callbacks);
+    })();
+    return true;
   }
 
   if (verdict.action === 'reask_provider') {
@@ -1300,6 +1341,7 @@ export class AgentLoop {
     this.isProcessing = true;
     this.currentObjective = `Fix the failure in background task ${hit.taskId}`;
     this._deniedToolsOnce = false;
+    this._steppedDownThisTurn = false;
     this._resentUnsubmittedOnce = false;
     this._failedRounds = 0;
 
@@ -1852,13 +1894,21 @@ export class AgentLoop {
      */
     if (requested) {
       const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+      // A switch someone is waiting on (`switchAndConfirm`) is reported by its
+      // waiter, which knows whether a step down follows. Saying "change it by
+      // hand" here as well would be advice the next line contradicts.
+      const waiting = (this._switchWaiters || []).filter((w) => same(w.label, requested));
+      if (waiting.length) {
+        this._switchWaiters = this._switchWaiters.filter((w) => !waiting.includes(w));
+        for (const w of waiting) w.settle({ ok: same(switchedTo, requested), switchedTo: switchedTo || null });
+        return;
+      }
       // `✓` and `!` rather than emoji, which is what every other row in this
       // transcript uses for the same two meanings.
       this._notify(same(switchedTo, requested)
         ? `✓ tab on ${switchedTo}`
-        : `! Browser model is still ${switchedTo || 'unknown'} — asked for ${requested}.`
-          + `\n  Change it by hand in the Gemini tab (ctrl+b opens it). `
-          + 'Until then the prompt follows the tab.');
+        : `${describeFailedSwitch({ label: requested, switchedTo })}`
+          + ' · change it in the Gemini tab (ctrl+b), or the next message asks what to do');
       return;
     }
 
@@ -2156,6 +2206,100 @@ export class AgentLoop {
   }
 
   /**
+   * What to put to the user before this message, or null (v5.28).
+   *
+   * Asked only under the `ask` policy, never while a step-down is in force (the
+   * status bar already says the tab is lower on purpose), never while a switch
+   * is in flight, and once per disagreement — see `describeMismatch`.
+   */
+  mismatchToAsk() {
+    if (mismatchPolicy(this.modelConfig) !== 'ask') return null;
+    if (this.effortFallback || this._switchInFlight) return null;
+    const ask = describeMismatch(this.modelConfig?.effort, this.modelOptions || [], this.modelConfig);
+    return ask && !this._mismatchAcks?.has(ask.key) ? ask : null;
+  }
+
+  /** "Send on the browser's model": not asked again until the tab or setting moves. */
+  ackMismatch(key) {
+    if (key) (this._mismatchAcks ||= new Set()).add(key);
+  }
+
+  /**
+   * Switch the main tab and wait for the picker to say where it landed.
+   *
+   * Resolved by `noteModelOptions` when the answer carrying this `requested`
+   * arrives, by `abortExtensionWork` (cancelled), or by the clock. The clock is
+   * generous because a switch asked mid-turn is deferred until the lane frees.
+   *
+   * @returns {Promise<{ok: boolean, switchedTo?: string|null, cancelled?: boolean, timedOut?: boolean}>}
+   */
+  switchAndConfirm(label, { timeoutMs = 15_000 } = {}) {
+    return new Promise((resolve) => {
+      const waiter = { label, settle: null };
+      const timer = setTimeout(() => {
+        this._switchWaiters = (this._switchWaiters || []).filter((w) => w !== waiter);
+        waiter.settle({ ok: false, switchedTo: null, timedOut: true });
+      }, timeoutMs);
+      timer.unref?.();
+      waiter.settle = (result) => {
+        clearTimeout(timer);
+        waiter.settle = () => {};
+        resolve(result);
+      };
+      (this._switchWaiters ||= []).push(waiter);
+      this.switchModelTo(label);
+    });
+  }
+
+  _settleSwitchWaiters(result) {
+    const waiting = this._switchWaiters || [];
+    this._switchWaiters = [];
+    for (const w of waiting) w.settle(result);
+  }
+
+  /**
+   * Get the tab onto `rung`, stepping down when a switch does not land, and
+   * say so on screen. The one walk every trigger uses (`ensureRung`).
+   *
+   * A landing below `rung` is remembered as `effortFallback` for the session:
+   * asking Pro again every message would spend a message each time to learn it
+   * is still full. `/effort` clears it.
+   *
+   * @param {string} rung
+   * @param {'switch'|'quota'} reason  what started it, for the screen and the log
+   * @param {{wanted?: string}} [opts] the rung the user wanted, when the walk
+   *        starts below it (a quota starts one down from where it hit)
+   */
+  async ensureRungForTurn(rung, reason, opts = {}) {
+    const wanted = resolveEffort(opts.wanted ?? rung);
+    const result = await ensureRung({
+      rung: resolveEffort(rung).id,
+      models: () => this.modelOptions || [],
+      modelConfig: this.modelConfig,
+      switchTo: (label) => {
+        this._notify(`Switching the browser to ${label}…`);
+        return this.switchAndConfirm(label);
+      },
+    });
+    if (result.cancelled) return result;
+    for (const failure of result.failed) this._noticeRow(describeFailedSwitch(failure));
+    if (result.ok && result.rung !== wanted.id) {
+      const got = resolveEffort(result.rung);
+      const why = reason === 'quota' ? 'at its limit' : 'switch did not land';
+      this.effortFallback = { wanted: wanted.id, got: got.id, label: result.label, reason: why };
+      this._noticeRow(`↓ Sending on ${result.label} (${got.name}) for this session · \`/effort ${wanted.id}\` tries ${wanted.name} again`);
+      logNotice(this.workspace, {
+        flow: 'agent', op: 'model_fallback',
+        message: `${wanted.id} → ${got.id}: ${why}`,
+        detail: result.failed.map((f) => `${f.label} stayed ${f.switchedTo || 'unanswered'}`).join('; '),
+      });
+    } else if (!result.ok) {
+      this._noticeRow(`✗ No model could be selected · sending on what the tab has`);
+    }
+    return result;
+  }
+
+  /**
    * Ask the browser to select one, by the label it reported.
    *
    * `sessionId` names a batch task's own tab. Without it this goes to the main
@@ -2349,6 +2493,7 @@ export class AgentLoop {
    */
   abortExtensionWork() {
     this._cancelScheduledRetry();
+    this._settleSwitchWaiters({ ok: false, cancelled: true });
     if (this._warming) this._warmCancelled = true;
     if (this._threadAsk) {
       const ask = this._threadAsk;
@@ -3586,6 +3731,17 @@ export class AgentLoop {
    */
   setNoticeSink(fn) {
     this._noticeSink = typeof fn === 'function' ? fn : null;
+  }
+
+  /**
+   * A row that must reach the transcript even mid-turn: a failed switch, a
+   * step down. `_notify` keeps mid-turn status on the spinner, which is gone
+   * the moment the turn ends, and this is a fact about the rest of the session.
+   */
+  _noticeRow(message) {
+    const target = this.callbacks || this._backgroundCallbacks;
+    target?.sendToPanel?.({ id: randomUUID(), type: 'status', payload: { message }, timestamp: Date.now() });
+    this._noticeSink?.(message);
   }
 
   _notify(message) {

@@ -130,21 +130,27 @@ export function classifyParseFailure(attempt) {
  *
  * @param {{toolCalls: object[], cleanContent: string}} reply
  * @param {{providerRetries?: number, deniedToolsOnce?: boolean, hasObjective?: boolean,
- *          hasLastPrompt?: boolean, random?: () => number}} state
+ *          hasLastPrompt?: boolean, canStepDown?: boolean, random?: () => number}} state
  */
 export function classifyReply({ toolCalls = [], cleanContent = '' } = {}, state = {}) {
   // A reply that does work is a reply that worked, whatever its prose says.
   if (toolCalls.length > 0) return { action: 'proceed' };
 
   /**
-   * Gemini's usage limit, recorded and not retried.
+   * Gemini's usage limit: step down a rung and re-send, once per turn (v5.28).
    *
-   * Instrumentation only: the log has never held one, so Gemini's exact
-   * wording is a guess and so is the right response (drop a rung to Flash?
-   * wait?). The reply is shown as it is — it tells the person when the limit
-   * resets — and the row is what turns the guess into a decision later.
+   * The owner settled what had been left open here ("drop a rung to Flash?
+   * wait?"): *"due to quota on pro and argon, then send the lower"*. Never
+   * retried on the same model — a limit's wording ("try again later") matches
+   * the provider detector, and re-asking walks into the same wall. When there
+   * is no rung below, or this turn already stepped down, the reply is shown as
+   * it is: it tells the person when the limit resets.
    */
-  if (looksLikeQuotaReached(cleanContent)) return { action: 'proceed', kind: 'quota' };
+  if (looksLikeQuotaReached(cleanContent)) {
+    return state.canStepDown && state.hasLastPrompt
+      ? { action: 'step_down', kind: 'quota' }
+      : { action: 'proceed', kind: 'quota' };
+  }
 
   // The provider errored rather than the model answering. Re-ask: this is a
   // transient failure of the tab, and the user should not have to notice it.

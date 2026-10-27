@@ -178,6 +178,13 @@ export function Menus({
     if (!key.escape) return;
     // The picker previews by applying each palette as you move; leaving
     // without choosing puts back the one you came in with.
+    // The mismatch ask (v5.28): cancelling must not lose what was typed.
+    if (activeMenu?.type === 'effort_mismatch') {
+      setActiveMenu(null);
+      setFocus(FOCUS_INPUT);
+      setInputAtEnd(activeMenu.query);
+      return;
+    }
     if (activeMenu?.type === 'theme') {
       setTheme(activeMenu.original);
       setActiveMenu(null);
@@ -621,6 +628,53 @@ export function Menus({
           chosen: "setup prompt" means nothing until it says what it is and
           what each choice costs.
         */}
+        {/*
+          The effort says one model and the browser is on another (v5.28,
+          `core/model-fallback.js`). Asked before the message is typed, once per
+          disagreement; the message waits here and comes back to the box on esc.
+        */}
+        {activeMenu?.type === 'effort_mismatch' && (() => {
+          const { ask, query } = activeMenu;
+          const setting = resolveEffort(ask.setting);
+          const browserRung = ask.browserRung ? resolveEffort(ask.browserRung) : null;
+          const { sub, tight, room } = fit(
+            `Effort is ${setting.name} (${ask.wanted}); the browser tab is on ${ask.current}.`,
+          );
+          const items = [
+            { label: `Switch the browser to ${ask.wanted}`, detail: 'then send · steps down if it will not switch', value: 'switch' },
+            {
+              label: `Send on ${ask.current}`,
+              detail: `with ${(browserRung || setting).name}'s prompt · not asked again for this`,
+              value: 'follow',
+            },
+            ...(browserRung && browserRung.id !== setting.id
+              ? [{ label: `Set effort to ${browserRung.name}`, detail: 'matches the browser from now on', value: 'set' }]
+              : []),
+          ];
+          return (
+            <Panel width={W} title="Effort and browser differ" tone="attention" sub={sub} tight={tight}
+              keys="enter choose · esc cancel — your message goes back in the box">
+              <Choices
+                numbered
+                limit={room}
+                items={items}
+                onSelect={async (item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  if (item.value === 'set') {
+                    const result = await agentLoop.handleSlashCommand('effort', [browserRung.id]);
+                    if (result?.message) {
+                      setHistory((prev) => [...prev, { role: 'assistant', content: result.message, isLocal: true }]);
+                    }
+                  }
+                  if (item.value === 'follow') agentLoop.ackMismatch(ask.key);
+                  handleSubmit(query, { mismatch: item.value, switchTo: item.value === 'switch' ? ask.setting : null });
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
         {activeMenu?.type === 'startup' && (() => {
           const warm = agentLoop.startupMode === 'warm';
           const { sub, tight, room } = fit(

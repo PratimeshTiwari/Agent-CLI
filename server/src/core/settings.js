@@ -26,6 +26,7 @@ import fs from 'fs';
 import { resolveEffort, EFFORT_LEVELS } from './effort.js';
 import { loadUserSettings } from './user-settings.js';
 import { browserModelPin } from './model-match.js';
+import { MISMATCH_POLICIES, mismatchPolicy } from './model-fallback.js';
 import { expectedExtensionVersion } from './extension-version.js';
 import * as paths from './paths.js';
 import { countToday } from './command-log.js';
@@ -94,6 +95,20 @@ export function describeSettings(agentLoop) {
       run: '/effort',
       restore: (value) => `/effort ${value}`,
       control: { kind: 'ladder', options: EFFORT_LEVELS.map((e) => e.id) },
+    },
+    {
+      group: 'Settings',
+      label: 'Browser differs',
+      // v5.28: what a message does when the tab is not on the effort's model.
+      value: mismatchPolicy(mc),
+      hint: {
+        ask: 'ask before sending: switch, send anyway, or change effort',
+        follow: 'send on the browser\'s model, with its prompt, without asking',
+        switch: 'switch the browser first; step down if it will not',
+      }[mismatchPolicy(mc)],
+      run: '/effort mismatch',
+      restore: (value) => `/effort mismatch ${value}`,
+      control: { kind: 'ladder', options: MISMATCH_POLICIES },
     },
     {
       group: 'Settings',
