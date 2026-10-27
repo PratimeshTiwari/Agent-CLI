@@ -527,8 +527,8 @@ log rather than from taste:
   because during the wait the lane is free and a stop would otherwise find nothing to abort.
 - **A usage limit is never retried.** Its wording ("try again later") matches the provider
   detector, so a limit was re-asked twice into the same wall. `looksLikeQuotaReached` runs
-  first and logs a `quota_reached` notice. The wording is a guess — the log had never held one
-  — so the *response* (drop to Flash? wait?) is deliberately undecided until a row exists.
+  first and logs a `quota_reached` notice. The wording is a guess — the log had never held one.
+  **Since v5.28 it is retried one rung down**, never on the same model (see Prompt economics).
 
 Verified end to end under the pty harness with a scripted provider error after a tool round:
 the resent prompt was byte-identical to the failed one (622 characters, tool results intact),
@@ -636,6 +636,19 @@ without Argon answers `stays <rung> · Argon is not available on this account` a
 nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
 slider's model line names what the marked stop maps to on this account (`stopModel` in
 `ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
+
+**The browser differing from the effort is asked about, and a failed switch steps down (v5.28,
+`core/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message
+is typed and offers three choices: switch the browser, send on it this time, or set the effort to
+match. It asks once per disagreement (`_mismatchAcks`, keyed on setting and tab) and never mid-turn.
+`/effort mismatch follow` brings back v5.26's silent following, and `switch` always switches,
+inside `handleUserMessage`, so the side panel gets it too; the panel never asks. A switch is
+confirmed by the picker's read-back (`switchAndConfirm`: the `requested` and `switchedTo` the bridge
+already sent, which nothing used to compare). `ensureRung` walks down from there: Max → High →
+Medium → Low, never up. **A quota reply now steps down and re-sends verbatim** (`step_down` in
+`reply-recovery.js`, once per turn), answering the "drop to Flash? wait?" the recovery table above had left open. A landing
+below the wanted rung is `effortFallback` for the session: the status bar shows `↓ <model>`, nothing
+asks again, and `/effort` clears it. Pty: 0 clears at 13 and 24 rows on all three paths.
 
 **Warm start is opt-in (v5.27, `/startup warm|cold`, `AgentLoop.warmUp`).** Warm sends the turn-0
 block on its own when the first extension identifies (after `resumeThreadOnConnect`) and after

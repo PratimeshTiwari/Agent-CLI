@@ -294,18 +294,18 @@ describe('noteModelOptions reports what landed', () => {
   test('a switch that did not land is a warning, not silence', () => {
     const { loop, said } = notes();
     loop.noteModelOptions([{ label: '3.8 Flash', selected: true }], '3.8 Flash', 'Gemini Pro');
-    assert.ok(said[0].startsWith('!'), `not a failure row: ${said[0]}`);
-    assert.match(said[0], /still 3.8 Flash/);
-    assert.match(said[0], /asked for Gemini Pro/);
+    // v5.28's wording: the same line a step-down prints (`describeFailedSwitch`).
+    assert.ok(said[0].startsWith('✗'), `not a failure row: ${said[0]}`);
+    assert.match(said[0], /switch the browser to Gemini Pro \(it stayed on 3\.8 Flash\)/);
     // The one thing the person can actually do about it, and how to get there.
-    assert.match(said[0], /by hand in the Gemini tab/);
+    assert.match(said[0], /in the Gemini tab/);
     assert.match(said[0], /ctrl\+b/);
   });
 
   test('a picker that reads nothing recognisable still says something', () => {
     const { loop, said } = notes();
     loop.noteModelOptions([{ label: 'x' }], null, 'Gemini Pro');
-    assert.match(said[0], /still unknown/);
+    assert.match(said[0], /showed no model selected/);
   });
 
   // Case matters to nobody but a string compare. "gemini pro" and "Gemini Pro"

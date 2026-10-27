@@ -28,7 +28,7 @@ const src = readFileSync(join(here, '../../src/ui/App.jsx'), 'utf8');
 
 /** The body of handleSubmit, without comments — a grep matches prose otherwise. */
 function submitBody() {
-  const start = src.indexOf('const handleSubmit = async (query) =>');
+  const start = src.indexOf('const handleSubmit = async (query, opts = {}) =>');
   assert.ok(start > -1, 'handleSubmit should still exist');
   const end = src.indexOf('\n  };', start);
   return src.slice(start, end)

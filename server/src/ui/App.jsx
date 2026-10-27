@@ -16,6 +16,7 @@ import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reserve
 import { resolveEffort } from '../core/effort.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
+import { mismatchPolicy } from '../core/model-fallback.js';
 import { planBoxRow, findPlanFile } from './plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript.js';
 import { expandPastes, attachedPastes } from './paste.js';
@@ -633,7 +634,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * prompt goes, and the row says what the setting wants, as before.
    */
   const sentRung = resolveEffort(agentLoop._promptEffort?.() ?? effortRung.id);
-  const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight)
+  // Not during a step-down either (v5.28): the tab is lower on purpose, and
+  // the status bar's `↓` says so for the rest of the session.
+  const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight || agentLoop.effortFallback)
     ? null
     : modelMismatch(
     effortRung.id,
@@ -938,9 +941,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
     return () => clearInterval(updateInterval);
   }, [agentLoop]);
 
-  const handleSubmit = async (query) => {
+  const handleSubmit = async (query, opts = {}) => {
     if (!query.trim()) return;
-    setInputHistory(prev => [...prev, query]);
+    // A message coming back from the mismatch ask is already in the history.
+    if (!opts.mismatch) setInputHistory(prev => [...prev, query]);
     setHistoryIdx(-1);
     setPaletteSuppressed(false);
     setInput('');
@@ -1037,6 +1041,17 @@ export function App({ agentLoop, wsServer, closing = false }) {
       return;
     }
 
+    /*
+     * The effort and the browser disagree: ask before anything is typed
+     * (v5.28). The message waits in the panel; the choice sends it back here
+     * with `opts.mismatch` set, so it is asked once.
+     */
+    const mismatchAsk = opts.mismatch ? null : agentLoop.mismatchToAsk?.();
+    if (mismatchAsk) {
+      setActiveMenu({ type: 'effort_mismatch', ask: mismatchAsk, query });
+      return;
+    }
+
     setIsProcessing(true);
     setStatus('Thinking...');
     setActiveToolCalls([]);
@@ -1086,7 +1101,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
       wsServer,
     });
 
-    await agentLoop.handleUserMessage(messageContent, callbacks);
+    await agentLoop.handleUserMessage(messageContent, callbacks,
+      opts.switchTo ? { switchTo: opts.switchTo } : {});
   };
 
   /**
@@ -1523,7 +1539,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
           {mismatch && (
             <Text color={T.attention} wrap="truncate">
               {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
-              {sentRung.id !== effortRung.id ? (<>
+              {/* What the next message will do about it (v5.28): ask, switch, or follow. */}
+              {agentLoop.mismatchToAsk?.() ? (<>
+                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>{' · your next message asks first'}
+              </>) : mismatchPolicy(agentLoop.modelConfig) === 'switch' ? (<>
+                {' · the next message switches it to '}<Text bold>{mismatch.wanted}</Text>
+              </>) : sentRung.id !== effortRung.id ? (<>
                 {' — sending the '}<Text bold>{sentRung.name}</Text>{` prompt (effort ${effortRung.name})`}
               </>) : (<>
                 {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
@@ -1674,7 +1695,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
             back to the rung when it has not — never invent a model, and never
             leave the row blank, which would read as "off".
           */}
-          {browserModelLabel
+          {browserModelLabel && agentLoop.effortFallback
+            ? <Text color={T.attention}>{'↓ '}{browserModelLabel}</Text>
+            : browserModelLabel
             ? (mismatch
               // The row above says what is wrong and how to fix it; this marks
               // the field it is about, and stays while that row scrolls away.

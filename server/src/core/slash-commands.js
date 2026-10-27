@@ -23,6 +23,7 @@ import { EFFORT_LEVELS, resolveEffort, foldEffort } from './effort.js';
 import { logError } from './error-log.js';
 import { saveUserSettings } from './user-settings.js';
 import { planModelSwitch, browserModelPin, pickModelFor } from './model-match.js';
+import { MISMATCH_POLICIES, mismatchPolicy } from './model-fallback.js';
 
 /**
  * How long a name the banner can take.
@@ -431,8 +432,32 @@ export async function handleSlashCommand(loop, command, args) {
        * path prints the ladder, so the old word would look like a typo rather
        * than a rename. Folded words select the rung they always meant.
        */
+      /*
+       * What happens when the browser is on another model (v5.28,
+       * `core/model-fallback.js`): ask before the message, follow the browser
+       * (v5.26's behaviour), or switch the browser every time.
+       */
+      if (wanted === 'mismatch') {
+        const policy = args?.[1]?.toLowerCase();
+        const was = mismatchPolicy(loop.modelConfig);
+        if (!MISMATCH_POLICIES.includes(policy)) {
+          return { message: `On a mismatch: **${was}** · \`/effort mismatch ${MISMATCH_POLICIES.join('|')}\`` };
+        }
+        loop.modelConfig.onMismatch = policy;
+        loop._saveConfig();
+        return {
+          message: changed('on mismatch', was, policy, {
+            ask: 'the next message asks first when the browser differs',
+            follow: 'the prompt follows the browser, without asking',
+            switch: 'the browser is switched before each message',
+          }[policy]),
+        };
+      }
+
       if (wanted && foldEffort(wanted)) {
         const chosen = resolveEffort(wanted);
+        // Choosing a rung ends a step-down: the user is asking for this one again.
+        loop.effortFallback = null;
         const before = resolveEffort(loop.modelConfig.effort);
 
         /*
@@ -555,6 +580,7 @@ export async function handleSlashCommand(loop, command, args) {
         : '';
       return {
         message: `${renamed}${rejected}Effort is **${now.name}** · tab **${now.browser}** · `
+          + (loop.effortFallback ? `stepped down to **${resolveEffort(loop.effortFallback.got).name}** (${loop.effortFallback.reason}) · ` : '')
           + `\`/effort ${EFFORT_LEVELS.map((e) => e.id).join('|')}\``,
       };
     }

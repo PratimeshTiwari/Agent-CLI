@@ -105,7 +105,7 @@ test('and a new turn is what clears it', () => {
     join(fileURLToPath(new URL('../../src/core/agent-loop.js', import.meta.url))), 'utf8',
   );
   const head = src.slice(
-    src.indexOf('async handleUserMessage(content, callbacks) {'),
+    src.indexOf('async handleUserMessage(content, callbacks, options = {}) {'),
     src.indexOf('needsCompaction(this.contextTokens'),
   );
   assert.match(head, /this\._userStoppedAt = null;/,
