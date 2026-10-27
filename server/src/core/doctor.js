@@ -147,11 +147,6 @@ export const PACKAGES = {
     why: 'Extracts the text of a PDF so read_file can hand it to the model as Markdown, page by page.',
     without: 'read_file fails on PDFs. Word, PowerPoint and text files still read.',
   },
-  chokidar: {
-    tier: 'optional',
-    why: 'Notices files changed outside the agent, on Linux. macOS and Windows use Node\'s own fs.watch instead.',
-    without: 'On Linux, edits made in another window are not reported to the agent. Elsewhere, nothing.',
-  },
   '@types/react': {
     tier: 'dev',
     why: 'Type hints for React in an editor. Nothing runs it.',

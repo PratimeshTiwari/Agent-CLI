@@ -91,19 +91,9 @@ test('a 15,000-file tree: the watcher holds no descriptors per file, and command
       console.log(JSON.stringify({ added: after - before, exec: result }));`);
     assert.ok(native.added < 10, `the watcher opened ${native.added} descriptors`);
     assert.equal(native.exec, 'ok');
-
-    // The negative control is the old watcher on the same tree.
-    const old = inChild(`${PROBE}
-      const { FileWatcher } = await import(${JSON.stringify(WATCHER)});
-      const w = new FileWatcher(${JSON.stringify(root)}, null, { native: false });
-      await w.start();
-      await new Promise((r) => w.watcher.on('ready', r));
-      const result = await tryExec();
-      const held = fds();
-      await w.watcher.close();
-      console.log(JSON.stringify({ held, exec: result }));`);
-    assert.ok(old.held > 10_240, `control: chokidar held only ${old.held}`);
-    assert.equal(old.exec, 'ERR EBADF', 'control: the old watcher is what broke the shell');
+    // The negative control was chokidar on the same tree, holding >10,240
+    // descriptors and failing the spawn. chokidar was removed in v5.31; the
+    // OPEN_MAX control above still shows what the limit does.
   });
 
 /** A watcher on a small tree, with every reported turn collected. */
@@ -151,8 +141,7 @@ test('outside edits are reported once each, worded by what is on disk', { skip: 
 test('a watcher that cannot start leaves the session running', async () => {
   const w = new FileWatcher('/definitely/not/a/dir', { workspace: mkdtempSync(join(tmpdir(), 'wl-')) });
   await w.start(); // must not throw
-  // chokidar (Linux) accepts a missing path and waits for it; the native
-  // watcher refuses it, and the session carries on without one.
-  if (w.native) assert.equal(w.watcher, null);
+  // fs.watch refuses a missing path, and the session carries on without one.
+  assert.equal(w.watcher, null);
   w.stop();
 });

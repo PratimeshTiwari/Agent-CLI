@@ -1076,7 +1076,9 @@ checkout was not one. macOS refuses `posix_spawn` once a process holds a descrip
 above `OPEN_MAX` (10,240 — bisected to the descriptor), and chokidar 4 dropped fsevents, so it
 holds about one descriptor per watched *file* (852 for 131 directories here). A big repo crossed
 the line at startup. On macOS and Windows the watcher is now Node's recursive `fs.watch` —
-FSEvents, **zero** extra descriptors on the same tree — with chokidar kept for Linux. Ignores are
+FSEvents, **zero** extra descriptors on the same tree. chokidar was kept for Linux until v5.31,
+then removed (owner: this is a macOS tool); Linux uses the same `fs.watch`, recursive since Node
+20, and a tree past `max_user_watches` only turns the announcements off. Ignores are
 by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and add `vendor`,
 `tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
 started, do not retry", and `/update` says git could not run instead of "not a git checkout".
