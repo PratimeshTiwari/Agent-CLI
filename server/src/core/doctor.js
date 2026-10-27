@@ -464,6 +464,8 @@ function pad(s, n) {
   return str.length >= n ? str : str + ' '.repeat(n - str.length);
 }
 
+const firstSentence = (text) => (String(text || '').match(/^.*?[.!?](?=\s|$)/) || [String(text || '')])[0];
+
 function latestNote(p) {
   if (!p.latest || !p.installed) return '';
   return compareVersions(p.installed, p.latest) < 0 ? `latest ${p.latest}` : 'latest';
@@ -497,9 +499,12 @@ export function formatReport(report) {
         lines.push(`  ${tier} — ${TIERS[tier]}`);
       }
       const have = p.status === 'missing' ? 'missing' : p.installed;
+      // The first sentence only: the table has to fit a terminal, and
+      // `/doctor <package>` has the rest.
+      const breaks = firstSentence(p.without);
       const tail = p.status === 'ok' ? latestNote(p)
-        : p.status === 'missing' ? (p.without || '')
-          : `wants ${p.range} · ${p.without || ''}`;
+        : p.status === 'missing' ? breaks
+          : `wants ${p.range} · ${breaks}`;
       lines.push(`    ${MARK[p.status]} ${pad(p.name, W.name)}${pad(have, W.have)}${pad(p.range, W.want)}${tail}`.trimEnd());
     }
     lines.push('');
@@ -521,7 +526,7 @@ export function formatReport(report) {
     const behind = report.groups.flatMap((g) => g.packages).filter((p) => p.installed && p.latest && compareVersions(p.installed, p.latest) < 0);
     const names = [...new Set(behind.map((p) => p.name))];
     lines.push(names.length
-      ? `${names.length} with a newer release. Updating past the range in package.json is a change to the agent, not a repair.`
+      ? `${names.length} with a newer release — an upgrade to choose, not a repair.`
       : 'Everything is on its latest release.');
   }
   while (lines.at(-1) === '') lines.pop();
