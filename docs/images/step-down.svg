@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="282" viewBox="0 0 940 282" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect width="940" height="282" rx="10" fill="#1e1e1e"/>
+<circle cx="20" cy="16" r="6" fill="#ff5f56"/><circle cx="40" cy="16" r="6" fill="#ffbd2e"/><circle cx="60" cy="16" r="6" fill="#27c93f"/>
+<text x="470.0" y="20" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — Pro at its limit: the turn steps down a rung and says so</text>
+<rect x="16.0" y="46" width="908.2" height="19" fill="#2a2f45"/>
+<text x="16" y="60" xml:space="preserve" textLength="283.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#7aa2f7" font-weight="bold">▌</tspan><tspan fill="#e6e6e6" font-weight="bold">  when is an invoice overdue?</tspan></text>
+<text x="16" y="98" xml:space="preserve" textLength="454.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">✗ 3.1 Pro is at its limit · stepping down a rung</tspan></text>
+<text x="16" y="117" xml:space="preserve" textLength="756.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">↓ Sending on 3.8 Flash (Medium) for this session · /effort high tries High again</tspan></text>
+<text x="16" y="136" xml:space="preserve" textLength="898.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" font-weight="bold">● </tspan><tspan fill="#d4d4d4">Invoice#overdue? is true once due_on plus the 14-day grace period has passed. I&#x27;d add the fee</tspan></text>
+<text x="16" y="155" xml:space="preserve" textLength="75.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  there.</tspan></text>
+<text x="16" y="193" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+<rect x="34.9" y="198" width="9.5" height="19" fill="#d4d4d4"/>
+<text x="16" y="212" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68" font-weight="bold">❯ </tspan><tspan fill="#1e1e1e">A</tspan><tspan fill="#d4d4d4" fill-opacity="0.5">sk anything, or / for commands</tspan></text>
+<text x="16" y="231" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="269" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">⏸ plan mode on</tspan><tspan fill="#d4d4d4" fill-opacity="0.5"> (shift+tab to cycle)</tspan><tspan fill="#d4d4d4">                             </tspan><tspan fill="#ff9e64" fill-opacity="0.5">↓ 3.8 Flash</tspan><tspan fill="#d4d4d4" fill-opacity="0.5">  ·  </tspan><tspan fill="#7aa2f7" fill-opacity="0.5">▰▱▱▱▱ 10% of 96k</tspan></text>
+</svg>

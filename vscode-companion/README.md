@@ -58,6 +58,17 @@ is how someone installs the wrong one.
 
 ## Version history
 
+### 1.8.4 — 2026-10-26
+
+**Images in the panel are `[Image #n]` tags**, as in the terminal: a pasted image puts a tag in
+the message and goes with it only while the tag is there. A long tool row no longer wraps its name.
+Only the copied-in panel changed.
+
+### 1.8.3 — 2026-10-26
+
+**The panel shows prompts typed in the terminal**, not just the replies, and hears when a turn
+ends, so its busy state no longer outlasts the turn. Only the copied-in panel changed.
+
 ### 1.8.2 — 2026-10-24
 
 **The panel's mode toggle cycles Plan, Auto and Strict**, matching the agent's three modes. Only

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="928" viewBox="0 0 940 928" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect width="940" height="928" rx="10" fill="#1e1e1e"/>
+<circle cx="20" cy="16" r="6" fill="#ff5f56"/><circle cx="40" cy="16" r="6" fill="#ffbd2e"/><circle cx="60" cy="16" r="6" fill="#27c93f"/>
+<text x="470.0" y="20" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — /doctor: what is installed, missing, and newer</text>
+<rect x="16.0" y="46" width="908.2" height="19" fill="#2a2f45"/>
+<text x="16" y="60" xml:space="preserve" textLength="94.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#7aa2f7" font-weight="bold">▌</tspan><tspan fill="#e6e6e6" font-weight="bold">  /doctor</tspan></text>
+<text x="16" y="98" xml:space="preserve" textLength="491.9" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" font-weight="bold">Health</tspan><tspan fill="#d4d4d4">  ✗ 1 missing · run npm install in ~/agent-cli</tspan></text>
+<text x="16" y="136" xml:space="preserve" textLength="567.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" fill-opacity="0.5">────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="155" xml:space="preserve" textLength="179.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">server/package.json</tspan></text>
+<text x="16" y="174" xml:space="preserve" textLength="454.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  required — the agent does not start without it</tspan></text>
+<text x="16" y="193" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ acorn             8.18.0    ^8.18.0   latest 8.19.0</tspan></text>
+<text x="16" y="212" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ acorn-jsx         5.3.2     ^5.3.2    latest</tspan></text>
+<text x="16" y="231" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ acorn-walk        8.3.5     ^8.3.5    latest</tspan></text>
+<text x="16" y="250" xml:space="preserve" textLength="529.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ diff              7.0.0     ^7.0.0    latest 9.0.0</tspan></text>
+<text x="16" y="269" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ fast-glob         3.3.3     ^3.3.0    latest</tspan></text>
+<text x="16" y="288" xml:space="preserve" textLength="529.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ ink               7.1.1     ^7.1.1    latest 8.0.0</tspan></text>
+<text x="16" y="307" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ ink-select-input  6.2.0     ^6.2.0    latest</tspan></text>
+<text x="16" y="326" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ ink-text-input    6.0.0     ^6.0.0    latest</tspan></text>
+<text x="16" y="345" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ marked            15.0.12   ^15.0.12  latest 18.1.2</tspan></text>
+<text x="16" y="364" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ marked-terminal   7.3.0     ^7.3.0    latest</tspan></text>
+<text x="16" y="383" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ react             19.2.8    ^19.2.8   latest 19.3.1</tspan></text>
+<text x="16" y="402" xml:space="preserve" textLength="548.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ tsx               4.23.12   ^4.23.12  latest 4.23.15</tspan></text>
+<text x="16" y="421" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ ws                8.21.3    ^8.18.0   latest 8.22.0</tspan></text>
+<text x="16" y="440" xml:space="preserve" textLength="529.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ zod               3.25.76   ^3.24.0   latest 4.6.7</tspan></text>
+<text x="16" y="459" xml:space="preserve" textLength="463.5" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  optional — one feature stops working without it</tspan></text>
+<text x="16" y="478" xml:space="preserve" textLength="529.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ chokidar          4.0.3     ^4.0.0    latest 5.0.0</tspan></text>
+<text x="16" y="497" xml:space="preserve" textLength="643.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✗ unpdf             missing   1.8.1     read_file fails on PDFs.</tspan></text>
+<text x="16" y="516" xml:space="preserve" textLength="406.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  unused — declared, but nothing imports it</tspan></text>
+<text x="16" y="535" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ ink-spinner       5.0.0     ^5.0.0    latest</tspan></text>
+<text x="16" y="573" xml:space="preserve" textLength="208.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">extension/package.json</tspan></text>
+<text x="16" y="592" xml:space="preserve" textLength="454.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  build — only for building the Chrome extension</tspan></text>
+<text x="16" y="611" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ esbuild           0.23.1    ^0.23.0   latest 0.28.2</tspan></text>
+<text x="16" y="630" xml:space="preserve" textLength="331.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  test — only for running the tests</tspan></text>
+<text x="16" y="649" xml:space="preserve" textLength="473.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ jsdom             29.1.1    ^29.1.1   latest</tspan></text>
+<text x="16" y="668" xml:space="preserve" textLength="539.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ marked            15.0.12   ^15.0.12  latest 18.1.2</tspan></text>
+<text x="16" y="706" xml:space="preserve" textLength="47.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">tools</tspan></text>
+<text x="16" y="725" xml:space="preserve" textLength="397.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ node              22.19.0   required</tspan></text>
+<text x="16" y="744" xml:space="preserve" textLength="397.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ npm               10.9.3    required</tspan></text>
+<text x="16" y="763" xml:space="preserve" textLength="397.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ git               2.39.5    optional</tspan></text>
+<text x="16" y="782" xml:space="preserve" textLength="870.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    · rg                missing   optional  grep_search falls back to a slower scan in Node.</tspan></text>
+<text x="16" y="801" xml:space="preserve" textLength="397.3" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">    ✔ textutil          present   optional</tspan></text>
+<text x="16" y="839" xml:space="preserve" textLength="577.1" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">11 with a newer release — an upgrade to choose, not a repair.</tspan></text>
+<text x="16" y="858" xml:space="preserve" textLength="567.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" fill-opacity="0.5">────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="896" xml:space="preserve" textLength="832.5" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">/doctor &lt;package&gt; says why it is here and what imports it · /doctor fix runs npm install</tspan></text>
+<text x="16" y="915" xml:space="preserve" textLength="690.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#ff9e64">✗ unpdf not installed · /doctor fix installs, /doctor says why it matters</tspan></text>
+</svg>
