@@ -26,6 +26,7 @@ import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
 import { checkInstalled, startupWarning } from '../core/doctor.js';
+import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../core/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
@@ -236,6 +237,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
     else setInput((prev) => put(prev, prev.length).value);
   }, [agentLoop, flashNote]);
   const [activeMenu, setActiveMenu] = useState(null);
+  // Slow local commands still waiting (see handleSubmit): the spinner is theirs
+  // until the last one answers.
+  const slowCommands = useRef(0);
   const [planReviewReady, setPlanReviewReady] = useState(false);
   // Bumped on the loop's busy → idle edge (see `onIdle` below). Declared up
   // here because the plan-review effect waits on it too, and it runs first.
@@ -694,8 +698,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * measured to fit and gives a row back for each row drawn beside it; the
    * notices are information, the seventh suggestion is not.
    */
-  const paletteRoom = Math.max(1, Math.min(6, terminalHeight - reservedRows(terminalHeight) + 2
-    - noticeRows - queuedRows - (extensionConnected ? 0 : 1)));
+  // The `+ 2` is the spinner row and its margin, free between turns. During a
+  // turn — or the warm-up, which draws `Getting ready` there — they are taken,
+  // and a `/` typed then overflowed 13 rows: 4 clears, and the `/` arrived twice
+  // (`//help`, "No such command"). On `main` too, found 2026-10-27.
+  const paletteRoom = Math.max(1, Math.min(6, terminalHeight - reservedRows(terminalHeight)
+    + (isProcessing ? -1 : 2) - noticeRows - queuedRows - (extensionConnected ? 0 : 1)));
   const slashMatches = slashQuery === null
     ? []
     : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery)).slice(0, paletteRoom);
@@ -903,7 +911,14 @@ export function App({ agentLoop, wsServer, closing = false }) {
 
   useEffect(() => {
     const id = setTimeout(() => setHealthNote(startupWarning(checkInstalled())), 50);
-    return () => clearTimeout(id);
+    // A `/doctor` package change is kept once a start has stayed up, drawn,
+    // this long; one that broke the start was undone by the bin, said here
+    // once (`core/doctor-guard.js`).
+    const kept = setTimeout(() => { try { confirmChange(); } catch { /* the next start decides */ } }, CONFIRM_AFTER_MS);
+    let notice = null;
+    try { notice = takeRevertNotice(); } catch { /* nothing to say */ }
+    if (notice) setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: notice }]);
+    return () => { clearTimeout(id); clearTimeout(kept); };
   }, []);
   useEffect(() => {
     if (healthNote) setHealthNote(startupWarning(checkInstalled()));
@@ -1040,20 +1055,44 @@ export function App({ agentLoop, wsServer, closing = false }) {
       // The args go too: `/update` reaches the network and `/update done` reads
       // a file, so the first word cannot answer this on its own.
       const [slashWord, ...slashArgs] = query.slice(1).split(/\s+/);
-      if (!turnInFlight && isSlowCommand(slashWord.toLowerCase(), slashArgs)) {
+      const raises = !turnInFlight && isSlowCommand(slashWord.toLowerCase(), slashArgs);
+      if (raises) {
+        slowCommands.current += 1;
         setIsProcessing(true);
         setStatus('Thinking...');
         setActiveToolCalls([]);
       }
-      await handleSlashCommand(query, {
-        agentLoop,
-        wsServer,
-        resetScreen,
-        setActiveMenu,
-        setHistory,
-        setIsProcessing: turnInFlight ? () => {} : setIsProcessing,
-        openShell: () => { setTerminalOpen(true); setFocus(FOCUS_TERMINAL); },
-      });
+      /*
+       * Two local commands can overlap (v5.30): `/doctor` is still asking npm
+       * when `/help` is typed, or a message is sent while it waits. Every
+       * handler ends with `setIsProcessing(false)`, so the first to finish took
+       * the spinner down under the one still running — or under the turn that
+       * started meanwhile. So the spinner comes down only when no slow command
+       * is left waiting and the loop is idle.
+       */
+      let released = false;
+      const release = () => {
+        if (raises && !released) { released = true; slowCommands.current -= 1; }
+      };
+      const settle = (value) => {
+        if (value !== false) { setIsProcessing(value); return; }
+        release();
+        if (slowCommands.current > 0 || agentLoop.isProcessing) return;
+        setIsProcessing(false);
+      };
+      try {
+        await handleSlashCommand(query, {
+          agentLoop,
+          wsServer,
+          resetScreen,
+          setActiveMenu,
+          setHistory,
+          setIsProcessing: turnInFlight ? () => {} : settle,
+          openShell: () => { setTerminalOpen(true); setFocus(FOCUS_TERMINAL); },
+        });
+      } finally {
+        release();
+      }
       return;
     }
 

@@ -102,6 +102,6 @@ describe('a local command still leaves a running turn alone', () => {
   });
 
   test('and setIsProcessing is still neutered while the loop is busy', () => {
-    assert.match(appSrc, /setIsProcessing: turnInFlight \? \(\) => \{\} : setIsProcessing/);
+    assert.match(appSrc, /setIsProcessing: turnInFlight \? \(\) => \{\} : settle/);
   });
 });

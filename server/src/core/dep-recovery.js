@@ -266,7 +266,7 @@ export function installDependencies(root, { stdio = 'pipe', timeout = INSTALL_TI
       ? { ok: true, output }
       // The tail, not the whole log: npm is verbose and this goes on a
       // terminal that may have a live frame on it.
-      : { ok: false, error: output.trim().split('\n').slice(-8).join('\n') || `npm install exited ${code}` }));
+      : { ok: false, error: output.trim().split('\n').slice(-8).join('\n') || `npm install exited ${code}`, output }));
   });
 }
 

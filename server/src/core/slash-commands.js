@@ -111,8 +111,9 @@ export function isSlowCommand(command, args = []) {
   // Every form but `done` reaches the network: bare reports, `pull`/`now` also
   // merge and may `npm install`.
   if (command === 'update') return (args[0] || '').toLowerCase() !== 'done';
-  // Asks the registry (`npm outdated`, ~1s) or runs `npm install`; only `offline` is instant.
-  if (command === 'doctor' || command === 'health') return (args[0] || '').toLowerCase() !== 'offline';
+  // `fix` runs `npm install` and `report` asks the registry (`npm outdated`,
+  // ~1s); the menu opens on what is on disk and fills the registry in behind.
+  if (command === 'doctor' || command === 'health') return ['fix', 'report'].includes((args[0] || '').toLowerCase());
   return false;
 }
 

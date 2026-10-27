@@ -21,8 +21,19 @@ import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
-import { T, PALETTES, PALETTE_INFO, setTheme } from '../theme.js';
+import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
+import {
+  REPO_ROOT, checkInstalled, checkTools, applyLatest, installPackage, installTool, listVersions, findImporters,
+  errorOutput, uninstallPackage,
+} from '../../core/doctor.js';
+import { installRoot, installDependencies } from '../../core/dep-recovery.js';
+import { exclusive, INSTALL_SLOT } from '../../core/local-jobs.js';
+import { snapshotBeforeChange } from '../../core/doctor-guard.js';
+import {
+  homeItems, homeCursor, homeStatus, findEntry, HEALTH_TABS, nextHealthTab, tabCounts, packageLines, packageActions, versionItems,
+  versionCursor, jobLine, errorLines,
+} from '../doctor-view.js';
 
 /**
  * Every modal the agent can raise: questions, command approval, plan review,
@@ -107,6 +118,89 @@ export function Menus({
     }
   }, [agentLoop, setActiveMenu, setFocus, setHistory]);
 
+  /*
+   * `/doctor`'s actions (v5.30). Every install holds the one install slot, so
+   * a second press — or `/update pull` meanwhile — is told what is running
+   * instead of starting another npm on the same node_modules. The result lands
+   * on the package page while the menu is open, and in the transcript if it
+   * was closed before npm finished.
+   */
+  const doctorOpen = React.useRef(false);
+  doctorOpen.current = activeMenu?.type === 'doctor';
+  const updateDoctor = React.useCallback((fn) => {
+    setActiveMenu((cur) => (cur?.type === 'doctor' ? fn(cur) : cur));
+  }, [setActiveMenu]);
+
+  const runDoctorInstall = React.useCallback(async (entry, version = null, { remove = false } = {}) => {
+    const isTool = entry?.kind === 'tool';
+    const name = entry?.name || 'npm install';
+    const cmd = isTool ? entry.install?.[0] : null;
+    updateDoctor((cur) => ({
+      ...cur, view: entry ? 'package' : cur.view,
+      job: { state: 'running', name, cmd, removing: remove, version: version || entry?.range || '' },
+    }));
+    const label = isTool ? `install ${name}` : remove ? `remove ${name}` : version ? `install ${name}@${version}` : 'npm install';
+    const result = await exclusive(INSTALL_SLOT, label, async () => {
+      if (isTool) return installTool(entry);
+      // A change to package.json is tried on the next start; the bin puts it
+      // back if that start breaks (`core/doctor-guard.js`).
+      if (version || remove) {
+        snapshotBeforeChange({
+          root: REPO_ROOT,
+          change: remove ? `remove ${name}` : `${name} ${entry.installed || 'missing'} → ${version}`,
+        });
+      }
+      if (remove) return uninstallPackage({ name, workspace: entry.workspace });
+      if (version) return installPackage({ name, version, workspace: entry.workspace, range: entry.range });
+      const root = installRoot(REPO_ROOT);
+      return root ? installDependencies(root, { stdio: 'pipe' }) : { ok: false, error: 'no package.json to install from' };
+    });
+    const groups = checkInstalled();
+    const tools = isTool ? await checkTools() : null;
+    const left = groups.flatMap((g) => g.packages).filter((p) => p.status !== 'ok' && p.tier !== 'dev' && p.tier !== 'unused');
+    // What the installer printed rides on a failure, shown only when asked for.
+    const output = Array.isArray(result.output) ? result.output : errorOutput({ stdout: result.output || result.error || '' });
+    const failed = (error) => ({ state: 'failed', name, cmd, version, error, output });
+    const job = result.busy ? { state: 'busy', name, holder: result.busy }
+      : isTool ? (result.ok ? { state: 'done', name, text: `✔ ${name} ${result.version} installed` } : failed(result.error))
+        : remove ? (result.ok ? { state: 'removed', name } : failed(result.error))
+        : version ? (result.ok ? { state: 'done', name, installed: result.installed } : failed(result.error))
+          : result.ok && left.length === 0
+            ? { state: 'done', name, text: '✔ npm install finished · /restart to load what changed' }
+            : failed(result.error || `npm install ran, and ${left.map((p) => p.name).join(', ')} still ${left.length === 1 ? 'is' : 'are'} not right`);
+    updateDoctor((cur) => ({
+      ...cur, job, report: applyLatest({ ...cur.report, groups, ...(tools ? { tools } : {}) }, cur.report.registry),
+      // A removed package has no page left to stand on.
+      ...(job.state === 'removed' ? { view: 'home', target: null, at: undefined } : {}),
+    }));
+    if (!doctorOpen.current) {
+      setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: jobLine(job) }]);
+    }
+  }, [updateDoctor, setHistory]);
+
+  const doctorPick = React.useCallback((menu, value, at) => {
+    const entry = findEntry(menu.report, menu.target);
+    if (value.kind === 'package' || value.kind === 'tool') {
+      setActiveMenu({
+        ...menu, view: 'package', target: value, at,
+        importers: value.kind === 'package' && value.workspace === 'server' ? findImporters(value.name) : [],
+      });
+      return;
+    }
+    if (value.kind === 'fix') { runDoctorInstall(menu.view === 'home' ? null : entry); return; }
+    if (value.kind === 'versions' && entry) {
+      setActiveMenu({ ...menu, view: 'versions', versions: null, versionsError: null });
+      listVersions(entry.name, { installed: entry.installed }).then((r) => updateDoctor((cur) => ({
+        ...cur, versions: r.ok ? r.versions : [], versionsError: r.ok ? null : r.reason,
+      })));
+      return;
+    }
+    if (value.kind === 'install' && entry) runDoctorInstall(entry, value.version);
+    if (value.kind === 'tool-install' && entry) runDoctorInstall(entry);
+    if (value.kind === 'remove' && entry) runDoctorInstall(entry, null, { remove: true });
+    if (value.kind === 'error') setActiveMenu({ ...menu, view: 'error', from: menu.view || 'home' });
+  }, [setActiveMenu, runDoctorInstall, updateDoctor]);
+
   // Every menu is a `Panel` (`ui/panel.js`): what it can afford at this height.
   const W = terminalWidth;
   const fit = (subtitle, extra = 0) => panelRoom({ rows: menuRows, width: W, subtitle, extra });
@@ -175,7 +269,23 @@ export function Menus({
       }
     }
 
+    // `/doctor`'s tabs: tab, shift+tab or ←/→, on the list only.
+    if (activeMenu?.type === 'doctor' && (activeMenu.view || 'home') === 'home'
+      && (key.tab || key.leftArrow || key.rightArrow)) {
+      const step = key.leftArrow || (key.tab && key.shift) ? -1 : 1;
+      setActiveMenu({ ...activeMenu, tab: nextHealthTab(activeMenu.tab || 'all', step), at: undefined });
+      return;
+    }
+
     if (!key.escape) return;
+    // `/doctor` (v5.30): back one view — versions → package → health — and
+    // only the health list closes. Asked for: "back should take to the health
+    // home instead of main home". An install keeps running behind it.
+    if (activeMenu?.type === 'doctor' && activeMenu.view && activeMenu.view !== 'home') {
+      const back = activeMenu.view === 'versions' ? 'package' : activeMenu.view === 'error' ? activeMenu.from || 'home' : 'home';
+      setActiveMenu({ ...activeMenu, view: back });
+      return;
+    }
     // The picker previews by applying each palette as you move; leaving
     // without choosing puts back the one you came in with.
     // The mismatch ask (v5.28): cancelling must not lose what was typed.
@@ -187,6 +297,7 @@ export function Menus({
     }
     if (activeMenu?.type === 'theme') {
       setTheme(activeMenu.original);
+      if (activeMenu.returnTo) { setActiveMenu(activeMenu.returnTo); return; }
       setActiveMenu(null);
       setFocus(FOCUS_INPUT);
       return;
@@ -497,7 +608,7 @@ export function Menus({
           const { sub, tight, room } = fit('', 4);
           return (
             <Panel width={W} title="Theme" sub={sub} tight={tight}
-              keys="↑↓ preview · enter keep · esc put it back">
+              keys={`↑↓ preview · enter keep · esc ${activeMenu.returnTo ? 'back' : 'put it back'}`}>
               <Choices
                 numbered
                 limit={room}
@@ -512,6 +623,9 @@ export function Menus({
                 onSelect={(item) => {
                   setTheme(item.value);
                   const saved = saveUserSettings({ theme: item.value });
+                  if (item.value !== activeMenu.original) resetScreen?.();
+                  // From settings, the row is the confirmation (`applyAndReturn`'s rule).
+                  if (activeMenu.returnTo && saved) { setActiveMenu(activeMenu.returnTo); return; }
                   setActiveMenu(null);
                   setFocus(FOCUS_INPUT);
                   setHistory((prev) => [...prev, {
@@ -519,7 +633,6 @@ export function Menus({
                     content: `🎨 Theme: **${PALETTE_INFO[item.value].label}**`
                       + (saved ? '' : ' — for this session only; ~/.agent/settings.json could not be written'),
                   }]);
-                  if (item.value !== activeMenu.original) resetScreen?.();
                 }}
               />
               <Text dimColor wrap="truncate">{'   '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
@@ -893,6 +1006,18 @@ export function Menus({
                       });
                       return;
                     }
+                    // Theme and Workspace were the two left going through
+                    // handleSubmit, so esc in either closed settings with it
+                    // (reported 2026-10-27: "esc should head back to settings
+                    // first, then the next esc takes back").
+                    if (picked.run === '/theme') {
+                      setActiveMenu({ type: 'theme', original: themeName(), at: themeName(), returnTo: back });
+                      return;
+                    }
+                    if (picked.run === '/workspace') {
+                      setActiveMenu({ type: 'workspace', current: agentLoop.workspace, returnTo: back });
+                      return;
+                    }
                     if (picked.run === '/commands') {
                       const days = listCommandDays(agentLoop.workspace);
                       if (days.length === 0) { setActiveMenu(null); setFocus(FOCUS_INPUT); handleSubmit(picked.run); return; }
@@ -1046,6 +1171,89 @@ export function Menus({
                   handleSubmit(`/logs ${item.value}`);
                 }}
               />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'doctor' && (() => {
+          const m = activeMenu;
+          const { report } = m;
+          const running = m.job?.state === 'running';
+          if (!m.view || m.view === 'home') {
+            const tab = m.tab || 'all';
+            const items = homeItems(report, { T, tab, job: m.job });
+            const counts = tabCounts(report);
+            const head = (
+              <Text wrap="truncate">
+                {' '}<Text bold color={T.menu}>Health</Text>
+                {HEALTH_TABS.map(({ id, label }) => (
+                  <React.Fragment key={id}>
+                    {'  '}
+                    {id === tab
+                      ? <Text bold inverse color={T.menu}>{` ${label} ${counts[id].count} `}</Text>
+                      : <Text color={counts[id].bad ? T.danger : undefined} dimColor={!counts[id].bad}>{` ${label} ${counts[id].count} `}</Text>}
+                  </React.Fragment>
+                ))}
+              </Text>
+            );
+            // The verdict, or the install running behind the list.
+            const { sub, tight, room } = fit(jobLine(m.job) || homeStatus(report));
+            return (
+              <Panel width={W} head={head} sub={sub} tight={tight}
+                keys={W >= 70 ? '↑↓ move · enter open · tab or ←/→ tabs · esc close' : '↑↓ · enter · tab · esc'}>
+                <Choices key={tab} limit={room} items={items} initialIndex={m.at ?? homeCursor(items)}
+                  onSelect={(item) => doctorPick(m, item.value, items.indexOf(item))} />
+              </Panel>
+            );
+          }
+          if (m.view === 'error') {
+            const output = m.job?.output || [];
+            const { note, lines } = errorLines(output, { width: W, rows: Math.max(2, menuRows - 5) });
+            const { tight } = fit('', lines.length);
+            return (
+              <Panel width={W} title={`${m.job?.name || 'install'} · what ${m.job?.cmd || 'npm'} said`} status={note}
+                tone="danger" tight={tight} keys="esc back">
+                {lines.map((line, i) => <Text key={i} wrap="truncate">{` ${line}`}</Text>)}
+              </Panel>
+            );
+          }
+          const entry = findEntry(report, m.target);
+          if (!entry) return null;
+          if (m.view === 'versions') {
+            const items = m.versions ? versionItems(m.versions, entry) : [];
+            const note = m.versionsError ? `✗ npm could not list them: ${m.versionsError}`
+              : !m.versions ? 'Asking npm for every release…'
+                : `${items.length} releases, newest first · enter installs one, keeping the range's style (${entry.range})`;
+            const { sub, tight, room } = fit(note);
+            return (
+              <Panel width={W} title={`${entry.name} · versions`} status={`installed ${entry.installed || 'no'}`}
+                sub={sub} tight={tight} keys={running ? 'installing… · esc back' : '↑↓ move · enter install · esc back'}>
+                {items.length ? (
+                  <Choices limit={room} items={items} initialIndex={versionCursor(m.versions, entry)} isActive={!running}
+                    onSelect={(item) => doctorPick(m, item.value)} />
+                ) : null}
+              </Panel>
+            );
+          }
+          const actions = packageActions(entry, { job: m.job });
+          const job = m.job && m.job.name === entry.name ? jobLine(m.job) : null;
+          // Text first, actions under it; the text gives way before an action does.
+          const lines = packageLines(entry, {
+            width: W, importers: m.importers || [], registry: report.registry,
+            rows: Math.max(1, menuRows - 7 - Math.min(actions.length, 3) - (job ? 1 : 0)),
+          });
+          const { tight, room } = fit('', lines.length + (job ? 1 : 0) + (actions.length ? 1 : 0));
+          const jobColour = m.job?.state === 'done' ? T.success : m.job?.state === 'running' ? T.accent : T.danger;
+          return (
+            <Panel width={W} title={entry.name} status={entry.kind === 'tool' ? 'tool' : entry.workspace}
+              tight={tight} keys={actions.length ? (running ? 'installing… · esc back' : '↑↓ move · enter choose · esc back') : 'esc back'}>
+              {lines.map((line, i) => <Text key={i} wrap="truncate">{` ${line}`}</Text>)}
+              {job ? <Text color={jobColour} wrap="truncate">{` ${job}`}</Text> : null}
+              {actions.length ? <Text> </Text> : null}
+              {actions.length ? (
+                <Choices limit={room} items={actions} isActive={!running}
+                  onSelect={(item) => doctorPick(m, item.value)} />
+              ) : null}
             </Panel>
           );
         })()}
@@ -1274,7 +1482,7 @@ export function Menus({
             2,
           );
           return (
-            <Panel width={W} title="Workspace" sub={sub} tight={tight} keys="↑↓ move · enter choose · esc cancel">
+            <Panel width={W} title="Workspace" sub={sub} tight={tight} keys={`↑↓ move · enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
               {/* Cut from the left by hand: `truncate-start` cut the label too. */}
               <Text wrap="truncate"><Text dimColor>{' Here   '}</Text>{cutStart(activeMenu.current, W - 9)}</Text>
               <Text wrap="truncate"><Text dimColor>{' State  '}</Text>{cutStart(agentDir(activeMenu.current), W - 9)}</Text>

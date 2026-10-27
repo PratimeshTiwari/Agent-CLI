@@ -26,7 +26,7 @@ const src = readFileSync(new URL('../../src/ui/hooks/use-slash-commands.js', imp
 
 /** The `/update` handler, from the pull to the restart. */
 const handler = (() => {
-  const start = src.indexOf('const outcome = await pullUpdate(');
+  const start = src.indexOf('outcome = await pullUpdate(');
   const end = src.indexOf("if (command === 'open')", start);
   assert.ok(start > 0 && end > start, 'the /update handler moved; this fixture is stale');
   return src.slice(start, end);
