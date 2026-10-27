@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="282" viewBox="0 0 940 282" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect width="940" height="282" rx="10" fill="#1e1e1e"/>
+<circle cx="20" cy="16" r="6" fill="#ff5f56"/><circle cx="40" cy="16" r="6" fill="#ffbd2e"/><circle cx="60" cy="16" r="6" fill="#27c93f"/>
+<text x="470.0" y="20" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — /doctor &lt;package&gt;: why it is here, and what breaks without it</text>
+<rect x="16.0" y="46" width="908.2" height="19" fill="#2a2f45"/>
+<text x="16" y="60" xml:space="preserve" textLength="151.4" lengthAdjust="spacingAndGlyphs"><tspan fill="#7aa2f7" font-weight="bold">▌</tspan><tspan fill="#e6e6e6" font-weight="bold">  /doctor unpdf</tspan></text>
+<text x="16" y="98" xml:space="preserve" textLength="567.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" fill-opacity="0.5">────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="117" xml:space="preserve" textLength="614.9" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">unpdf · optional in server — one feature stops working without it</tspan></text>
+<text x="16" y="136" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">Why: Extracts the text of a PDF so read_file can hand it to the model as Markdown, page by page.</tspan></text>
+<text x="16" y="155" xml:space="preserve" textLength="756.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">Without it: read_file fails on PDFs. Word, PowerPoint and text files still read.</tspan></text>
+<text x="16" y="174" xml:space="preserve" textLength="425.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">Wanted: 1.8.1 · installed: no · latest: 1.9.1</tspan></text>
+<text x="16" y="212" xml:space="preserve" textLength="179.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">Imported by 1 file:</tspan></text>
+<text x="16" y="231" xml:space="preserve" textLength="264.9" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  src/mcp/tools/documents.js</tspan></text>
+<text x="16" y="250" xml:space="preserve" textLength="567.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" fill-opacity="0.5">────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="269" xml:space="preserve" textLength="690.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#ff9e64">✗ unpdf not installed · /doctor fix installs, /doctor says why it matters</tspan></text>
+</svg>

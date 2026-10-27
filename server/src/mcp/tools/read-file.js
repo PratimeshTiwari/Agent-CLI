@@ -1,12 +1,15 @@
 /**
  * Tool: read_file
  *
- * Read file contents with optional line range.
+ * Read file contents with optional line range. PDF, Word, PowerPoint, RTF and
+ * ODT come back as extracted Markdown (`documents.js`, v5.29), numbered and
+ * paged like any text; any other binary file is refused rather than decoded.
  */
 
 import { readFileSync, statSync, existsSync } from 'fs';
 import { resolve, extname } from 'path';
 import { displayPath } from '../../core/paths.js';
+import { documentKind, extractDocument, looksBinary } from './documents.js';
 
 // Language detection by extension
 const LANG_MAP = {
@@ -60,12 +63,44 @@ export async function readFile(args, context) {
     throw new Error(`${relPath} is a directory. Use list_directory instead.`);
   }
 
-  // Size guard — don't read files larger than 1MB
-  if (stat.size > 1024 * 1024) {
-    throw new Error(`File too large (${formatBytes(stat.size)}). Use startLine/endLine to read a portion.`);
+  const kind = documentKind(absPath);
+  let content;
+  let language = null;
+  if (kind) {
+    // A document is paged after extraction, so its own size limit is about
+    // the extraction, not the prompt: a 40-page PDF is easily several MB.
+    if (stat.size > 50 * 1024 * 1024) {
+      throw new Error(`Document too large to extract (${formatBytes(stat.size)}, limit 50 MB).`);
+    }
+    const doc = await extractDocument(absPath, stat, kind);
+    if (doc.scanned) {
+      return {
+        path: relPath,
+        language: doc.label,
+        totalLines: 1,
+        range: { start: 1, end: 1 },
+        size: formatBytes(stat.size),
+        content: `   1: (no text layer: ${doc.pages} page${doc.pages === 1 ? '' : 's'} of images, a scan. `
+          + 'Nothing can be extracted. If you need what is on them, ask the user to paste the pages as images.)',
+      };
+    }
+    content = doc.text;
+    language = doc.label;
+  } else {
+    // Size guard — don't read files larger than 1MB
+    if (stat.size > 1024 * 1024) {
+      throw new Error(`File too large (${formatBytes(stat.size)}). Use startLine/endLine to read a portion.`);
+    }
+    const raw = readFileSync(absPath);
+    // Decoding a binary file as UTF-8 handed the model thousands of characters
+    // of noise, typed into the browser tab. Refused, and the refusal says what
+    // can be read.
+    if (looksBinary(raw)) {
+      throw new Error(`${relPath} is a binary file (${formatBytes(stat.size)}) and cannot be read as text. `
+        + 'read_file reads text, PDF, Word (.docx, .doc), PowerPoint (.pptx), RTF and ODT.');
+    }
+    content = raw.toString('utf-8');
   }
-
-  const content = readFileSync(absPath, 'utf-8');
   const allLines = content.split('\n');
   const totalLines = allLines.length;
 
@@ -94,7 +129,7 @@ export async function readFile(args, context) {
   }
 
   const ext = extname(absPath).toLowerCase();
-  const language = LANG_MAP[ext] || 'plaintext';
+  language ??= LANG_MAP[ext] || 'plaintext';
 
   return {
     path: relPath,

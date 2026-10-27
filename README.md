@@ -35,9 +35,9 @@ the same chat, moves to a fresh one, and carries on: one line in the transcript,
 
 ![A compacted conversation](docs/images/compaction.svg)
 
-**Every setting on one page** — `/settings` has three tabs (`←/→` moves between them). Each
-value is coloured by kind: on is green, off is dim, the mode wears its own colour. Typing filters
-across all three tabs.
+**Every setting on one page** — `/settings` is a list of switches: `↑↓` picks a row, `←/→`
+changes it in place, and the selected row says what it does. `tab` moves between Settings, Status
+and Context; typing filters across all three.
 
 ![The settings page](docs/images/settings.svg)
 
@@ -47,6 +47,35 @@ reply is one line, `⚙ effort  High → Medium · switching to Gemini Flash`, p
 the browser could not switch.
 
 ![The effort slider](docs/images/effort.svg)
+
+**It asks when the browser disagrees** — if the Gemini tab is on a different model from the one
+your effort wants, your next message stops and asks: switch the tab, send on what it has, or change
+the effort to match. Esc puts your message back in the box. `/effort mismatch ask·follow·switch`
+picks what happens without asking.
+
+![Effort and browser differ: a three-way choice before sending](docs/images/effort-mismatch.svg)
+
+**When Pro is at its limit, it steps down and says so** — a quota reply, or a switch that will not
+land, sends the same prompt again one rung lower, once, with a line saying what happened. The status
+bar shows `↓ 3.8 Flash` until `/effort` tries the higher model again.
+
+![Pro at its limit: the turn steps down to Flash](docs/images/step-down.svg)
+
+**It reads PDFs, Word and PowerPoint** — `read_file` turns a `.pdf`, `.docx` or `.pptx` into
+Markdown (headings, lists, tables, a line per page or slide), so the model reads a policy or a spec
+the way it reads code. `.doc`, `.rtf` and `.odt` work on macOS. Other binary files are refused
+with a reason rather than read as garbage.
+
+![Reading a PDF policy against the code it describes](docs/images/pdf-read.svg)
+
+**A health check for the install** — `/doctor` lists every package the agent uses: whether it is
+**required** (the agent will not start without it) or **optional** (one feature stops working),
+the version installed, the one `package.json` wants and the latest on your registry. A missing
+package also shows one line at startup. `/doctor <package>` says why it is here, what breaks
+without it and which files import it; `/doctor fix` runs the install. `agent doctor` works from
+the shell even when the install is too broken to start.
+
+![/doctor: installed, missing and newer, by tier](docs/images/doctor.svg)
 
 *Screenshots are real terminal frames from the project's test harness, replayed through a terminal
 emulator; the editor in the second one is an illustration.*
@@ -81,7 +110,7 @@ Then two things no installer can do for you:
 2. **Open gemini.google.com and sign in.** Leave the tab open.
 
 **Optional — the VS Code companion.** Extensions panel → `…` → **Install from VSIX…** →
-`vscode-companion/cli-agent-companion-1.8.2.vsix`. It gives the agent your open file, cursor and
+`vscode-companion/cli-agent-companion-1.8.4.vsix`. It gives the agent your open file, cursor and
 Problems panel, and adds a chat panel to the sidebar (`cmd+alt+j`).
 
 ## First run
@@ -143,6 +172,7 @@ the prompt; backspace over the tag takes the image off.
 | Command | |
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model picker to match |
+| `/doctor` | packages and tools: installed, missing, latest · `/doctor <package>` says why it is used |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
 | `/copy` | the last reply, as markdown, to the clipboard — `/copy code` for the last code block |
@@ -183,6 +213,8 @@ history lives in `~/.agent/workspaces/` so a fresh checkout doesn't lose it. In 
 | It feels slow | `/logs extension` shows each stage of a turn; typing the prompt should take well under a second |
 | Something failed | `/logs` groups failures by where they came from |
 | After `git pull` | `/update` says what to reload — usually the extension and a restart |
+| A feature fails on a new machine | `/doctor` (or `agent doctor` from the shell) lists what is missing; `/doctor fix` installs it |
+| `latest` is blank in `/doctor` | npm could not reach your registry — the reason is printed; on a work laptop check `npm config get registry` |
 
 ## Release history
 
@@ -191,12 +223,27 @@ PR with its date, branch and notes — is in [`CHANGELOG.md`](CHANGELOG.md).
 
 | Series | Dates | PRs | What it was about |
 | --- | --- | --- | --- |
-| **v5** | 2026-10-19 … 2026-10-25 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#84](https://github.com/PratimeshTiwari/Agent-CLI/pull/84) | Clean slate, one recovery policy, the VS Code chat panel, compaction that hands over, large files, three modes, themes, and a redesigned transcript |
+| **v5** | 2026-10-19 … 2026-10-26 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#93](https://github.com/PratimeshTiwari/Agent-CLI/pull/93) | Clean slate, one recovery policy, the VS Code chat panel, compaction that hands over, large files, three modes, themes, a redesigned transcript, first-start setup, the effort slider and Argon |
 | **v4** | 2026-09-27 … 2026-10-19 | [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60)–[#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) | An honest failure log, the rename to Agent CLI, fixes from real use |
 | **v3** | 2026-09-22 … 2026-09-27 | [#26](https://github.com/PratimeshTiwari/Agent-CLI/pull/26)–[#59](https://github.com/PratimeshTiwari/Agent-CLI/pull/59) | The model picker, tab lanes, effort low/medium/high, traces, subagent fixes |
 | **v2** | 2026-09-20 … 2026-09-22 | [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17)–[#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) | Bridge speed and stability, tool-call parsing and discipline, prompt trims |
 | **v1** | 2026-09-16 | [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13)–[#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16) | The first stable release |
 | **Betas** | 2026-08-26 … 2026-09-06 | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1)–[#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) | Context management, subagents, the GitHub agent (later removed), the CLI |
+
+## Project images
+
+Every screenshot in this project, in one place. They are real terminal frames from the test harness
+(`docs/images/`), except the editor in *Add to chat* and the architecture diagram, which are drawn.
+
+| | |
+| --- | --- |
+| ![The agent at work](docs/images/terminal.svg)<br>**The agent at work** — reading two models and documenting them | ![Diff approval](docs/images/diff-approval.svg)<br>**Diff approval** — every edit in plan mode |
+| ![Add to chat](docs/images/add-to-chat.svg)<br>**Add to chat** — a selection from VS Code arrives as a marker | ![Queued messages](docs/images/queued.svg)<br>**Queued messages** — type while it works |
+| ![Compaction](docs/images/compaction.svg)<br>**Compaction** — long sessions summarise and carry on | ![First-start setup](docs/images/setup.svg)<br>**First-start setup** — theme, name, Chrome |
+| ![Settings](docs/images/settings.svg)<br>**`/settings`** — switches changed with `←/→` | ![Effort slider](docs/images/effort.svg)<br>**`/effort`** — faster to smarter |
+| ![Effort mismatch](docs/images/effort-mismatch.svg)<br>**Effort and browser differ** — it asks first | ![Step down](docs/images/step-down.svg)<br>**Step down** — Pro at its limit, Flash answers |
+| ![Reading a PDF](docs/images/pdf-read.svg)<br>**Documents** — a PDF read as Markdown | ![Package detail](docs/images/doctor-package.svg)<br>**`/doctor <package>`** — why it is used |
+| ![Health check](docs/images/doctor.svg)<br>**`/doctor`** — required and optional packages, installed and latest | ![Architecture](docs/images/architecture.svg)<br>**Architecture** — terminal, extension, Gemini tab |
 
 ## More
 

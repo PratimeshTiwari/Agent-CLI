@@ -32,8 +32,18 @@ if (!existsSync(tsxPath)) {
   tsxPath = resolve(__dirname, '../../node_modules/.bin/tsx');
 }
 
+// `agent doctor` answers before tsx is looked for: it exists for the machine
+// whose install is broken, and core/doctor.js imports only built-ins.
+if (process.argv[2] === 'doctor' || process.argv.includes('--doctor')) {
+  const { runDoctorCli } = await import('./core/doctor.js');
+  process.exit(await runDoctorCli(process.argv.slice(2)));
+}
+
 if (!existsSync(tsxPath)) {
-  console.error("✗ 'tsx' not found. Please run 'npm install' in the workspace root or server directory.");
+  console.error("✗ 'tsx' not found. Please run 'npm install' in the workspace root or server directory.\n");
+  // Whatever else that install is missing, said now rather than one crash at a time.
+  const { runDoctorCli } = await import('./core/doctor.js');
+  await runDoctorCli(['--offline']);
   process.exit(1);
 }
 

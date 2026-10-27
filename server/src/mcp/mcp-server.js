@@ -72,7 +72,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'read_file',
-    description: 'Read the contents of a file. You can optionally specify a line range to read only a portion.',
+    description: 'Read the contents of a file. You can optionally specify a line range to read only a portion. PDF, Word (.docx, .doc), PowerPoint, RTF and ODT are returned as extracted Markdown; other binary files are refused.',
     parameters: {
       path: { type: 'string', description: 'File path (relative to workspace root or absolute)', required: true },
       startLine: { type: 'number', description: 'Start line (1-indexed, inclusive)', required: false },
