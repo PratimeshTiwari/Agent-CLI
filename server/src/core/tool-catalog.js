@@ -133,11 +133,12 @@ Parameters:
   {
     name: 'read_file',
     dispatch: 'mcp',
-    flash: ` — Read a file. Args: path (string), startLine? (number), endLine? (number)
+    flash: ` — Read a file (PDF, Word, PowerPoint too, as Markdown). Args: path (string), startLine? (number), endLine? (number)
 `,
     pro: `
 Read a file, optionally one line range of it. Read before you edit — \`edit_file\` matches exact
-text and fails if you guessed it.
+text and fails if you guessed it. PDF, Word (.docx, .doc), PowerPoint, RTF and ODT come back as
+Markdown, a PDF with a \`--- page N ---\` line per page; other binary files are refused.
 Parameters:
   - path (string, required): relative to the workspace root
   - startLine (number, optional): 1-indexed

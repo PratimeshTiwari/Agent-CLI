@@ -848,6 +848,19 @@ document is built a section at a time instead of rewriting the whole file each r
 addition-only, so auto mode does not stop on every section). Edit rows read `edit_file doc.md · +3 −0`
 (v5.12 dropped the repeated file name the result first carried).
 
+**`read_file` reads documents (v5.29, `mcp/tools/documents.js`).** Before it, a PDF was decoded as
+UTF-8 and handed to the model as mojibake with no error. Now PDF (`unpdf`, pinned exact,
+lazy-imported), `.docx` and `.pptx` (a small zip reader over `zlib`, no dependency) come back as
+**Markdown, not JSON**: headings, `- ` lists, pipe tables, a `--- page N ---` / `--- slide N ---`
+line each, through the same numbered-text path as any read, so ranges and `fitReadResult` work
+unchanged. JSON was asked for and declined — escaping costs the line structure ranges depend on
+and ~10–20% more characters typed into the tab. `.doc`, `.rtf` and `.odt` go through macOS
+`textutil` (stderr not inherited, like `OSASCRIPT_STDIO`); elsewhere the refusal says to save as
+.docx or .pdf. A PDF with no text layer says so in one line instead of returning blank. Anything
+else with a NUL in its first 8 KB is **refused**, naming what can be read. Extractions are cached by
+path, size and mtime. Pty: one turn reading a PDF, a .docx and a .zip — the prompt log holds the
+two as numbered Markdown and the refusal, 0 clears at 13 and 24 rows.
+
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
 that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the walker, so a `.jsx`
