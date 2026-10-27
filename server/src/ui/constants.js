@@ -57,6 +57,7 @@ const SLASH_COMMANDS = [
   { name: 'theme', desc: 'Colours — dark, light, colour-blind, terminal, mono', group: 'config' },
   { name: 'name', desc: 'Name the agent — shown in the banner', group: 'config' },
   { name: 'update', desc: 'Pull the agent\'s own repo, and say what to reload', group: 'agent' },
+  { name: 'doctor', desc: 'Packages and tools: installed, missing, latest · `/doctor <package>` says why it is here', group: 'agent' },
   { name: 'logs', desc: 'What has been failing — `/logs rates` for how often', group: 'audit' },
   { name: 'restart', desc: 'Restart the server', group: 'agent' },
   { name: 'exit', desc: 'Quit the agent', group: 'agent' },

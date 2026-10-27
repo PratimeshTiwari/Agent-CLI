@@ -59,6 +59,9 @@ import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
 import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
+import {
+  checkHealth, checkInstalled, problems, formatReport, summaryLine, describePackage, findImporters, REPO_ROOT,
+} from '../../core/doctor.js';
 import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 
@@ -643,6 +646,53 @@ export async function handleSlashCommand(query, {
 
     // What the agent has actually run on this machine. Nothing reads this back
     // into a prompt — it is for the person whose computer it is.
+    /*
+     * `/doctor`: what the agent needs installed, what is, and what is newer.
+     * `/doctor <package>` says why it is here; `/doctor fix` runs the install;
+     * `/doctor offline` skips the registry. See `core/doctor.js`.
+     */
+    if (command === 'doctor' || command === 'health') {
+      const sub = (args[0] || '').toLowerCase();
+      const say = (content) => setHistory(prev => [...prev,
+        { role: 'user', content: query, isLocal: true },
+        { role: 'assistant', isLocal: true, content }]);
+      const block = (lines) => '```\n' + lines.join('\n') + '\n```';
+
+      if (sub === 'fix') {
+        const before = problems(checkInstalled());
+        if (before.length === 0) {
+          say('✔ Nothing to fix: every package the agent uses is installed at a version `package.json` accepts.');
+          setIsProcessing(false);
+          return;
+        }
+        const root = installRoot(REPO_ROOT);
+        const installed = root
+          ? await installDependencies(root, { stdio: 'pipe' })
+          : { ok: false, error: 'Could not find a `package.json` to install from.' };
+        const after = problems(checkInstalled());
+        say(installed.ok && after.length === 0
+          ? `✔ \`npm install\` fixed ${before.map((p) => p.name).join(', ')} · \`/restart\` so the running agent loads ${before.length === 1 ? 'it' : 'them'}`
+          : `✗ \`npm install\` ${installed.ok ? 'ran, and these are still not right' : 'failed'}:\n\n`
+            + block([installed.error || '', ...after.map((p) => `${p.name}  ${p.status}  wants ${p.range}`)].filter(Boolean))
+            + '\n\nOn a work laptop this is usually the registry: check `npm config get registry` and that you are signed in to it.');
+        setIsProcessing(false);
+        return;
+      }
+
+      const offline = sub === 'offline';
+      const name = sub && !offline ? args[0] : null;
+      const report = await checkHealth({ latest: !offline });
+      if (name) {
+        const lines = describePackage(name, report, { importers: findImporters(name) });
+        say(lines ? block(lines) : `\`${name}\` is not a package or tool this repo declares. \`/doctor\` lists them.`);
+      } else {
+        say(`**Health**  ${summaryLine(report)}\n\n${block(formatReport(report))}\n\n`
+          + '`/doctor <package>` says why it is here and what imports it · `/doctor fix` runs `npm install`');
+      }
+      setIsProcessing(false);
+      return;
+    }
+
     if (command === 'commands' || command === 'audit') {
       const day = (args[0] || '').trim();
       const days = listCommandDays(agentLoop.workspace);

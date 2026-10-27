@@ -194,7 +194,18 @@ export function pptxToMarkdown(buffer) {
 export async function pdfToMarkdown(buffer) {
   // Loaded on first use: pdf.js is the largest thing in the process, and most
   // sessions never open a PDF.
-  const { getDocumentProxy, extractText } = await import('unpdf');
+  let unpdf;
+  try {
+    unpdf = await import('unpdf');
+  } catch (err) {
+    if (!/MODULE_NOT_FOUND/.test(err?.code || '')) throw err;
+    // The optional dependency an install most often misses: the agent starts
+    // and works without it, so nothing said so until a PDF was read.
+    throw new Error('Reading PDFs needs the `unpdf` package, which is not installed. '
+      + 'Tell the user to run `/doctor fix` (or `npm install` in the agent\'s folder), then `/restart`. '
+      + 'Do not retry until then.');
+  }
+  const { getDocumentProxy, extractText } = unpdf;
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
   const { totalPages, text } = await extractText(pdf, { mergePages: false });
   const pages = text.map((t) => String(t || '').trim());

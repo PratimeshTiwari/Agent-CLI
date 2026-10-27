@@ -25,6 +25,7 @@ import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
 import { checkForUpdate, readPendingReload } from '../core/update.js';
+import { checkInstalled, startupWarning } from '../core/doctor.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
@@ -265,6 +266,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
    */
   const [update, setUpdate] = useState({ available: false, behind: 0 });
   const [pendingReload, setPendingReload] = useState(() => readPendingReload());
+  // A package the install missed (v5.29, core/doctor.js). Read a beat after
+  // mount, never before the first frame, and again after each local command
+  // while it is showing, so `/doctor fix` takes the row down.
+  const [healthNote, setHealthNote] = useState(null);
   // Pasted blocks, kept out of the prompt as markers. See ui/paste.js.
   const [pastes, setPastes] = useState([]);
   const addPaste = React.useCallback((paste) => {
@@ -329,11 +334,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const slashQuery = focus === FOCUS_INPUT && !paletteSuppressed && /^\/[a-z-]*$/i.test(input)
     ? input.slice(1).toLowerCase()
     : null;
-  const slashMatches = slashQuery === null
-    ? []
-    : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery)).slice(0, 6);
-  const slashOpen = slashMatches.length > 0;
-  const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
 
   // The `⇥` beside the mode teaches the key; once it has been used, it has
   // taught it, and the status bar is the most crowded row on screen.
@@ -661,7 +661,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     && (agentLoop.warmState === 'ready' || agentLoop.warmState === 'failed') ? agentLoop.warmState : null;
 
   const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0)
-    + (warmNote ? 1 : 0);
+    + (warmNote ? 1 : 0) + (healthNote ? 1 : 0);
 
   /**
    * What is left after the furniture — floored at one row, never at three.
@@ -686,6 +686,21 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // Steered prompts share the block (and its three rows) with queued ones.
   const waiting = queued.length + steered.length;
   const queuedRows = waiting === 0 ? 0 : Math.min(waiting, 3) + (waiting > 3 ? 1 : 0) + 1;
+  /*
+   * The palette comes out of the same viewport, and it always offered six. Six
+   * fit a 13-row terminal with nothing else above the prompt — measured, 0
+   * clears — and overflowed it the moment a notice row was up: 2 `ESC[2J` on
+   * typing `/` with v5.29's health row showing. So it keeps six where six were
+   * measured to fit and gives a row back for each row drawn beside it; the
+   * notices are information, the seventh suggestion is not.
+   */
+  const paletteRoom = Math.max(1, Math.min(6, terminalHeight - reservedRows(terminalHeight) + 2
+    - noticeRows - queuedRows - (extensionConnected ? 0 : 1)));
+  const slashMatches = slashQuery === null
+    ? []
+    : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery)).slice(0, paletteRoom);
+  const slashOpen = slashMatches.length > 0;
+  const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
   const frameBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
     - queuedRows
     - promptExtraRows
@@ -885,6 +900,14 @@ export function App({ agentLoop, wsServer, closing = false }) {
     }, 2500);
     return () => clearInterval(id);
   }, [isProcessing]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setHealthNote(startupWarning(checkInstalled())), 50);
+    return () => clearTimeout(id);
+  }, []);
+  useEffect(() => {
+    if (healthNote) setHealthNote(startupWarning(checkInstalled()));
+  }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // `/update done` clears the file; this notices and the row goes away.
   useEffect(() => {
@@ -1439,6 +1462,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
               {pendingReload.steps.map((s) => s.what).join(' · ')}
               <Text dimColor>{'  —  /update done when finished'}</Text>
             </Text>
+          )}
+          {healthNote && (
+            <Text color={T.attention} wrap="truncate">{healthNote}</Text>
           )}
           {update.available && (
             <Text color={T.link} wrap="truncate">

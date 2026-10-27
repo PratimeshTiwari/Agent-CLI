@@ -38,7 +38,8 @@ import { TaskManager } from '../../src/core/task-manager.js';
  * runner with them. `update` runs `git pull` against the real remote. `compact`
  * and `new` both wait on a browser round trip that has no extension here.
  */
-const NOT_DRIVEN = new Set(['exit', 'restart', 'update', 'compact', 'new']);
+// `doctor` asks the registry (`npm outdated`); its offline form is driven below.
+const NOT_DRIVEN = new Set(['exit', 'restart', 'update', 'compact', 'new', 'doctor']);
 
 function harness() {
   const ws = fs.mkdtempSync(join(tmpdir(), 'slash-'));
@@ -146,6 +147,7 @@ describe('arguments do not break anything', () => {
     '/allowlist', '/allowlist add ls',
     '/effort pro', '/effort nonsense',
     '/help extra args', '/context', '/plans', '/plan show', '/history', '/commands', '/skills',
+    '/doctor offline',
   ];
 
   test('none of them throws', async () => {

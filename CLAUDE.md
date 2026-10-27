@@ -861,6 +861,23 @@ else with a NUL in its first 8 KB is **refused**, naming what can be read. Extra
 path, size and mtime. Pty: one turn reading a PDF, a .docx and a .zip — the prompt log holds the
 two as numbered Markdown and the refusal, 0 clears at 13 and 24 rows.
 
+**`/doctor` and `agent doctor` say what is installed (v5.29, `core/doctor.js`).** Asked for for the
+work laptop, where an install can miss a package without anything crashing. `dep-recovery.js`
+handles the loud case (a startup import is missing: install once, restart); this is the quiet
+ones — an **optional** package (`unpdf`, imported only when a PDF is read), a wrong version, a
+missing tool (`git`, `rg`, `textutil`). Every package has a tier (`required` / `optional` /
+`build` / `test` / `dev` / `unused`) and a **why** in `PACKAGES`; `/doctor <package>` prints it with
+what breaks and the files that import it. `doctor.test.js` holds the prose to the code: every
+declared package has an entry, `required` is a static import, `optional` only a lazy one, and
+`doctor.js` imports **only built-ins** — the bin runs `agent doctor` before looking for `tsx`, and a
+missing `tsx` prints the offline report. Latest versions come from `npm outdated`, which uses the
+user's npm config (a company registry, proxy and auth); a refusal is reported with npm's reason,
+never as "up to date" — empty output with an error parsed as `{}` did exactly that at first. A
+missing required/optional package shows one startup row (`✗ unpdf not installed · /doctor fix …`),
+and the slash palette now gives way to notice rows: it always offered six, which overflowed 13
+rows by one with that row up (2 `ESC[2J`). 0 extra clears at 10, 13, 24 rows. It found
+`ink-spinner`, declared and imported by nothing — listed as `unused`, not removed.
+
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
 that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the walker, so a `.jsx`
