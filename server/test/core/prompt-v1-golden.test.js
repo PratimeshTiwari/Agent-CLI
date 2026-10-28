@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashedShapes, promptShapes } from './prompt-golden-shapes.js';
@@ -36,11 +36,13 @@ test('naming v1 explicitly is the same as the default', () => {
 
 test('negative control: a file override under a newer version moves its shapes and leaves v1 alone', (t) => {
   // v2 overrides by directory; plant one override and watch only v2 change.
-  const dir = join(here, '..', '..', 'src', 'prompts', PROMPT_VERSIONS.v2.dir);
-  const file = join(dir, 'core-terse.md');
-  let existed = true;
-  try { readFileSync(file); } catch { existed = false; }
-  if (existed) return t.skip('v2 already overrides core-terse.md');
+  // A file v2 does not override yet, so the control never has to skip.
+  const base = join(here, '..', '..', 'src', 'prompts');
+  const dir = join(base, PROMPT_VERSIONS.v2.dir);
+  const name = ['tool-call-format-terse', 'reasoning-lite', 'tool-call-format-full', 'pro-guardrails']
+    .find((n) => !existsSync(join(dir, `${n}.md`)));
+  assert.ok(name, 'v2 overrides every candidate: add one it does not');
+  const file = join(dir, `${name}.md`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(file, 'OVERRIDDEN FOR THE CONTROL\n');
   t.after(() => { rmSync(file, { force: true }); clearPromptCache(); });

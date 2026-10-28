@@ -638,8 +638,19 @@ in a newer version. A version is its differences: `dir` overrides prompt files
 switch re-teaches the chat only when the version changes. Every reply and every
 `tool-usage.jsonl` row records `promptVersion` (older rows count as v1, since v1 *is* v5.31's
 prompt), and bare `/prompt` and `/logs tools` show turns and rounds per version. The status bar
-says `prompt v2` only off the default. v2 ships identical to v1; the dedup plan fills it in.
+says `prompt v2` only off the default.
 Pty: after `/prompt v2` the next prompt is the full 19,342 characters; 0 clears at 13 and 24 rows.
+
+**v2 is the dedup plan (v5.34, `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`)**, as five
+`flags` plus five files in `prompts/v2/`. It cuts lines that cost round trips: no read-back after
+every edit (the result already says applied, approved, rejected or mismatch — the handovers say
+so too, or they would contradict it); `task.md` ticked in the reply that makes the next call; the
+review subagent only past one file or ~30 lines; `walkthrough.md` only after a `task.md`. It also
+keeps one copy of each repeated rule. **The plan was wrong once:** it dropped the `edit_file`
+mismatch bullet on medium too, but medium gets the terse tool list, which does not say it.
+`prompt-v2.test.js` asserts every surviving copy for that reason. Turn 0 is −78 / −148 / −892
+characters (low / medium / high): the size is not the point, round trips are. Judge it by
+`/prompt` after some days on v2, not by this paragraph.
 
 **Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
 labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old

@@ -14,10 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-28 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#99](https://github.com/PratimeshTiwari/Agent-CLI/pull/99)
+### v5 — 2026-10-19 … 2026-10-28 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#100](https://github.com/PratimeshTiwari/Agent-CLI/pull/100)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.34 | 2026-10-28 | `v5.34/prompt-v2` | [#100](https://github.com/PratimeshTiwari/Agent-CLI/pull/100) | v5.34: prompt v2 — fewer round trips, one copy of each rule |
 | v5.33 | 2026-10-28 | `v5.33/file-drop` | [#99](https://github.com/PratimeshTiwari/Agent-CLI/pull/99) | v5.33: drag and drop — a dropped path becomes a [File #n] tag |
 | v5.32 | 2026-10-28 | `v5.32/prompt-versions` | [#98](https://github.com/PratimeshTiwari/Agent-CLI/pull/98) | v5.32: prompt versions — v1 frozen, v2 opt-in, compared per reply |
 | v5.31 | 2026-10-28 | `v5.31/quick-wins` | [#97](https://github.com/PratimeshTiwari/Agent-CLI/pull/97) | v5.31: chokidar out; /doctor uninstall, remove unused, ripgrep from VS Code; ✻ end-of-turn line |
