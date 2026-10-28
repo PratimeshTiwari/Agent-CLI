@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow } from '../format.js';
+import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, turnEndLine } from '../format.js';
 import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
@@ -139,6 +139,7 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
           touched={touched}
           tick={tick}
           breakdown={workBreakdown(actions)}
+          endedAt={timed ? turn.endTime : null}
         />
         </Box>
       )}
@@ -242,7 +243,7 @@ export function UserBar({ content, note, isLive, terminalWidth = 80, compact = f
  * While the turn runs it is the spinner, which now sits directly above the
  * input box rather than four rows up.
  */
-export function TurnSummary({ isLive, duration, worked, touched, tick = 0, breakdown = '' }) {
+export function TurnSummary({ isLive, duration, worked, touched, tick = 0, breakdown = '', endedAt = null }) {
   // `wrap="truncate"`: in the live frame a row that wraps is charged as one
   // and drawn as two, and the breakdown made this row long enough to.
   return (
@@ -267,12 +268,24 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
          */
         <>{'  '}<Text color={T.muted}>◌</Text>{' so far'}</>
       ) : (
-        <>{'  '}{duration === null ? 'Worked' : `Worked for ${duration}s`}</>
+        /*
+         * `✻ Worked for 3.5s · 2 rounds · 1 edit · done 1:06 AM` (v5.31), at
+         * the margin where the reply's `●` sits: it reads as the turn's end
+         * rather than the reply's last line.
+         */
+        <>{turnEndLine({
+          seconds: duration === null ? null : Number(duration),
+          breakdown: [
+            breakdown || (worked > 0 ? `${worked} action${worked === 1 ? '' : 's'}` : ''),
+            touched > 0 ? `${touched} file${touched === 1 ? '' : 's'} changed on disk` : '',
+          ].filter(Boolean).join(' · '),
+          endedAt,
+        })}</>
       )}
-      {breakdown ? <Text dimColor> · {breakdown}</Text> : worked > 0 && (
+      {isLive && (breakdown ? <Text dimColor> · {breakdown}</Text> : worked > 0 && (
         <Text dimColor> · {worked} action{worked === 1 ? '' : 's'}</Text>
-      )}
-      {touched > 0 && (
+      ))}
+      {isLive && touched > 0 && (
         <Text dimColor> · {touched} file{touched === 1 ? '' : 's'} changed on disk</Text>
       )}
     </Text>

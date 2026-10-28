@@ -30,6 +30,7 @@ test('the live branch draws a still marker and the tally, and no past tense', ()
   assert.doesNotMatch(live, /Worked/, '"Worked for ⠋ Thinking…" read as a turn that had stopped');
 });
 
-test('the finished branch still says what the turn cost', () => {
-  assert.match(done, /`Worked for \$\{duration\}s`/);
+test('the finished branch still says what the turn cost, and when it ended', () => {
+  assert.match(done, /turnEndLine\(/);
+  assert.match(done, /endedAt/);
 });

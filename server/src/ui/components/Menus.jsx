@@ -133,10 +133,11 @@ export function Menus({
 
   const runDoctorInstall = React.useCallback(async (entry, version = null, { remove = false } = {}) => {
     const isTool = entry?.kind === 'tool';
-    const name = entry?.name || 'npm install';
+    // An array is "Remove unused": several packages, one npm run.
+    const name = Array.isArray(entry?.name) ? entry.name.join(', ') : entry?.name || 'npm install';
     const cmd = isTool ? entry.install?.[0] : null;
     updateDoctor((cur) => ({
-      ...cur, view: entry ? 'package' : cur.view,
+      ...cur, view: entry && !Array.isArray(entry.name) ? 'package' : cur.view,
       job: { state: 'running', name, cmd, removing: remove, version: version || entry?.range || '' },
     }));
     const label = isTool ? `install ${name}` : remove ? `remove ${name}` : version ? `install ${name}@${version}` : 'npm install';
@@ -150,7 +151,7 @@ export function Menus({
           change: remove ? `remove ${name}` : `${name} ${entry.installed || 'missing'} → ${version}`,
         });
       }
-      if (remove) return uninstallPackage({ name, workspace: entry.workspace });
+      if (remove) return uninstallPackage({ name: entry.name, workspace: entry.workspace });
       if (version) return installPackage({ name, version, workspace: entry.workspace, range: entry.range });
       const root = installRoot(REPO_ROOT);
       return root ? installDependencies(root, { stdio: 'pipe' }) : { ok: false, error: 'no package.json to install from' };
@@ -198,6 +199,9 @@ export function Menus({
     if (value.kind === 'install' && entry) runDoctorInstall(entry, value.version);
     if (value.kind === 'tool-install' && entry) runDoctorInstall(entry);
     if (value.kind === 'remove' && entry) runDoctorInstall(entry, null, { remove: true });
+    if (value.kind === 'remove-unused') {
+      runDoctorInstall({ name: value.names, workspace: value.workspace }, null, { remove: true });
+    }
     if (value.kind === 'error') setActiveMenu({ ...menu, view: 'error', from: menu.view || 'home' });
   }, [setActiveMenu, runDoctorInstall, updateDoctor]);
 

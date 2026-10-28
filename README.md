@@ -74,7 +74,9 @@ the version installed, the one `package.json` wants and the latest on your regis
 package also shows one line at startup. It is a menu: tabs for All, Required, Optional, Other
 and Tools; enter on a package says why it is here, what breaks without it and which files import
 it, and offers to install it, update it, pick any other version, or remove it if nothing uses
-it. A missing tool (`rg`, `git`) can be installed with Homebrew or winget. A failed install says
+it, or uninstall it if it is optional (it stays listed, with Install to bring it back). Unused
+packages go in one step. ripgrep needs no installer when VS Code or Cursor is installed: both ship
+it, and the agent uses their copy. A missing tool (`rg`, `git`) can otherwise be installed with Homebrew or winget. A failed install says
 one line, and the full error is a choice away. If a change stops the agent starting, the next
 start puts the previous `package.json` and lockfile back by itself. `/doctor fix` runs the
 install; `/doctor report` prints the table. `agent doctor` works from the shell even when the

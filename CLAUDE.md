@@ -876,7 +876,18 @@ never as "up to date" — empty output with an error parsed as `{}` did exactly 
 missing required/optional package shows one startup row (`✗ unpdf not installed · /doctor fix …`),
 and the slash palette now gives way to notice rows: it always offered six, which overflowed 13
 rows by one with that row up (2 `ESC[2J`). 0 extra clears at 10, 13, 24 rows. It found
-`ink-spinner`, declared and imported by nothing — listed as `unused`, not removed.
+`ink-spinner`, declared and imported by nothing — listed as `unused`, and removed in v5.31.
+
+**v5.31: optional packages can be uninstalled, and ripgrep needs no installer.** An optional
+package gets **Uninstall** (`npm uninstall`, out of `package.json` too, so a later `npm install`
+does not quietly bring it back); it then stays listed as `removed` — dim, not a fault, no startup
+row — with **Install** at `PACKAGES[name].restore.range` (held to the manifest by a test). The home
+list has **Remove unused** when anything is. A required package no longer repeats "The agent does
+not start" under its tier (`withoutBeyondTier`). **ripgrep:** the work laptop has no Homebrew, and
+every VS Code ships rg for its own search (`@vscode/ripgrep-universal/bin/darwin-<arch>/rg`;
+Cursor's `@vscode/ripgrep/bin/rg`). `core/find-rg.js` looks in `AGENT_RG`, then PATH, then the
+editors' bundles; `grep_search` and `/doctor` both use it, and the tool row reads `from Visual
+Studio Code`. `doctor.js` may import local modules now, and the built-ins test follows them down.
 
 **`/doctor` is a menu since v5.30 (`ui/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
 All · Required · Optional · Other · Tools (tab or ←/→). Enter opens a package: why, versions,
@@ -1076,7 +1087,9 @@ checkout was not one. macOS refuses `posix_spawn` once a process holds a descrip
 above `OPEN_MAX` (10,240 — bisected to the descriptor), and chokidar 4 dropped fsevents, so it
 holds about one descriptor per watched *file* (852 for 131 directories here). A big repo crossed
 the line at startup. On macOS and Windows the watcher is now Node's recursive `fs.watch` —
-FSEvents, **zero** extra descriptors on the same tree — with chokidar kept for Linux. Ignores are
+FSEvents, **zero** extra descriptors on the same tree. chokidar was kept for Linux until v5.31,
+then removed (owner: this is a macOS tool); Linux uses the same `fs.watch`, recursive since Node
+20, and a tree past `max_user_watches` only turns the announcements off. Ignores are
 by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and add `vendor`,
 `tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
 started, do not retry", and `/update` says git could not run instead of "not a git checkout".

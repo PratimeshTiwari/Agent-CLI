@@ -128,3 +128,40 @@ test('an unused package can be removed; a used one cannot', () => {
   assert.equal(jobLine({ state: 'removed', name: 'ink-spinner' }), '✔ ink-spinner removed · /restart to load it');
   assert.equal(jobLine({ state: 'running', name: 'ink-spinner', removing: true }), '◌ Removing ink-spinner — npm uninstall');
 });
+
+test('a required package does not repeat "the agent does not start" under its tier', () => {
+  const lines = packageLines(pkg({ name: 'zod', workspace: 'server', tier: 'required', status: 'ok', installed: '3.25.76', range: '^3.24.0' }), { width: 100, rows: 12 });
+  assert.match(lines[0], /required — the agent does not start without it/);
+  assert.ok(!lines.some((l) => l.startsWith('Without it')), lines.join('\n'));
+  // Negative controls: a line that says more stays, and so does an optional one.
+  const tsx = packageLines(pkg({ name: 'tsx', tier: 'required', without: 'The agent does not start: the bin prints "tsx not found".' }), { width: 100, rows: 12 });
+  assert.ok(tsx.some((l) => l.startsWith('Without it') && /tsx not found/.test(l)));
+  const unpdf = packageLines(pkg({ name: 'unpdf', tier: 'optional', without: 'read_file fails on PDFs.' }), { width: 100, rows: 12 });
+  assert.ok(unpdf.some((l) => l.startsWith('Without it')));
+});
+
+test('optional: Uninstall when installed, Install when removed; Remove unused gathers every unused one', () => {
+  const installed = pkg({ name: 'unpdf', workspace: 'server', tier: 'optional', range: '1.8.1', installed: '1.8.1', without: 'read_file fails on PDFs.' });
+  assert.deepEqual(packageActions(installed).filter((a) => a.value.kind === 'remove').map((a) => a.label), ['Uninstall']);
+  const removed = { ...installed, installed: null, status: 'removed' };
+  const acts = packageActions(removed);
+  assert.equal(acts[0].label, 'Install');
+  assert.deepEqual(acts[0].value, { kind: 'install', version: '1.8.1' });
+  assert.ok(!acts.some((a) => a.value.kind === 'fix' || a.value.kind === 'remove'));
+  // Control: a required package offers neither.
+  assert.ok(!packageActions(pkg({ workspace: 'server' })).some((a) => a.value.kind === 'remove'));
+
+  const r = report();
+  r.groups[0].packages.push(
+    pkg({ name: 'ink-spinner', tier: 'unused', installed: '5.0.0' }),
+    pkg({ name: 'left-pad', tier: 'unused', installed: '1.3.0' }),
+    { ...removed, name: 'gone' },
+  );
+  const items = homeItems(r);
+  const bulk = items.find((i) => i.value.kind === 'remove-unused');
+  assert.deepEqual(bulk.value, { kind: 'remove-unused', workspace: 'server', names: ['ink-spinner', 'left-pad'] });
+  const gone = items.find((i) => i.key === 'server:gone');
+  assert.match(gone.detail, /removed .*enter to install it/);
+  assert.equal(gone.tone, undefined, 'removed is not drawn as a fault');
+  assert.ok(!homeItems(report()).some((i) => i.value.kind === 'remove-unused'), 'control: nothing unused, no row');
+});

@@ -19,8 +19,14 @@ import { logError } from '../core/error-log.js';
  *
  * Node's own recursive `fs.watch` is FSEvents-backed on macOS and
  * ReadDirectoryChangesW on Windows: one handle for any tree, measured at zero
- * extra descriptors on the tree that cost chokidar 852. chokidar stays on
- * Linux, where recursive watching is per-directory inotify either way.
+ * extra descriptors on the tree that cost chokidar 852.
+ *
+ * **chokidar is gone (v5.31).** It had been kept for Linux only, and this is a
+ * macOS tool first (owner, 2026-10-28). Node has had recursive `fs.watch` on
+ * Linux since 20, which `engines` already requires. There it is per-directory
+ * inotify, as chokidar's was, so a very large tree can still meet
+ * `fs.inotify.max_user_watches`; the watcher then fails to start, which costs
+ * the announcements and nothing else (see `start`).
  */
 
 /**
@@ -32,7 +38,7 @@ export const IGNORED_DIRS = new Set([
   'node_modules', 'dist', 'build', 'vendor', 'tmp', 'log', 'coverage',
 ]);
 
-/** Quiet time before a change is reported — chokidar's `awaitWriteFinish`. */
+/** Quiet time before a change is reported, so an editor's burst of writes is one report. */
 export const SETTLE_MS = 1000;
 
 /**
@@ -45,28 +51,23 @@ export function isIgnored(relPath) {
   return relPath.split(/[\\/]/).some((seg) => seg.startsWith('.') || IGNORED_DIRS.has(seg));
 }
 
-/** One handle for the whole tree where the platform has one. */
-export const NATIVE_RECURSIVE = process.platform === 'darwin' || process.platform === 'win32';
-
 export class FileWatcher {
   /**
    * @param {string} workspacePath
    * @param {AgentLoop} agentLoop
    */
-  constructor(workspacePath, agentLoop, { native = NATIVE_RECURSIVE, settleMs = SETTLE_MS } = {}) {
+  constructor(workspacePath, agentLoop, { settleMs = SETTLE_MS } = {}) {
     this.workspacePath = workspacePath;
     this.agentLoop = agentLoop;
     this.watcher = null;
     this.enabled = true;
-    this.native = native;
     this.settleMs = settleMs;
     this._pending = new Map(); // relPath -> { timer, sawRename, firstAt }
   }
 
   async start() {
     try {
-      if (this.native) this._startNative();
-      else await this._startChokidar();
+      this._startNative();
     } catch (err) {
       // A watcher that cannot start costs a convenience. Throwing here would
       // cost the session, which is the trade the old one made by accident.
@@ -94,19 +95,6 @@ export class FileWatcher {
       });
       this.stop();
     });
-  }
-
-  async _startChokidar() {
-    const { default: chokidar } = await import('chokidar');
-    this.watcher = chokidar.watch(this.workspacePath, {
-      ignored: (p) => isIgnored(path.relative(this.workspacePath, p)),
-      persistent: true,
-      ignoreInitial: true,
-      awaitWriteFinish: { stabilityThreshold: this.settleMs, pollInterval: 100 },
-    });
-    this.watcher.on('change', (p) => this._handleChange('modified', p));
-    this.watcher.on('add', (p) => this._handleChange('added', p));
-    this.watcher.on('unlink', (p) => this._handleChange('deleted', p));
   }
 
   /**
@@ -138,9 +126,9 @@ export class FileWatcher {
     }
     let st;
     try { st = statSync(abs); } catch { return; }
-    if (!st.isFile()) return; // chokidar reported files only
+    if (!st.isFile()) return; // files only: a new folder is not news
     // FSEvents can deliver writes from just before the watch began. A file
-    // untouched since then has nothing to report — chokidar's `ignoreInitial`.
+    // untouched since then has nothing to report.
     if (st.mtimeMs < this._startedAt && st.birthtimeMs < this._startedAt) return;
     /*
      * New if it was born after the watch began and written as it was born.
