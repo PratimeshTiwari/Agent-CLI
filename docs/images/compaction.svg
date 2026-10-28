@@ -4,10 +4,11 @@
 <text x="470.0" y="20" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — long sessions compact themselves</text>
 <rect x="16.0" y="46" width="908.2" height="19" fill="#2a2f45"/>
 <text x="16" y="60" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#7aa2f7" font-weight="bold">▌</tspan><tspan fill="#e6e6e6" font-weight="bold">  and where are refunds handled?</tspan></text>
-<text x="16" y="98" xml:space="preserve" textLength="482.5" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  ✻ Conversation compacted · ctrl+e for the summary</tspan></text>
+<text x="16" y="98" xml:space="preserve" textLength="482.5" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  </tspan><tspan fill="#d4d4d4" fill-opacity="0.5">✻ Conversation compacted · ctrl+e for the summary</tspan></text>
 <text x="16" y="136" xml:space="preserve" textLength="719.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" font-weight="bold">● </tspan><tspan fill="#d4d4d4">Refunds are handled in one place: Invoice#total skips refunded line items.</tspan></text>
 <text x="16" y="174" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
-<text x="16" y="193" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68" font-weight="bold">❯ </tspan><tspan fill="#d4d4d4">Ask anything, or / for commands</tspan></text>
+<rect x="34.9" y="179" width="9.5" height="19" fill="#d4d4d4"/>
+<text x="16" y="193" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68" font-weight="bold">❯ </tspan><tspan fill="#1e1e1e">A</tspan><tspan fill="#d4d4d4" fill-opacity="0.5">sk anything, or / for commands</tspan></text>
 <text x="16" y="212" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
-<text x="16" y="250" xml:space="preserve" textLength="898.7" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4"> </tspan><tspan fill="#e0af68"> ⏸ plan mode on</tspan><tspan fill="#d4d4d4"> (shift+tab to cycle)                          effort: high  ·  </tspan><tspan fill="#7aa2f7">▰▱▱▱▱ 6% of 96k</tspan></text>
+<text x="16" y="250" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">⏸ plan mode on</tspan><tspan fill="#d4d4d4" fill-opacity="0.5"> (shift+tab to cycle)</tspan><tspan fill="#d4d4d4">                             </tspan><tspan fill="#d4d4d4" fill-opacity="0.5">effort: high  ·  </tspan><tspan fill="#7aa2f7" fill-opacity="0.5">▰▱▱▱▱ 6% of 96k</tspan></text>
 </svg>
