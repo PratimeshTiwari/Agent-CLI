@@ -179,6 +179,7 @@ the prompt; backspace over the tag takes the image off.
 | Command | |
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model picker to match |
+| `/prompt` | which prompt version is sent: `v1` is the frozen baseline, `v2` the candidate; bare `/prompt` compares rounds per turn |
 | `/doctor` | packages and tools as a menu: why each is used, install, update, pick a version, remove unused · `report` prints the table |
 | `/diff` | the last edit's diff, and whether it was written |
 | `/undo` | revert the last edit |
