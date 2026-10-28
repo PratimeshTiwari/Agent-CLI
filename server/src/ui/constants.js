@@ -35,6 +35,7 @@ const SLASH_COMMANDS = [
   { name: 'effort', desc: 'How hard to work, and which browser tab it expects', group: 'config' },
   { name: 'allowlist', desc: 'Manage auto-approved/blocked command rules', group: 'config' },
   { name: 'subagents', desc: 'Subagents on or off — parallel tabs for research and review', group: 'config' },
+  { name: 'prompt', desc: 'Prompt version — v1 is the frozen baseline, v2 the candidate; shows how they compare', group: 'config' },
   { name: 'startup', desc: 'Warm or cold — send the setup prompt when Chrome connects, or with your first message', group: 'config' },
   { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not · `/plan show` previews the plan', group: 'work' },
   { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },

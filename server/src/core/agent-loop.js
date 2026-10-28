@@ -175,7 +175,8 @@ import { requiresApproval, isBlockedOutright } from './tool-policy.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from './diff-approval.js';
 import { createOutputTail } from './output-tail.js';
-import { startupMode } from './user-settings.js';
+import { startupMode, loadUserSettings, saveUserSettings } from './user-settings.js';
+import { resolvePromptVersion, isPromptVersion } from './prompt-versions.js';
 import { describeMismatch, ensureRung, describeFailedSwitch, lowerRung, mismatchPolicy } from './model-fallback.js';
 
 
@@ -431,6 +432,10 @@ export class AgentLoop {
     // first extension to identify spends it (`warmUpOnConnect`).
     this.startupMode = startupMode();
     this._warmOnConnect = this.startupMode === 'warm';
+    // Prompt version (v5.32), per person like the theme. Unknown reads as v1.
+    if (this.promptBuilder) {
+      this.promptBuilder.promptVersion = resolvePromptVersion(loadUserSettings().promptVersion).id;
+    }
     this.warmState = null;
     // v5.28 (`core/model-fallback.js`): the rung a failed switch or a quota
     // stepped down to, for the rest of the session; disagreements the user
@@ -804,6 +809,8 @@ export class AgentLoop {
         // the tab is not on the rung's model, and Pro and Argon share a prompt,
         // so only `model` can tell those two apart afterwards.
         promptEffort: this._promptEffort(),
+        // Which prompt version this reply answered (v5.32): what /prompt compares.
+        promptVersion: this.promptVersion,
         model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
         timestamp: Date.now(),
       };
@@ -1213,7 +1220,9 @@ export class AgentLoop {
      * A turn with no tool calls is recorded too: that is not an absence of
      * data, it is the thing `turn0_no_tools` is about.
      */
-    logToolUsage(this.workspace, this._turnEvidence || new Map(), { rounds: this._roundsThisTurn || 0 });
+    logToolUsage(this.workspace, this._turnEvidence || new Map(), {
+      rounds: this._roundsThisTurn || 0, promptVersion: this.promptVersion,
+    });
 
     /*
      * Only a `/compact` typed during the turn runs here — you asked for it.
@@ -1811,6 +1820,32 @@ export class AgentLoop {
    * flight: the list then still holds the tab's *previous* model, and the tab is
    * a second away from the one the setting names.
    */
+  /** The prompt version the next build uses (core/prompt-versions.js). */
+  get promptVersion() {
+    return resolvePromptVersion(this.promptBuilder?.promptVersion).id;
+  }
+
+  /**
+   * Choose the prompt version. Saved per person; the chat is re-taught only when
+   * it actually changes, because a thread that learned v1 keeps answering to v1
+   * until it is sent the other — and a full payload sent to change nothing is
+   * the repetition Gemini's filters react to.
+   *
+   * @returns {{ok: boolean, changed?: boolean, from?: string, to?: string, saved?: boolean}}
+   */
+  setPromptVersion(id) {
+    if (!isPromptVersion(id)) return { ok: false };
+    const from = this.promptVersion;
+    const to = resolvePromptVersion(id).id;
+    const saved = saveUserSettings({ promptVersion: to });
+    if (from === to) return { ok: true, changed: false, from, to, saved };
+    if (this.promptBuilder) {
+      this.promptBuilder.promptVersion = to;
+      this.promptBuilder.resetPromptState?.();
+    }
+    return { ok: true, changed: true, from, to, saved };
+  }
+
   _promptEffort() {
     const setting = resolveEffort(this.modelConfig?.effort).id;
     if (this._switchInFlight) return setting;

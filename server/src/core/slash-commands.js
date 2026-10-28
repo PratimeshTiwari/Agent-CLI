@@ -24,6 +24,8 @@ import { logError } from './error-log.js';
 import { saveUserSettings } from './user-settings.js';
 import { planModelSwitch, browserModelPin, pickModelFor } from './model-match.js';
 import { MISMATCH_POLICIES, mismatchPolicy } from './model-fallback.js';
+import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVersion } from './prompt-versions.js';
+import { summariseToolUsage } from './tool-usage.js';
 
 /**
  * How long a name the banner can take.
@@ -59,8 +61,31 @@ export const MAX_AGENT_NAME = 20;
 export const AGENT_COMMANDS = new Set([
   'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
-  'workspace', 'startup',
+  'workspace', 'startup', 'prompt',
 ]);
+
+/**
+ * `/prompt`'s answer with no argument: which version, what each one is, and how
+ * they compare so far — rounds per turn from `tool-usage.jsonl`, the number
+ * that says whether a prompt costs round trips.
+ */
+export function promptVersionReport(loop) {
+  const current = loop.promptVersion || DEFAULT_PROMPT_VERSION;
+  let versions = [];
+  try { versions = summariseToolUsage(loop.workspace).versions || []; } catch { /* nothing recorded */ }
+  const byId = new Map(versions.map((v) => [v.version, v]));
+  const width = Math.max(...PROMPT_VERSION_IDS.map((id) => id.length));
+  const rows = PROMPT_VERSION_IDS.map((id) => {
+    const v = byId.get(id);
+    const use = !v ? 'not used yet'
+      : `${v.turns} turn${v.turns === 1 ? '' : 's'}`
+        + (v.rounds ? ` · rounds median ${v.rounds.median}, p90 ${v.rounds.p90}` : '');
+    return `${id === current ? '❯' : ' '} ${id.padEnd(width)}  ${PROMPT_VERSIONS[id].summary} · ${use}`;
+  });
+  const other = PROMPT_VERSION_IDS.find((id) => id !== current);
+  return `Prompt **${current}**\n\n\`\`\`\n${rows.join('\n')}\n\`\`\`\n`
+    + `\`/prompt ${other}\` to switch · the chat is sent the new prompt with your next message`;
+}
 
 /**
  * The local commands that are worth a spinner.
@@ -243,6 +268,22 @@ export async function handleSlashCommand(loop, command, args) {
       }
       if (!saved) note += ' · this session only, settings.json could not be written';
       return { message: changed('startup', was, asked, note) };
+    }
+
+    /**
+     * The prompt version (v5.32): v1 is frozen, a newer one is opt-in, and every
+     * reply records which it answered so the two can be compared. Per person.
+     */
+    case 'prompt': {
+      const asked = String(args?.[0] || '').toLowerCase();
+      if (!asked) return { message: promptVersionReport(loop) };
+      if (!isPromptVersion(asked)) {
+        return { message: `No prompt version **${asked}** · there is ${PROMPT_VERSION_IDS.join(', ')}` };
+      }
+      const r = loop.setPromptVersion(asked);
+      let note = r.changed ? 'the chat is sent this prompt with your next message' : '';
+      if (!r.saved) note = [note, 'this session only, settings.json could not be written'].filter(Boolean).join(' · ');
+      return { message: changed('prompt', r.from, r.to, note) };
     }
 
     case 'mode':

@@ -34,7 +34,7 @@ const usagePath = (workspace) => path.join(paths.logsDir(workspace), 'tool-usage
  * @param {string} workspace
  * @param {Map<string, number>|Record<string, number>} counts name -> times called
  */
-export function logToolUsage(workspace, counts, { rounds } = {}) {
+export function logToolUsage(workspace, counts, { rounds, promptVersion } = {}) {
   try {
     const entries = counts instanceof Map ? [...counts.entries()] : Object.entries(counts || {});
     const tools = {};
@@ -56,6 +56,8 @@ export function logToolUsage(workspace, counts, { rounds } = {}) {
      * were uncheckable without it. Absent on rows written before it existed.
      */
     if (Number.isFinite(rounds) && rounds >= 0) row.rounds = Math.round(rounds);
+    // Which prompt version the turn ran on (v5.32), so versions can be compared.
+    if (typeof promptVersion === 'string' && promptVersion) row.promptVersion = promptVersion;
     fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
   } catch {
     /* never fail a turn for a counter */
@@ -80,7 +82,7 @@ export function summariseToolUsage(workspace, catalog = []) {
     // Sorted here too: the empty case is the one a fresh workspace hits, and a
     // list that changes order depending on whether anything was logged is a
     // list somebody will eventually diff.
-    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort(), rounds: null };
+    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort(), rounds: null, versions: [] };
   }
 
   const totals = new Map();
@@ -88,11 +90,20 @@ export function summariseToolUsage(workspace, catalog = []) {
   let calls = 0;
   let turnsWithNoTools = 0;
   const roundSamples = [];
+  // Per prompt version (v5.32). Rows written before it existed ran on what is
+  // now v1 — the frozen baseline is v5.31's prompt — so they count as v1.
+  const byVersion = new Map();
   for (const line of lines) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
     turns += 1;
     if (Number.isFinite(row.rounds)) roundSamples.push(row.rounds);
+    const version = typeof row.promptVersion === 'string' && row.promptVersion ? row.promptVersion : 'v1';
+    const v = byVersion.get(version) || { turns: 0, noTools: 0, rounds: [] };
+    v.turns += 1;
+    if (!row.tools || Object.keys(row.tools).length === 0) v.noTools += 1;
+    if (Number.isFinite(row.rounds)) v.rounds.push(row.rounds);
+    byVersion.set(version, v);
     const tools = row.tools && typeof row.tools === 'object' ? row.tools : {};
     const names = Object.keys(tools);
     if (names.length === 0) turnsWithNoTools += 1;
@@ -117,5 +128,13 @@ export function summariseToolUsage(workspace, catalog = []) {
     rounds: roundSamples.length
       ? { samples: roundSamples.length, median: percentile(roundSamples, 50), p90: percentile(roundSamples, 90) }
       : null,
+    versions: [...byVersion.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([version, v]) => ({
+      version,
+      turns: v.turns,
+      turnsWithNoTools: v.noTools,
+      rounds: v.rounds.length
+        ? { samples: v.rounds.length, median: percentile(v.rounds, 50), p90: percentile(v.rounds, 90) }
+        : null,
+    })),
   };
 }

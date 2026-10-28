@@ -23,6 +23,7 @@ import { skillCatalogue } from './skills.js';
 import { resolveEffort } from './effort.js';
 import { renderToolDefinitions } from './tool-catalog.js';
 import { prompt } from './prompt-loader.js';
+import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
 import { parseMemory, readMemoryEnabled } from '../context/memory-manager.js';
 
 // How often to send the condensed reminder, counted in MESSAGES pushed to the tab —
@@ -87,6 +88,17 @@ export class PromptBuilder {
     this.hasSeenHandover = false;     // ...and the full handover review, once
     this.pendingToolRedeclare = false; // Does the next prompt owe the model its tools back?
     this.promptTier = null;            // The tier this chat was taught (AgentLoop._promptConfig)
+    this.promptVersion = DEFAULT_PROMPT_VERSION; // core/prompt-versions.js; AgentLoop sets the person's
+  }
+
+  /** A prompt file, as this builder's prompt version has it. */
+  _prompt(name) {
+    return prompt(name, resolvePromptVersion(this.promptVersion).dir);
+  }
+
+  /** Turns between condensed reminders, by version. */
+  _refreshEvery() {
+    return resolvePromptVersion(this.promptVersion).refreshEvery || REFRESH_INTERVAL_MESSAGES;
   }
 
   /**
@@ -149,7 +161,7 @@ export class PromptBuilder {
     // which is exactly what the model has just demonstrated is not enough.
     const needsToolRedeclare = !needsFullPrompt && this.pendingToolRedeclare;
     const needsRefresh = !needsFullPrompt && !needsToolRedeclare
-      && this.messagesSinceRefresh >= REFRESH_INTERVAL_MESSAGES;
+      && this.messagesSinceRefresh >= this._refreshEvery();
 
     if (needsFullPrompt) {
       // First turn in this chat session — send everything
@@ -355,7 +367,7 @@ export class PromptBuilder {
    * of waiting out the rest of the message budget.
    */
   noteDrift() {
-    this.messagesSinceRefresh = REFRESH_INTERVAL_MESSAGES;
+    this.messagesSinceRefresh = this._refreshEvery();
   }
 
   /**
@@ -403,7 +415,7 @@ export class PromptBuilder {
           : 'Before you finish: Checklist, Read back, Ran, Not done — each with a real answer.';
       }
       this.hasSeenHandover = true;
-      return prompt(short ? 'handover-micro' : 'handover-short');
+      return this._prompt(short ? 'handover-micro' : 'handover-short');
     }
 
     /**
@@ -431,7 +443,7 @@ export class PromptBuilder {
      * lite copy is not orphaned: `_getReasoningInstructions` still hands it to
      * `flash`, which is the rung it now belongs to.
      */
-    return prompt('pro-handover-review');
+    return this._prompt('pro-handover-review');
   }
 
   buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '') {
@@ -839,7 +851,7 @@ underspecified, say what you assumed rather than guessing silently.
    * Flash models struggle with long prompts — keep it minimal.
    */
   _buildFlashCoreInstructions() {
-    return prompt('core-terse');
+    return this._prompt('core-terse');
   }
 
   /**
@@ -913,7 +925,7 @@ ${modelTier === 'pro' ? `## Communication
    * does not need the tokens spent on showing it.
    */
   _buildToolCallFormat(tier) {
-    return prompt(tier === 'lite' ? 'tool-call-format-terse' : 'tool-call-format-full');
+    return this._prompt(tier === 'lite' ? 'tool-call-format-terse' : 'tool-call-format-full');
   }
 
   /**
@@ -963,7 +975,7 @@ ${modelTier === 'pro' ? `## Communication
    * that answered a question.
    */
   _getFlashInstructions() {
-    return prompt('reasoning-lite');
+    return this._prompt('reasoning-lite');
   }
 
   /**
@@ -978,7 +990,7 @@ ${modelTier === 'pro' ? `## Communication
    * that changed something, like every rung's (`buildHandoverBlock`).
    */
   _getFlashThinkingInstructions() {
-    return prompt('reasoning-flash');
+    return this._prompt('reasoning-flash');
   }
 
   /**
@@ -1029,7 +1041,7 @@ You are operating as a SENIOR PRINCIPAL ENGINEER. Every action is deliberate, ve
 defensible in review. You DO NOT guess. You VERIFY.`;
 
     // The heart of it: decide what you are doing before you touch anything.
-    const planFirst = `\n${prompt('pro-plan-first')}\n`;
+    const planFirst = `\n${this._prompt('pro-plan-first')}\n`;
 
     const investigate = `
 ### PHASE 1: INVESTIGATION (never skip)
@@ -1046,7 +1058,7 @@ Before forming an opinion or writing code:
 next, what you expect the next call to show. One per phase, not one per call: a four-point
 preamble in front of every read turns a five-file investigation into twenty round-trips.
 
-${prompt('pro-hypothesis')}`;
+${this._prompt('pro-hypothesis')}`;
 
     const analyse = `
 ### PHASE 2: ANALYSIS
@@ -1077,7 +1089,7 @@ and what could go wrong with it — empty inputs, concurrent access, scale, erro
 5. **Adversarial self-review** — read the diff as a hostile reviewer. What would you flag?
    Say it out loud rather than hoping nobody looks.`}`;
 
-    const guardrails = `\n${prompt('pro-guardrails')}`;
+    const guardrails = `\n${this._prompt('pro-guardrails')}`;
 
     /**
      * The gate at the end, asked for explicitly: a list the agent must check

@@ -25,6 +25,7 @@ import { MODES, nextMode, describeMode } from './modes.js';
 import fs from 'fs';
 import { resolveEffort, EFFORT_LEVELS } from './effort.js';
 import { loadUserSettings } from './user-settings.js';
+import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION } from './prompt-versions.js';
 import { browserModelPin } from './model-match.js';
 import { MISMATCH_POLICIES, mismatchPolicy } from './model-fallback.js';
 import { expectedExtensionVersion } from './extension-version.js';
@@ -120,6 +121,16 @@ export function describeSettings(agentLoop) {
       run: '/subagents',
       restore: (value) => `/subagents ${value}`,
       control: { kind: 'switch', options: ['on', 'off'] },
+    },
+    {
+      group: 'Settings',
+      label: 'Prompt',
+      // v5.32: which prompt version is sent; `/prompt` shows how they compare.
+      value: agentLoop?.promptVersion || DEFAULT_PROMPT_VERSION,
+      hint: `${PROMPT_VERSIONS[agentLoop?.promptVersion]?.summary || PROMPT_VERSIONS[DEFAULT_PROMPT_VERSION].summary} — /prompt compares them`,
+      run: '/prompt',
+      restore: (value) => `/prompt ${value}`,
+      control: { kind: 'ladder', options: PROMPT_VERSION_IDS },
     },
     {
       group: 'Settings',

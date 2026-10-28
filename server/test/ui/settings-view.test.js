@@ -86,7 +86,7 @@ test('printable keys filter; control bytes and the page keys do not', () => {
 test('every switch and ladder row can set each of its options by its own command', () => {
   const rows = describeSettings(null).filter((r) => r.control);
   assert.deepEqual(rows.map((r) => r.label).sort(),
-    ['Browser differs', 'Command rules', 'Edit approval', 'Effort', 'Memory', 'Startup', 'Subagents']);
+    ['Browser differs', 'Command rules', 'Edit approval', 'Effort', 'Memory', 'Prompt', 'Startup', 'Subagents']);
   for (const row of rows) {
     assert.ok(row.control.options.includes(row.value), `${row.label}: ${row.value} is one of its options`);
     for (const option of row.control.options) assert.match(row.restore(option), /^\/\w/);
