@@ -572,6 +572,8 @@ export class WebSocketServer {
         logTrace(this.agentLoop?.workspace, {
           ...payload,
           effort: resolveEffort(this.agentLoop?.modelConfig?.effort).id,
+          // v5.35: and the prompt version, so `/logs speed` can compare them.
+          promptVersion: this.agentLoop?.promptVersion,
         });
         break;
 

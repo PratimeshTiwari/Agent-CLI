@@ -89,6 +89,7 @@ export function logTrace(workspace, trace) {
       model: trace.model || 'gemini',
       ...(trace.effort ? { effort: String(trace.effort) } : {}),
       ...(trace.outcome ? { outcome: String(trace.outcome) } : {}),
+      ...(trace.promptVersion ? { promptVersion: String(trace.promptVersion) } : {}),
       stages,
     });
     const file = tracePath(workspace);
@@ -184,7 +185,26 @@ export function summariseTraces(workspace, { limit = 200 } = {}) {
     }))
     .sort((a, b) => b.n - a.n);
 
-  return { samples: traces.length, stages, efforts };
+  /*
+   * By prompt version (v5.35), for the reply time only: the rest is the
+   * browser's overhead and no prompt changes it. Rows from before the field
+   * existed are v1's, since v1 *is* the prompt they were sent with.
+   */
+  const byVersion = new Map();
+  for (const trace of traces) {
+    const v = trace.promptVersion || 'v1';
+    const done = trace.stages?.complete;
+    if (!Number.isFinite(done)) continue;
+    if (!byVersion.has(v)) byVersion.set(v, []);
+    byVersion.get(v).push(done);
+  }
+  const versions = [...byVersion.entries()]
+    .map(([version, values]) => ({
+      version, n: values.length, complete: percentile(values, 50), p90: percentile(values, 90),
+    }))
+    .sort((a, b) => a.version.localeCompare(b.version));
+
+  return { samples: traces.length, stages, efforts, versions };
 }
 
 /** `2.1s`, `340ms` — the unit people would say out loud. */

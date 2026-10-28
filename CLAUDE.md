@@ -1372,6 +1372,13 @@ jsdom without `runScripts`, which models the CSP honestly: the old markup fails 
 
 ### Failure logging
 
+**Bare `/logs` is a picker (v5.35, `ui/logs-view.js`)**: Failures · Speed · Tools · Text channel ·
+Notices · Clear, each row carrying its one-line answer, enter opening the typed form's full text.
+It used to open only once something had failed, so "is it slower?" needed the word `extension`.
+Failures is a second view of flows (esc steps back). The old summary is `/logs failures`; `/logs
+speed` is new. Traces now record `promptVersion`, so Speed splits reply time by version as Tools
+splits rounds. Pty: 0 clears at 13 and 24 rows.
+
 `core/error-log.js` writes every failure to `<ws>/.agent/logs/errors.jsonl`, tagged with the
 flow it came from (`bridge`, `extension`, `agent`, `tool`, `github`, `task`, `diff`, `context`,
 `ui`). `/logs` reads it back grouped by flow; `/logs <flow>` drills in.

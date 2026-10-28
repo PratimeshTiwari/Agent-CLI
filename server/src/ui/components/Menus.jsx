@@ -12,6 +12,7 @@ import { filterUnderline, settingsKeys, stepValue } from '../settings-view.js';
 import { sliderLayout, stopModel } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
+import { logsHomeItems, failureItems } from '../logs-view.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
@@ -282,6 +283,11 @@ export function Menus({
     }
 
     if (!key.escape) return;
+    // `/logs` (v5.35): from a flow list back to the picker.
+    if (activeMenu?.type === 'logs' && activeMenu.view === 'failures') {
+      setActiveMenu({ ...activeMenu, view: 'home' });
+      return;
+    }
     // `/doctor` (v5.30): back one view — versions → package → health — and
     // only the health list closes. Asked for: "back should take to the health
     // home instead of main home". An install keeps running behind it.
@@ -1142,37 +1148,38 @@ export function Menus({
         })()}
 
         {activeMenu?.type === 'logs' && (() => {
-          const total = activeMenu.summary.total;
-          const { sub, tight, room } = fit('Pick a flow to see what broke in it.');
+          // v5.35 (`ui/logs-view.js`): every question the log answers, each row
+          // with its answer; enter opens the full one. Failures is a second view
+          // so the nine flow names are never typed.
+          const m = activeMenu;
+          const open = (word) => {
+            setActiveMenu(null);
+            setFocus(FOCUS_INPUT);
+            handleSubmit(`/logs ${word}`);
+          };
+          if (m.view === 'failures') {
+            const total = m.data.summary.total;
+            const { sub, tight, room } = fit('Pick a flow to see what broke in it.');
+            return (
+              <Panel width={W} title="Failures" status={`${total} logged`}
+                sub={sub} tight={tight} keys="↑↓ move · enter open · esc back">
+                <Choices limit={room} items={failureItems(m.data.summary, { T })} onSelect={(item) => open(item.value)} />
+              </Panel>
+            );
+          }
+          const { sub, tight, room } = fit('What the log can tell you. Enter opens the full answer.');
           return (
-            <Panel width={W} title="Failure log" status={`${total} failure${total === 1 ? '' : 's'}`}
+            <Panel width={W} title="Logs" status=".agent/logs"
               sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
               <Choices
                 limit={room}
-                items={[
-                  ...activeMenu.summary.byFlow.map((f) => ({
-                    label: `${String(f.count).padStart(3)}  ${f.flow}`,
-                    detail: f.label,
-                    value: f.flow,
-                    colour: T.danger,
-                  })),
-                  // Reachable, and below the failures. These are the expected
-                  // states that used to be mixed in with them and outnumbered
-                  // them three to one; a reader wants them available and never
-                  // first.
-                  ...(activeMenu.summary.notices?.count
-                    ? [{
-                      label: `${String(activeMenu.summary.notices.count).padStart(3)}  notices`,
-                      detail: 'Expected states — nothing to act on',
-                      value: 'notices',
-                    }]
-                    : []),
-                  { label: '     Clear the log', value: 'clear' },
-                ]}
+                items={logsHomeItems(m.data, { T })}
                 onSelect={(item) => {
-                  setActiveMenu(null);
-                  setFocus(FOCUS_INPUT);
-                  handleSubmit(`/logs ${item.value}`);
+                  if (item.value === 'failures' && m.data.summary.total > 0) {
+                    setActiveMenu({ ...m, view: 'failures' });
+                    return;
+                  }
+                  open(item.value);
                 }}
               />
             </Panel>

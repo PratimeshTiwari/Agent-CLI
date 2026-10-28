@@ -68,6 +68,24 @@ import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 
 /** For the confirm prompt: a plan that cannot be made is described as none. */
+/**
+ * The browser timings, as `/logs speed` and `/logs extension` print them:
+ * per stage, then the reply time by effort rung and by prompt version — each
+ * split only with two or more represented, since one row compares nothing.
+ */
+export function browserTimings(workspace) {
+  const t = summariseTraces(workspace);
+  if (t.samples === 0) return '_No turn timings recorded yet — they land here as turns complete._';
+  const byRung = (t.efforts || []).filter((e) => e.n > 0);
+  const rungs = byRung.length < 2 ? '' : '\n\n**By effort rung** — median, the two stages the model decides\n'
+    + byRung.map((e) => `  ${e.effort.padEnd(6)} n=${String(e.n).padEnd(4)} first token ${formatMs(e.firstToken).padStart(7)}   reply ${formatMs(e.complete)}`).join('\n');
+  const versions = (t.versions || []).length < 2 ? '' : '\n\n**By prompt version** — reply time\n'
+    + t.versions.map((v) => `  ${v.version.padEnd(6)} n=${String(v.n).padEnd(4)} median ${formatMs(v.complete).padStart(7)}   p90 ${formatMs(v.p90)}`).join('\n');
+  return `**Browser timings** — median and slowest tenth, over ${t.samples} turn${t.samples === 1 ? '' : 's'}\n`
+    + t.stages.map((st) => `  ${st.stage.padEnd(12)} ${formatMs(st.median).padStart(6)}   p90 ${formatMs(st.p90)}`).join('\n')
+    + rungs + versions;
+}
+
 function safePlanReset(workspace, args = []) {
   try { return planReset(workspace, { keepSettings: args.includes('--keep-settings') }); }
   catch { return null; }
@@ -999,32 +1017,22 @@ export async function handleSlashCommand(query, {
         return;
       }
 
-      // `/logs <flow>` drills into one; bare `/logs` answers "what is breaking?"
+      // `/logs speed` (v5.35): the browser timings on their own, by rung and by
+      // prompt version — the picker's Speed row.
+      if (arg === 'speed') {
+        setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
+          role: 'assistant', isLocal: true, content: browserTimings(agentLoop.workspace),
+        }]);
+        setIsProcessing(false);
+        return;
+      }
+
+      // `/logs <flow>` drills into one; `/logs failures` answers "what is breaking?"
       if (arg && FLOWS[arg]) {
         // The extension is the one flow with timings as well as failures, and
         // "is it slower?" is the question people bring to it. Shown first,
         // because a turn that is merely slow logs nothing at all below.
-        let timing = '';
-        if (arg === 'extension') {
-          const t = summariseTraces(agentLoop.workspace);
-          /*
-           * And the split by rung, which is the one comparison these numbers
-           * are asked for: is a Flash tab actually cheaper per round trip than
-           * a Pro one? Shown only with **two or more** rungs represented — one
-           * row comparing a thing to itself is noise, and the field is new so
-           * most logs will have one rung for a while.
-           */
-          const byRung = (t.efforts || []).filter((e) => e.n > 0);
-          const rungs = byRung.length < 2 ? '' : '\n\n**By effort rung** — median, the two stages the model decides\n'
-            + byRung.map((e) => `  ${e.effort.padEnd(6)} n=${String(e.n).padEnd(4)} first token ${formatMs(e.firstToken).padStart(7)}   reply ${formatMs(e.complete)}`).join('\n');
-
-          timing = t.samples === 0
-            ? '_No turn timings recorded yet — they land here as turns complete._\n\n'
-            : `**Browser timings** — median and slowest tenth, over ${t.samples} turn${t.samples === 1 ? '' : 's'}\n`
-              + t.stages.map((st) => `  ${st.stage.padEnd(12)} ${formatMs(st.median).padStart(6)}   p90 ${formatMs(st.p90)}`).join('\n')
-              + rungs
-              + '\n\n';
-        }
+        const timing = arg === 'extension' ? `${browserTimings(agentLoop.workspace)}\n\n` : '';
         /*
          * Both levels here, notices marked.
          *
@@ -1051,10 +1059,22 @@ export async function handleSlashCommand(query, {
       }
 
       const summary = summarizeErrors(agentLoop.workspace);
-      // A summary you can act on. Picking a flow drills into it; picking clear
-      // clears it — rather than printing a list and a set of commands to type.
-      if (summary.total > 0 && !arg) {
-        setActiveMenu({ type: 'logs', summary });
+      /*
+       * Bare `/logs` is a picker (v5.35, `ui/logs-view.js`): every question the
+       * log answers, each row with its answer. It used to open only once
+       * something had failed, so "is it slower?" needed the word `extension`.
+       */
+      if (!arg) {
+        setActiveMenu({
+          type: 'logs',
+          view: 'home',
+          data: {
+            summary,
+            traces: summariseTraces(agentLoop.workspace),
+            usage: summariseToolUsage(agentLoop.workspace, TOOL_CATALOG.map((t) => t.name)),
+            channel: channelHealth(agentLoop.workspace),
+          },
+        });
         setIsProcessing(false);
         return;
       }
@@ -1071,9 +1091,12 @@ export async function handleSlashCommand(query, {
         ? `\n\n_${summary.notices.count} notice${summary.notices.count === 1 ? '' : 's'} — `
           + 'expected states, nothing to act on. `/logs notices` to read them._'
         : '';
+      // `/logs failures`, or a word that is none of the above.
+      const unknown = arg === 'failures' ? '' : `No log view **${arg}** — the flows are ${Object.keys(FLOWS).join(', ')}. `
+        + 'Bare `/logs` lists the rest.\n\n';
       let content;
       if (summary.total === 0) {
-        content = '**Failures**  nothing has failed since the log was last cleared.'
+        content = unknown + '**Failures**  nothing has failed since the log was last cleared.'
           + noticeLine;
       } else {
         const rows = summary.byFlow.map((f) => {
@@ -1081,7 +1104,7 @@ export async function handleSlashCommand(query, {
           return `  **${f.flow}** ${String(f.count).padStart(3)}  _${f.label}_\n`
             + `      last ${when} — ${f.lastMessage}`;
         }).join('\n');
-        content = `**Failures**  ${summary.total} logged\n\n${rows}`
+        content = `${unknown}**Failures**  ${summary.total} logged\n\n${rows}`
           + `${noticeLine}\n\n`
           + `_\`/logs <flow>\` for detail · \`/logs clear\` to reset · full log in \`.agent/logs/errors.jsonl\`_`;
       }
