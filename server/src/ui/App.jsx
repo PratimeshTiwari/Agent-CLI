@@ -14,6 +14,7 @@ import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLa
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
+import { DEFAULT_PROMPT_VERSION } from '../core/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
 import { mismatchPolicy } from '../core/model-fallback.js';
@@ -1762,6 +1763,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
             back to the rung when it has not — never invent a model, and never
             leave the row blank, which would read as "off".
           */}
+          {/* v5.32: only when it is not the default, so v1 changes nothing here. */}
+          {agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION && (
+            <><Text color={T.attention}>{`prompt ${agentLoop.promptVersion}`}</Text>{'  ·  '}</>
+          )}
           {browserModelLabel && agentLoop.effortFallback
             ? <Text color={T.attention}>{'↓ '}{browserModelLabel}</Text>
             : browserModelLabel

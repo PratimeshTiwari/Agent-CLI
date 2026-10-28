@@ -23,7 +23,7 @@
  * be worse than what it replaced.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -43,10 +43,17 @@ const cache = new Map();
  * @param {string} name - file name without the extension
  * @returns {string}
  */
-export function prompt(name) {
-  if (cache.has(name)) return cache.get(name);
+export function prompt(name, dir = null) {
+  const key = dir ? `${dir}/${name}` : name;
+  if (cache.has(key)) return cache.get(key);
 
-  const file = join(PROMPTS_DIR, `${name}.md`);
+  /*
+   * A prompt version (core/prompt-versions.js) overrides a file by putting its
+   * own copy in `prompts/<dir>/`; anything it does not override is the base
+   * file, so a version is only its differences.
+   */
+  const own = dir ? join(PROMPTS_DIR, dir, `${name}.md`) : null;
+  const file = own && existsSync(own) ? own : join(PROMPTS_DIR, `${name}.md`);
   let text;
   try {
     text = readFileSync(file, 'utf-8').trimEnd();
@@ -54,7 +61,7 @@ export function prompt(name) {
     throw new Error(`Missing prompt file ${name}.md (${file}): ${err.message}`);
   }
 
-  cache.set(name, text);
+  cache.set(key, text);
   return text;
 }
 

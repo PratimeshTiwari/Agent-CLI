@@ -626,6 +626,21 @@ The setting is never rewritten. The thread is re-taught (`resetPromptState`) onl
 own. Each reply records `effort`, `promptEffort` and `model`. The first review of the rungs is
 in `.agent/artifacts/plans/2026-10-26-effort-review.md`.
 
+**The prompt is versioned (v5.32, `core/prompt-versions.js`, `/prompt`).** Asked 2026-10-28: "we
+don't know exactly if newer will be better or not". Every prompt change had replaced the one
+before, so "better" was argued from prompt sizes. Now **v1 is frozen**: `prompt-v1-golden.test.js`
+hashes 98 shapes (turn 0, short, refresh, redeclare and warm-up for every effort × mode ×
+subagents; handovers; a tool batch; subagent wrappers; compaction) against
+`test/core/fixtures/prompt-v1-golden.json`, so a change that reaches v1 fails the build — put it
+in a newer version. A version is its differences: `dir` overrides prompt files
+(`prompts/<dir>/<name>.md`, else the base file — `prompt(name, dir)`), `flags` for builder switches,
+`refreshEvery` for the reminder cadence. Per person in `~/.agent/settings.json`, default v1; a
+switch re-teaches the chat only when the version changes. Every reply and every
+`tool-usage.jsonl` row records `promptVersion` (older rows count as v1, since v1 *is* v5.31's
+prompt), and bare `/prompt` and `/logs tools` show turns and rounds per version. The status bar
+says `prompt v2` only off the default. v2 ships identical to v1; the dedup plan fills it in.
+Pty: after `/prompt v2` the next prompt is the full 19,342 characters; 0 clears at 13 and 24 rows.
+
 **Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
 labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old
 "High = the last model" rule it took High, Medium landed on Pro, and Flash became unreachable.
