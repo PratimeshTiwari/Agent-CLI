@@ -193,7 +193,7 @@ Only the path goes to the model, with its size and line count, and it reads what
 | `/context` | what is in the window and which files feed the prompt |
 | `/subagents on·off` | parallel tabs for research and review |
 | `/theme` | colours — Dark, Light, colour-blind, Terminal (the classic look) or Mono; previews as you move |
-| `/logs` | what has been failing · `/logs extension` for how long the browser takes |
+| `/logs` | a picker: failures, speed, tool use, the text channel and notices, each row with its answer; enter opens the full one (`/logs speed`, `/logs tools`, `/logs <flow>` still work typed) |
 | `/reset` | start this repo fresh — its `.agent` state goes to `~/.agent/trash`, nothing deleted |
 | `/help` | every key and command |
 
@@ -220,7 +220,7 @@ history lives in `~/.agent/workspaces/` so a fresh checkout doesn't lose it. In 
 | --- | --- |
 | `○ agent` in yellow | The extension isn't connected: open a gemini.google.com tab, or reload the extension at `chrome://extensions` |
 | ⌘⇧1 does nothing | Chrome only assigns the shortcut on first install — set it at `chrome://extensions/shortcuts` and choose **Global** |
-| It feels slow | `/logs extension` shows each stage of a turn; typing the prompt should take well under a second |
+| It feels slow | `/logs speed` shows each stage of a turn, by rung and by prompt version; typing the prompt should take well under a second |
 | Something failed | `/logs` groups failures by where they came from |
 | After `git pull` | `/update` says what to reload — usually the extension and a restart |
 | A feature fails on a new machine | `/doctor` (or `agent doctor` from the shell) lists what is missing; `/doctor fix` installs it |

@@ -14,10 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v5 — 2026-10-19 … 2026-10-28 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#100](https://github.com/PratimeshTiwari/Agent-CLI/pull/100)
+### v5 — 2026-10-19 … 2026-10-28 · PRs [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v5.35 | 2026-10-28 | `v5.35/logs-picker` | [#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101) | v5.35: /logs is a picker — every question the log answers, each with its answer |
 | v5.34 | 2026-10-28 | `v5.34/prompt-v2` | [#100](https://github.com/PratimeshTiwari/Agent-CLI/pull/100) | v5.34: prompt v2 — fewer round trips, one copy of each rule |
 | v5.33 | 2026-10-28 | `v5.33/file-drop` | [#99](https://github.com/PratimeshTiwari/Agent-CLI/pull/99) | v5.33: drag and drop — a dropped path becomes a [File #n] tag |
 | v5.32 | 2026-10-28 | `v5.32/prompt-versions` | [#98](https://github.com/PratimeshTiwari/Agent-CLI/pull/98) | v5.32: prompt versions — v1 frozen, v2 opt-in, compared per reply |

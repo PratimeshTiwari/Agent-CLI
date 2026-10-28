@@ -140,7 +140,7 @@ describe('arguments do not break anything', () => {
    */
   const CASES = [
     '/open', '/open nope.txt',
-    '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools',
+    '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools', '/logs speed', '/logs failures', '/logs notices',
     '/name Ada', '/name',
     '/subagents', '/subagents off', '/subagents on', '/config', '/copy code', '/shell', '/terminal',
     '/memory on', '/memory off',
