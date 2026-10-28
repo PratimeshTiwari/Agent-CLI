@@ -4,6 +4,7 @@ import { PromptInput } from './PromptInput.jsx';
 import { RunningLine } from './RunningLine.jsx';
 import { FOCUS_INPUT, modeColor } from '../constants.js';
 import { applyPaste, nextPasteId } from '../paste.js';
+import { recognizeDrop } from '../file-drop.js';
 import { oneLine, taskProgress } from '../format.js';
 import { hasClipboardImage } from '../clipboard-image.js';
 import { T } from '../theme.js';
@@ -37,6 +38,7 @@ export function InputBar({
   focus,
   handleSubmit,
   attachImage,
+  attachDropped,
   input,
   isProcessing,
   steered = [],
@@ -115,6 +117,14 @@ export function InputBar({
     // only on this path, which is already the rare one.
     if (text === '' && hasClipboardImage()) {
       attachImage();
+      return;
+    }
+
+    // A paste that is nothing but existing absolute paths is a drop (v5.33):
+    // each becomes a tag at the caret instead of text (`ui/file-drop.js`).
+    const dropped = attachDropped ? recognizeDrop(text) : null;
+    if (dropped) {
+      attachDropped(dropped);
       return;
     }
 
