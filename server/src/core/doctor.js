@@ -35,6 +35,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findRg } from './find-rg.js';
 
 /** The repo root: `server/src/core` → three up. */
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -58,6 +59,19 @@ export const TIERS = {
 };
 
 const TIER_ORDER = Object.keys(TIERS);
+
+/**
+ * The "Without it" line, only when it says more than the tier line above it.
+ * Twelve required packages carry "The agent does not start.", which the tier
+ * already says (owner, 2026-10-28: "if required is mentioned it should be
+ * understood"). `tsx`'s line names what you would see, so it stays.
+ */
+export function withoutBeyondTier(entry) {
+  const text = String(entry?.without || '').trim();
+  if (!text) return null;
+  if (entry.tier === 'required' && /^the agent does not start\.?$/i.test(text)) return null;
+  return text;
+}
 
 /**
  * Why each package is here. Every package any `package.json` declares has an
@@ -91,11 +105,6 @@ export const PACKAGES = {
     tier: 'required',
     why: 'The pick-one lists on the first-start setup screens.',
     without: 'The agent does not start.',
-  },
-  'ink-spinner': {
-    tier: 'unused',
-    why: 'Was the thinking spinner; the spinner is drawn by the agent itself now and nothing imports this.',
-    without: 'Nothing. It can be removed from server/package.json.',
   },
   marked: {
     tier: 'required',
@@ -146,6 +155,9 @@ export const PACKAGES = {
     tier: 'optional',
     why: 'Extracts the text of a PDF so read_file can hand it to the model as Markdown, page by page.',
     without: 'read_file fails on PDFs. Word, PowerPoint and text files still read.',
+    // Where and at what range it goes back in after an uninstall from the menu,
+    // which takes it out of package.json too. Held to the declared range by a test.
+    restore: { workspace: 'server', range: '1.8.1' },
   },
   '@types/react': {
     tier: 'dev',
@@ -206,7 +218,7 @@ export const TOOLS = [
     why: 'ripgrep: grep_search uses it when present.',
     without: 'grep_search falls back to a slower scan in Node.', short: 'search is slower',
     install: { darwin: ['brew', ['install', 'ripgrep']], win32: ['winget', ['install', '--id', 'BurntSushi.ripgrep.MSVC', '-e']] },
-    manual: { darwin: 'https://brew.sh, then brew install ripgrep', linux: 'sudo apt install ripgrep', win32: 'https://github.com/BurntSushi/ripgrep' },
+    manual: { darwin: 'VS Code or Cursor (each ships ripgrep, used automatically), or brew install ripgrep', linux: 'sudo apt install ripgrep', win32: 'https://github.com/BurntSushi/ripgrep' },
   },
   {
     name: 'textutil', need: 'optional', platform: 'darwin', path: '/usr/bin/textutil',
@@ -343,6 +355,19 @@ export function checkInstalled(root = REPO_ROOT) {
         status: !found ? 'missing' : ok === false ? 'mismatch' : 'ok',
       };
     });
+    /*
+     * An optional package uninstalled from the menu is gone from package.json,
+     * so nothing above lists it — and it could then never be put back from the
+     * place it was taken out. It stays listed as `removed`: a choice, not a fault.
+     */
+    for (const [name, info] of Object.entries(PACKAGES)) {
+      if (info.tier !== 'optional' || info.restore?.workspace !== workspace) continue;
+      if (declared.some((d) => d.name === name)) continue;
+      packages.push({
+        name, range: info.restore.range, tier: 'optional', why: info.why, without: info.without,
+        installed: null, location: null, status: 'removed',
+      });
+    }
     packages.sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier) || a.name.localeCompare(b.name));
     groups.push({ workspace, dir, packages });
   }
@@ -352,7 +377,7 @@ export function checkInstalled(root = REPO_ROOT) {
 /** What needs fixing: missing or wrong-version packages that something uses. */
 export function problems(groups) {
   return groups.flatMap((g) => g.packages
-    .filter((p) => p.status !== 'ok' && p.tier !== 'unused' && p.tier !== 'dev')
+    .filter((p) => p.status !== 'ok' && p.status !== 'removed' && p.tier !== 'unused' && p.tier !== 'dev')
     .map((p) => ({ ...p, workspace: g.workspace })));
 }
 
@@ -381,7 +406,11 @@ function run(cmd, args, { cwd, timeout = 3000 } = {}) {
 }
 
 /** The tools outside npm, each with a version or a reason it has none. */
-export async function checkTools({ platform = process.platform, runner = run, root = REPO_ROOT } = {}) {
+export async function checkTools({
+  platform = process.platform, runner = run, root = REPO_ROOT,
+  // A faked runner is a faked machine: it must not find the real VS Code's rg.
+  rgLookup = runner === run ? () => findRg({ fresh: true, platform }) : () => null,
+} = {}) {
   const engines = readJson(path.join(root, 'package.json'))?.engines?.node || null;
   return Promise.all(TOOLS.map(async (t) => {
     const row = {
@@ -399,10 +428,12 @@ export async function checkTools({ platform = process.platform, runner = run, ro
       return { ...row, version: process.versions.node, range: engines, status: ok === false ? 'mismatch' : 'ok' };
     }
     if (t.path) return { ...row, status: existsSync(t.path) ? 'ok' : 'missing', version: existsSync(t.path) ? 'present' : null };
-    const r = await runner(t.name, t.args);
+    // ripgrep may be the copy inside VS Code or Cursor rather than on PATH.
+    const rg = t.name === 'rg' ? rgLookup() : null;
+    const r = await runner(rg?.path || t.name, t.args);
     if (r.error) return { ...row, status: 'missing' };
     const v = /(\d+\.\d+(?:\.\d+)?)/.exec(r.stdout)?.[1] || r.stdout.trim().split('\n')[0];
-    return { ...row, version: v };
+    return { ...row, version: v, ...(rg && rg.source !== 'path' ? { via: rg.source === 'env' ? 'AGENT_RG' : rg.source } : {}) };
   }));
 }
 
@@ -468,7 +499,7 @@ export function applyLatest(report, registry) {
 
 /* ----------------------------------------------------------------- output */
 
-const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·' };
+const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·', removed: '·' };
 
 /** A missing optional tool degrades one feature; it is not a fault. */
 const toolMark = (t) => (t.status === 'missing' && t.tier !== 'required' ? '·' : MARK[t.status]);
@@ -478,7 +509,7 @@ function pad(s, n) {
   return str.length >= n ? str : str + ' '.repeat(n - str.length);
 }
 
-const firstSentence = (text) => (String(text || '').match(/^.*?[.!?](?=\s|$)/) || [String(text || '')])[0];
+export const firstSentence = (text) => (String(text || '').match(/^.*?[.!?](?=\s|$)/) || [String(text || '')])[0];
 
 function latestNote(p) {
   if (!p.latest || !p.installed) return '';
@@ -512,13 +543,14 @@ export function formatReport(report, { width = Infinity } = {}) {
         tier = p.tier;
         lines.push(`  ${tier} — ${TIERS[tier]}`);
       }
-      const have = p.status === 'missing' ? 'missing' : p.installed;
+      const have = p.status === 'missing' ? 'missing' : p.status === 'removed' ? 'removed' : p.installed;
       // The first sentence only: the table has to fit a terminal, and
       // `/doctor <package>` has the rest.
       const breaks = firstSentence(p.without);
       const tail = p.status === 'ok' ? latestNote(p)
         : p.status === 'missing' ? breaks
-          : `wants ${p.range} · ${breaks}`;
+          : p.status === 'removed' ? `uninstalled · /doctor ${p.name} to install it`
+            : `wants ${p.range} · ${breaks}`;
       lines.push(`    ${MARK[p.status]} ${pad(p.name, W.name)}${pad(have, W.have)}${pad(p.range, W.want)}${tail}`.trimEnd());
     }
     lines.push('');
@@ -594,8 +626,8 @@ export function describePackage(name, report, { importers = [] } = {}) {
   for (const p of rows) {
     lines.push(`${name} · ${p.tier} in ${p.workspace} — ${TIERS[p.tier]}`);
     lines.push(`Why: ${p.why || 'no reason recorded — add one to PACKAGES in server/src/core/doctor.js'}`);
-    if (p.without) lines.push(`Without it: ${p.without}`);
-    lines.push(`Wanted: ${p.range} · installed: ${p.installed || 'no'}${p.status === 'mismatch' ? ' (does not satisfy the range)' : ''}`
+    if (withoutBeyondTier(p)) lines.push(`Without it: ${withoutBeyondTier(p)}`);
+    lines.push(`Wanted: ${p.range} · installed: ${p.installed || (p.status === 'removed' ? 'no, uninstalled' : 'no')}${p.status === 'mismatch' ? ' (does not satisfy the range)' : ''}`
       + (p.latest ? ` · latest: ${p.latest}` : ''));
     lines.push('');
   }
@@ -720,20 +752,23 @@ export async function installTool(tool, { runner = run, timeout = 600_000 } = {}
 
 /**
  * Take a package out of a workspace's `package.json` and `node_modules` —
- * offered only for the `unused` tier, where nothing imports it. Judged by the
+ * offered for the `unused` tier, where nothing imports it, and for `optional`
+ * ones, which the list then shows as `removed` with an Install. Judged by the
  * manifest afterwards, not by npm's exit code.
  *
  * @returns {Promise<{ok: boolean, error?: string, output?: string[]}>}
  */
 export async function uninstallPackage({ name, workspace = 'server' }, { root = REPO_ROOT, runner = run, timeout = 300_000 } = {}) {
-  const args = ['uninstall', name];
+  // One name, or several in one npm run ("Remove unused").
+  const names = [].concat(name);
+  const args = ['uninstall', ...names];
   if (workspace && workspace !== 'root') args.push(`--workspace=${workspace}`);
   const r = await runner('npm', args, { cwd: root, timeout });
   const manifest = readJson(path.join(workspace && workspace !== 'root' ? path.join(root, workspace) : root, 'package.json')) || {};
-  const still = Boolean(manifest.dependencies?.[name] || manifest.devDependencies?.[name]);
-  if (!still) return { ok: true };
+  const still = names.filter((n) => manifest.dependencies?.[n] || manifest.devDependencies?.[n]);
+  if (!still.length) return { ok: true };
   const output = errorOutput(r);
-  return { ok: false, error: output.find((l) => /error|ERR!/i.test(l))?.replace(/^npm (ERR!|error)\s*/i, '') || `${name} is still in package.json`, output };
+  return { ok: false, error: output.find((l) => /error|ERR!/i.test(l))?.replace(/^npm (ERR!|error)\s*/i, '') || `${still.join(', ')} still in package.json`, output };
 }
 
 /**

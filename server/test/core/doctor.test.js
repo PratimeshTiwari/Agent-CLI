@@ -59,12 +59,22 @@ describe('the table says why, and the code agrees', () => {
   });
 
   test('doctor.js imports only built-ins — agent doctor runs where node_modules is broken', () => {
-    const source = readFileSync(join(SRC, 'core/doctor.js'), 'utf8');
-    const specifiers = [...source.matchAll(/^import[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    assert.ok(specifiers.length > 0);
-    for (const s of specifiers) {
-      assert.ok(builtinModules.includes(s.replace(/^node:/, '')), `${s} is not a Node built-in`);
-    }
+    // A local module is allowed when it, in turn, imports only built-ins
+    // (find-rg.js, since v5.31): followed all the way down.
+    const seen = new Set();
+    const walk = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const source = readFileSync(file, 'utf8');
+      const specifiers = [...source.matchAll(/^import[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+      assert.ok(specifiers.length > 0, file);
+      for (const s of specifiers) {
+        if (s.startsWith('.')) { walk(join(file, '..', s)); continue; }
+        assert.ok(builtinModules.includes(s.replace(/^node:/, '')), `${s} (in ${file}) is not a Node built-in`);
+      }
+    };
+    walk(join(SRC, 'core/doctor.js'));
+    assert.ok(seen.size >= 2, 'the walk followed find-rg.js');
   });
 
   test('the bin answers doctor before it looks for tsx', () => {
@@ -118,6 +128,29 @@ function fakeRepo({ deps = {}, devDeps = {}, installed = {}, local = {} } = {}) 
 }
 
 const row = (groups, name) => groups.flatMap((g) => g.packages).find((p) => p.name === name);
+
+describe('an optional package uninstalled from the menu', () => {
+  test('is listed as removed, with the range it goes back in at, and is not a fault', () => {
+    const { root, done } = fakeRepo({ deps: { ink: '^7.1.1' }, installed: { ink: '7.1.1' } });
+    const groups = checkInstalled(root);
+    const unpdf = row(groups, 'unpdf');
+    assert.equal(unpdf.status, 'removed');
+    assert.equal(unpdf.range, PACKAGES.unpdf.restore.range);
+    assert.deepEqual(problems(groups), [], 'a choice, not a fault');
+    assert.equal(startupWarning(groups), null);
+    assert.match(formatReport({ groups, tools: [] }).join('\n'), /· unpdf\s+removed .*uninstalled · \/doctor unpdf to install it/);
+    done();
+  });
+
+  test('restore ranges match what the real manifest declares', () => {
+    const declared = Object.fromEntries(readManifests(REPO_ROOT).flatMap((m) => m.declared.map((d) => [`${m.workspace}:${d.name}`, d.range])));
+    for (const [name, info] of Object.entries(PACKAGES)) {
+      if (!info.restore) continue;
+      const range = declared[`${info.restore.workspace}:${name}`];
+      if (range) assert.equal(info.restore.range, range, `${name}: restore.range drifted from package.json`);
+    }
+  });
+});
 
 describe('what is installed', () => {
   test('missing, wrong version, hoisted and local copies', () => {

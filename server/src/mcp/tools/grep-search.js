@@ -6,6 +6,7 @@
  */
 
 import { execFile } from 'child_process';
+import { findRg } from '../../core/find-rg.js';
 import { AGENT_DIR } from '../../core/paths.js';
 import { logNotice } from '../../core/error-log.js';
 import { promisify } from 'util';
@@ -137,9 +138,9 @@ export async function grepSearch(args, context) {
       logNotice(workspace, {
         flow: 'tool',
         op: 'grep_no_ripgrep',
-        message: 'No ripgrep binary on PATH, so grep_search used its built-in search. '
+        message: 'No ripgrep on PATH or inside VS Code / Cursor, so grep_search used its built-in search. '
           + 'Results are the same; it is slower on a large tree. '
-          + 'Install ripgrep (brew install ripgrep / apt install ripgrep) for the fast path. '
+          + 'Installing VS Code is enough (it ships ripgrep); or brew/apt install ripgrep, or set AGENT_RG to a binary. '
           + 'Note a shell function or alias named rg does not count — this spawns a binary.',
         detail: String(err?.code || err?.message || err).slice(0, 200),
       });
@@ -219,7 +220,8 @@ async function ripgrepSearch(patterns, workspace, { isRegex, includes, maxResult
 
   args.push(workspace);
 
-  const { stdout } = await execFileAsync('rg', args, {
+  // PATH first, then the copy every VS Code and Cursor ships (core/find-rg.js).
+  const { stdout } = await execFileAsync(findRg()?.path || 'rg', args, {
     maxBuffer: 10 * 1024 * 1024,
     timeout: 15000,
   });

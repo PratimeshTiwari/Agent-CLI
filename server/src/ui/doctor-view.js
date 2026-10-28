@@ -13,10 +13,13 @@
  * terminal's own scroll and copy), so "click" is ↑↓ and enter.
  */
 
-import { TIERS, compareVersions, satisfies, newerCount, problems, clip } from '../core/doctor.js';
+import { TIERS, withoutBeyondTier, firstSentence, compareVersions, satisfies, newerCount, problems, clip } from '../core/doctor.js';
 import { wrapLines } from './panel.js';
 
-const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·' };
+const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·', removed: '·' };
+
+/** Not ok, and not by choice: an uninstalled optional package is neither red nor counted. */
+const isFault = (p) => p.status !== 'ok' && p.status !== 'removed';
 
 /**
  * The list's tabs (asked 2026-10-27: "maybe create tabs like required,
@@ -56,7 +59,7 @@ export function tabCounts(report) {
     const rows = id === 'tools' ? report.tools : listed(report, id);
     const bad = id === 'tools'
       ? rows.filter((t) => t.status === 'missing' && t.tier === 'required').length
-      : rows.filter((p) => p.status !== 'ok').length;
+      : rows.filter(isFault).length;
     out[id] = { count: id === 'all' ? rows.length + report.tools.length : rows.length, bad };
   }
   return out;
@@ -84,18 +87,31 @@ export function homeItems(report, { T = {}, tab = 'all', job = null } = {}) {
       key: 'fix', label: 'Install what is missing', detail: 'npm install', value: { kind: 'fix' }, colour: T.attention,
     });
   }
+  // Owner, 2026-10-28: "remove the unused packages" — all of them, one choice per workspace.
+  if (tab === 'all' || tab === 'other') {
+    for (const g of report.groups) {
+      const names = g.packages.filter((p) => p.tier === 'unused' && p.installed).map((p) => p.name);
+      if (!names.length) continue;
+      items.push({
+        key: `remove-unused:${g.workspace}`, label: 'Remove unused',
+        detail: `npm uninstall ${names.join(' ')}${g.workspace === 'server' ? '' : ` · ${g.workspace}`}`,
+        value: { kind: 'remove-unused', workspace: g.workspace, names }, colour: T.attention,
+      });
+    }
+  }
   const tools = tab === 'all' || tab === 'tools' ? report.tools : [];
   const width = Math.max(10, ...listed(report, tab).map((p) => p.name.length), ...tools.map((t) => t.name.length));
   for (const p of listed(report, tab)) {
-    const bad = p.status !== 'ok';
-    const have = p.status === 'missing' ? 'missing' : p.installed;
+    const bad = isFault(p);
+    const removed = p.status === 'removed';
+    const have = p.status === 'missing' ? 'missing' : removed ? 'removed' : p.installed;
     const where = p.workspace === 'server' ? '' : ` · ${p.workspace}`;
     items.push({
       key: `${p.workspace}:${p.name}`,
       label: `${MARK[p.status]} ${p.name.padEnd(width)}`,
-      detail: `${String(have).padEnd(9)} ${`${p.tier}${where}`.padEnd(18)} ${bad ? '' : latestNote(p, report.registry)}`.trimEnd(),
+      detail: `${String(have).padEnd(9)} ${`${p.tier}${where}`.padEnd(18)} ${bad ? '' : removed ? 'enter to install it' : latestNote(p, report.registry)}`.trimEnd(),
       value: { kind: 'package', name: p.name, workspace: p.workspace },
-      colour: bad ? T.danger : undefined,
+      colour: bad ? T.danger : removed ? T.muted : undefined,
       tone: bad ? 'danger' : undefined,
     });
   }
@@ -106,7 +122,7 @@ export function homeItems(report, { T = {}, tab = 'all', job = null } = {}) {
     items.push({
       key: `tool:${t.name}`,
       label: `${missing && !required ? '·' : MARK[t.status]} ${t.name.padEnd(width)}`,
-      detail: `${String(have).padEnd(9)} ${`${t.tier} tool`.padEnd(18)} ${missing ? t.short || '' : ''}`.trimEnd(),
+      detail: `${String(have).padEnd(9)} ${`${t.tier} tool`.padEnd(18)} ${missing ? t.short || '' : t.via ? `from ${t.via}` : ''}`.trimEnd(),
       value: { kind: 'tool', name: t.name },
       colour: missing && required ? T.danger : undefined,
       tone: missing ? (required ? 'danger' : 'muted') : undefined,
@@ -158,9 +174,9 @@ export function packageLines(entry, { width = 80, rows = 8, importers = [], regi
     .map((line, i) => `${i ? ' '.repeat(12) : label(name)}${line}`);
 
   const versions = entry.kind === 'tool'
-    ? `${label('Installed')}${entry.status === 'missing' ? 'no' : entry.status === 'n/a' ? entry.note : entry.version}`
+    ? `${label('Installed')}${entry.status === 'missing' ? 'no' : entry.status === 'n/a' ? entry.note : entry.version}${entry.via ? ` · the copy inside ${entry.via}` : ''}`
       + (entry.status === 'missing' && !entry.install && entry.manual ? ` · install it with ${entry.manual}` : '')
-    : `${label('Versions')}installed ${entry.installed || 'no'} · wants ${entry.range}`
+    : `${label('Versions')}installed ${entry.installed || (entry.status === 'removed' ? 'no, uninstalled' : 'no')} · wants ${entry.range}`
       + (entry.latest ? ` · latest ${entry.latest}` : registry && !registry.ok ? ' · latest unknown' : !registry ? ' · latest …' : '');
   const tier = `${label('Tier')}${entry.tier}${entry.kind === 'tool' ? ' tool' : entry.workspace !== 'server' ? ` in ${entry.workspace}` : ''} — ${TIERS[entry.tier] || ''}`;
   const used = importers.length
@@ -171,7 +187,7 @@ export function packageLines(entry, { width = 80, rows = 8, importers = [], regi
     const lines = [
       clip(tier, w),
       ...wrapped('Why', entry.why || 'no reason recorded', whyMax),
-      ...(withoutMax && entry.without ? wrapped('Without it', entry.without, withoutMax) : []),
+      ...(withoutMax && withoutBeyondTier(entry) ? wrapped('Without it', withoutBeyondTier(entry), withoutMax) : []),
       clip(versions, w),
       ...(withImporters && used ? [used] : []),
     ];
@@ -200,7 +216,9 @@ export function packageActions(entry, { job = null } = {}) {
     }
     return out;
   }
-  if (entry.status !== 'ok') {
+  if (entry.status === 'removed') {
+    out.push({ key: 'reinstall', label: 'Install', detail: `npm install ${entry.name}@${entry.range} · back into ${entry.workspace}/package.json`, value: { kind: 'install', version: entry.range } });
+  } else if (entry.status !== 'ok') {
     out.push({ key: 'fix', label: 'Install what package.json wants', detail: `npm install · ${entry.range}`, value: { kind: 'fix' } });
   }
   if (entry.latest && entry.installed && compareVersions(entry.installed, entry.latest) < 0) {
@@ -212,6 +230,9 @@ export function packageActions(entry, { job = null } = {}) {
   }
   if (entry.tier === 'unused') {
     out.push({ key: 'remove', label: 'Remove it', detail: `npm uninstall · out of ${entry.workspace}/package.json`, value: { kind: 'remove' } });
+  } else if (entry.tier === 'optional' && entry.installed) {
+    // Owner, 2026-10-28: "if something is optional, also give option to install/uninstall".
+    out.push({ key: 'remove', label: 'Uninstall', detail: `npm uninstall · ${firstSentence(entry.without || '') || 'out of package.json'}`, value: { kind: 'remove' } });
   }
   out.push({ key: 'versions', label: 'Choose a version…', detail: 'every release, to go up or down', value: { kind: 'versions' } });
   return out;
