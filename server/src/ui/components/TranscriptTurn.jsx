@@ -4,6 +4,7 @@ import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
 import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, turnEndLine } from '../format.js';
 import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
+import { foldFiles, fileLink } from '../file-drop.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
 
@@ -163,7 +164,10 @@ export function UserBar({ content, note, isLive, terminalWidth = 80, compact = f
   // The image block above the message is drawn as `⎿ [Image #1]` rows under
   // it, each a link to the file (see ui/image-attach.js). Committed only: the
   // live copy of the bar lasts a moment, and its rows are budgeted.
-  const { text, links } = foldImages(content);
+  const folded = foldImages(content);
+  const { links } = folded;
+  // Then dropped files' header lines (v5.33): `⎿ [File #1: x.js]` rows, linked.
+  const { text, files } = foldFiles(folded.text);
   return (
     /*
      * A blank row **above** the bar, and it is the bar's to own.
@@ -218,6 +222,11 @@ export function UserBar({ content, note, isLive, terminalWidth = 80, compact = f
       {!isLive && [...links.keys()].map((n) => (
         <Text key={`image-${n}`} dimColor wrap="truncate">
           {'  ⎿  '}<Text underline>{linkImageTags(imageTag(n), links)}</Text>
+        </Text>
+      ))}
+      {!isLive && files.map((f) => (
+        <Text key={`${f.kind}-${f.n}`} dimColor wrap="truncate">
+          {'  ⎿  '}<Text underline>{fileLink(f)}</Text>
         </Text>
       ))}
       {/* What became of a prompt that never reached the model (`:stop`). */}

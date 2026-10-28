@@ -172,7 +172,9 @@ repos (`~/.agent/settings.json`); `NO_COLOR` always means Mono.
 
 Messages typed while the agent is working are **queued** and sent when it finishes. Paste freely —
 long pastes collapse to a marker. `ctrl+v` with an image on the clipboard puts `[Image #1]` in
-the prompt; backspace over the tag takes the image off.
+the prompt; backspace over the tag takes the image off. **Drag files or folders onto the terminal**
+and each becomes a tag — `[File #1: app.js]`, `[Folder #2: src]`, or `[Image #3]` for a picture.
+Only the path goes to the model, with its size and line count, and it reads what it needs.
 
 ### Commands worth knowing
 

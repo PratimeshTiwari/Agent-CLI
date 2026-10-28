@@ -85,13 +85,18 @@ export function imagesInText(text, images = []) {
  * @returns {{value: string, offset: number}}
  */
 export function tagAt(value, offset, n) {
+  return textAt(value, offset, imageTag(n));
+}
+
+/** Any tag at the caret, spaced the same way (file tags use it too, v5.33). */
+export function textAt(value, offset, tag) {
   const text = String(value ?? '');
   const at = Math.max(0, Math.min(offset ?? text.length, text.length));
   const before = text.slice(0, at);
   const after = text.slice(at);
   const lead = before && !/\s$/.test(before) ? ' ' : '';
   const tail = /^\s/.test(after) ? '' : ' ';
-  const put = `${lead}${imageTag(n)}${tail}`;
+  const put = `${lead}${tag}${tail}`;
   return { value: before + put + after, offset: at + put.length };
 }
 
@@ -164,7 +169,8 @@ export function linkImageTags(line, links) {
 export function backspaceAt(value, offset) {
   const text = String(value ?? '');
   if (offset <= 0) return { value: text, offset: 0 };
-  const m = /\[Image #\d+\] ?$/.exec(text.slice(0, offset));
+  // A dropped file's tag too (v5.33): `[File #2: x.js]`, `[Folder #1: src]`.
+  const m = /\[(?:Image #\d+|(?:File|Folder) #\d+: [^\]\n]*)\] ?$/.exec(text.slice(0, offset));
   const from = m ? m.index : offset - 1;
   return { value: text.slice(0, from) + text.slice(offset), offset: from };
 }

@@ -9,7 +9,8 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { loadImage, tagAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
+import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
+import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
 import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
@@ -215,6 +216,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // Images attached with ctrl+v, each named in the prompt by its `[Image #n]`
   // tag. One goes with a message only while its tag is in the text.
   const [pendingImages, setPendingImages] = useState([]);
+  // Dropped files and folders (v5.33), held like images: one goes while its tag is in the text.
+  const [pendingFiles, setPendingFiles] = useState([]);
   // One line in the status row for a moment, where the mode hint sits — what
   // ctrl+v says when there is nothing to paste.
   const [flash, setFlash] = useState(null);
@@ -234,6 +237,31 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // At the caret, through the field's own edit path: a key already on its
     // way must see the tag, or it types over it (see `PromptInput`'s `live`).
     const put = (v, o) => tagAt(v, o, got.image.n);
+    if (cursorRef.current?.apply) cursorRef.current.apply(put);
+    else setInput((prev) => put(prev, prev.length).value);
+  }, [agentLoop, flashNote]);
+  /*
+   * Files dropped on the terminal arrive as a paste of their paths (InputBar).
+   * An image goes the ctrl+v way; anything else is a `[File #n: name]` tag and
+   * only its path reaches the model. Tags go in at the caret, one after another.
+   */
+  const attachDropped = React.useCallback((items) => {
+    setDropWorkspace(agentLoop.workspace);
+    const tags = [];
+    for (const item of items) {
+      if (item.kind === 'image') {
+        const got = loadImage({ workspace: agentLoop.workspace, filePath: item.path });
+        if (!got.ok) { flashNote(got.reason); continue; }
+        setPendingImages((prev) => [...prev, got.image]);
+        tags.push(`[Image #${got.image.n}]`);
+      } else {
+        const f = describeDropped(item);
+        setPendingFiles((prev) => [...prev, f]);
+        tags.push(fileTag(f));
+      }
+    }
+    if (!tags.length) return;
+    const put = (v, o) => tags.reduce((acc, tag) => textAt(acc.value, acc.offset, tag), { value: v, offset: o });
     if (cursorRef.current?.apply) cursorRef.current.apply(put);
     else setInput((prev) => put(prev, prev.length).value);
   }, [agentLoop, flashNote]);
@@ -1128,7 +1156,14 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // one is taken off. The echo carries the block as the loop will record it,
     // so the screen draws the same `⎿ [Image #1]` link now and after a resume.
     const images = imagesInText(query, pendingImages);
-    const shownQuery = recordedImageBlock(images) + query;
+    // Dropped files: a header line each, after the images' block (v5.33).
+    const files = filesInText(query, pendingFiles);
+    const fileBlock = filePromptBlock(files, agentLoop.workspace);
+    const shownQuery = recordedImageBlock(images) + fileBlock + query;
+    if (files.length) {
+      messageContent = fileBlock + messageContent;
+      setPendingFiles((prev) => prev.filter((f) => !files.includes(f)));
+    }
     if (images.length) {
       messageContent = imagePromptBlock(images) + messageContent;
       setPendingImages((prev) => prev.filter((img) => !images.includes(img)));
@@ -1635,6 +1670,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             focus={focus}
             handleSubmit={handleSubmit}
             attachImage={attachImage}
+            attachDropped={attachDropped}
             input={input}
             isProcessing={isProcessing}
             isThinkingTooLong={isThinkingTooLong}

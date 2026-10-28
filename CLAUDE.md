@@ -1736,6 +1736,17 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   and saves nothing**: the context is identical when the task arrives, plus the
   model's acknowledgements. Make turn 0 smaller; do not spread it out.
 
+- **A dropped file is a tag too (v5.33, `ui/file-drop.js`).** A terminal has no drop event: a drop
+  is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
+  (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays
+  text. Images go through `loadImage` and become `[Image #n]`; anything else is
+  `[File #n: name]` / `[Folder #n: name]`, with one header line per file in front of the message
+  (`[File #2: big.js] (6 KB, 1,200 lines) — read it with read_file`) and **never the content**:
+  the model reads the range it needs. Backspace takes the tag (`backspaceAt` knows all three),
+  and the sent message draws `⎿ [File #2: big.js]` as an OSC 8 link (`foldFiles`). Inlining small
+  files was planned and is not built: it would save a round trip only if `/logs tools` says
+  dropped files are read whole. Pty (`{"paste": …}` step in drive2.py): a folder, a 1,200-line
+  file and an image at 13 and 24 rows, 0 clears; the prompt holds headers and no file text.
 - **An image is a tag in the prompt, Claude Code's way (v5.24, `ui/image-attach.js`).**
   ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
   an image goes with a message only while its tag is in the text, so backspace — which takes a
