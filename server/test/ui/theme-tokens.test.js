@@ -106,6 +106,19 @@ test('every palette reads: 4.5:1 for words, 3:1 for detail', () => {
   assert.deepEqual(failures, []);
 });
 
+test('muted is visibly quieter than text in every palette with a background', () => {
+  // The end-of-turn line is all muted (v5.31); if muted came close to text it
+  // would read as the reply's last line again. At most 70% of text's contrast.
+  const failures = [];
+  for (const [name, palette] of Object.entries(PALETTES)) {
+    const bg = PALETTE_INFO[name]?.background;
+    if (!bg) continue;
+    const ratio = contrast(palette.muted, bg) / contrast(palette.text, bg);
+    if (ratio > 0.7) failures.push(`${name}: muted is ${(ratio * 100).toFixed(0)}% of text's contrast`);
+  }
+  assert.deepEqual(failures, []);
+});
+
 test('every palette has picker text, and every entry there is a palette', () => {
   assert.deepEqual(Object.keys(PALETTE_INFO).sort(), Object.keys(PALETTES).sort());
 });

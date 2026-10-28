@@ -1191,3 +1191,31 @@ export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } 
   const rows = (ruled ? RULE : 0) + TITLE + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 1 : 0) + OPTIONS;
   return { command: all.slice(0, shown), hidden: all.length - shown, ruled, cwd, reason, padded, rows };
 }
+
+/**
+ * The end-of-turn line, Claude Code's shape: `✻ Worked for 3.5s · 2 rounds ·
+ * done 1:06 AM` (v5.31; §6 of the 2026-10-26 action-rows plan). The mark and
+ * the clock are what say, at a glance, that the turn is over and when.
+ * `seconds` is a number or null (a turn never stamped has no duration).
+ */
+export function turnDuration(seconds) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return null;
+  const s = Number(seconds);
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${Math.round(s - m * 60)}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+/** `1:06 AM` or `13:06`, by the system locale. Null when there is no time to show. */
+export function doneAt(ms, locale = undefined) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
+  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+}
+
+export function turnEndLine({ seconds, breakdown = '', endedAt = null, locale } = {}) {
+  const took = turnDuration(seconds);
+  const at = doneAt(endedAt, locale);
+  return ['✻ ' + (took ? `Worked for ${took}` : 'Worked'), breakdown, at && `done ${at}`]
+    .filter(Boolean).join(' · ');
+}

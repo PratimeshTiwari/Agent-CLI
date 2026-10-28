@@ -520,6 +520,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
         worked: parsed.actions.filter((a) => a.type !== 'fs_event').length,
         touched: parsed.actions.reduce((n, a) => (a.type === 'fs_event' ? n + a.paths.length : n), 0),
         breakdown: workBreakdown(parsed.actions),
+        endedAt: timed ? turn.endTime : null,
       });
       seen.summary = true;
     }
@@ -1462,6 +1463,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
                   worked={row.worked}
                   touched={row.touched}
                   breakdown={row.breakdown}
+                  endedAt={row.endedAt}
                 />
               </Box>
             );
