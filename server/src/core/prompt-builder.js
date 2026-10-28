@@ -96,6 +96,11 @@ export class PromptBuilder {
     return prompt(name, resolvePromptVersion(this.promptVersion).dir);
   }
 
+  /** A behaviour switch of this builder's prompt version (v1 has none). */
+  _flag(name) {
+    return Boolean(resolvePromptVersion(this.promptVersion).flags?.[name]);
+  }
+
   /** Turns between condensed reminders, by version. */
   _refreshEvery() {
     return resolvePromptVersion(this.promptVersion).refreshEvery || REFRESH_INTERVAL_MESSAGES;
@@ -677,7 +682,19 @@ export class PromptBuilder {
     // Tool call format (Flash gets examples, Pro gets description only)
     const toolCallFormat = this._buildToolCallFormat(modelTier);
 
-    const selfAwareness = `
+    // v2 (`oneCopy`): the source path only when it is not this workspace —
+    // inside it, "you can edit yourself here" is the workspace said twice.
+    const sourceOutside = () => {
+      if (!this.agentSourceDir || !this.workspace) return Boolean(this.agentSourceDir);
+      const rel = relative(this.workspace, this.agentSourceDir);
+      return rel.startsWith('..') || path.isAbsolute(rel);
+    };
+    const selfAwareness = this._flag('oneCopy') ? `
+<self_awareness>
+Workspace: \`${this.workspace}\`${sourceOutside() ? `
+Your own source (the Agent-CLI server) is at \`${this.agentSourceDir}\`, outside it — edit it there if the user asks you to change yourself.` : ''}
+Effort: ${effort.id} — ${effort.blurb}
+</self_awareness>` : `
 <self_awareness>
 You are currently operating in the user's workspace at: \`${this.workspace}\`
 Your OWN source code (the Agent-CLI server) is at: \`${this.agentSourceDir}\`
@@ -752,20 +769,36 @@ implying it was checked elsewhere.`;
      * The two artifacts nothing else mentions stay on every rung.
      */
     const proRung = modelTier === 'pro';
+    // v2's changes are switches on the version (`core/prompt-versions.js`);
+    // with every one off, the text below is v1's, byte for byte.
+    const tickSameReply = this._flag('tickWithNextCall')
+      ? ', in the same reply as your next tool call — never a reply that only ticks' : '';
     // In the original order, so the lite and flash prompts stay byte-identical.
     const taskBullet = proRung ? '' : `
-- When tasked with a complex or multi-step objective, ALWAYS proactively create a \`.agent/artifacts/task.md\` checklist using the \`create_file\` tool to plan your work, similar to Antigravity IDE. Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`. The user is reading that file to see where you are.`;
-    const reviewBullets = proRung ? '' : `
+- When tasked with a complex or multi-step objective, ALWAYS proactively create a \`.agent/artifacts/task.md\` checklist using the \`create_file\` tool to plan your work, similar to Antigravity IDE. Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`${tickSameReply}. The user is reading that file to see where you are.`;
+    const reviewBullets = proRung ? '' : this._flag('trustEditResult') ? `
+- After implementing changes, self-review: the edit result says whether it landed — re-read a file only after a mismatch — and verify correctness
+- If you're not confident in a change, tell the user explicitly rather than guessing` : `
 - After implementing changes, self-review: re-read the edited files and verify correctness
 - If you're not confident in a change, tell the user explicitly rather than guessing`;
+    /*
+     * v2: the two plan files say what each is *for*, and the walkthrough is
+     * asked for only after work big enough to have had a checklist — on a
+     * one-line fix it was a round trip spent writing a file nobody opens.
+     * `implementation_plan.md` (or `plan.md`) in plan mode opens the plan
+     * review (`use-agent-callbacks.js`), which is why it is "to be approved".
+     */
+    const planBullets = this._flag('walkthroughWithTask') ? `
+- \`.agent/artifacts/implementation_plan.md\` is a plan you want approved before a large change; \`.agent/artifacts/task.md\` is how far you are.${taskBullet}
+- If you wrote a \`task.md\`, finish by writing \`.agent/artifacts/walkthrough.md\`: changes made, what was tested, and the results.${reviewBullets}` : `
+- When tasks are complex, create a plan first (save it to \`.agent/artifacts/implementation_plan.md\`)${taskBullet}
+- After completing all implementation and verification, summarize your work by creating a walkthrough document (save it to \`.agent/artifacts/walkthrough.md\`). Document changes made, what was tested, and validation results.${reviewBullets}`;
     const topologyInstructions = `
 ## Role: Coding Agent
 Every edit, command and decision on this task is yours: planning, implementation, review and
 testing are your responsibility to see done.
 ${subagentParagraph}
-
-- When tasks are complex, create a plan first (save it to \`.agent/artifacts/implementation_plan.md\`)${taskBullet}
-- After completing all implementation and verification, summarize your work by creating a walkthrough document (save it to \`.agent/artifacts/walkthrough.md\`). Document changes made, what was tested, and validation results.${reviewBullets}`;
+${planBullets}`;
 
     // toolCallFormat goes last: <available_tools> is appended straight after
     // this block, and the format is the contract for reading that list.
@@ -888,13 +921,23 @@ underspecified, say what you assumed rather than guessing silently.
      * check above is what corrected it, and is worth re-running before cutting
      * anything else here: strip the block, then test each rule against the rest.
      */
+    /*
+     * v2 (`oneCopy`) keeps one statement of each rule, the one nearest its use:
+     * where a \`<thought>\` goes is STEP 1, PHASE 1 and the tool-call format;
+     * "read before you claim" is the pro guardrails; an edit_file mismatch is
+     * the tool's own description — on pro only, because flash is given the
+     * terse tool list, where that guidance is not. Each surviving copy is asserted in
+     * `prompt-v2.test.js`, which is what makes deleting the others safe.
+     */
+    const oneCopy = this._flag('oneCopy');
+    const pro = modelTier === 'pro';
     return `## Core Principles
-1. **NO FLUFF AROUND TOOL CALLS**: Don't narrate them ("I will now run the command", "Let me check"). Emit the JSON block plainly. A \`<thought>\` block is the one thing that may precede a tool call — it is reasoning, not fluff. Save prose for when you are actually answering the user.
+1. **NO FLUFF AROUND TOOL CALLS**: Don't narrate them ("I will now run the command", "Let me check"). Emit the JSON block plainly.${oneCopy ? '' : ' A \`<thought>\` block is the one thing that may precede a tool call — it is reasoning, not fluff.'} Save prose for when you are actually answering the user.
 2. **ONE ANSWER PER TURN.** Give a single, definitive response. Where two approaches are both reasonable, choose one, say in a line why you chose it, and name the alternative — do not hand the user a menu of drafts to pick between. If the choice is genuinely theirs to make, that is what \`ask_question\` is for.
 
-## Source Code and Execution
+## Source Code and Execution${oneCopy && pro ? '' : `
 - ONLY reference code that you have explicitly read using \`read_file\` or \`grep_search\`.
-- Never guess line numbers, function signatures, or variable names.
+- Never guess line numbers, function signatures, or variable names.`}
 - When running commands, ensure the \`cwd\` is correct.
 
 ## Documentation & Context Maintenance
@@ -906,8 +949,8 @@ ${modelTier === 'pro' ? `## Communication
 - Format all technical output (code, file paths) in markdown.
 - Give a brief summary of completed steps at the end of your turn.` : ''}
 
-## Self-Correction Guardrails
-- **edit_file mismatch**: If \`edit_file\` fails with an \`oldText\` mismatch, DO NOT guess the new text. Immediately use \`read_file\` to fetch the correct current contents, then issue a new \`edit_file\` call.
+## Self-Correction Guardrails${oneCopy && pro ? '' : `
+- **edit_file mismatch**: If \`edit_file\` fails with an \`oldText\` mismatch, DO NOT guess the new text. Immediately use \`read_file\` to fetch the correct current contents, then issue a new \`edit_file\` call.`}
 - **run_command failure**: If a command fails due to a missing dependency, install it if appropriate, or ask the user. If it fails due to syntax, fix it and run again.
 - **Blocklisted commands**: If a command is rejected with "Command blocked by user blocklist", you must either find an alternative command to achieve your goal, or ask the user to remove it from their blocklist using \`/allowlist remove <cmd>\`.
 - **search_files failure**: If search returns no results, broaden your query.`;
@@ -1075,19 +1118,35 @@ and what could go wrong with it — empty inputs, concurrent access, scale, erro
 4. Comment only non-obvious logic ("why", not "what").
 5. Mark any assumption you must make: **⚠️ ASSUMPTION**: [what] — and what changes if wrong.`;
 
-    const verify = `
-### PHASE 4: VERIFICATION (never skip)
-
-1. **Re-read the edited file** — confirm the edit landed as intended.
-2. **Run the tests** if they exist.
-3. **Re-check the callers** you found in Phase 1. Does your change break them?
-4. **Name the gaps** — any path you introduced that nothing covers.${hasReviewer ? `
+    /*
+     * v2 (`trustEditResult`): the edit result already says applied, approved,
+     * rejected or mismatch, so a read-back after every edit was a round trip
+     * that told the model what the result had. And (`gateReview`) a second
+     * tab is worth its round trips on a change big enough to hide something;
+     * on a three-line fix it costs more than it catches.
+     */
+    const firstCheck = this._flag('trustEditResult')
+      ? '1. **Trust the edit result** — it says whether the edit landed (applied, approved, rejected, or an `oldText` mismatch). Re-read a file only after a mismatch.'
+      : '1. **Re-read the edited file** — confirm the edit landed as intended.';
+    const reviewStep = !hasReviewer ? `
+5. **Adversarial self-review** — read the diff as a hostile reviewer. What would you flag?
+   Say it out loud rather than hoping nobody looks.` : this._flag('gateReview') ? `
+5. **Review.** If the change touches more than one file or more than ~30 lines, send the diff
+   to \`ask_subagent\` with \`role: "review"\` — a second tab, reading it cold. Paste the diff
+   itself, the file paths, and what the change is meant to do — it cannot see your files. Act
+   on what comes back or say why you are not. Smaller than that: read the diff yourself as a
+   hostile reviewer and say what you would flag.` : `
 5. **Send the diff to \`ask_subagent\` with \`role: "review"\`** — a second tab, reading it
    cold, with no memory of why you chose any of it. Paste the diff itself, the file paths,
    and what the change is meant to do — it cannot see your files. Act on what comes back
-   or say why you are not; do not paste it onward unread.` : `
-5. **Adversarial self-review** — read the diff as a hostile reviewer. What would you flag?
-   Say it out loud rather than hoping nobody looks.`}`;
+   or say why you are not; do not paste it onward unread.`;
+    const verify = `
+### PHASE 4: VERIFICATION (never skip)
+
+${firstCheck}
+2. **Run the tests** if they exist.
+3. **Re-check the callers** you found in Phase 1. Does your change break them?
+4. **Name the gaps** — any path you introduced that nothing covers.${reviewStep}`;
 
     const guardrails = `\n${this._prompt('pro-guardrails')}`;
 

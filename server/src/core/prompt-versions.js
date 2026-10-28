@@ -28,14 +28,23 @@ export const PROMPT_VERSIONS = {
     dir: null,
     flags: {},
   },
+  /*
+   * v2 (v5.34): the dedup plan, `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`.
+   * Fewer lines that cost a round trip, and one copy of each repeated rule.
+   * The files in `prompts/v2/` carry the same changes for the prompt files.
+   */
   v2: {
     id: 'v2',
-    // Filled in by the dedup work (plan phase 4). Until then it is v1 under
-    // another name, which is what proves the switch and the recording alone.
-    summary: 'the candidate: same text as v1 for now',
+    summary: 'fewer round trips: trusts the edit result, reviews only big changes, one copy of each rule',
     refreshEvery: 20,
     dir: 'v2',
-    flags: {},
+    flags: {
+      trustEditResult: true,     // no read-back after every edit; the result says whether it landed
+      gateReview: true,          // a review subagent only past one file or ~30 lines
+      walkthroughWithTask: true, // walkthrough.md only after a task.md; the plan files say what each is for
+      tickWithNextCall: true,    // tick task.md in the reply that makes the next call
+      oneCopy: true,             // a repeated rule is kept once, nearest its use
+    },
   },
 };
 
