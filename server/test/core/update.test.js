@@ -14,7 +14,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -204,6 +204,17 @@ describe('what a dirty tree means to a pull', () => {
     writeFileSync(join(work, 'package-lock.json'), '{"lockfileVersion": 2}\n');
     assert.equal(await isDirty(work), false, 'a rewritten lockfile still reads as your work');
     const out = await pullUpdate(work);
+    assert.equal(out.ok, true, out.error);
+    assert.deepEqual(out.restored, ['package-lock.json']);
+    assert.deepEqual(out.files, ['new.js']);
+  });
+
+  test('the lockfile is put back when called from a subfolder, as the agent calls it (#102)', async () => {
+    // The agent passes `server/`, not the repo root. Porcelain status names the
+    // lockfile from the root; a bare checkout path is read from the folder.
+    mkdirSync(join(work, 'server'));
+    writeFileSync(join(work, 'package-lock.json'), '{"lockfileVersion": 2}\n');
+    const out = await pullUpdate(join(work, 'server'));
     assert.equal(out.ok, true, out.error);
     assert.deepEqual(out.restored, ['package-lock.json']);
     assert.deepEqual(out.files, ['new.js']);
