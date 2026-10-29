@@ -21,7 +21,7 @@
  *           the command that sets it, so there is still one way to change anything
  */
 
-import { MODES, nextMode, describeMode } from './modes.js';
+import { MODES, nextMode } from './modes.js';
 import fs from 'fs';
 import { resolveEffort, EFFORT_LEVELS } from './effort.js';
 import { loadUserSettings } from './user-settings.js';
@@ -32,6 +32,7 @@ import { expectedExtensionVersion } from './extension-version.js';
 import * as paths from './paths.js';
 import { countToday } from './command-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
+import { changed } from './slash-commands.js';
 
 /**
  * The tabs, in the order they are shown.
@@ -42,6 +43,21 @@ import { describeInstructionSources } from './instruction-sources.js';
  * third tab with six.
  */
 export const SETTING_GROUPS = ['Settings', 'Status', 'Context'];
+
+/**
+ * A hint is a few plain words beside the value, never a sentence: it sits on
+ * one row and was cut off mid-clause (owner, 2026-10-30). The keys line already
+ * says what enter does, so no hint repeats it. `settings.test.js` holds every
+ * hint to `HINT_MAX`.
+ */
+export const HINT_MAX = 32;
+
+/** `describeMode` is a sentence for the transcript; the row needs the short form. */
+const MODE_HINTS = {
+  plan: 'every edit asks, except .md',
+  auto: 'safe edits apply on their own',
+  strict: 'every edit asks first',
+};
 
 /**
  * Build the page.
@@ -103,9 +119,9 @@ export function describeSettings(agentLoop) {
       // v5.28: what a message does when the tab is not on the effort's model.
       value: mismatchPolicy(mc),
       hint: {
-        ask: 'ask before sending: switch, send anyway, or change effort',
-        follow: 'send on the browser\'s model, with its prompt, without asking',
-        switch: 'switch the browser first; step down if it will not',
+        ask: 'ask what to do',
+        follow: 'use the browser\'s model',
+        switch: 'switch the browser first',
       }[mismatchPolicy(mc)],
       run: '/effort mismatch',
       restore: (value) => `/effort mismatch ${value}`,
@@ -116,7 +132,7 @@ export function describeSettings(agentLoop) {
       label: 'Subagents',
       value: subagents ? 'on' : 'off',
       hint: subagents
-        ? 'extra tabs can research or review in parallel'
+        ? 'research and review in parallel'
         : 'one tab does everything',
       run: '/subagents',
       restore: (value) => `/subagents ${value}`,
@@ -127,7 +143,7 @@ export function describeSettings(agentLoop) {
       label: 'Prompt',
       // v5.32: which prompt version is sent; `/prompt` shows how they compare.
       value: agentLoop?.promptVersion || DEFAULT_PROMPT_VERSION,
-      hint: `${PROMPT_VERSIONS[agentLoop?.promptVersion]?.summary || PROMPT_VERSIONS[DEFAULT_PROMPT_VERSION].summary} — /prompt compares them`,
+      hint: (PROMPT_VERSIONS[agentLoop?.promptVersion] || PROMPT_VERSIONS[DEFAULT_PROMPT_VERSION]).hint,
       run: '/prompt',
       restore: (value) => `/prompt ${value}`,
       control: { kind: 'ladder', options: PROMPT_VERSION_IDS },
@@ -137,8 +153,8 @@ export function describeSettings(agentLoop) {
       label: 'Startup',
       value: agentLoop?.startupMode === 'warm' ? 'warm' : 'cold',
       hint: agentLoop?.startupMode === 'warm'
-        ? 'setup sent when Chrome connects — enter to compare'
-        : 'setup sent with your first message — enter to compare',
+        ? 'setup sent when Chrome connects'
+        : 'setup sent with first message',
       // The chooser, not a toggle: each choice needs its cost said next to it.
       run: '/startup',
       restore: (value) => `/startup ${value}`,
@@ -148,7 +164,7 @@ export function describeSettings(agentLoop) {
       group: 'Settings',
       label: 'Edit approval',
       value: MODES.includes(agentLoop?.mode) ? agentLoop.mode : 'plan',
-      hint: describeMode(agentLoop?.mode).split(' — ')[1],
+      hint: MODE_HINTS[agentLoop?.mode] || MODE_HINTS.plan,
       run: `/${nextMode(agentLoop?.mode)}`,
       restore: (value) => `/${value}`,
       control: { kind: 'ladder', options: MODES },
@@ -157,7 +173,7 @@ export function describeSettings(agentLoop) {
       group: 'Settings',
       label: 'Memory',
       value: memoryOn ? 'on' : 'off',
-      hint: memoryOn ? `${facts} fact${facts === 1 ? '' : 's'} recalled each session` : 'nothing learned, nothing recalled',
+      hint: memoryOn ? `${facts} fact${facts === 1 ? '' : 's'} remembered` : 'nothing remembered',
       // The direction, not the bare command: `/memory` on its own prints the
       // list of facts, which is not what pressing Enter on a switch should do.
       run: memoryOn ? '/memory off' : '/memory on',
@@ -168,7 +184,7 @@ export function describeSettings(agentLoop) {
       group: 'Settings',
       label: 'Command rules',
       value: rules.enabled === false ? 'off' : 'on',
-      hint: `${rules.allow?.length || 0} allowed · ${rules.block?.length || 0} blocked — enter to browse them`,
+      hint: `${rules.allow?.length || 0} allowed · ${rules.block?.length || 0} blocked`,
       run: '/allowlist',
       restore: (value) => `/allowlist ${value === 'on' ? 'enable' : 'disable'}`,
       control: { kind: 'switch', options: ['on', 'off'] },
@@ -178,21 +194,21 @@ export function describeSettings(agentLoop) {
       label: 'Theme',
       // The saved choice, which is what `/theme` previews from. Per person.
       value: safeRead(() => loadUserSettings().theme, null) || 'terminal',
-      hint: 'colours — enter to preview them',
+      hint: 'colour palette',
       run: '/theme',
     },
     {
       group: 'Settings',
       label: 'Skill folders',
       value: String((agentLoop?.skillFolders || []).length + 2),
-      hint: 'this project, yours, plus any added by hand',
+      hint: 'project, personal and extra',
       run: '/skills',
     },
     {
       group: 'Status',
       label: 'Workspace',
       value: agentLoop?.workspace || '',
-      hint: scope ? `scope: ${scope} — set at launch with --scope` : 'the files the agent reads and edits',
+      hint: scope ? `scope: ${scope}` : 'the files the agent works on',
       run: '/workspace',
     },
     {
@@ -202,7 +218,7 @@ export function describeSettings(agentLoop) {
       // read `modelConfig.agentName` — a key nothing has ever written — so the
       // screen reported "Agent CLI" while the banner said something else.
       value: cfg?.agentName || 'Agent CLI',
-      hint: 'shown in the banner — enter to rename, empty to clear',
+      hint: 'shown in the banner',
       // `/name` with no argument only *prints* the current name, so this row
       // promised a change and delivered a paragraph. It opens an editor now;
       // `Menus.jsx` runs `/name <text>` with what you type.
@@ -213,7 +229,7 @@ export function describeSettings(agentLoop) {
       group: 'Status',
       label: 'Commands run',
       value: `${commandsToday} today`,
-      hint: 'every shell command, kept per day — enter to read them',
+      hint: 'shell commands, kept per day',
       run: '/commands',
     },
     {
@@ -224,7 +240,7 @@ export function describeSettings(agentLoop) {
         if (ms === undefined) return 'not connected yet';
         return ms < 1000 ? `connected in ${ms}ms` : `connected in ${(ms / 1000).toFixed(1)}s`;
       })(),
-      hint: 'how long the browser bridge took to find this server',
+      hint: 'time to reach this server',
     },
     {
       /*
@@ -241,34 +257,34 @@ export function describeSettings(agentLoop) {
       value: agentLoop?.extensionVersion
         || (agentLoop?.extensionConnectMs === undefined ? 'not connected yet' : 'older than 1.26.0'),
       hint: expectedExtensionVersion()
-        ? `this checkout ships ${expectedExtensionVersion()} — reload Chrome's copy if they differ`
-        : 'reported by the extension itself, not by chrome://extensions',
+        ? `this checkout ships ${expectedExtensionVersion()}`
+        : 'as the extension reports it',
     },
     {
       group: 'Status',
       label: 'State directory',
       value: safe(() => paths.agentDir(agentLoop.workspace), ''),
-      hint: 'config, sessions, memory, plans, logs',
+      hint: 'config, sessions, memory, logs',
       run: '/agent-dir',
     },
     {
       group: 'Context',
       label: 'Turns',
       value: String(history.length),
-      hint: 'user and agent messages in this session',
+      hint: 'messages this session',
     },
     {
       group: 'Context',
       label: 'Tokens',
       value: `~${tokens.toLocaleString()} / ${limit.toLocaleString()}`,
-      hint: `${Math.min(100, Math.round((tokens / limit) * 100))}% — counts the system prompt and tool results too`,
+      hint: `${Math.min(100, Math.round((tokens / limit) * 100))}% of the window`,
       run: '/compact',
     },
     {
       group: 'Context',
       label: 'Diffs',
       value: `${pending} pending`,
-      hint: `${applied} applied — \`/undo\` steps back one`,
+      hint: `${applied} applied`,
       run: applied > 0 ? '/undo' : undefined,
     },
     // What the prompt is actually being told about this project.
@@ -288,7 +304,7 @@ export function describeSettings(agentLoop) {
       group: 'Context',
       label: 'Session',
       value: `${history.length} turn${history.length === 1 ? '' : 's'} kept`,
-      hint: 'saved next to the project and under ~/.agent',
+      hint: 'saved here and in ~/.agent',
       run: '/clear',
     },
   ].filter((row) => row.value !== '');
@@ -342,6 +358,20 @@ export function settingsChanged(before, after) {
     });
   }
   return changes;
+}
+
+/**
+ * What "Put them back" says: one `⚙` line per setting that really moved, in the
+ * `changed()` style every other setting reply uses, and nothing at all when
+ * none did — a restore can land on a value that is already there. It printed
+ * `↩️ Put back: …` for every row it tried, moved or not (owner, 2026-10-28).
+ *
+ * @param {SettingRow[]} before the page just before the restores ran
+ * @param {SettingRow[]} after the page just after
+ * @returns {string[]}
+ */
+export function putBackLines(before, after) {
+  return settingsChanged(before, after).map((c) => changed(c.label.toLowerCase(), c.from, c.to));
 }
 
 export function filterSettings(rows, query, group = null) {

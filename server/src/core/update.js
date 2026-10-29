@@ -321,8 +321,14 @@ export async function pullUpdate(dir) {
   }
   // The install after the pull writes it again from the new package.json, so
   // nothing is lost by putting it back.
+  //
+  // `:(top,literal)` because status names paths from the repo root and checkout
+  // reads them from `dir`, which is `server/` — so the bare name asked for
+  // `server/package-lock.json` and every update with a rewritten lockfile
+  // stopped here (#102).
   const restored = tree.regenerable;
-  if (restored.length && (await git(dir, ['checkout', 'HEAD', '--', ...restored])) === null) {
+  const fromRoot = restored.map((f) => `:(top,literal)${f}`);
+  if (restored.length && (await git(dir, ['checkout', 'HEAD', '--', ...fromRoot])) === null) {
     return { ok: false, error: `Could not restore ${nameFiles(restored)} before pulling.` };
   }
 

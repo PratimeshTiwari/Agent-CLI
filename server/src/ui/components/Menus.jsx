@@ -4,6 +4,8 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
+import ThemePreview from './ThemePreview.jsx';
+import { previewSize, PREVIEW_ROWS } from '../theme-preview.js';
 import { DiffRows } from './DiffRows.jsx';
 import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
@@ -16,7 +18,7 @@ import { logsHomeItems, failureItems } from '../logs-view.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
-import { describeSettings, filterSettings, settingsChanged, SETTING_GROUPS } from '../../core/settings.js';
+import { describeSettings, filterSettings, settingsChanged, putBackLines, SETTING_GROUPS } from '../../core/settings.js';
 import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
@@ -614,8 +616,9 @@ export function Menus({
            * committed transcript keeps the old colours until enter reprints it.
            */
           const names = Object.keys(PALETTES);
-          // blurb, gap, two preview rows
-          const { sub, tight, room } = fit('', 4);
+          // blurb and gap, then the biggest preview that keeps all six visible
+          const size = previewSize((extra) => fit('', extra), names.length, 2);
+          const { sub, tight, room } = fit('', 2 + PREVIEW_ROWS[size]);
           return (
             <Panel width={W} title="Theme" sub={sub} tight={tight}
               keys={`↑↓ preview · enter keep · esc ${activeMenu.returnTo ? 'back' : 'put it back'}`}>
@@ -646,19 +649,7 @@ export function Menus({
                 }}
               />
               <Text dimColor wrap="truncate">{'   '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
-              <Text> </Text>
-              {/* The preview: one row per role a person actually meets. */}
-              <Text wrap="truncate">
-                {'   '}<Text color={T.success}>⏺ </Text><Text bold>edit_file</Text>
-                <Text color={T.muted}> invoice.rb </Text><Text color={T.success}>+2 </Text><Text color={T.danger}>−1</Text>
-                {'   '}<Text color={T.danger}>✗ </Text><Text bold>run_command</Text><Text color={T.danger}> exit 1</Text>
-              </Text>
-              <Text wrap="truncate">
-                {'   '}<Text color={T.accent}>⠋ Running rspec…</Text>
-                {'   '}<Text color={T.attention}>⏸ 1 queued</Text>
-                {'   '}<Text bold color={T.plan}>plan</Text>{' '}<Text bold color={T.auto}>auto</Text>{' '}<Text bold color={T.strict}>strict</Text>
-                {'   '}<Text color={T.link}>/history</Text>
-              </Text>
+              <ThemePreview size={size} marginTop={1} marginLeft={size === 'rows' ? 3 : 2} />
             </Panel>
           );
         })()}
@@ -864,15 +855,19 @@ export function Menus({
                     if (item.value !== 'undo') return;
                     // One at a time and in order: each runs the command that
                     // owns that setting, which is the same path the user took.
+                    const before = describeSettings(agentLoop);
                     for (const change of undoable) {
                       await agentLoop.handleSlashCommand(
                         change.restore.slice(1).split(' ')[0],
                         change.restore.slice(1).split(' ').slice(1),
                       );
                     }
+                    // Only what moved, and nothing when nothing did.
+                    const lines = putBackLines(before, describeSettings(agentLoop));
+                    if (!lines.length) return;
                     setHistory(prev => [...prev, {
                       role: 'assistant', isLocal: true,
-                      content: `↩️ Put back: ${undoable.map((c) => `${c.label} → ${c.from}`).join(', ')}`,
+                      content: lines.join('\n'),
                     }]);
                   }}
                 />

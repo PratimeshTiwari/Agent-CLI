@@ -1479,7 +1479,11 @@ them, and do not squash their history away.
   states as failures. v4 was the production-readiness plan in
   `.agent/artifacts/plans/2026-09-27-production-readiness.md` and closed with #62
   (`v4.2/fixes-from-use`). **v5 opens with `v5.0/clean-slate`**: cleanup, one recovery policy
-  for the reply path, then an editor chat panel in the VS Code companion.
+  for the reply path, then an editor chat panel in the VS Code companion. **v6 opens with
+  `v6.0/settings-and-update-fixes`** (owner, 2026-10-30): the open GitHub issues and the
+  small UI asks first, then `.agent/artifacts/plans/2026-10-28-plan-by-effort.md` in order.
+  `/update` runs git in `server/`, and status names paths from the repo root — any path
+  handed back to git there needs `:(top)` (#102).
 - Open a PR into `main`. That is the only way work reaches `main`.
 - A force-push to `main` is not a merge and is not covered by this: it is a repair, it needs
   the owner to ask for it explicitly, and it breaks every open PR targeting `main` plus every

@@ -24,6 +24,7 @@ export const PROMPT_VERSIONS = {
   v1: {
     id: 'v1',
     summary: 'the prompt as of v5.31, frozen as the baseline',
+    hint: 'original prompt', // the settings row: a few words, not the summary
     refreshEvery: 20,
     dir: null,
     flags: {},
@@ -36,6 +37,7 @@ export const PROMPT_VERSIONS = {
   v2: {
     id: 'v2',
     summary: 'fewer round trips: trusts the edit result, reviews only big changes, one copy of each rule',
+    hint: 'fewer round trips',
     refreshEvery: 20,
     dir: 'v2',
     flags: {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeSettings, filterSettings, settingsChanged, settingsColumns, SETTING_GROUPS, VALUE_MAX } from '../../src/core/settings.js';
+import { describeSettings, filterSettings, settingsChanged, settingsColumns, SETTING_GROUPS, VALUE_MAX, HINT_MAX, putBackLines } from '../../src/core/settings.js';
 
 /** Enough of an AgentLoop for the page to describe. */
 const loop = (over = {}) => ({
@@ -102,6 +102,29 @@ test('filterSettings', async (t) => {
   await t.test('no match is empty, not everything', () => {
     assert.deepEqual(filterSettings(rows, 'zzzz'), []);
   });
+});
+
+/*
+ * Owner, 2026-10-30, with a screenshot of the Prompt hint cut off mid-sentence:
+ * "help text is not proper, keep it simple". Every state a row can be in, so a
+ * long hint cannot hide behind the default.
+ */
+test('every hint is a few words, in every state', () => {
+  const states = [
+    loop(),
+    loop({ mode: 'auto', modelConfig: { main: 'gemini', subagents: false, effort: 'low', mismatch: 'follow' } }),
+    loop({ mode: 'strict', startupMode: 'warm', promptVersion: 'v2', modelConfig: { main: 'gemini', mismatch: 'switch' } }),
+    loop({ memoryManager: { isMemoryEnabled: () => false }, commandRules: { enabled: false, allow: [], block: [] } }),
+  ];
+  for (const state of states) {
+    for (const r of describeSettings(state)) {
+      // Instruction-source rows show a file's own detail, which is not ours to word.
+      if (['Instructions', 'Memory file', 'Skills'].includes(r.label)) continue;
+      assert.ok(typeof r.hint === 'string' && r.hint.length > 0, `${r.label} has no hint`);
+      assert.ok(r.hint.length <= HINT_MAX, `${r.label}: "${r.hint}" is ${r.hint.length} characters`);
+      assert.doesNotMatch(r.hint, / — /, `${r.label}: "${r.hint}" is two clauses`);
+    }
+  }
 });
 
 test('tabs', async (t) => {
@@ -274,5 +297,30 @@ test('settingsColumns measures the rows being drawn', async (t) => {
     const narrowed = settingsColumns(filterSettings(rows, 'effort'));
     assert.ok(narrowed.width <= all.width);
     assert.ok(narrowed.width > 0);
+  });
+});
+
+/*
+ * "Put them back" (owner, 2026-10-28): the `⚙` line every other setting reply
+ * uses, and only for what really moved.
+ */
+test('putBackLines', async (t) => {
+  await t.test('one ⚙ line per setting that moved, no ↩️', () => {
+    const before = describeSettings(loop({ mode: 'auto' }));
+    const after = describeSettings(loop({ mode: 'plan' }));
+    assert.deepEqual(putBackLines(before, after), ['⚙ edit approval  **auto** → **plan**']);
+  });
+
+  await t.test('a restore that landed on the value already there says nothing', () => {
+    const rows = describeSettings(loop());
+    assert.deepEqual(putBackLines(rows, describeSettings(loop())), []);
+  });
+
+  await t.test('two put back, one already at its old value: one line', () => {
+    const before = describeSettings(loop({ mode: 'auto' }));
+    const after = describeSettings(loop({ mode: 'plan' })); // memory was on before and after
+    const lines = putBackLines(before, after);
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines.join('\n'), /memory|↩️/i);
   });
 });

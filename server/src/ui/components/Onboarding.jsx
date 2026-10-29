@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { Header as BannerHeader, Mark, MARK } from './Banner.jsx';
 import { FRAMES } from './RunningLine.jsx';
+import ThemePreview from './ThemePreview.jsx';
 import { copyToClipboard } from '../clipboard.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
@@ -233,36 +234,11 @@ export function Onboarding({ agentLoop, wsServer, onDone }) {
         />
         <Text dimColor wrap="truncate">{'  '}{PALETTE_INFO[themeAt]?.blurb}</Text>
         {layout.themePreview && (
-          /* The preview: what an edit, a failure and a running step look like
-             in this palette — the rows a person actually meets. */
-          <Box flexDirection="column" borderStyle="round" borderColor={T.muted ?? undefined} paddingX={1} marginTop={spaced ? 1 : 0}>
-            <Text wrap="truncate">
-              <Text color={T.success ?? undefined}>⏺ </Text><Text bold>edit_file</Text>
-              <Text dimColor> greet.js </Text><Text color={T.success ?? undefined}>+1 </Text><Text color={T.danger ?? undefined}>−1</Text>
-            </Text>
-            <Text wrap="truncate" dimColor>{'  1  function greet() {'}</Text>
-            <Text wrap="truncate" color={T.danger ?? undefined}>{'  2 -  console.log("Hello, World!");'}</Text>
-            <Text wrap="truncate" color={T.success ?? undefined}>{'  2 +  console.log("Hello, Agent!");'}</Text>
-            <Text wrap="truncate">
-              <Text color={T.accent ?? undefined}>{FRAMES[tick % FRAMES.length]} Running npm test…</Text>
-              {'   '}<Text bold color={T.plan ?? undefined}>plan</Text>{' '}<Text bold color={T.auto ?? undefined}>auto</Text>
-              {'   '}<Text color={T.link ?? undefined}>/history</Text>
-            </Text>
-          </Box>
+          <ThemePreview size="full" frame={FRAMES[tick % FRAMES.length]} marginTop={spaced ? 1 : 0} />
         )}
         {layout.themeSample && (
           /* Too short for the box: the same idea in two rows. */
-          <Box flexDirection="column" marginTop={spaced ? 1 : 0}>
-            <Text wrap="truncate">
-              {'  '}<Text color={T.success ?? undefined}>⏺ </Text><Text bold>edit_file</Text>
-              <Text color={T.success ?? undefined}> +1 </Text><Text color={T.danger ?? undefined}>−1</Text>
-              {'   '}<Text color={T.danger ?? undefined}>✗ </Text><Text bold>run_command</Text><Text color={T.danger ?? undefined}> exit 1</Text>
-            </Text>
-            <Text wrap="truncate">
-              {'  '}<Text color={T.accent ?? undefined}>{FRAMES[tick % FRAMES.length]} Running npm test…</Text>
-              {'   '}<Text color={T.plan ?? undefined}>⏸ plan</Text>{'  '}<Text color={T.auto ?? undefined}>⏵⏵ auto</Text>
-            </Text>
-          </Box>
+          <ThemePreview size="rows" frame={FRAMES[tick % FRAMES.length]} marginTop={spaced ? 1 : 0} marginLeft={2} />
         )}
         <Gap show={spaced} />
         <Hint>↑↓ preview · enter choose · esc keep current · later: /theme</Hint>
