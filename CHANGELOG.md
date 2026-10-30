@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#135](https://github.com/PratimeshTiwari/Agent-CLI/pull/135)
+### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#136](https://github.com/PratimeshTiwari/Agent-CLI/pull/136)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v7.2 | 2026-10-31 | `v7.2/typing-path-traces` | [#133](https://github.com/PratimeshTiwari/Agent-CLI/pull/133) | Traces say how the prompt was typed and whether the tab was hidden; `generating_start` is honest (#104, extension 1.54.0) |
 | v7.3 | 2026-10-31 | `v7.3/context-fill-traces` | [#134](https://github.com/PratimeshTiwari/Agent-CLI/pull/134) | Traces and drift rows record how full the thread was; `/logs speed` by context fill |
 | v7.4 | 2026-10-31 | `v7.4/project-commands` | [#135](https://github.com/PratimeshTiwari/Agent-CLI/pull/135) | Test, lint and build commands detected from the project, named in turn 0 (v2) and `/context`; AGENT.md overrides |
+| v7.5 | 2026-10-31 | `v7.5/ask-before-compacting` | [#136](https://github.com/PratimeshTiwari/Agent-CLI/pull/136) | Past the threshold it asks once: compact now or continue in this chat |
 
 ### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 

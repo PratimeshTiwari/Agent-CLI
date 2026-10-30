@@ -40,6 +40,8 @@ export function shortModel(label) {
  * (`of 48k`) was the same on every frame of a session and is in `/context`.
  */
 export function contextText(pct, compactAtPct) {
+  // Declined for this chat (v7.5): there is nothing to count down to.
+  if (compactAtPct == null) return `${pct}%`;
   const toGo = compactAtPct - pct;
   if (toGo <= 20) return `${Math.max(0, toGo)}% to compact`;
   return `${pct}%`;
@@ -79,7 +81,8 @@ export const STATUS_RIGHT_GUTTER = 2;
 
 export function statusBarLayout(o) {
   const width = Math.max(1, o.width || 80);
-  const compactAt = o.compactAtPct ?? 80;
+  // null is "declined for this chat" (v7.5); only a missing value means the default.
+  const compactAt = o.compactAtPct === null ? null : (o.compactAtPct ?? 80);
   // Each step gives one thing up, in the order the plan fixed; `build` reads them.
   const shed = { hint: false, pastes: false, modeWord: false, scope: false, meter: false,
     version: false, modelNumber: false, tasks: false, context: false };
