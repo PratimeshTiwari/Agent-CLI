@@ -44,6 +44,8 @@ describe('extensionVersionNotice', () => {
     assert.match(msg, /1\.25\.0/);
     assert.match(msg, /1\.26\.0/);
     assert.match(msg, /chrome:\/\/extensions/);
+    assert.equal(msg, '⚠ Extension update · 1.25.0 → 1.26.0 · reload at chrome://extensions');
+    assert.ok(msg.length <= 76, 'one line at 80 columns, not a paragraph');
   });
 
   /*
@@ -53,7 +55,7 @@ describe('extensionVersionNotice', () => {
    */
   test('no version reported is a version older than the check itself', () => {
     const msg = extensionVersionNotice(undefined, '1.26.0');
-    assert.match(msg, /did not report a version/);
+    assert.match(msg, /unknown → 1\.26\.0/);
     assert.match(msg, /1\.26\.0/);
     assert.match(msg, /chrome:\/\/extensions/);
     assert.equal(extensionVersionNotice(null, '1.26.0'), msg, 'null and undefined read the same');

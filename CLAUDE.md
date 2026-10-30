@@ -976,6 +976,20 @@ strings, `x.name` is any object's), and a Ruby file in `find_references` is mark
 reason. `find_symbol`'s "JavaScript and JSX only" is v1's frozen text; v2 names Ruby
 (`symbolLanguages`), since a tool description is part of the prompt.
 
+**References are precise since v6.19.** Measured against Ripper's lexer over every name defined in
+macOS's Ruby stdlib (883 files, 8,570 names): precision **91.8% → 99.5%**, recall **99.1% →
+99.96%**. `codeOf` is a literal scanner now: regexes (`/…/` after an operator, keyword, or
+`name ` with no space after, as Ruby reads `split /,/`), `%w[] %i[] %q() %r{}` and friends, strings
+nested in `#{}`, `?/` one-character strings and heredoc bodies' `#{}`. A literal open at the end
+of a line carries into the next, capped at `CARRY_MAX` (40) so a misread start cannot blank a
+file — the first run lost forty lines of `fileutils.rb` to `chomp(?/)` read as a regex. A method
+named like a keyword (`next`, `class`) matches only after `.`, `:` or `def`; `__END__` ends the
+code. Definitions lost by the carry were all inside strings (Ripper's `def` count agrees). Cost:
+115 ms for the 883 files against 67 before, cached by mtime; lines with no quote, `/`, `%`, `?`,
+`#` or `$` skip the scan. The comparison scripts are `rb/lex.rb` and `rb/compare.mjs` in the
+session scratchpad: `ruby lex.rb $(cat files.txt) > lex.json`, then `ALL=1 node compare.mjs lex.json`
+from `server/`.
+
 **A partial read of Markdown ends with the headings it did not show (v6.14, `unreadOutline` in
 `mcp/tools/read-file.js`).** Asked about this agent's architecture, the model read README lines
 1–100 and 90–150 and answered from them; the pointer to this file sat under `## More` at line 258,
@@ -1002,6 +1016,14 @@ Writes never go straight to disk. `edit_file` / `create_file` produce a `DiffEng
 (`core/diff-engine.js`) diff with per-hunk accept/reject, backups, atomic writes, and `undo()`.
 Commands pass through `core/risk-classifier.js`, which decides whether `App.jsx` must prompt;
 persistent allow/block rules live in `commandRules`  (`/allowlist`).
+
+**Rails (v6.19).** Anything aimed at production (`RAILS_ENV=` / `RACK_ENV=production`,
+`-e production`, `--environment=production`, `DISABLE_DATABASE_ENVIRONMENT_CHECK=1`) is
+`critical`, which is blocked outright in every mode, and says to run it yourself. A task that
+drops or rewrites the database (`db:drop`, `db:reset`, `db:purge`, `db:schema:load`, …, through
+`rails` or `rake`) stays `risky` — asked about in every mode, auto included — but under its own
+reason, where it used to read "Mutating shell command" like `rspec`. Both only for a command that
+runs something: `grep RAILS_ENV=production config` is a search.
 
 **Who may run what is `core/tool-policy.js`, not `_executeToolCalls`.** Two pure functions —
 `isBlockedOutright` and `requiresApproval` — over the catalog's own `mutates`, `shell` and

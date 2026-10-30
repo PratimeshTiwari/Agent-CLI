@@ -152,3 +152,64 @@ test('RiskClassifier — non-shell tools', async (t) => {
     assert.notEqual(rc.classify('run_command', { command: 'rm -rf /' }).level, 'safe');
   });
 });
+
+/*
+ * Rails (v6.19). A destructive database task was "Mutating shell command" —
+ * the same words as `rspec`, which is how a prompt gets approved unread — and
+ * production was not distinguished at all.
+ */
+test('RiskClassifier — Rails: production is blocked, a destroyed database says so', async (t) => {
+  await t.test('production is never the agent\'s to run', () => {
+    for (const c of [
+      'RAILS_ENV=production rake db:migrate',
+      'RAILS_ENV="production" bin/rails runner x.rb',
+      'RACK_ENV=production bundle exec puma',
+      'bin/rails db:migrate -e production',
+      'rails c --environment=production',
+      'DISABLE_DATABASE_ENVIRONMENT_CHECK=1 rails db:drop',
+      'RAILS_ENV=production rails db:migrate > log/m.txt',
+    ]) {
+      const r = classify(c);
+      assert.equal(r.level, 'critical', c);
+      assert.match(r.reason, /Targets production .*run it yourself/, c);
+    }
+  });
+
+  await t.test('a destructive task is asked about by name, through rails or rake', () => {
+    for (const [c, task] of [
+      ['rails db:drop', 'db:drop'],
+      ['bin/rails db:reset', 'db:reset'],
+      ['bundle exec rake db:schema:load', 'db:schema:load'],
+      ['bin/rails db:purge', 'db:purge'],
+      ['rails db:seed:replant', 'db:seed:replant'],
+      ['RAILS_ENV=test bin/rails db:drop:all', 'db:drop:all'],
+    ]) {
+      const r = classify(c);
+      assert.equal(r.level, 'risky', c);
+      assert.equal(r.reason, `Drops or rewrites the database (\`${task}\`)`, c);
+    }
+  });
+
+  await t.test('controls: the everyday commands read as before', () => {
+    for (const c of ['bundle exec rspec', 'rails db:migrate', 'bin/rails db:migrate:status', 'RAILS_ENV=test rspec']) {
+      const r = classify(c);
+      assert.equal(r.level, 'risky', c);
+      assert.equal(r.reason, 'Mutating shell command', c);
+    }
+  });
+
+  await t.test('controls: reading about production is not running against it', () => {
+    for (const c of [
+      'grep -rn RAILS_ENV=production config',
+      'cat config/database.yml | grep production',
+      'git log -S db:drop',
+      'echo db:drop',
+    ]) {
+      assert.equal(level(c), 'safe', c);
+    }
+  });
+
+  await t.test('controls: a task name outside rails or rake is not a database task', () => {
+    assert.equal(classify('./scripts/db:drop-notes.sh').reason, 'Mutating shell command');
+  });
+});

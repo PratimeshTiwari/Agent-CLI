@@ -68,15 +68,24 @@ export function extensionVersionNotice(reported, expected = expectedExtensionVer
    * available for exactly the builds old enough to be the problem.
    */
   if (!reported) {
-    return `⚠ The extension did not report a version, so it predates ${expected}. `
-      + 'Reload it at chrome://extensions — Load unpacked from this repo\'s `extension/` folder.';
+    return updateLine('unknown', expected);
   }
 
   if (String(reported) === String(expected)) return null;
 
-  return `⚠ Extension is **${reported}**, this checkout is **${expected}** — reload it at `
-    + 'chrome://extensions. Until then the browser is running different code from the server.';
+  return updateLine(reported, expected);
 }
+
+/*
+ * One short line (v6.19). It was two sentences, ~120 characters, and wrapped
+ * under the banner on every start with a stale build — owner: "simplify this
+ * line, extension update available, current, latest, reload at
+ * chrome://extensions". Current → latest as an arrow, because spelled out it
+ * was 83 characters and wrapped at 80 columns under the pty. The versions
+ * lead, so a narrower terminal cuts the instruction rather than the numbers.
+ */
+const updateLine = (current, latest) =>
+  `⚠ Extension update · ${current} → ${latest} · reload at chrome://extensions`;
 
 /**
  * What to say when the extension's global shortcut has no key, or null.
