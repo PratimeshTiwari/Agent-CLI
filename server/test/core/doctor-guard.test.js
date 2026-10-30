@@ -65,3 +65,12 @@ test('the bin reverts before it passes an exit through', () => {
   assert.ok(revert > 0 && revert < exit);
   assert.match(src, /if \(ok\) continue;/);
 });
+
+test('the bin says why before npm runs, since npm prints first otherwise', () => {
+  // Driven end to end (v7.7): the crash, then npm's "added 7 packages", and only
+  // then the line saying a revert was happening.
+  const src = readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8');
+  const say = src.indexOf('Putting back the previous package.json');
+  const run = src.indexOf('revertChange({ env: process.env })');
+  assert.ok(say > 0 && say < run);
+});
