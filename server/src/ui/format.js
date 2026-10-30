@@ -754,6 +754,8 @@ export function renderMarkdown(content, width = 80) {
       // blank lines is content, are still standing in as sentinels.
       .replace(/\n{3,}/g, '\n\n');
 
+    // Before the code blocks go back: those are copied, never re-wrapped.
+    out = fitLines(out, renderWidth);
     out = out.replace(/x0codeblock(\d+)x0/g, (m, i) => blocks[Number(i)] ?? m);
   } catch {
     out = source;
@@ -768,6 +770,59 @@ export function renderMarkdown(content, width = 80) {
   return out;
 }
 
+
+/** The raw index just past `cols` visible columns of `s`, escapes included. */
+function indexAtColumn(s, cols) {
+  let col = 0;
+  let i = 0;
+  while (i < s.length && col < cols) {
+    if (s[i] === '\x1b') {
+      const m = /^\x1b\[[0-9;]*m/.exec(s.slice(i));
+      if (m) { i += m[0].length; continue; }
+    }
+    i += 1;
+    col += 1;
+  }
+  // Take any escapes that sit on the boundary, so a colour opened right after
+  // a bullet stays with the text it colours.
+  while (s[i] === '\x1b') {
+    const m = /^\x1b\[[0-9;]*m/.exec(s.slice(i));
+    if (!m) break;
+    i += m[0].length;
+  }
+  return i;
+}
+
+/**
+ * Every rendered line fitted to `width`, continuation rows under the text
+ * (v6.12).
+ *
+ * Ink used to do this wrapping, and got two things wrong in a way that showed
+ * on every long reply. It keeps the space it broke at, so each continuation
+ * row opened one column right of the text; and it knows nothing about lists,
+ * so a wrapped bullet ran back under its own `◦` (reported with a
+ * screenshot). Wrapped here, a bullet's rows hang at the text column and every
+ * row is exactly as wide as it claims, which is what lets the frame budget
+ * count it.
+ *
+ * The hang is the line's indent plus its marker (`◦ `, `12. `, `[ ] `), read
+ * from the visible text. Fenced code is still a sentinel when this runs, so it
+ * is never re-wrapped, and tables are already fitted to `width`.
+ */
+export function fitLines(text, width) {
+  const w = Math.max(10, Number(width) || 80);
+  return String(text).split('\n').map((line) => {
+    if (visibleWidth(line) <= w) return line;
+    const plain = line.replace(ANSI, '');
+    const m = /^( *)(?:(?:◦|•|\*|-|\d+\.) )?(?:\[[ xX]\] )?/.exec(plain);
+    let hang = m ? m[0].length : 0;
+    // A marker on a line too narrow for its own text is not worth a hang.
+    if (hang > w / 2) hang = 0;
+    const cut = indexAtColumn(line, hang);
+    const rows = wrapAnsi(line.slice(cut), w - hang);
+    return rows.map((row, i) => (i === 0 ? line.slice(0, cut) : ' '.repeat(hang)) + row).join('\n');
+  }).join('\n');
+}
 
 /**
  * Lay text out as a full-width block, for the user's own message.
