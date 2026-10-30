@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#138](https://github.com/PratimeshTiwari/Agent-CLI/pull/138)
+### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#139](https://github.com/PratimeshTiwari/Agent-CLI/pull/139)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -26,6 +26,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v7.5 | 2026-10-31 | `v7.5/ask-before-compacting` | [#136](https://github.com/PratimeshTiwari/Agent-CLI/pull/136) | Past the threshold it asks once: compact now or continue in this chat |
 | v7.6 | 2026-10-31 | `v7.6/code-outline-on-partial-reads` | [#137](https://github.com/PratimeshTiwari/Agent-CLI/pull/137) | A partial read of code ends with the definitions it did not show |
 | v7.7 | 2026-10-31 | `v7.7/doctor-revert-checked-for-real` | [#138](https://github.com/PratimeshTiwari/Agent-CLI/pull/138) | The `/doctor` revert guard, driven end to end; it says why before npm runs |
+| v7.8 | 2026-10-31 | `v7.8/attach-files-from-the-editor` | [#139](https://github.com/PratimeshTiwari/Agent-CLI/pull/139) | Right-click → Attach to Agent CLI puts files at the prompt as tags (companion 1.8.7) |
 
 ### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 

@@ -13,6 +13,7 @@ said "it is **not** a chat panel"; what changed is in the 1.8.0 entry below.
 | | |
 | --- | --- |
 | **Add to Agent Chat** | Send the selection to the agent's prompt as `@file.js:12-30`. `cmd+alt+l`, the editor context menu, the editor title bar, or the line-number gutter. |
+| **Attach to Agent CLI** | Right-click files or folders in the explorer (or an editor tab) to attach them to the prompt as `[File #n]`, `[Folder #n]` or `[Image #n]` tags, as a drop would. The agent gets the path and reads what it needs. For editors whose panels take drops for the whole window, such as Antigravity's agent panel. |
 | **Editor state** | The active file and cursor position, so `get_editor_state` can answer "what am I looking at?". |
 | **Diagnostics** | The Problems panel, so `get_diagnostics` can check whether an edit compiled. |
 | **Plan review** | Comment on a plan section by section and approve, request changes, or reject — the shape of a PR review, on `implementation_plan.md`. |
@@ -25,7 +26,7 @@ Through files under `<workspace>/.agent/state/`, never a socket:
 ```
 editor.json         active file and cursor
 diagnostics.json    the Problems panel, debounced 1.5s
-chat-queue.jsonl    "Add to Agent Chat" selections, drained by the CLI
+chat-queue.jsonl    "Add to Agent Chat" selections and attached files, drained by the CLI
 plan-review.json    comments accumulated while reviewing
 plan-approval.json  the submitted verdict
 ```
@@ -57,6 +58,13 @@ is how someone installs the wrong one.
 `server/`. Changing `AGENT_DIR` in `server/src/core/paths.js` means changing it here too.
 
 ## Version history
+
+### 1.8.7 — 2026-10-31
+
+**Attach to Agent CLI** on the explorer's and an editor tab's context menu. The selected files
+(multi-select works) become tags at the terminal prompt's caret, exactly as if they had been
+dropped. Antigravity's agent panel takes image, PDF and video drops for the whole window, so a
+drag never reaches its terminal; a menu command cannot be taken that way. Needs the CLI at v7.8.
 
 ### 1.8.6 — 2026-10-30
 
