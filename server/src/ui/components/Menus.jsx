@@ -24,6 +24,8 @@ import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../core/slash-commands.js';
+import { versionChanges } from '../../core/prompt-versions.js';
+import { promptPanelPlan, roundsBar, roundsLabel } from '../prompt-view.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import {
@@ -832,21 +834,67 @@ export function Menus({
         })()}
 
         {activeMenu?.type === 'prompt' && (() => {
+          /*
+           * A comparison as well as a choice (v6.11, "this looks a bit dull"):
+           * rounds per turn as a bar per version, then what the highlighted
+           * one changes from v1. Laid out by `ui/prompt-view.js`; both blocks
+           * give way on a short terminal, the list never does.
+           */
           const rows = promptVersionRows(agentLoop);
           const current = rows.find((r) => r.current) || rows[0];
+          const at = rows.find((r) => r.id === activeMenu.at) || current;
           const { sub, tight, room } = fit('A switch reaches the chat with your next message.');
+          const changes = versionChanges(at.id);
+          const plan = promptPanelPlan({
+            room: room - rows.length, versions: rows.length,
+            changes: changes.length ? changes : [at.summary],
+          });
+          const max = Math.max(0, ...rows.map((r) => r.p90 ?? r.median ?? 0));
+          const idW = Math.max(...rows.map((r) => r.id.length));
+          const barW = Math.max(6, Math.min(24, W - idW - 40));
           return (
             <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
               keys={`↑↓ move · 1–${rows.length} or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
               <Choices
                 numbered
-                limit={room}
+                limit={rows.length}
                 initialIndex={Math.max(0, rows.indexOf(current))}
                 items={rows.map((r) => ({
-                  label: r.id, detail: `${r.hint} · ${r.use}`, value: r.id, current: r.current,
+                  label: r.id, detail: r.hint, value: r.id, current: r.current,
                 }))}
+                onHighlight={(item) => setActiveMenu((m) => ({ ...m, at: item.value }))}
                 onSelect={(item) => applyAndReturn(activeMenu, 'prompt', [item.value])}
               />
+              {plan.stats ? (
+                <>
+                  <Text> </Text>
+                  <Text wrap="truncate">{'   '}<Text bold>Rounds per turn</Text><Text dimColor>  fewer is faster</Text></Text>
+                  {rows.map((r) => {
+                    const bar = roundsBar({ median: r.median, p90: r.p90, max, width: barW });
+                    const sel = r.id === at.id;
+                    return (
+                      <Text key={r.id} wrap="truncate">
+                        {'   '}<Text color={sel ? T.accent : undefined} bold={sel}>{r.id.padEnd(idW)}</Text>{'  '}
+                        <Text color={T.accent}>{'━'.repeat(bar.fill)}</Text>
+                        <Text color={T.muted}>{'─'.repeat(bar.tail)}</Text>
+                        {' '.repeat(Math.max(0, barW - bar.fill - bar.tail))}{'  '}
+                        <Text dimColor>{roundsLabel(r)}</Text>
+                      </Text>
+                    );
+                  })}
+                </>
+              ) : null}
+              {plan.changes.length ? (
+                <>
+                  <Text> </Text>
+                  <Text wrap="truncate">{'   '}<Text bold>{changes.length ? `What ${at.id} changes` : `${at.id} is the baseline`}</Text></Text>
+                  {plan.changes.map((line) => (
+                    line.startsWith('… +')
+                      ? <Text key={line} dimColor wrap="truncate">{'     '}{line}</Text>
+                      : <Text key={line} wrap="truncate">{'   '}<Text color={T.accent}>▸ </Text>{line}</Text>
+                  ))}
+                </>
+              ) : null}
             </Panel>
           );
         })()}

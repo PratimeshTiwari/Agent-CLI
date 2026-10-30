@@ -52,6 +52,27 @@ export const PROMPT_VERSIONS = {
   },
 };
 
+/**
+ * Each switch in a version's `flags`, in a few words, for the `/prompt` menu's
+ * "what changes" list (v6.11). A flag with no entry here fails a test, so a new
+ * switch cannot ship with nothing to say about it.
+ */
+export const FLAG_NOTES = {
+  trustEditResult: 'No read-back after an edit: the result says if it landed',
+  tickWithNextCall: 'task.md is ticked in the reply that makes the next call',
+  gateReview: 'A review subagent only past one file or ~30 lines',
+  walkthroughWithTask: 'walkthrough.md only after a task.md',
+  oneCopy: 'Each repeated rule is said once, nearest its use',
+  answerDirectly: 'A greeting gets an answer, not a task.md and a plan',
+  symbolLanguages: 'find_symbol says it reads Ruby as well as JavaScript',
+};
+
+/** What a version changes from v1, one line per switch that is on. */
+export function versionChanges(id) {
+  const v = resolvePromptVersion(id);
+  return Object.entries(v.flags || {}).filter(([, on]) => on).map(([flag]) => FLAG_NOTES[flag] || flag);
+}
+
 export const PROMPT_VERSION_IDS = Object.keys(PROMPT_VERSIONS);
 export const DEFAULT_PROMPT_VERSION = 'v1';
 

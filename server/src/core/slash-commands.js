@@ -86,7 +86,10 @@ export function promptVersionRows(loop) {
       : `${v.turns} turn${v.turns === 1 ? '' : 's'}`
         + (v.rounds ? ` · rounds median ${v.rounds.median}, p90 ${v.rounds.p90}` : '');
     const { hint, summary } = PROMPT_VERSIONS[id];
-    return { id, hint, summary, use, current: id === current };
+    return {
+      id, hint, summary, use, current: id === current,
+      turns: v?.turns || 0, median: v?.rounds?.median ?? null, p90: v?.rounds?.p90 ?? null,
+    };
   });
 }
 
