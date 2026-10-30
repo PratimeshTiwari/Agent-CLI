@@ -2,6 +2,7 @@ import { watch as fsWatch, existsSync, statSync } from 'fs';
 import path from 'path';
 import { AgentLoop } from '../core/agent-loop.js';
 import { logError } from '../core/error-log.js';
+import { isOwnWrite } from '../core/own-writes.js';
 
 /**
  * FileWatcher
@@ -120,6 +121,8 @@ export class FileWatcher {
   _settle(rel, entry) {
     this._pending.delete(rel);
     const abs = path.join(this.workspacePath, rel);
+    // The agent's own write (v6.15): `DiffEngine` noted the path as it wrote.
+    if (isOwnWrite(abs, entry.firstAt)) return;
     if (!existsSync(abs)) {
       if (entry.sawRename) this._handleChange('deleted', abs);
       return;

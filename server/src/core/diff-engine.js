@@ -6,6 +6,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, copyFileSync, readdirSync, unlinkSync } from 'fs';
+import { noteOwnWrite } from './own-writes.js';
 import { backupsDir } from './paths.js';
 import { planBackupPruning } from './backup-pruner.js';
 import { resolve, dirname, relative, isAbsolute, join } from 'path';
@@ -485,6 +486,10 @@ export class DiffEngine {
       mkdirSync(dir, { recursive: true });
     }
     const tmpPath = `${absPath}.tmp.${Date.now()}`;
+    // Both paths, before the write: the watcher must not announce our own
+    // edit, nor the temp file it passed through, as the user's (v6.15).
+    noteOwnWrite(tmpPath);
+    noteOwnWrite(absPath);
     writeFileSync(tmpPath, content, 'utf-8');
     renameSync(tmpPath, absPath);
   }

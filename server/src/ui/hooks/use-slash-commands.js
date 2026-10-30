@@ -66,6 +66,7 @@ import {
 } from '../../core/doctor.js';
 import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
+import { countTurns } from '../../core/compaction.js';
 
 /** For the confirm prompt: a plan that cannot be made is described as none. */
 /**
@@ -146,7 +147,7 @@ export async function handleSlashCommand(query, {
       const warning = describeDestructive(command, args, {
         allowCount: rules.allow?.length || 0,
         blockCount: rules.block?.length || 0,
-        turnCount: agentLoop.conversationHistory?.length || 0,
+        turnCount: countTurns(agentLoop.conversationHistory),
         resetPlan: command === 'reset' ? safePlanReset(agentLoop.workspace, args) : null,
       });
       if (warning) {

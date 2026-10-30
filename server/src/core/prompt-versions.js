@@ -48,6 +48,7 @@ export const PROMPT_VERSIONS = {
       oneCopy: true,             // a repeated rule is kept once, nearest its use
       answerDirectly: true,      // lite/flash: a greeting gets no task.md and no plan (v6.7)
       symbolLanguages: true,     // find_symbol names Ruby as well as JavaScript (v6.8)
+      subagentEffortWords: true, // ask_subagent's effort is low | medium | high | max (v6.15)
     },
   },
 };
@@ -65,6 +66,7 @@ export const FLAG_NOTES = {
   oneCopy: 'Each repeated rule is said once, nearest its use',
   answerDirectly: 'A greeting gets an answer, not a task.md and a plan',
   symbolLanguages: 'find_symbol says it reads Ruby as well as JavaScript',
+  subagentEffortWords: 'ask_subagent takes the /effort words, max included',
 };
 
 /** What a version changes from v1, one line per switch that is on. */

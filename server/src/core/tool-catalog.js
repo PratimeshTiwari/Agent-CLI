@@ -354,7 +354,9 @@ Parameters:
      */
     flash: ` — Delegate to a parallel tab. Args: role ("review"|"research"|"task"), prompt (string)
 `,
-    pro: `
+    // v1 is frozen with the browser-shaped words; a newer version uses the
+    // ladder's own, which `/effort` shows and which include max (v6.15).
+    pro: (_config, flags = {}) => `
 Hand work to a second tab of this model with its **own empty context** — it has not seen this
 conversation and cannot see your files, so it knows only what you put in \`prompt\`. Read-only
 tools, one answer back, several run at once.
@@ -365,10 +367,15 @@ paths, "the fix above" means nothing to it; \`role: "task"\` for a self-containe
 Parameters:
   - role (string, required): "review", "research" or "task"
   - prompt (string, required): everything it needs — it has no other context
-  - effort (string, optional): "lite", "flash" or "pro" — which model its tab runs on.
+${flags.subagentEffortWords
+    ? `  - effort (string, optional): "low", "medium", "high" or "max" — which model its tab runs on.
+    Leave it out and research and task run at medium, review keeps yours. Set it only when
+    you know better: "high" for an errand that needs real reasoning, "low" for one that is
+    barely more than a search, "max" only when nothing less will do.`
+    : `  - effort (string, optional): "lite", "flash" or "pro" — which model its tab runs on.
     Leave it out and research and task go to a fast model, review keeps yours. Set it
     only when you know better: "pro" for an errand that needs real reasoning, "lite"
-    for one that is barely more than a search.
+    for one that is barely more than a search.`}
 
 `,
   },
