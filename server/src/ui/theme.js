@@ -110,13 +110,20 @@ export const PALETTES = {
  * checked against (`theme-tokens.test.js`). `null`: it uses the terminal's own
  * colours, so there is nothing of ours to check.
  */
+/*
+ * Names that say what each one *is* (owner, 2026-10-30: "terminal colour and
+ * dark colour … not clear"). `terminal` borrows your terminal's own 16 colours,
+ * so it changes with the terminal's theme; the others are fixed colours chosen
+ * for one kind of background. The blurb is drawn beside the name, so all six
+ * can be compared without moving the cursor.
+ */
 export const PALETTE_INFO = {
-  terminal: { label: 'Terminal', blurb: 'your terminal\'s own 16 colours — the classic look', background: null },
-  dark: { label: 'Dark', blurb: 'tuned for dark terminals', background: '#1e1e1e' },
-  light: { label: 'Light', blurb: 'for light backgrounds', background: '#ffffff' },
-  'dark-colorblind': { label: 'Dark (colour-blind)', blurb: 'blue and orange instead of green and red', background: '#1e1e1e' },
-  'light-colorblind': { label: 'Light (colour-blind)', blurb: 'blue and orange, for light backgrounds', background: '#ffffff' },
-  mono: { label: 'Mono', blurb: 'no colour — bold and dim only (also NO_COLOR)', background: null },
+  terminal: { label: 'Match terminal', blurb: 'your terminal\'s own colours', background: null },
+  dark: { label: 'Dark', blurb: 'fixed colours for a dark background', background: '#1e1e1e' },
+  light: { label: 'Light', blurb: 'fixed colours for a light background', background: '#ffffff' },
+  'dark-colorblind': { label: 'Dark, colour-blind', blurb: 'blue and orange for green and red', background: '#1e1e1e' },
+  'light-colorblind': { label: 'Light, colour-blind', blurb: 'the same, for a light background', background: '#ffffff' },
+  mono: { label: 'No colour', blurb: 'bold and dim only (also NO_COLOR)', background: null },
 };
 
 /**

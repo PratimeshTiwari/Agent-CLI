@@ -51,7 +51,7 @@ import { commandHelp } from '../help.js';
 import { AGENT_COMMANDS } from '../../core/slash-commands.js';
 import { oneLine, renderCommandList } from '../format.js';
 import { planResume } from '../../core/chat-thread.js';
-import { SETTING_GROUPS, describeSettings } from '../../core/settings.js';
+import { SETTING_GROUPS } from '../../core/settings.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { summariseTraces, formatMs } from '../../core/trace-log.js';
 import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../core/channel-health.js';
@@ -666,14 +666,13 @@ export async function handleSlashCommand(query, {
     // so they piled up somewhere no command would show them — which is its own
     // way of losing the plan you wanted back.
     if (command === 'settings' || command === 'config-all') {
-      // Snapshot on the way in, so leaving can say what changed. Settings apply
-      // as they are picked, so this is the only record of what they were.
+      // Changes on the page wait in `pending` until Apply (v6.1).
       setActiveMenu({
         type: 'settings',
         query: '',
         group: SETTING_GROUPS[0],
         at: 0,
-        baseline: describeSettings(agentLoop),
+        pending: {},
       });
       setIsProcessing(false);
       return;

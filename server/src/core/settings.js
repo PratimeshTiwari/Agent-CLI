@@ -361,16 +361,40 @@ export function settingsChanged(before, after) {
 }
 
 /**
- * What "Put them back" says: one `⚙` line per setting that really moved, in the
- * `changed()` style every other setting reply uses, and nothing at all when
- * none did — a restore can land on a value that is already there. It printed
- * `↩️ Put back: …` for every row it tried, moved or not (owner, 2026-10-28).
+ * Changes made on the page and not yet applied (v6.1). Owner, 2026-10-30:
+ * *"only apply when user clicks on apply"*. Every ←/→ on the page used to run
+ * its command there and then — so trying `/effort` medium and back switched the
+ * browser twice and left three lines in the transcript for nothing changed.
+ * Now the page holds `pending` and nothing runs until Apply.
  *
- * @param {SettingRow[]} before the page just before the restores ran
+ * A pending value equal to the live one is not a change: stepping away and back
+ * again is the same as not touching it.
+ *
+ * @param {SettingRow[]} rows the page as it is live
+ * @param {Object<string, string>} pending label → the value shown
+ * @returns {Array<{label: string, from: string, to: string, restore: string}>}
+ */
+export function stagedChanges(rows, pending = {}) {
+  const out = [];
+  for (const row of rows || []) {
+    if (!row.restore || !(row.label in (pending || {}))) continue;
+    const to = pending[row.label];
+    if (to == null || String(to) === String(row.value)) continue;
+    out.push({ label: row.label, from: row.value, to, restore: row.restore(to) });
+  }
+  return out;
+}
+
+/**
+ * What Apply says: one `⚙` line per setting that really moved, in the
+ * `changed()` style every other setting reply uses, and nothing at all when
+ * none did. It used to print `↩️ Put back: …` for every row it tried.
+ *
+ * @param {SettingRow[]} before the page just before the commands ran
  * @param {SettingRow[]} after the page just after
  * @returns {string[]}
  */
-export function putBackLines(before, after) {
+export function changedLines(before, after) {
   return settingsChanged(before, after).map((c) => changed(c.label.toLowerCase(), c.from, c.to));
 }
 
