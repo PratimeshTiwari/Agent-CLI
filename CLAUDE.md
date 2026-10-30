@@ -173,440 +173,57 @@ Modules are kebab-case; React components keep PascalCase (`ui/App.jsx`). Tests l
    dispatches through `MCPServer.executeTool`.
 6. Results are fed back via `buildToolResultPrompt` and the loop repeats.
 
-### Bridge liveness — why a prompt used to wait for you to open Chrome
+### Bridge liveness and the reply path — the rules
 
-Reported from use, 2026-09-17: *"most of the time the prompt is not sent while I am out
-of Chrome, and as soon as I open Chrome or the Gemini tab it is sent."* That is two
-independent faults that produce one symptom, and neither is throttling.
+The investigations behind each of these (measurements, wrong theories, the reports that started
+them) are in [`docs/history.md`](docs/history.md#bridge-liveness-and-the-reply-path). Read the
+entry before changing the mechanism it describes.
 
-**The reconnect alarm was cleared on connect.** `chrome.alarms.create('reconnect')` was
-called in `scheduleRetry` and `chrome.alarms.clear` in `stopKeepAlive` — which runs on
-`onopen`. So a *healthy* bridge had no alarm at all. Chrome can still evict a service
-worker that believes it is connected, and when it does the socket dies with it: `onclose`
-never runs inside a worker that is already gone, no `setTimeout` survives it, and nothing
-outside the browser can reach in and start it. What actually revived it was incidental —
-the user focusing a tab, `chrome.tabs.onUpdated` firing, and Chrome starting the worker to
-deliver that event, which re-runs the module and its bottom-line `connectWebSocket()`.
-The alarm is periodic and permanent now. While connected it costs nothing, because the
-heartbeat already keeps the worker resident; it is the only thing that can resurrect a
-worker Chrome has silently collected. `test/background/watchdog-alarm.test.js` pins it,
-including a source assertion that `stopKeepAlive` does not clear it — re-adding that line
-reads as ordinary cleanup in a diff.
-
-**And the prompt it was waiting for had already been thrown away.** `broadcast` returns
-whether it reached anyone; every caller ignored it. `injectPrompt` with no extension
-connected wrote to no sockets and vanished, leaving the lane busy until the seven-minute
-watchdog. `sendInjectPrompt` honours the return and holds what it could not deliver;
-`flushPendingInjects` drains it when a client **identifies as an extension** — not on
-socket open, because the socket is open before we know what is on the other end and the
-side panel uses the same transport. Held prompts past `INJECT_BUFFER_TTL_MS` are dropped
-rather than sent: the lane watchdog has already abandoned that turn, and typing it into
-Gemini then starts a conversation nobody is listening to.
-
-**Fixed sleeps became a readiness handshake.** 4000ms after opening a subagent tab, 1500ms
-after a new main tab loaded, 1000ms after re-injecting — 6.5s of unconditional waiting per
-new tab, wrong in both directions: seconds burnt on a warm machine, and still too early on
-a cold one, where the send lands before the listener exists and is reported as an
-unreachable tab. `waitForBridge` polls a `ping` the content script answers. It reports two
-things because they fail differently: `ready` (this script is listening and not orphaned)
-and `canType` (the composer is in the DOM, which is the real precondition for an inject).
-**Gating only on `canType` would be worse than the sleep it replaces** — a changed composer
-selector would turn "the send fails with a readable error" into "every turn burns its whole
-budget first" — so the last 40% of the budget accepts `ready` alone and lets the send
-produce the honest error.
-
-**The 3-second nudge was the third mechanism doing this job, and the most expensive.** Every
-model tab ran `setInterval(() => safeSend({type:'connect'}), 3000)` for the life of the
-page, so an open Gemini tab woke the service worker twenty times a minute forever — a
-worker never allowed to go idle, to solve a problem that only exists while there is nothing
-to connect to. The worker now answers `connect` with its state and the tab backs off to 30s
-once connected, which is a tenth of the steady-state cost with the fast cadence still there
-for the case it was written for. It reports the state *before* attempting the connection:
-`connectWebSocket` resolves long before a socket is open, and answering "connected" there
-would slow the nudge down at the moment it is working.
-
-**The clock was the only throttled thing, and that is measurable.**
-
-The bridge activated the model tab and held your focus for the length of a turn, because
-completion was detected by a 2s `setInterval` in the content script and Chrome throttles
-page timers in a hidden tab. Before redesigning around that, it was measured — on
-example.com, in a genuinely hidden tab, Chrome 152, over 334 seconds:
-
-| mechanism | delivered | expected |
-| --- | --- | --- |
-| page `setInterval(100ms)` | 63 | 3340 — **1.9%** |
-| **Worker** `setInterval(100ms)` | 3344 | 3340 — 100% |
-| **`MutationObserver`** | 9.97–10/s every bucket | 10/s |
-| **`getBoundingClientRect()`** | 3213 real boxes | **0** empty |
-
-Three things that were assumed to be broken in a hidden tab are not. The MutationObserver
-that supplies the evidence runs at full rate. Layout works, so the Stop-button visibility
-check — `getBoundingClientRect` plus `getComputedStyle` — is sound. A Worker's timers are
-not throttled at all. **Only the page's own timer is**, and it collapses to roughly one
-tick per minute within 60 seconds of the tab being hidden, staying there across the
-five-minute intensive-throttling boundary rather than degrading further at it.
-
-So a 2s completion check becomes a ~60s one, per round, and a multi-round turn stalls until
-you look at the browser. That is the whole of "it hangs while I am out of Chrome".
-
-The fix keeps the evidence in the page and moves the clock out: a service worker is not a
-tab and is not throttled, and `chrome.tabs.sendMessage` is an *event* rather than a timer,
-so it is delivered at full rate into a hidden page. `startCompletionTicks` drives
-`tick_completion` every 2s from the worker; the content script's own interval stays as a
-backstop for a worker evicted mid-turn. **A Worker inside the page would also have worked
-and was rejected**: creating one from a content script means either a `blob:` URL, which
-gemini.google.com's CSP is entitled to refuse, or a `chrome-extension://` URL, which is
-cross-origin for a worker. The service worker needs no new capability and is already kept
-alive for the turn by the heartbeat.
-
-With the clock outside the tab, **focus is returned as soon as the send lands** rather than
-when the reply does — the tab only has to be in front long enough to accept the paste.
-
-**And that fix was applied to one caller, on 2026-09-25 to the second.** The completion
-check was the throttled poll anyone had noticed, because it is the one that stalls a turn.
-The **mode picker** read the same way and was left on the same clock, and it is worse off:
-that last sentence is why. `discover_models` and `switch_model` are messages to a tab rather
-than turns, so nothing activates the tab first — the picker is read *only* in a hidden tab,
-where the `send` stage's measured ~500ms says injection is not.
-
-`openModelMenu` polled `20 × 50ms` and `closeModelMenu` `8 × 50ms`, the second of those
-inside the `finally` that `readModelOptions` returns the list through. Nominally 1.4
-seconds, clamped ≥28, against a server watchdog of 8. In `errors.jsonl`: **36
-`model_options_unanswered`, of which only 13 were "no tab to ask"** — the other 23 reached a
-tab and the answer arrived too late to be wanted. That is the whole of "the model never
-switches" and of routing falling back to the default: `modelOptions` was never filled, so
-`pickModelFor` had nothing to resolve a rung against.
-
-`waitForDom` waits on a `MutationObserver` (full rate, per the table above) with
-`performance.now()` as the deadline — a clock *read* rather than a timer. One `setTimeout`
-remains as a backstop for a page that goes completely still, and it is only ever reached
-when the answer is "no". The close-confirmation loop was deleted rather than converted: it
-never retried and never reported, so every tick of it was spent on a value nobody read.
-
-**The lesson generalises past this file: a clock fix has as many sites as the clock has
-callers.** It had four. The typing path held the other two until 2026-09-27: the paste-settle
-check slept `setTimeout(…, 50)` between looks (the `type` stage went from a **27ms** median over
-376 turns to **994ms**, one turn-0 paste took **22s**), and `waitForSendButton` polled on a page
-timer against a 30s deadline — first look before Gemini rendered the button, next look after the
-deadline, prompt pasted and never sent. Both run on the observer clock now, and both are tested
-with a `setTimeout` that **never fires**, which is the only honest model of a hidden tab: every
-earlier test ran on Node's timers, which are never throttled, and so could not see either bug. Nothing in the codebase distinguished the two, and the second one was invisible
-because its symptom — a picker that does not change — reads as a DOM-selector bug. It was
-diagnosed as one twice.
-
-**A failure to read the picker also used to kill the turn.** The bridge's `error` case ends
-in `isProcessing = false` plus `abortExtensionWork()`, which is right for every error that
-means the in-flight prompt is not coming back and wrong for these two, which are asked
-outside the lane in the first place. So `/effort` during a turn, or one unreachable tab,
-abandoned the prompt underneath it and filed the reason under `flow: 'extension'`, nowhere
-near the turn that stopped. `NON_FATAL_EXTENSION_OPS` is the gate, with a negative control
-per branch — a bridge that aborts for nothing is a worse bug than the one being fixed, since
-a prompt that really is dead then holds the lane for seven minutes.
-
-**The picker had a veto and no containment until v4.0.** Everything it had was a veto —
-don't open a menu over a live composer, don't act on a half-read list — and a veto only works
-while every path that could leave a menu open is *known*. Eight selector ladders against a page
-Google redesigns without telling anyone means that assumption expires without warning. An open
-menu puts an overlay across the composer; the send lands on its backdrop, `waitForSendButton`
-burns its budget, and the turn is lost two turns away from its cause.
-
-`dismissStuckMenu` is the containment: every inject clears a stuck menu before typing, so the
-turn stops trusting the picker to have cleaned up. Three properties are load-bearing, because it
-runs on **every** turn. It is **synchronous and unbudgeted** — never `findModelTrigger`, which
-waits up to 8s for a picker to *appear*. It **cannot throw**, or it becomes a cause of the lost
-turn it prevents. And it tries **Escape before the trigger**, which is not a matter of taste:
-the trigger *toggles*, so clicking it after Escape has closed the menu **opens it again**. The
-first DOM fixture modelled a trigger that could only close and could not see that; the second
-toggles, as Gemini's does. **A fixture that is kinder than the page tests the fixture.**
-
-**And the first cut closed menus that were not stuck.** A subagent's tab is switched to its
-model and then typed into; the worker gives the switch **5s**, and in a fresh tab the switch's
-own waits add up to about **14**. So the inject arrived mid-switch and the cleanup closed the
-switch's own menu — the switch failed and the subagent ran on Pro. Picker operations register
-themselves now (`trackPicker`, including the fire-and-forget close, which would otherwise let the
-count reach zero while a toggle is still pending), and the inject waits for them before deciding
-a menu is abandoned. **Containment must not be able to tell a stuck thing from a busy one by
-looking at it**; it has to be told which is which by the thing that owns it.
-
-The notice it sends says *"tried to close it"*, not *"closed it"*, and does not re-check. Angular
-Material animates the overlay out, so a synchronous look after Escape can still see it open on
-the live page — escalating on that would log a false failure for every stuck menu, which is the
-noise the log levels exist to remove. Whether the prompt landed is observed properly by the send
-path.
-
-`switch_model` also gained the `isInjecting` guard `discover_models` had since 1.30.0. The server
-defers a *main-lane* switch while the lane is busy, but a **subagent** switch is dispatched with
-no lane check — and its tab is precisely the one about to be typed into. The lane is the server's
-model of the tab; `isInjecting` is the tab's own answer, and only one of them can be wrong about a
-composer.
-
-**Verified with the picker forced to fail on every call:** 20 of 20 turns, five tool rounds and a
-subagent, two failures landing mid-turn. A `/effort` typed a second into a deliberately slow turn
-was held and dispatched **4ms after** that turn's reply.
-
-**The composer stopped claiming our paste, and every prompt waited 5 s for it (fixed v5.7).**
-The `type` stage was ~30 ms median here until 09-24, then 1–6 s; on the work laptop 6.5 s median,
-113 s max. Checked on the live page 10-24: the synthetic paste is no longer `preventDefault`ed and
-never lands, so every turn waited out `PASTE_LAND_BUDGET_MS` before the `insertText` fallback —
-which puts 34,615 characters in exactly, one paragraph per line, in 1.2 s. The work account's
-composer is a `<textarea>`, which never claimed it. An **unclaimed** paste cannot land later (a
-browser does nothing by default with an untrusted one), so the wait now runs only for a claimed
-paste or an image. That is the converse of the earlier lesson — claimed is not landed — and
-does not undo it. The shape fallback also vetoes `Expand input to Fullscreen`, which appears
-exactly when a long prompt goes in and was clicked instead of send.
-
-**Chrome also discards background tabs**, which looks identical to a hang: the tab stays in
-the strip with its title intact while the page and content script are gone.
-`prepareTabForTurn` sets `autoDiscardable: false` on a tab about to hold a turn, and
-reloads plus re-handshakes one that was already discarded. The flag is a request, not a
-guarantee, which is why the repair exists alongside it.
-
-**What is still unexamined:** the `MutationObserver` watches `document.body` with
-`subtree: true, characterData: true`, which on an app as busy as Gemini fires far more than
-it needs to. Narrowing it to the response container is a real cost saving and a real risk —
-a wrong selector observes nothing and every turn breaks — so it wants measuring against the
-live page, not a guess.
-
-**Self-healing: what is repaired, and the two things deliberately not.**
-
-Every failure below used to end the turn, and the prompt with it.
-
-- **A failing send repairs the tab.** `sendWithRepairs` is a ladder — send,
-  re-inject the content script, reload the tab — cheapest repair first, because
-  the commonest cause by far is a script orphaned by an extension reload. It
-  **stops before opening a fresh tab, on purpose**: a reload returns to the same
-  `/app/<id>` and Gemini still holds the thread, while a new tab is a new
-  conversation, and an incremental prompt sent into one gets a confident answer
-  to a question the model never saw. Losing a turn beats answering a different
-  one. That is the same reasoning `session_lost` already encodes for batch tabs.
-
-  **That middle rung did nothing at all until 2026-09-19.** The bridge declared
-  its constants at the top level of the content-script world, and that world
-  outlives the script that created it — so re-injecting into a tab that already
-  had a copy threw `Identifier 'RESPONSE_IDLE_TIMEOUT' has already been
-  declared` on line one and the fresh copy never evaluated. The rung existed for
-  exactly the case that guarantees a copy is already there. It failed silently,
-  `waitForBridge` then burned its budget waiting for a script that had not
-  loaded, and the only evidence was an entry on `chrome://extensions`.
-
-  The file is an IIFE now, which makes a second injection legal, and a
-  `window.__agentBridgeStop` handover makes it a *replacement*: the new copy
-  calls the old one's `invalidate()` before taking the handle, so the orphan's
-  MutationObservers and timers stop immediately instead of running until
-  something happens to call `safeSend`. Skipping would not have done — the goal
-  is to replace an orphan, not to notice one.
-- **A prompt that never reached the composer is sent again, once.** The content
-  script always knew the difference and discarded it. `sawGenerating` is the
-  discriminator: generation started and we failed to read it means the model
-  **has** an answer, so a resend asks twice into a thread that already holds the
-  first reply; generation never started and nothing scraped means the submit did
-  not happen, so a resend is the first attempt landing. Only the second retries.
-  It resends `_lastMainPrompt` **verbatim**, because `buildPrompt` has side
-  effects — rebuilding after a failed turn 0 marks the system prompt as seen and
-  hands the model a bare question with no tools.
-- **A tab about to hold a turn is opted out of discarding, and reloaded if it
-  was already discarded** (`prepareTabForTurn`). A discarded tab is
-  indistinguishable from a hang: it keeps its title in the strip while the page
-  and script are gone.
-
-Not done, and why: **`timedOut` with partial text is not retried** — the model
-answered, and a second ask corrupts the thread for a reply we already partly
-have. And **a disconnected extension mid-turn does not re-dispatch the in-flight
-prompt**; `pendingInjects` covers prompts that were never delivered, but one
-that *was* delivered may have been answered into a tab we can no longer see, and
-re-sending it blind is the double-answer bug again. Doing that safely needs the
-worker to ask the tab whether it is still watching that `requestId` — the
-`tick_completion` handshake is the piece that would make it answerable.
-
-**Tool amnesia: the cause is a thread the model never saw, not a bad detector.**
-
-Reported from use with two screenshots. The prompt in both was the *short*
-turn — a bracketed context line and a list of tool **names** — sent into a
-brand-new Gemini conversation. The model has names and no definitions, so it
-says the tools "are not actually connected to my current execution
-environment", and the turn is spent.
-
-`hasSeenSystemPrompt` is the **prompt builder's belief**; the model's memory is
-the **thread**, which is the entire premise of `chat-thread.js`. Nothing
-connected the two. So when the tab moved to a different conversation — the user
-opening a new chat, `ensureModelTab` opening one because the old tab was gone,
-a reload landing on `/app` with no id — the builder carried on sending short
-turns forever. `_recordThread` notices the change already; it now also calls
-`resetPromptState()`, but **only when there was a previous thread**: the first
-id of a session is turn 0's own conversation, which already carried the prompt.
-
-**The detector was wrong in both directions, and one of them destroyed
-answers.** `looksLikeCapabilityDenial` gates a repair that discards the reply
-and re-asks. It asked for an inability phrase and then, loosely, for any of
-`execute|run|access|read|…` within 60 characters of any of
-`local|file|directory|command|…` — a window wide enough to span two clauses, so
-*"I read the file and I can't see any problem with the parser — the local
-variable is fine"* was classified as a refusal and thrown away. Meanwhile both
-denials seen in use that day slipped through, because both were **passive**:
-the model did not say it could not, it said the tools were not connected.
-
-The cure for the false positives is the *subject*, not a narrower window. A
-denial is about the agent's tooling or the box it runs in; an ordinary answer
-saying "can't" is about code. `local scope` and `local variable` are no longer
-objects, `local disk` and `file system` are, and `mcp/tools/` is excluded by
-path because in this repo that directory is a thing an answer mentions by name.
-A second pattern covers *"I can't read files in that directory"*, which names
-no environment: there the negation must attach within four words to a verb the
-tools perform, so `can't see`, `can't reproduce`, `can't find` and `can't make`
-— the four ways an ordinary answer says it — do not qualify.
-`test/core/denial-corpus.test.js` holds both lists; the old pattern fails it in
-both directions.
-
-**And moving the clock exposed a latent race.** A turn ended on a *single*
-observation of "no Stop button and one second since the text changed". That was
-only safe while the check was throttled to roughly once a minute, where a
-transient is almost never sampled. At a reliable 2s cadence the transients get
-caught, and a reply came back truncated mid-token. Gemini pauses longer than a
-second between sections and the Stop button is briefly absent while the
-composer re-renders — either alone looks exactly like finished. The condition
-must now hold across consecutive checks. **A fix that makes something reliable
-will find every place that was quietly relying on it being unreliable.**
-
-**Turn latency, measured — and where it actually goes.**
-
-`core/trace-log.js` records five stages per turn (`find_input`, `type`, `send`,
-`first_token`, `complete`); `/trace` reads them back. From 74 real turns on the
-owner's machine:
-
-| stage | median | p90 |
-| --- | --- | --- |
-| `find_input` | 1ms | 13ms |
-| `type` | 24ms | 513ms |
-| `send` | 514ms | 1201ms |
-| `first_token` | **0ms** | 1ms |
-| `complete` | 6004ms | 18981ms |
-
-Two things fall out of that table, and neither is Gemini being slow.
-
-**`first_token` measured nothing.** It was marked one line after the send, so
-it timed the gap between two adjacent statements. The number it is named for —
-the one that separates *the model thinking* from *our overhead* — was never
-captured; it all went into `complete`. Marked now when the observer first sees
-text, which is what makes any further latency claim checkable.
-
-**`complete` was quantised to the poll interval.** 6004, 8966, 10001, 16002,
-30064: every sample sits on a ~2000ms boundary, because a finished reply is
-only noticed when the check next fires. A reply that ended at 4.2s was
-delivered at 6s, and the two-consecutive-checks rule that stopped truncated
-replies added another whole interval. The rule is right and the *cadence* was
-wrong: the tab now reports `confirmSoon` as soon as it goes quiet and the
-worker returns at a quarter of the interval for the confirming look — slow
-while the model writes, fast only when there is something to confirm.
-
-The remaining per-turn overhead is `send` (~0.5s median, 1.2s p90), and the
-real multiplier is **round trips**: every tool call is another full
-inject → think → scrape cycle, so tail latency is paid once per round, not
-once per turn.
-
-**Rounds per turn are recorded since v5.1** (`rounds` on each `tool-usage.jsonl` row; `/logs
-tools` prints median and p90), because nothing did, and "faster" was uncheckable. The same
-release fixed the line most likely inflating them: turn 0 says *"You can make MULTIPLE tool
-calls in a single response"*, but every tool-result turn ended *"Reply once, with exactly one
-of: the next tool call"* — singular, and the line the model reads last and most often. It now
-asks for independent reads and searches in one reply. **Judge it from `/logs tools` after a
-few days of use, not from the argument.**
-
-**One recovery table (`core/reply-recovery.js`, v5.1).** `handleGeminiResponse` was 510 lines
-holding five retry policies inline; the decisions are pure functions now, in the shape of
-`tool-policy.js`, and the handler is under 200 lines. Three behaviours changed, each from the
-log rather than from taste:
-
-- **A provider error re-sends the prompt that failed, verbatim.** It rebuilt one from
-  `currentObjective` — the user's original question — so an error after a tool round threw
-  away the `<tool_results>` the model had asked for and restarted the task. The unsubmitted
-  resend had already learned that a resend cannot be a rebuild; the branch beside it had not.
-  Inline image data is stripped first, because the tab took the upload before it errored.
-- **It waits first: 3s, then 8s, ±20%.** The immediate retry was measured failing — on 09-22
-  the identical error came back six seconds later, and on 09-24 the retry hit a timeout. The
-  timer is Node's, so hidden-tab throttling does not apply. `abortExtensionWork` cancels it,
-  because during the wait the lane is free and a stop would otherwise find nothing to abort.
-- **A usage limit is never retried.** Its wording ("try again later") matches the provider
-  detector, so a limit was re-asked twice into the same wall. `looksLikeQuotaReached` runs
-  first and logs a `quota_reached` notice. The wording is a guess — the log had never held one.
-  **Since v5.28 it is retried one rung down**, never on the same model (see Prompt economics).
-
-Verified end to end under the pty harness with a scripted provider error after a tool round:
-the resent prompt was byte-identical to the failed one (622 characters, tool results intact),
-sent 3,381ms later, with `retrying in 3s` on screen and the final answer drawn.
-
-**And the confirming look leaked, once per turn, compounding.** It was scheduled with a bare
-`setTimeout` nobody held, and `stopCompletionTicks` cleared only the interval. Stopping a turn
-from outside — the tab closing, the session ending, the next turn starting — therefore left a
-tick to fire into a tab whose turn was over, which costs one stray message and nothing else.
-
-The next turn is where it gets expensive. `startCompletionTicks` stops the old ticker and
-installs a new one, so an orphaned confirm firing afterwards finds `completionTickers.has(tabId)`
-**true again** — for the new turn — and schedules another. That is a second fast chain running
-beside the real one, holding the *previous* turn's `everyMs`, with no handle anywhere to stop
-it, and it compounds once per turn on a long session.
-
-`completionConfirms` holds the pending timeout so the stop can cancel it, and the cancel runs
-*before* the early return on a missing interval — returning early there is precisely how it got
-left running.
-
-**It was found by widening an unrelated timing window until the leak reached the next test.**
-Nothing else would have: a stray message is invisible and the doubling only shows if you count.
-That test had asserted `>= 3` ticks after `TICK * 1.6`, where the third tick and the deadline
-are 4ms apart — so it failed about one run in five, on the machine's load rather than the code.
-**A wall-clock assertion with no margin measures the machine**, which the frame-budget harness
-had already learned once.
-
-**`mergeLoopHistory` uses a recorded position, not a count.** It counted the screen's
-non-local rows and used that number to `slice()` the loop's history — valid only if the screen
-mirrors the loop one-for-one, in order. Two ordinary things break that: `file-watcher.js`
-appends `[System Event]` turns the screen never asked for, *including before the session's
-first prompt*, and the prompt is echoed to the screen optimistically, so it is there before the
-loop has it. Measured under the harness with a busy watcher: screen 1 row, loop 16 —
-`[system ×12, user, agent, system, system]`. Slicing from index 1 appended eleven system events
-and a second copy of the user's own prompt, and every later merge was misaligned. The position
-now rides on the rows (`__loopIndex`), and the optimistic echo (`__echo`) is claimed by the
-loop's own copy rather than drawn twice — once per echo, because asking the same question twice
-must produce two rows.
-
-**The reply after a diff approval — fixed by reprinting, not by staying live.** `App.jsx` keeps only the last turn live *while `isProcessing`*; everything else is
-committed to `<Static>`, which Ink never repaints. `agent_response` cleared `isProcessing` even
-when the turn still had tool calls to run, so the turn was written to scrollback mid-flight and
-the tool result, the approval and the closing reply were appended to a group that could no
-longer be drawn. Reproduced in the harness: file written, diff shown, final reply never drawn.
-
-The obvious fix — make `isProcessing` follow `agentLoop.isProcessing`, so the turn stays live
-until the loop is done — restores the reply and is **catastrophic**: one run went from 15KB and
-**0** full clears to **6.8MB and 1,228**, which is the flicker bug entire. Three attempts to
-bound the longer-lived turn made it worse still (45, then 89 clears). Do not retry it.
-
-What works is the mechanism this file already had for exactly this: the turn still commits
-early, and when a *committed* turn grows, `<Static>` is remounted and the transcript reprinted.
-Measured across three runs: **18.2–18.5KB, 0 clears, reply present** — against a 15.1KB, 0-clear
-baseline where the reply never appeared. A remount reprints without clearing, so it is cheaper
-than the one clear `ctrl+e` pays.
-
-**`agent_response` is not "the turn ended" (v5.5).** It is sent for any reply with prose,
-including prose that comes *with* tool calls, and every front-end treated it as the end: the
-status bar went back to `● agent`, `esc to stop` vanished, and — because the task panel draws
-only when idle — the checklist appeared under the prompt mid-turn. Reported as "the indicator
-stops but gemini runs, executes some command and output updates"; reproduced under the pty. The
-payload carries `continuing` now, and a `tool_call` or `status` re-raises the flag while
-`agentLoop.isProcessing` says the loop is busy, which also covers the diff prompt, which lowers it
-with nothing to raise it again. Keeping React's flag up for the whole turn was the catastrophic
-experiment described above; it is safe now only because rows are committed one at a time — measured at
-0 clears.
-
-Two traps, both of which produced confident wrong numbers first:
-
-- **The harness was measuring nothing repeatable.** `drive2.py` waited a fixed number of
-  seconds between steps, so pressing enter to approve could land *before* the prompt existed —
-  a different code path. Identical code measured 1 clear and 89. `drive3.py` waits on observed
-  output (`{"wait": "Approve"}`) and is reproducible to within 300 bytes across runs. **Any
-  frame-budget number taken with a wall-clock driver is noise.**
-- **The first cut of the reprint counted `t.messages`, which `groupTurns` does not return** (it
-  is `steps`). The shape never changed, the epoch never bumped, and it measured a clean 0
-  clears *while doing nothing at all* — a fix that looks perfect because it is inert. Only the
-  reply still being missing caught it.
+- **The reconnect alarm is periodic and permanent.** `stopKeepAlive` must not clear it: it is the
+  only thing that revives a worker Chrome collected while it believed it was connected.
+  `watchdog-alarm.test.js` pins it, including a source assertion.
+- **An undelivered prompt is held, not dropped.** `sendInjectPrompt` honours `broadcast`'s return;
+  `flushPendingInjects` drains when a client *identifies as an extension* (not on socket open);
+  past `INJECT_BUFFER_TTL_MS` it is dropped, because the lane watchdog has abandoned that turn.
+- **Readiness is a handshake, not a sleep.** `waitForBridge` reports `ready` and `canType`; the last
+  40% of its budget accepts `ready` alone so a broken selector fails readably instead of slowly.
+  The `connect` nudge backs off from 3s to 30s once connected.
+- **In a hidden tab only the page's own timers are throttled** (to ~1/min). MutationObserver,
+  layout and Worker/service-worker timers run at full rate. So the clock lives in the service
+  worker (`startCompletionTicks` → `tick_completion`), the tab's interval is a backstop, and focus
+  is returned as soon as the send lands. **A clock fix has as many sites as the clock has
+  callers**: `waitForDom`, the paste-settle check and `waitForSendButton` all run on the observer
+  clock, and are tested with a `setTimeout` that never fires.
+- **Completion needs consecutive quiet checks**, and `confirmSoon` brings the confirming look
+  forward. `completionConfirms` holds that look so a stop cancels it (it leaked and compounded).
+- **The picker cannot kill a turn.** `NON_FATAL_EXTENSION_OPS`, and a notice is never fatal
+  (checked after the settle and `session_lost` branches). `dismissStuckMenu` runs on every inject:
+  synchronous, unbudgeted, cannot throw, Escape before the trigger (it toggles), and it waits for
+  `trackPicker`'d operations so it never closes a busy menu. `switch_model` has the `isInjecting`
+  guard.
+- **Typing:** an unclaimed synthetic paste goes straight to the `insertText` fallback; only a
+  claimed paste or an image waits. The send-button fallback vetoes `Expand input to Fullscreen`.
+- **Repairs:** `prepareTabForTurn` (no discarding, reload a discarded tab); `sendWithRepairs` —
+  send, re-inject, reload, and **never a fresh tab** (a new conversation answers a question it
+  never saw). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
+  an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
+  (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
+  delivered prompt after a disconnect — both risk a double answer.
+- **Tool amnesia is a thread change.** `_recordThread` calls `resetPromptState()` when the thread
+  id changes from a previous one. `looksLikeCapabilityDenial` judges the *subject* (tooling, not
+  code); `denial-corpus.test.js` holds both directions.
+- **One recovery table** (`core/reply-recovery.js`): a provider error re-sends the failed prompt
+  verbatim after 3s then 8s (±20%, cancelled by `abortExtensionWork`); a usage limit is never
+  retried on the same model — it steps down (v5.28).
+- **Traces:** five stages per turn; `first_token` is marked when the observer first sees text.
+  Rounds per turn are on every `tool-usage.jsonl` row. Prompt length is not what a turn costs —
+  round trips are.
+- **The screen:** `mergeLoopHistory` uses recorded positions (`__loopIndex`, `__echo`), never a
+  count. A committed turn that grows remounts `<Static>`; keeping `isProcessing` up for the whole
+  turn was 1,228 clears — do not retry it. `agent_response` carries `continuing`. Frame numbers
+  only from a driver that waits on output, never on wall-clock sleeps.
+- **Still unexamined:** narrowing the MutationObserver from `document.body` to the response
+  container — wants measuring on the live page.
 
 ### Prompt economics
 
@@ -1710,7 +1327,8 @@ Kept so they are not re-tried.
 
 ## History
 
-Long-form records of what was removed, measured and decided — the GitHub agent and ChatGPT
+Long-form records of what was removed, measured and decided — bridge liveness and the reply
+path (moved 2026-10-30), the GitHub agent and ChatGPT
 removals, the dead-code audits, the Direction phases, P0–P3 and "The fork" — live in
 [`docs/history.md`](docs/history.md). They moved out on 2026-10-25 because this file had reached
 167.9k characters, past the 150k Claude Code loads. Read that file before re-opening any of those

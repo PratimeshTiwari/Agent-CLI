@@ -5,7 +5,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contextText, shortModel, statusBarLayout } from '../../src/ui/status-bar.js';
+import { readFileSync } from 'node:fs';
+import { contextText, shortModel, statusBarLayout, STATUS_RIGHT_GUTTER } from '../../src/ui/status-bar.js';
 import { contextMeter } from '../../src/ui/format.js';
 
 const text = (segs) => segs.map((s) => s.text).join('');
@@ -119,4 +120,14 @@ test('helpers', () => {
   assert.equal(contextText(14, 80), '14%');
   assert.equal(contextText(60, 80), '20% to compact');
   assert.equal(contextText(93, 80), '0% to compact');
+});
+
+test('v6.22: the right half stops short of the last column', () => {
+  // Flush, its last character sat under VS Code's overlay scrollbar and was
+  // reported as running off the edge. App must lay out narrower *and* leave
+  // the columns empty — either alone is the bug (or a wrap) again.
+  assert.ok(STATUS_RIGHT_GUTTER >= 1);
+  const app = readFileSync(new URL('../../src/ui/App.jsx', import.meta.url), 'utf8');
+  assert.match(app, /width: Math\.max\(1, terminalWidth - STATUS_RIGHT_GUTTER\)/);
+  assert.match(app, /marginRight=\{STATUS_RIGHT_GUTTER\}/);
 });

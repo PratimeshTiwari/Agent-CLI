@@ -70,6 +70,13 @@ function contextRole(pct) {
  * @param {number} [o.compactAtPct]
  * @returns {{left: Array<{text:string, role:string}>, right: Array<{text:string, role:string}>}}
  */
+/**
+ * Columns left empty after the right half (v6.22). Flush, the last character
+ * sat in the terminal's last column, under VS Code's overlay scrollbar, and
+ * was reported as overflowing. App lays the bar out this much narrower.
+ */
+export const STATUS_RIGHT_GUTTER = 2;
+
 export function statusBarLayout(o) {
   const width = Math.max(1, o.width || 80);
   const compactAt = o.compactAtPct ?? 80;
