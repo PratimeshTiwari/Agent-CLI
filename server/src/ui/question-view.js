@@ -3,7 +3,7 @@
  * it is tested without Ink.
  *
  * v6.4, the owner's pick from mockups: Claude Code's own picker. Tabs of the
- * questions across the top (`☐` until answered, then `✔`) and a Submit tab;
+ * questions across the top (`○` until answered, then `✔`) and a Submit tab;
  * the question in bold; each option's description on the line under it; and
  * `Type something.` last.
  *

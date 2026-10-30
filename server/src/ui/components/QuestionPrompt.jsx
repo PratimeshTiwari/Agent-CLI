@@ -99,15 +99,17 @@ export function QuestionPrompt({ payload, onAnswer, onCancel, width = 80, rows =
   const head = many ? (
     <Text wrap="truncate">
       {tabs.map((tab, i) => {
-        const mark = tab.submit ? '' : tab.done ? '✔ ' : '☐ ';
+        // `○`, not `☐`: many terminal fonts draw the box small and low, which
+        // read as broken (v6.23).
+        const mark = tab.submit ? '' : tab.done ? '✔ ' : '○ ';
         // The active tab is one block, mark included; the others keep the
         // mark's own colour. Each is padded the same, so the row does not shift.
         return tab.active ? (
           <Text key={i} bold inverse color={T.menu}>{` ${mark}${tab.label} `}</Text>
         ) : (
           <Text key={i}>
-            {' '}<Text color={tab.done ? T.success : T.muted}>{mark}</Text>
-            <Text dimColor={!tab.done}>{tab.label}</Text>{' '}
+            {' '}<Text color={tab.done ? T.success : T.attention}>{mark}</Text>
+            <Text>{tab.label}</Text>{' '}
           </Text>
         );
       })}
@@ -129,15 +131,15 @@ export function QuestionPrompt({ payload, onAnswer, onCancel, width = 80, rows =
             {'   '}{summary.map((s, i) => (
               <React.Fragment key={i}>
                 {i > 0 ? <Text dimColor>{' · '}</Text> : null}
-                <Text color={s.answer == null ? T.attention : T.success}>{s.answer == null ? '☐ ' : '✔ '}</Text>
+                <Text color={s.answer == null ? T.attention : T.success}>{s.answer == null ? '○ ' : '✔ '}</Text>
                 {s.answer ?? <Text color={T.attention}>{s.header}</Text>}
               </React.Fragment>
             ))}
           </Text>
         ) : summary.map((s, i) => (
           <Text key={i} wrap="truncate">
-            {'   '}<Text color={s.answer == null ? T.attention : T.success}>{s.answer == null ? '☐' : '✔'}</Text>
-            {' '}<Text dimColor>{`${s.header}:`}</Text>{' '}{s.answer ?? <Text color={T.attention}>not answered</Text>}
+            {'   '}<Text color={s.answer == null ? T.attention : T.success}>{s.answer == null ? '○' : '✔'}</Text>
+            {' '}<Text>{`${s.header}:`}</Text>{' '}{s.answer != null ? <Text bold>{s.answer}</Text> : <Text color={T.attention}>not answered</Text>}
           </Text>
         ))}
         {fit.gap ? <Text> </Text> : null}

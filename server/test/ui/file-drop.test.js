@@ -96,3 +96,21 @@ test('a panel-dropped file folds to its tag, and its inline text is not drawn (v
   // Control: a message that merely mentions <file> is left alone.
   assert.equal(foldFiles('<file name="x">\ny\n</file>').text, '<file name="x">\ny\n</file>');
 });
+
+// v6.23: VS Code's terminal types a dropped path in, with no paste markers.
+import { asBracketedDrop } from '../../src/ui/file-drop.js';
+
+test('asBracketedDrop: a chunk that is only existing paths is a drop; anything else is typing', () => {
+  const statSync = (p) => {
+    if (p === '/Users/me/x.jsonl') return { isDirectory: () => false };
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  };
+  assert.equal(asBracketedDrop("'/Users/me/x.jsonl' ", { statSync }), "\x1b[200~'/Users/me/x.jsonl'\x1b[201~");
+  assert.equal(asBracketedDrop('/Users/me/x.jsonl', { statSync }), '\x1b[200~/Users/me/x.jsonl\x1b[201~');
+  // Controls: a slash command, a path that does not exist, a sentence, one key.
+  assert.equal(asBracketedDrop('/help', { statSync }), null);
+  assert.equal(asBracketedDrop("'/Users/me/gone.jsonl'", { statSync }), null);
+  assert.equal(asBracketedDrop('look at /Users/me/x.jsonl', { statSync }), null);
+  assert.equal(asBracketedDrop('/', { statSync }), null);
+  assert.equal(asBracketedDrop('\x1b[A', { statSync }), null);
+});
