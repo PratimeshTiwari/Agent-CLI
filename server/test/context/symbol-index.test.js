@@ -18,7 +18,10 @@ import assert from 'node:assert';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, utimesSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { definitionsIn, referencesIn, SymbolIndex } from '../../src/context/symbol-index.js';
+import { definitionsIn, referencesIn, SymbolIndex, loadJsParser } from '../../src/context/symbol-index.js';
+
+// acorn is loaded on first use since v6.8; the tools await it, these tests do it here.
+await loadJsParser();
 
 const kinds = (src) => definitionsIn(src).map((d) => `${d.kind} ${d.name}`).sort();
 

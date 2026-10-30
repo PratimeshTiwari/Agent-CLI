@@ -22,7 +22,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v2 is a set of switches, all on', () => {
   const flags = PROMPT_VERSIONS.v2.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'oneCopy', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'oneCopy', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -56,6 +56,12 @@ test('v6.7: on the cheap rungs a greeting gets no task.md and no plan', () => {
   // High already says it in STEP 1, so it is not said twice.
   assert.equal(count(v2['high/plan/sub/turn0'], line), 0);
   assert.match(v2['high/plan/sub/turn0'], /A greeting, or a question you can answer without reading anything, needs none of this/);
+});
+
+test('v6.8: find_symbol names Ruby on v2, and v1 keeps its sentence', () => {
+  assert.match(v2['high/plan/sub/turn0'], /JavaScript and JSX are parsed; Ruby is matched by line patterns/);
+  assert.doesNotMatch(v2['high/plan/sub/turn0'], /JavaScript and JSX only\./);
+  assert.match(v1['high/plan/sub/turn0'], /JavaScript and JSX only\./, 'control: v1 frozen');
 });
 
 test('A2: task.md is ticked in the reply that makes the next call', () => {

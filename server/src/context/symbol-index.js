@@ -30,21 +30,45 @@
  * concluding a symbol does not exist when the truth is that nothing looked.
  */
 
-import { Parser } from 'acorn';
-import jsx from 'acorn-jsx';
-import * as walk from 'acorn-walk';
 import { readFileSync, statSync } from 'fs';
-import { relative, join, extname } from 'path';
+import { relative, extname } from 'path';
 import fg from 'fast-glob';
 import { AGENT_DIR } from '../core/paths.js';
-
-const JsxParser = Parser.extend(jsx());
+import { RUBY, rubyCodeLines, rubyDefinitionsIn, rubyReferencesIn } from './ruby-symbols.js';
 
 /** What acorn can read. Everything else is reported, not silently dropped. */
 export const PARSEABLE = new Set(['.js', '.jsx', '.mjs', '.cjs']);
 
 /** Extensions worth *mentioning* when skipped — code we simply cannot read. */
-const CODE_LIKE = new Set(['.ts', '.tsx', '.py', '.go', '.rb', '.rs', '.java', '.php', '.c', '.cpp']);
+const CODE_LIKE = new Set(['.ts', '.tsx', '.py', '.go', '.rs', '.java', '.php', '.c', '.cpp']);
+
+/**
+ * acorn, acorn-jsx and acorn-walk, loaded on first use (v6.8).
+ *
+ * They were static imports, so `/doctor` called all three *required* — the
+ * agent would not start without them — when nothing touches them until a
+ * symbol tool is called. Loaded here, a missing copy costs the JavaScript half
+ * of two tools and says so in their answer; Ruby and everything else go on.
+ * About 10 ms, paid once.
+ *
+ * @returns {Promise<{Parser: any, walk: any, WALK_BASE: object}>}
+ */
+let js = null;
+export async function loadJsParser() {
+  if (js) return js;
+  const [acorn, jsx, walk] = await Promise.all([import('acorn'), import('acorn-jsx'), import('acorn-walk')]);
+  js = {
+    Parser: acorn.Parser.extend(jsx.default()),
+    walk,
+    WALK_BASE: { ...walk.base, ...JSX_BASE, ...MODULE_BASE },
+  };
+  return js;
+}
+
+function parser() {
+  if (!js) throw new Error('loadJsParser() has not run');
+  return js;
+}
 
 const PARSE_OPTIONS = { ecmaVersion: 'latest', sourceType: 'module', locations: true };
 
@@ -113,17 +137,14 @@ const MODULE_BASE = {
   },
 };
 
-/**
- * `acorn-walk`'s defaults plus the JSX and module ones.
- *
- * Exported because it is the only correct way to walk *this* project's sources,
- * and anything else that walks them needs the same two corrections — a test
- * that scans for calls to undefined names hit the identical JSXElement throw
- * within a minute of being written. One definition, so the next walker does not
- * rediscover both traps.
+/*
+ * `acorn-walk`'s defaults plus the JSX and module ones are `WALK_BASE`, built in
+ * `loadJsParser`. It is handed out because it is the only correct way to walk
+ * *this* project's sources, and anything else that walks them needs the same
+ * two corrections — a test that scans for calls to undefined names hit the
+ * identical JSXElement throw within a minute of being written. One
+ * definition, so the next walker does not rediscover both traps.
  */
-export const WALK_BASE = { ...walk.base, ...JSX_BASE, ...MODULE_BASE };
-const BASE = WALK_BASE;
 
 /**
  * Every definition in one source text.
@@ -136,7 +157,8 @@ const BASE = WALK_BASE;
  * @returns {Array<{name: string, kind: string, line: number}>}
  */
 export function definitionsIn(source) {
-  const ast = JsxParser.parse(source, PARSE_OPTIONS);
+  const { Parser, walk, WALK_BASE: BASE } = parser();
+  const ast = Parser.parse(source, PARSE_OPTIONS);
   const out = [];
   const add = (name, kind, node) => {
     if (name) out.push({ name, kind, line: node.loc.start.line });
@@ -214,7 +236,8 @@ export function definitionsIn(source) {
  * @returns {Array<{line: number, column: number, member?: boolean}>}
  */
 export function referencesIn(source, name, { includeMembers = false } = {}) {
-  const ast = JsxParser.parse(source, PARSE_OPTIONS);
+  const { Parser, walk, WALK_BASE: BASE } = parser();
+  const ast = Parser.parse(source, PARSE_OPTIONS);
   const out = [];
   // `import { X }` gives `imported` and `local` the same position, and visiting
   // both is how the import is found at all — so the duplicate is deduped here
@@ -278,7 +301,7 @@ export class SymbolIndex {
 
   /** Every file worth parsing, plus the code-like ones we cannot. */
   _candidates() {
-    const entries = fg.sync(['**/*.{js,jsx,mjs,cjs,ts,tsx,py,go,rb,rs,java,php,c,cpp}'], {
+    const entries = fg.sync(['**/*.{js,jsx,mjs,cjs,ts,tsx,py,go,rb,rake,rs,java,php,c,cpp}'], {
       cwd: this.workspace,
       // `node_modules/**` matches only the top level, and this is a workspaces
       // repo — `server/node_modules` and `extension/node_modules` were being
@@ -291,6 +314,8 @@ export class SymbolIndex {
       ignore: [
         '**/node_modules/**', '**/.git/**', `**/${AGENT_DIR}/**`,
         '**/dist/**', '**/build/**', '**/*.min.js',
+        // Bundler's installed gems: a Rails app vendors thousands of them.
+        '**/vendor/bundle/**',
         'extension/service-worker.js',
       ],
       absolute: true,
@@ -315,8 +340,13 @@ export class SymbolIndex {
       const rel = relative(this.workspace, abs);
       seen.add(abs);
 
-      if (!PARSEABLE.has(ext)) {
+      const ruby = RUBY.has(ext);
+      if (!ruby && !PARSEABLE.has(ext)) {
         if (CODE_LIKE.has(ext)) this.skipped.push({ file: rel, reason: `acorn cannot parse ${ext}` });
+        continue;
+      }
+      if (!ruby && !js) {
+        this.skipped.push({ file: rel, reason: 'JavaScript not indexed (acorn is not installed, see /doctor)' });
         continue;
       }
 
@@ -333,6 +363,11 @@ export class SymbolIndex {
         continue;
       }
 
+      if (ruby) {
+        const code = rubyCodeLines(source);
+        this.files.set(abs, { mtime, defs: rubyDefinitionsIn(source, code), source, code, ruby: true });
+        continue;
+      }
       try {
         this.files.set(abs, { mtime, defs: definitionsIn(source), source });
       } catch (err) {
@@ -353,16 +388,24 @@ export class SymbolIndex {
     return [...this.files.values()].filter((f) => !f.unparsed).length;
   }
 
+  /** How many of those are Ruby, read by pattern rather than parsed. */
+  get rubyFiles() {
+    return [...this.files.values()].filter((f) => f.ruby).length;
+  }
+
   /**
    * Where `name` is defined.
    *
    * @returns {Array<{file: string, line: number, kind: string}>}
    */
   find(name) {
+    // `Billing::Invoice` is indexed as `Invoice`; asking with the namespace
+    // finds it. JavaScript names never contain `::`.
+    const want = name.includes('::') ? name.split('::').pop() : name;
     const out = [];
     for (const [abs, entry] of this.files) {
       for (const def of entry.defs) {
-        if (def.name === name) {
+        if (def.name === want) {
           out.push({ file: relative(this.workspace, abs), line: def.line, kind: def.kind });
         }
       }
@@ -405,7 +448,9 @@ export class SymbolIndex {
       if (!entry.source.includes(name)) continue;
       let hits;
       try {
-        hits = referencesIn(entry.source, name, { includeMembers });
+        // Ruby is a word match on its code lines (`ruby-symbols.js`), which
+        // already includes `x.name`: in Ruby that is how a method is called.
+        hits = entry.ruby ? rubyReferencesIn(entry.code, name) : referencesIn(entry.source, name, { includeMembers });
       } catch {
         continue;
       }
@@ -427,7 +472,13 @@ export class SymbolIndex {
 /** One index per workspace, kept between calls so the parse is paid once. */
 const indexes = new Map();
 
-export function symbolIndex(workspace) {
+/**
+ * The index for a workspace, refreshed. Async because the JavaScript parser is
+ * loaded on the first call; if it cannot be, JavaScript files are listed as
+ * skipped with the reason and Ruby is still indexed.
+ */
+export async function symbolIndex(workspace) {
+  try { await loadJsParser(); } catch { /* reported per file by refresh() */ }
   if (!indexes.has(workspace)) indexes.set(workspace, new SymbolIndex(workspace));
   return indexes.get(workspace).refresh();
 }

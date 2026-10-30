@@ -947,7 +947,23 @@ that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the wal
 file parses and then throws `No walker function defined for node type JSXElement`; and
 `acorn-walk` defines `ImportSpecifier` as `ignore`, so `import { X }` is never visited and "who
 imports this?" answers nothing. Built lazily and cached by mtime — 135 ms cold, 3 ms warm on
-this repo, 282 of 282 exported symbols. `executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
+this repo, 282 of 282 exported symbols.
+
+**Ruby since v6.8 (`context/ruby-symbols.js`), by line patterns, and acorn is loaded on first
+use.** `.rb` and `.rake` files are indexed rather than skipped. Definitions come from `def`
+(operators and any receiver included), `class`, `module`, constants, `attr_*`, `alias`,
+`alias_method`, `define_method :x` and `scope`. References are word matches on code lines, with
+comments, `=begin` blocks, heredoc bodies and string contents blanked (`#{}` kept). Checked
+against Ripper over the 1,093 `.rb` files macOS ships: **17,628 of 17,641 definitions (99.9%)**,
+160 ms cold. The first cut found 92.4% because a heredoc named in a *comment* blanked the rest
+of the file. Answers that include Ruby carry `rubyNote` (no run-time methods, no names in
+strings, `x.name` is any object's), and a Ruby file in `find_references` is marked `byText`.
+`vendor/bundle` is ignored. acorn, acorn-jsx and acorn-walk are `optional` in `/doctor` now;
+`loadJsParser()` imports them, and if that fails JavaScript is listed as skipped with the
+reason. `find_symbol`'s "JavaScript and JSX only" is v1's frozen text; v2 names Ruby
+(`symbolLanguages`), since a tool description is part of the prompt.
+
+`executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
 backoff and rewrites `errno` codes into LLM-readable instructions.
 
 ### Workspace
@@ -1024,6 +1040,13 @@ workspace** without asking — decided by location, never by extension alone —
 instruction files (`AGENT.md`, `CLAUDE.md`, `GEMINI.md`), which is the line the paragraph below
 was written to hold. The prompt states the exception in plan and not in strict, because the two
 disagreeing is the failure recorded below. Tab cycles plan → auto → strict.
+
+**A plan review opens only for a plan still waiting (v6.7, `planWorthReviewing` in
+`ui/plan-box.js`).** "hi" on Flash-Lite in plan mode wrote `task.md`, a one-line plan, ticked it,
+said hello, and ended on *Plan ready for review* with the editor opened. The review and editor are
+skipped when `task.md` was written after the plan with nothing unticked, or the plan has fewer than
+two steps and under 200 characters. v2's cheap rungs also lose "ALWAYS proactively create a task.md"
+(`answerDirectly`); v1 still says it.
 
 **Plan mode exempts the agent's own artifacts, and nothing else.** *(Now true of `strict`.)* The check was
 `path.endsWith('.md')`, beside a comment reading "Creating/Editing Markdown files (like plans)

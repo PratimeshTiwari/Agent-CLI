@@ -111,12 +111,16 @@ Parameters:
     verb: 'Symbol',
     flash: ` — Where a symbol is DEFINED (parses the code, not the text). Args: name (string, exact, case-sensitive)
 `,
-    pro: `
+    // v1 is frozen and keeps "JavaScript and JSX only"; Ruby is indexed since
+    // v6.8 and a newer prompt version says so (`symbolLanguages`).
+    pro: (_config, flags = {}) => `
 Find where a symbol is **defined** — class, function, method or const. Parses the code, so it
 returns the definition rather than forty call sites, and never a match inside a comment or
 string: reach for this instead of grep_search whenever you know the exact name.
 
-JavaScript and JSX only. "No definition found" plus a note about skipped files means *not found
+${flags.symbolLanguages
+    ? 'JavaScript and JSX are parsed; Ruby is matched by line patterns, and the result says what that misses.'
+    : 'JavaScript and JSX only.'} "No definition found" plus a note about skipped files means *not found
 here*, not "does not exist" — follow up with grep_search.
 Parameters:
   - name (string, required): exact symbol name, case-sensitive
@@ -454,7 +458,7 @@ export function toolNames(ctx) {
  * It is gone: one `ask_subagent` with a role covers what three names pretended
  * to.
  */
-export function renderToolDefinitions(tier, ctx, modelConfig = {}) {
+export function renderToolDefinitions(tier, ctx, modelConfig = {}, flags = {}) {
   /*
    * Both cheap tiers get the terse list, not just the one called `flash`.
    *
@@ -472,7 +476,7 @@ export function renderToolDefinitions(tier, ctx, modelConfig = {}) {
   let out = '<available_tools>\n';
   for (const tool of toolsFor(ctx)) {
     const text = (isFlash ? tool.flash : (tool.pro ?? tool.flash));
-    out += `${tool.lead || ''}## ${tool.name}${typeof text === 'function' ? text(modelConfig) : text}`;
+    out += `${tool.lead || ''}## ${tool.name}${typeof text === 'function' ? text(modelConfig, flags) : text}`;
   }
   return `${out}</available_tools>`;
 }

@@ -28,7 +28,9 @@ import * as walk from 'acorn-walk';
 // The JSX and import-specifier walkers this project's sources need. Without
 // them a .jsx file parses and then throws on the walk — the trap CLAUDE.md
 // documents, met again inside a minute.
-import { WALK_BASE } from '../../src/context/symbol-index.js';
+import { loadJsParser } from '../../src/context/symbol-index.js';
+
+const { WALK_BASE } = await loadJsParser();
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const Parser = acorn.Parser.extend(jsx());
