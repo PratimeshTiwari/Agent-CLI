@@ -108,6 +108,52 @@ export function asBracketedDrop(chunk, { statSync, home } = {}) {
   return recognizeDrop(s.trim(), { statSync, home }) ? `\x1b[200~${s.trim()}\x1b[201~` : null;
 }
 
+/**
+ * VS Code's pty host writes input in pieces of at most 50 characters, 5 ms
+ * apart (`chunkInput` in ptyHostMain), so a dropped path longer than that
+ * arrived as several reads and `asBracketedDrop` saw only the first (v6.25).
+ * A 45-character `.dmg` path became a tag; a workspace `.jsonl` did not.
+ */
+export const PTY_CHUNK = 50;
+const JOIN_WAIT_MS = 30;
+const looksLikePathStart = (s) => !s.includes('\x1b') && /^\s*['"]?(?:\/|~\/|file:\/\/)/.test(s);
+
+/**
+ * Holds a read that could be the first piece of a split drop and joins the
+ * pieces after it. Only a read whose length is a whole number of pty pieces
+ * and that starts like a path is held — typing never delivers fifty
+ * characters in one read — and the held text is delivered whole and in order,
+ * after a read shorter than a piece or `JOIN_WAIT_MS` of quiet.
+ */
+export function createDropJoiner({ deliver, setTimer = setTimeout, clearTimer = clearTimeout, waitMs = JOIN_WAIT_MS }) {
+  let held = '';
+  let timer = null;
+  const flush = () => {
+    if (timer) clearTimer(timer);
+    timer = null;
+    const text = held;
+    held = '';
+    if (text) deliver(text);
+  };
+  return {
+    accept(raw) {
+      const s = String(raw);
+      const full = s.length > 0 && s.length % PTY_CHUNK === 0;
+      if (!held) {
+        if (!full || !looksLikePathStart(s)) return deliver(s);
+      } else if (s.includes('\x1b')) {
+        flush();
+        return deliver(s);
+      }
+      held += s;
+      if (!full) return flush();
+      if (timer) clearTimer(timer);
+      timer = setTimer(flush, waitMs);
+    },
+    flush,
+  };
+}
+
 const LABEL = { file: 'File', folder: 'Folder' };
 
 /** `[File #2: agent-loop.js]` — the name only; the header line has the path. */

@@ -319,3 +319,13 @@ describe('subjectOf fits the row it is drawn in', () => {
     }
   });
 });
+
+test('one tilde is "about", not strikethrough; two still strike (v6.25)', () => {
+  const plain = (s) => renderMarkdown(s).replace(/\x1b\[[0-9;]*m/g, '');
+  assert.match(plain('The file is ~291.5 MB (~298,548 KB) in total.'), /~291\.5 MB \(~298,548 KB\)/);
+  assert.match(plain('Run it from ~/code and ~/tmp.'), /~\/code and ~\/tmp/);
+  // Control: the double form is still a strikethrough, its tildes consumed.
+  const struck = plain('This is ~~gone~~ now.');
+  assert.match(struck, /gone/);
+  assert.doesNotMatch(struck, /~~/);
+});

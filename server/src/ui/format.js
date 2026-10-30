@@ -40,6 +40,23 @@ marked.use(markedTerminal({
 }));
 
 /**
+ * Strikethrough needs two tildes (v6.25). GFM also takes one, so a reply
+ * saying "~291.5 MB (~298,548 KB)" drew everything between the two as struck
+ * out. Gemini writes `~` as "about" far more often than it strikes anything,
+ * and its own page renders `~~` only. Returning nothing leaves the tildes as
+ * text; returning false would hand the source back to the one-tilde rule.
+ */
+const DOUBLE_TILDE_DEL = /^~~(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))~~(?=[^~]|$)/;
+marked.use({
+  tokenizer: {
+    del(src) {
+      const m = DOUBLE_TILDE_DEL.exec(src);
+      if (m) return { type: 'del', raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+    },
+  },
+});
+
+/**
  * The last step `marked-terminal` applies to a paragraph, for inline text we
  * render ourselves (list items, table cells).
  *

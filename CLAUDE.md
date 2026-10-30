@@ -1517,6 +1517,15 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   dropped path in with no paste markers, so it stayed text. One stdin chunk of nothing but existing
   absolute paths is wrapped as a paste in `cli-ui.jsx`; `/help`, a missing path and a sentence are
   not. Pty (`{"raw": …}` step): `[File #1: drop-me.jsonl]`, 0 clears at 13 and 24 rows.
+  **It arrives in pieces past 50 characters (v6.25, `createDropJoiner`).** VS Code's pty host
+  writes input in pieces of at most 50, 5 ms apart (`chunkInput` in `ptyHostMain.js`), so a
+  45-character `.dmg` path became a tag and a workspace path did not. A read whose length is a
+  multiple of 50 and that starts like a path is held up to 30 ms and joined; typing never
+  delivers 50 characters in one read. Pty (`{"vscode": …}` step, VS Code's own chunker): tag at
+  13 and 24 rows, 0 clears; `main` sends the quoted path. **Antigravity's agent panel takes image,
+  PDF and video drops for the whole window** (`dragover`/`drop` on `window`, `stopPropagation`),
+  so those never reach its terminal while that panel is open — paste the path instead (a paste
+  of an existing path is a drop).
 - **A dropped file is a tag too (v5.33, `ui/file-drop.js`).** A terminal has no drop event: a drop
   is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
   (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays

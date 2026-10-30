@@ -11,7 +11,7 @@ import { animationAllowed, OUTRO_MS } from './intro.js';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../core/user-settings.js';
 import { createProbeHold } from './ink-probe-hold.js';
-import { asBracketedDrop } from './file-drop.js';
+import { asBracketedDrop, createDropJoiner } from './file-drop.js';
 
 /**
  * The stream Ink reads: real stdin, with a trailing Enter delivered separately.
@@ -166,7 +166,10 @@ export class CliUI {
       });
     };
     const probeHold = createProbeHold({ deliver: onKeys });
-    process.stdin.on('data', (raw) => probeHold.accept(raw));
+    // A drop longer than one pty piece arrives in pieces (VS Code); joined
+    // first, so `asBracketedDrop` sees the whole path.
+    const dropJoiner = createDropJoiner({ deliver: (raw) => probeHold.accept(raw) });
+    process.stdin.on('data', (raw) => dropJoiner.accept(raw));
 
     // Before the first frame: a theme applied after it would draw the banner in
     // the old colours, and <Static> never repaints it.
