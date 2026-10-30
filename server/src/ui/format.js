@@ -591,24 +591,6 @@ export function summarizeResult(toolName, result) {
 }
 
 /**
- * The status bar's context field.
- *
- * Far from the threshold it is `18% of 96k`. Within twenty points it says
- * how far is left, in Claude Code's words — `18% until auto-compact`, down to
- * `0% until auto-compact`, when your next message compacts before it is sent —
- * and drops the budget, which is the part nobody acts
- * on. It used to append ` · 18% to auto-compact` / ` · compacts after this
- * turn` to the full field, and the right side of the bar does not shrink, so
- * the hint pushed the left side (`agent · scope · /help`) off the row.
- */
-export function contextField(pct, limit, compactAtPct) {
-  const toGo = compactAtPct - pct;
-  // Claude Code's words. At 0% the next message you send compacts first.
-  if (toGo <= 20) return `${Math.max(0, toGo)}% until auto-compact`;
-  return `${pct}% of ${limit >= 1000 ? `${Math.round(limit / 1000)}k` : limit}`;
-}
-
-/**
  * Lines added and removed in a unified diff, or null without one. The `+++`
  * and `---` file headers are not lines of the file.
  */
@@ -1124,10 +1106,9 @@ export function contextMeter(pct, cells = 5) {
 }
 
 /**
- * The mode, said the way Claude Code says it, for the status line, with
- * Claude Code's glyphs: `⏸ plan mode on`, `⏵⏵ auto mode on`, `⏹ strict plan
- * mode on`. Replaced a label on the input border, which read as floating above
- * the box.
+ * The mode's glyph on the status line, Claude Code's: `⏸` plan, `⏵⏵` auto,
+ * `⏹` strict. The words beside it are `ui/status-bar.js`'s (v6.13; `on` went,
+ * since the mode's presence already says it).
  *
  * v5.20 dropped the glyphs — `⏸` drew as a thick `▮▮` in the owner's font and
  * was reported as looking bad. They came back by choice on 2026-10-25 (Look A
@@ -1136,12 +1117,6 @@ export function contextMeter(pct, cells = 5) {
  * forms; change `MODE_GLYPHS` only.
  */
 export const MODE_GLYPHS = { plan: '⏸', auto: '⏵⏵', strict: '⏹' };
-
-export function modeLine(mode) {
-  if (mode === 'auto') return `${MODE_GLYPHS.auto} auto mode on`;
-  if (mode === 'strict') return `${MODE_GLYPHS.strict} strict plan mode on`;
-  return `${MODE_GLYPHS.plan} plan mode on`;
-}
 
 /** How many output lines a running command shows under its row. */
 export const RUNNING_OUTPUT_LINES = 5;

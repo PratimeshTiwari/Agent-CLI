@@ -1946,6 +1946,15 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `snap` is the raw stream with escapes stripped and invents blank rows; use `{"screen": file}`,
   pyte's rendered viewport, for anything about layout.
 
+- **The status bar is laid out in `ui/status-bar.js` (v6.13, Option A of
+  `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
+  coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest
+  is dim. Bare values (`v2`, `medium`, `14%`), absent at default (prompt v1, context before the
+  first message). `shift+tab to cycle` shows only before the chat's first message, while idle
+  (owner: "show this at the start of chat only"). What gives way as it narrows is a fixed order
+  (`shed` in `statusBarLayout`), tested at 30–120 columns; App only maps roles to colours. Pty:
+  0 clears at 10, 13, 24 rows × 60, 90 columns.
+
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80
