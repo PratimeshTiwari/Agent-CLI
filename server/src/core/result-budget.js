@@ -184,7 +184,13 @@ export function planSpoolPruning(fileNames = [], { keep = KEEP_SPOOLS } = {}) {
  * @returns {string|null} null when `result` is not a read_file result
  */
 export function formatReadResult(result) {
-  if (!result || typeof result !== 'object' || typeof result.content !== 'string' || !result.range) return null;
+  if (!result || typeof result !== 'object' || typeof result.content !== 'string') return null;
+  // A large file read by a subagent (v6.16): a digest, and the header says so,
+  // so the model never quotes it as the file.
+  if (result.delegated) {
+    return `${result.path} · ${result.totalLines} lines · read by a subagent; this is its digest, not the file\n${result.content}`;
+  }
+  if (!result.range) return null;
   const { path, language, totalLines, range } = result;
   return `${path} · lines ${range.start}–${range.end} of ${totalLines}${language ? ` · ${language}` : ''}\n${result.content}`;
 }
@@ -202,6 +208,10 @@ export function formatReadResult(result) {
 export function fitReadResult(result, allowance) {
   const text = formatReadResult(result);
   if (text === null || text.length <= allowance) return text;
+  if (result.delegated) {
+    const cut = text.slice(0, allowance - 30);
+    return `${cut.slice(0, Math.max(0, cut.lastIndexOf('\n')))}\n… digest cut to fit`;
+  }
   const { path, range } = result;
   const lines = text.split('\n');
   const header = lines[0];

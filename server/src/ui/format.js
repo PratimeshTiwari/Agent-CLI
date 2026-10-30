@@ -533,6 +533,8 @@ export function summarizeResult(toolName, result) {
       case 'read_file':
         // { path, totalLines, size, content }
         if (typeof r?.totalLines === 'number') {
+          // v6.16: a large file read in a subagent's tab.
+          if (r.delegated) return `${plural(r.totalLines.toLocaleString(), 'line')} · summarised by a subagent`;
           return `${plural(r.totalLines, 'line')}${r.size ? ` · ${r.size}` : ''}`;
         }
         break;

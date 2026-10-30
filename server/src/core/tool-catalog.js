@@ -149,16 +149,26 @@ Parameters:
     verb: 'Read',
     flash: ` — Read a file (PDF, Word, PowerPoint too, as Markdown). Args: path (string), startLine? (number), endLine? (number)
 `,
-    pro: `
+    // v1 is frozen; a newer version says what happens to a large file
+    // (`largeFileDigest`, v6.16), and only while it does happen.
+    pro: (config = {}, flags = {}, ctx = null) => {
+      const subagents = typeof ctx === 'object' && ctx !== null ? Boolean(ctx.subagents) : Boolean(ctx);
+      const digest = flags.largeFileDigest && subagents && config.largeFiles !== 'direct';
+      return `
 Read a file, optionally one line range of it. Read before you edit — \`edit_file\` matches exact
 text and fails if you guessed it. PDF, Word (.docx, .doc), PowerPoint, RTF and ODT come back as
 Markdown, a PDF with a \`--- page N ---\` line per page; other binary files are refused.
-Parameters:
+${digest ? `A file over 1,200 lines or 80 KB read with no range is read by a subagent, and you get its
+digest (outline, quoted passages with line numbers), not the file. Say what you need in \`purpose\`.
+A range always reads the file itself — use one for the exact text of an edit.
+` : ''}Parameters:
   - path (string, required): relative to the workspace root
   - startLine (number, optional): 1-indexed
   - endLine (number, optional): 1-indexed
-
-`,
+${digest ? `  - purpose (string, optional): what you are looking for, for a large file read by a subagent
+` : ''}
+`;
+    },
   },
   {
     name: 'edit_file',
@@ -483,7 +493,7 @@ export function renderToolDefinitions(tier, ctx, modelConfig = {}, flags = {}) {
   let out = '<available_tools>\n';
   for (const tool of toolsFor(ctx)) {
     const text = (isFlash ? tool.flash : (tool.pro ?? tool.flash));
-    out += `${tool.lead || ''}## ${tool.name}${typeof text === 'function' ? text(modelConfig, flags) : text}`;
+    out += `${tool.lead || ''}## ${tool.name}${typeof text === 'function' ? text(modelConfig, flags, ctx) : text}`;
   }
   return `${out}</available_tools>`;
 }

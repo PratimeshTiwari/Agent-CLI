@@ -315,6 +315,27 @@ export async function handleSlashCommand(loop, command, args) {
       // thing this command has, so requiring it is ceremony.
       const asked = ['subagents', 'subagent', 'reviewer'].includes(word) ? value : word;
 
+      // v6.16: who reads a large file. `subagent` sends an unranged read of a
+      // file over 1,200 lines or 80 KB to a research tab and hands the main
+      // chat a digest; `direct` pages it into the main chat as before.
+      if (word === 'large-files' || word === 'large') {
+        const was = loop.modelConfig.largeFiles === 'direct' ? 'direct' : 'subagent';
+        const to = ['direct', 'read', 'off'].includes(value) ? 'direct'
+          : ['subagent', 'sub', 'on'].includes(value) ? 'subagent' : null;
+        if (!to) {
+          return {
+            message: `Large files are read **${was === 'direct' ? 'directly' : 'by a subagent'}** · `
+              + `\`/subagents large-files ${was === 'direct' ? 'subagent' : 'direct'}\` to change it`,
+          };
+        }
+        loop.modelConfig.largeFiles = to;
+        loop._saveConfig();
+        return {
+          message: changed('large files', was, to,
+            to === 'subagent' && !loop.subagentsEnabled ? 'subagents are off, so files are read directly' : ''),
+        };
+      }
+
       const was = loop.subagentsEnabled ? 'on' : 'off';
       if (OFF.includes(asked) || ON.includes(asked)) {
         const to = OFF.includes(asked) ? 'off' : 'on';

@@ -22,7 +22,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v2 is a set of switches, all on', () => {
   const flags = PROMPT_VERSIONS.v2.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'oneCopy', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'largeFileDigest', 'oneCopy', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -157,4 +157,13 @@ test('ask_subagent takes the /effort words on v2, max included; v1 keeps its own
   assert.match(high, /effort \(string, optional\): "low", "medium", "high" or "max"/);
   assert.doesNotMatch(high, /"lite", "flash" or "pro"/);
   assert.match(v1['high/plan/sub/turn0'], /"lite", "flash" or "pro"/);
+});
+
+test('read_file names the digest and purpose on v2 with subagents; never on v1 or solo (v6.16)', () => {
+  assert.match(v2['high/plan/sub/turn0'], /purpose \(string, optional\)/);
+  assert.match(v2['high/plan/sub/turn0'], /digest \(outline, quoted passages/);
+  assert.doesNotMatch(v1['high/plan/sub/turn0'], /purpose \(string, optional\)/);
+  const solo = Object.entries(v2).filter(([k]) => k.startsWith('high/') && k.includes('/solo/'));
+  assert.ok(solo.length > 0, 'there is a solo shape to check');
+  for (const [k, text] of solo) assert.doesNotMatch(text, /read by a subagent/, k);
 });

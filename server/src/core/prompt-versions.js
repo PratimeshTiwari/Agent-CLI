@@ -49,6 +49,7 @@ export const PROMPT_VERSIONS = {
       answerDirectly: true,      // lite/flash: a greeting gets no task.md and no plan (v6.7)
       symbolLanguages: true,     // find_symbol names Ruby as well as JavaScript (v6.8)
       subagentEffortWords: true, // ask_subagent's effort is low | medium | high | max (v6.15)
+      largeFileDigest: true,     // read_file says a large unranged read comes back as a digest (v6.16)
     },
   },
 };
@@ -67,6 +68,7 @@ export const FLAG_NOTES = {
   answerDirectly: 'A greeting gets an answer, not a task.md and a plan',
   symbolLanguages: 'find_symbol says it reads Ruby as well as JavaScript',
   subagentEffortWords: 'ask_subagent takes the /effort words, max included',
+  largeFileDigest: 'read_file says a large file comes back as a subagent\'s digest',
 };
 
 /** What a version changes from v1, one line per switch that is on. */
