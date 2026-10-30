@@ -574,6 +574,8 @@ export class WebSocketServer {
           effort: resolveEffort(this.agentLoop?.modelConfig?.effort).id,
           // v5.35: and the prompt version, so `/logs speed` can compare them.
           promptVersion: this.agentLoop?.promptVersion,
+          // v7.3: and how full the thread was, so the budgets can be tested.
+          ...(this.agentLoop?.contextFill ?? {}),
         });
         break;
 

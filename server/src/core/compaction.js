@@ -228,6 +228,8 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
      */
     progress(loop, 1);
     const startedAt = Date.now();
+    // How full it was when it compacted (v7.3), read before anything resets it.
+    const fill = loop.contextFill ?? {};
     const asked = await loop._askThread(summaryPrompt(focus), { timeoutMs: SUMMARY_TIMEOUT_MS });
     if (asked.cancelled) {
       return { message: 'Compaction cancelled — nothing changed; this chat carries on as it was.' };
@@ -240,7 +242,7 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
       message: fromThread ? 'Compacted from the thread\'s own summary'
         : `Compacted locally — the thread ${asked.timedOut ? 'did not answer in time' : 'gave no usable summary'}`,
       meta: { auto, path: fromThread ? 'thread' : 'local', ms: Date.now() - startedAt,
-        summaryChars: summary.length, turns: compactedTurns, kept: countTurns(toKeep) },
+        summaryChars: summary.length, turns: compactedTurns, kept: countTurns(toKeep), ...fill },
     });
 
     const compactedTurn = {

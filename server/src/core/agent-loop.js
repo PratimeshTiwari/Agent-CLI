@@ -1045,7 +1045,7 @@ export class AgentLoop {
     logError(this.workspace, {
       flow: 'agent', op: 'provider_error',
       message: cleanContent.trim().slice(0, 200),
-      meta: { attempt: verdict.attempt, delayMs: verdict.delayMs ?? null },
+      meta: { attempt: verdict.attempt, delayMs: verdict.delayMs ?? null, ...this.contextFill },
     });
   }
 
@@ -1094,6 +1094,7 @@ export class AgentLoop {
       flow: 'agent', op: 'tool_amnesia',
       message: 'Model denied having tools; re-sent the definitions',
       detail: cleanContent.slice(0, 400),
+      meta: { ...this.contextFill },
     });
     this.promptBuilder.requestToolRedeclaration(); // definitions only, not a whole turn-0 prompt
 
@@ -1812,6 +1813,17 @@ export class AgentLoop {
 
   get contextTokens() {
     return Math.round(this.contextChars / 4);
+  }
+
+  /**
+   * How full the thread is, for a log row (v7.3). The budgets in `effort.js`
+   * are guesses, and nothing that could test them — a slow reply, tool
+   * amnesia, a provider error, a compaction — recorded the size it happened at.
+   */
+  get contextFill() {
+    const tokens = this.contextTokens;
+    const limit = this.contextLimit;
+    return { contextTokens: tokens, contextLimit: limit };
   }
 
   /**
