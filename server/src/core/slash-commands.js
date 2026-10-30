@@ -147,11 +147,68 @@ export const SLOW_COMMANDS = new Set(['compact']);
  * @param {string} command - the word after the slash, lower-cased
  * @param {string[]} [args]
  */
+/**
+ * What each command accepts after its name, where that is a fixed set (v6.24).
+ *
+ * `/update ayz` ran the update check, and twelve other commands answered a
+ * wrong word exactly as if it were not there — `/subagents zzz` printed the
+ * status, which reads like a confirmation. A wrong word now stops the command
+ * and lists the forms, each with what it does (owner: "mention the available
+ * options with the command written"). `[]` means the command takes nothing.
+ * A command absent here takes free text (a path, a name, a search) or checks
+ * its own words already (`/effort`, `/logs`, `/theme`, `/prompt`, `/doctor`).
+ */
+export const COMMAND_OPTIONS = {
+  update: [['', 'check for a newer version'], ['pull', 'pull it and install'], ['done', 'clear the reload notice']],
+  plan: [['', 'switch to plan mode'], ['show', 'preview the current plan']],
+  copy: [['', 'copy the last reply'], ['code', 'copy its last code block']],
+  reset: [['', 'move this repo\'s agent state to the trash'], ['--keep-settings', 'keep config.json and memory.md']],
+  startup: [['', 'say which it is'], ['warm', 'send the setup prompt when Chrome connects'], ['cold', 'send it with your first message']],
+  memory: [['', 'list what is remembered'], ['on', 'remember facts'], ['off', 'stop'], ['forget <n>', 'drop fact n']],
+  allowlist: [['', 'open the picker'], ['add <command>', 'auto-approve it'], ['block <command>', 'never run it'],
+    ['remove <command>', 'drop a rule'], ['clear', 'drop every rule'], ['enable', 'use the rules'], ['disable', 'ignore them']],
+  subagents: [['', 'say whether they are on'], ['on', 'parallel tabs for research and review'], ['off', 'one tab only'],
+    ['large-files <subagent|direct>', 'who reads a large file']],
+  context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
+  new: [], restart: [], exit: [],
+};
+
+/** Words a command also takes that its list does not advertise. */
+const OPTION_ALIASES = {
+  update: ['now'],
+  plan: ['preview'],
+  allowlist: ['allow'],
+  subagents: ['none', 'no', 'false', 'solo', 'yes', 'true', 'gemini', 'duo', 'subagent', 'reviewer', 'large'],
+};
+
+/**
+ * The reply for a word a command does not take, or null when the args are fine.
+ * Keyed on the first word only: `allowlist add <command>` carries free text after it.
+ */
+export function invalidOption(command, args = []) {
+  const spec = COMMAND_OPTIONS[command];
+  const word = String(args[0] || '').toLowerCase();
+  if (!spec || !word) return null;
+  const known = new Set([...spec.map(([form]) => form.split(' ')[0]).filter(Boolean), ...(OPTION_ALIASES[command] || [])]);
+  if (command === 'reset' && args.every((a) => a === '--keep-settings')) return null;
+  if (known.has(word)) return null;
+  const typed = `\`/${command} ${args.join(' ')}\``;
+  if (spec.length === 0) return `${typed} — \`/${command}\` takes no options.`;
+  const width = Math.max(...spec.map(([form]) => `/${command}${form ? ` ${form}` : ''}`.length));
+  const rows = spec.map(([form, what]) => {
+    const cmd = `/${command}${form ? ` ${form}` : ''}`;
+    return `  \`${cmd}\`${' '.repeat(width - cmd.length)}  ${what}`;
+  });
+  return [`${typed} — no option \`${args[0]}\`. It takes:`, ...rows].join('\n');
+}
+
 export function isSlowCommand(command, args = []) {
   if (SLOW_COMMANDS.has(command)) return true;
   // Every form but `done` reaches the network: bare reports, `pull`/`now` also
   // merge and may `npm install`.
-  if (command === 'update') return (args[0] || '').toLowerCase() !== 'done';
+  // A word it does not take is answered at once (`invalidOption`), so only
+  // the forms that reach the network wait.
+  if (command === 'update') return ['', 'pull', 'now'].includes((args[0] || '').toLowerCase());
   // `fix` runs `npm install` and `report` asks the registry (`npm outdated`,
   // ~1s); the menu opens on what is on disk and fills the registry in behind.
   if (command === 'doctor' || command === 'health') return ['fix', 'report'].includes((args[0] || '').toLowerCase());

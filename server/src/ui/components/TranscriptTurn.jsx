@@ -77,6 +77,16 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
   const pending = fromItem > 0 ? items.slice(fromItem) : items;
   const shown = isLive ? pending.slice(-Math.max(1, liveBudget - 2)) : pending;
   const hidden = pending.length - shown.length;
+  /*
+   * The row above the first live one is usually in <Static>, where every
+   * action row has a blank row above it. Drawn without one, the newest read
+   * sat tight under the others and jumped down a row when it committed —
+   * reported with a screenshot (v6.24). So the live row is spaced the same,
+   * but only when the budget holds every row *and* its gap; a short terminal
+   * keeps the tight rows rather than overflow the frame.
+   */
+  const spaceLive = isLive && shown.length * 2 + 2 <= liveBudget;
+  const lead = isLive && hidden === 0 && fromItem > 0 && shown[0]?.type !== 'text' ? items[fromItem - 1] : undefined;
 
   /**
    * What the agent did, counted separately from what happened to it.
@@ -120,7 +130,8 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
         <TurnRow
           key={item.id}
           item={item}
-          previous={shown[idx - 1]}
+          previous={idx === 0 ? lead : shown[idx - 1]}
+          spaced={!isLive || spaceLive}
           isLive={isLive}
           verbose={verbose}
           liveBudget={liveBudget}
@@ -317,18 +328,17 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
  * live frame is charged for strictly fewer rows than before — never more,
  * which is the only direction that is safe here.
  */
-export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalWidth, tick = 0 }) {
+export function TurnRow({ item, previous, isLive, spaced = !isLive, verbose, liveBudget, terminalWidth, tick = 0 }) {
   // The columns beside the `● ` a reply is drawn after.
   const textWidth = Math.max(10, terminalWidth - (item.msg?.isLocal ? 0 : 2));
   if (item.type !== 'text') {
     return (
       /*
        * A blank row between events once committed, the way Claude Code spaces
-       * them — reported as "each new event should be spaced out". Committed
-       * rows only: `<Static>` is not budgeted, the live frame is, and a live
-       * row is at most the newest one, so there is nothing above it to space.
+       * them — reported as "each new event should be spaced out". A live row
+       * too since v6.24, when `spaced` says the budget has room (see `spaceLive`).
        */
-      <Box flexDirection="column" marginLeft={2} marginTop={!isLive && previous ? 1 : 0} width="100%">
+      <Box flexDirection="column" marginLeft={2} marginTop={spaced && previous ? 1 : 0} width="100%">
         <ActionRow act={item} verbose={verbose} isLive={isLive} width={terminalWidth} tick={tick} />
       </Box>
     );

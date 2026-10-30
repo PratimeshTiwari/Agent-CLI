@@ -257,3 +257,42 @@ describe('a bare slash is the question, not an unknown command', () => {
     h.cleanup();
   });
 });
+
+/*
+ * v6.24: `/update ayz` ran the update check, and twelve commands answered a
+ * wrong word as if it were not there. Every command with a fixed set of
+ * options must name the word it did not take and list its forms.
+ */
+import { COMMAND_OPTIONS, invalidOption, isSlowCommand } from '../../src/core/slash-commands.js';
+
+describe('a word a command does not take', () => {
+  test('is named, with the forms it does take', async () => {
+    const silent = [];
+    for (const name of Object.keys(COMMAND_OPTIONS)) {
+      if (NOT_DRIVEN.has(name) && name !== 'update') continue;
+      const h = harness();
+      await h.run(`/${name} zzqjunk`);
+      if (!/zzqjunk/.test(h.lastMessage())) silent.push(`/${name}`);
+      h.cleanup();
+    }
+    assert.deepEqual(silent, [], `answered as if the word were not there: ${silent.join(', ')}`);
+  });
+
+  test('/update lists check, pull and done, and does not wait on the network', () => {
+    const msg = invalidOption('update', ['ayz']);
+    assert.match(msg, /`\/update ayz` — no option `ayz`/);
+    for (const form of ['`/update`', '`/update pull`', '`/update done`']) assert.ok(msg.includes(form), form);
+    assert.equal(isSlowCommand('update', ['ayz']), false);
+    assert.equal(isSlowCommand('update', ['pull']), true);
+  });
+
+  // Controls: every real form, aliases and free text after a known word pass.
+  test('real forms pass', () => {
+    for (const [cmd, args] of [['update', []], ['update', ['pull']], ['update', ['now']], ['update', ['done']],
+      ['plan', ['show']], ['copy', ['code']], ['reset', ['--keep-settings']], ['startup', ['warm']],
+      ['memory', ['forget', '2']], ['allowlist', ['add', 'npm', 'test']], ['subagents', ['large-files', 'direct']],
+      ['subagents', ['solo']], ['auto', []], ['effort', ['whatever']]]) {
+      assert.equal(invalidOption(cmd, args), null, `/${cmd} ${args.join(' ')}`);
+    }
+  });
+});

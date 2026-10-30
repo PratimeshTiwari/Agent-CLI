@@ -48,7 +48,7 @@ export function resolveOpenTarget(workspace, target) {
 }
 import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
 import { commandHelp } from '../help.js';
-import { AGENT_COMMANDS } from '../../core/slash-commands.js';
+import { AGENT_COMMANDS, invalidOption } from '../../core/slash-commands.js';
 import { oneLine, renderCommandList } from '../format.js';
 import { planResume } from '../../core/chat-thread.js';
 import { SETTING_GROUPS } from '../../core/settings.js';
@@ -138,7 +138,17 @@ export async function handleSlashCommand(query, {
 }) {
     const parts = query.slice(1).split(/\s+/);
     const command = parts[0].toLowerCase();
-    const args = parts.slice(1);
+    const args = parts.slice(1).filter(Boolean);
+
+    // A word the command does not take stops it before anything runs —
+    // before the confirm for a destructive one, too (v6.24).
+    const bad = invalidOption(command, args);
+    if (bad) {
+      setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true },
+        { role: 'assistant', content: bad, isLocal: true }]);
+      setIsProcessing(false);
+      return;
+    }
 
     // Some commands destroy more than they name. Ask first, once, from the one
     // place that decides — `confirmed` is set when the answer comes back.
