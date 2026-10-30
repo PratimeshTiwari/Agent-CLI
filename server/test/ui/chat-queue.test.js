@@ -15,6 +15,23 @@ const queue = (ws, ...entries) => fs.writeFileSync(
   entries.map((e) => JSON.stringify(e)).join('\n') + '\n',
 );
 
+test('"Attach to Agent CLI" entries come back as drops, missing files left out', () => {
+  const ws = freshWorkspace();
+  const doc = path.join(ws, 'spec.pdf');
+  const img = path.join(ws, 'shot.png');
+  fs.writeFileSync(doc, '%PDF');
+  fs.writeFileSync(img, 'png');
+  queue(ws,
+    { paths: [doc, path.join(ws, 'gone.txt'), img] },
+    { file: 'a.js', startLine: 1, endLine: 1, text: 'x' },
+    { paths: [path.join(ws, 'gone.txt')] },
+    { paths: ['relative/not-a-drop.js'] });
+  const out = drainChatQueue(ws);
+  assert.deepEqual(out[0], { drop: [{ path: doc, kind: 'file' }, { path: img, kind: 'image' }] });
+  assert.equal(out[1].marker, '@a.js:1');
+  assert.equal(out.length, 2, 'an entry with nothing left to attach adds nothing');
+});
+
 test('selectionMarker', async (t) => {
   await t.test('is short and reads as a reference', () => {
     assert.equal(selectionMarker({ file: 'src/ui/App.jsx', startLine: 12, endLine: 40 }), '@App.jsx:12-40');

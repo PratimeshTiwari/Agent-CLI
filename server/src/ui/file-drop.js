@@ -79,15 +79,21 @@ export function recognizeDrop(text, { statSync = fs.statSync, home } = {}) {
   if (!pieces || pieces.length === 0 || pieces.length > 20) return null;
   const items = [];
   for (const piece of pieces) {
-    const abs = absolutePiece(piece, { home });
-    if (!abs) return null;
-    let st;
-    try { st = statSync(abs); } catch { return null; }
-    const kind = st.isDirectory() ? 'folder'
-      : IMAGE_EXTENSIONS.has(path.extname(abs).toLowerCase()) ? 'image' : 'file';
-    items.push({ path: abs, kind });
+    const item = droppedItem(absolutePiece(piece, { home }), { statSync });
+    if (!item) return null;
+    items.push(item);
   }
   return items;
+}
+
+/** One existing absolute path as a dropped item, or null. */
+export function droppedItem(abs, { statSync = fs.statSync } = {}) {
+  if (!abs || !path.isAbsolute(abs)) return null;
+  let st;
+  try { st = statSync(abs); } catch { return null; }
+  const kind = st.isDirectory() ? 'folder'
+    : IMAGE_EXTENSIONS.has(path.extname(abs).toLowerCase()) ? 'image' : 'file';
+  return { path: abs, kind };
 }
 
 /**

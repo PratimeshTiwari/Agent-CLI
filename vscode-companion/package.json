@@ -2,7 +2,7 @@
   "name": "cli-agent-companion",
   "displayName": "Agent CLI Companion",
   "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"
@@ -25,6 +25,12 @@
         "title": "Add to Agent Chat",
         "category": "Agent CLI",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "agentCli.attachToChat",
+        "title": "Attach to Agent CLI",
+        "category": "Agent CLI",
+        "icon": "$(attach)"
       },
       {
         "command": "agentCli.openPlan",
@@ -107,6 +113,10 @@
         {
           "command": "agentCli.rejectDiff",
           "when": "resourceScheme == agent-cli-proposed"
+        },
+        {
+          "command": "agentCli.attachToChat",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -130,6 +140,20 @@
         {
           "command": "agentCli.addToChat",
           "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "agentCli.attachToChat",
+          "group": "navigation@9",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "agentCli.attachToChat",
+          "group": "navigation@9",
+          "when": "resourceScheme == file"
         }
       ]
     },

@@ -1562,7 +1562,11 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   13 and 24 rows, 0 clears; `main` sends the quoted path. **Antigravity's agent panel takes image,
   PDF and video drops for the whole window** (`dragover`/`drop` on `window`, `stopPropagation`),
   so those never reach its terminal while that panel is open — paste the path instead (a paste
-  of an existing path is a drop).
+  of an existing path is a drop), or **right-click → Attach to Agent CLI (v7.8, companion
+  1.8.7)**: the companion appends `{paths}` to `chat-queue.jsonl` and `drainChatQueue` returns
+  `{drop}`, which goes through `attachDropped` like any drop. A menu command cannot be taken by a
+  panel's `drop` handler. Missing files are skipped, at most 20. Pty (a `{"write"}` step into
+  the queue): tags at the caret, the prompt holds headers and no file text, 0 clears at 13 and 24.
 - **A dropped file is a tag too (v5.33, `ui/file-drop.js`).** A terminal has no drop event: a drop
   is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
   (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays

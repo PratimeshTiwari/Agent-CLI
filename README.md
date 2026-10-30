@@ -179,7 +179,7 @@ A command given a word it does not take says so and lists the ones it does.
 | ⌘⇧1 does nothing | Chrome only assigns the shortcut on first install. Set it at `chrome://extensions/shortcuts` and choose **Global** |
 | It feels slow | `/logs speed` shows each stage of a turn, by rung and by prompt version |
 | Something failed | `/logs` groups failures by where they came from |
-| A dropped PDF or image does nothing in Antigravity | Its agent panel takes those drops for the whole window. Paste the path instead (Copy Path, or ⌥⌘C in Finder) |
+| A dropped PDF or image does nothing in Antigravity | Its agent panel takes those drops for the whole window. Right-click the file in the explorer → **Attach to Agent CLI** (companion 1.8.7), or paste the path (Copy Path, or ⌥⌘C in Finder) |
 | After `git pull` | `/update` says what to reload, usually the extension and a restart |
 | A feature fails on a new machine | `/doctor` (or `agent doctor` from the shell) lists what is missing; `/doctor fix` installs it |
 | `latest` is blank in `/doctor` | npm could not reach your registry and the reason is printed; on a work laptop check `npm config get registry` |

@@ -992,7 +992,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // one row of the live frame, and the model still gets all of it.
   useEffect(() => {
     const id = setInterval(() => {
-      const added = drainChatQueue(agentLoop.workspace);
+      const drained = drainChatQueue(agentLoop.workspace);
+      // "Attach to Agent CLI" from the explorer: tags at the caret, as a drop.
+      for (const d of drained) if (d.drop) attachDropped(d.drop);
+      const added = drained.filter((d) => !d.drop);
       if (added.length === 0) return;
       setPastes((prev) => [...prev, ...added].slice(-20));
       setInputAtEnd((prev) => {
@@ -1004,7 +1007,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setPaletteSuppressed(true);
     }, 500);
     return () => clearInterval(id);
-  }, [agentLoop.workspace]);
+  }, [agentLoop.workspace, attachDropped]);
 
   // Poll active background tasks
   useEffect(() => {
