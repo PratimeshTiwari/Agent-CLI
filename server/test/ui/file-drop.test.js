@@ -114,3 +114,64 @@ test('asBracketedDrop: a chunk that is only existing paths is a drop; anything e
   assert.equal(asBracketedDrop('/', { statSync }), null);
   assert.equal(asBracketedDrop('\x1b[A', { statSync }), null);
 });
+
+import { createDropJoiner, PTY_CHUNK } from '../../src/ui/file-drop.js';
+
+// VS Code's `chunkInput` (ptyHostMain), as shipped: pieces of at most 50, and
+// a cut before every ESC.
+function vscodeChunks(e) {
+  const t = []; let E = 0;
+  for (let n = 0; n < e.length - 1; n++) {
+    if (n - E + 1 >= 50 || e[n + 1] === '\x1b') { t.push(e.substring(E, n + 1)); E = n + 1; n++; }
+  }
+  if (E !== e.length) t.push(e.substring(E));
+  return t;
+}
+
+function joinerUnderTest() {
+  const out = [];
+  let pending = null;
+  const joiner = createDropJoiner({
+    deliver: (s) => out.push(s),
+    setTimer: (fn) => { pending = fn; return 1; },
+    clearTimer: () => { pending = null; },
+  });
+  return { out, joiner, fire: () => { const fn = pending; pending = null; fn?.(); } };
+}
+
+test('createDropJoiner: a path VS Code typed in pieces is delivered whole (v6.25)', () => {
+  const drop = "'/Users/me/Documents/Gemini-Agent/.agent/logs/tool-usage-2026-10-30.jsonl' ";
+  const pieces = vscodeChunks(drop);
+  assert.ok(pieces.length > 1 && pieces[0].length === PTY_CHUNK, 'the fixture really is split');
+  const { out, joiner } = joinerUnderTest();
+  for (const p of pieces) joiner.accept(p);
+  assert.deepEqual(out, [drop]);
+  const statSync = (p) => (p.endsWith('.jsonl') ? { isDirectory: () => false } : null);
+  assert.match(asBracketedDrop(out[0], { statSync }), /^\x1b\[200~/);
+});
+
+test('createDropJoiner: typing, a short drop and escapes pass straight through', () => {
+  const { out, joiner } = joinerUnderTest();
+  for (const k of ['/', 'h', 'e', 'l', 'p', '\r']) joiner.accept(k);
+  joiner.accept('/Users/me/Downloads/Flow-v1.6.1297.dmg');
+  joiner.accept('x'.repeat(PTY_CHUNK)); // fifty characters that are not a path
+  joiner.accept('\x1b[A');
+  assert.deepEqual(out, ['/', 'h', 'e', 'l', 'p', '\r', '/Users/me/Downloads/Flow-v1.6.1297.dmg', 'x'.repeat(PTY_CHUNK), '\x1b[A']);
+});
+
+test('createDropJoiner: held text is never lost or reordered', () => {
+  const head = '/' + 'a'.repeat(PTY_CHUNK - 1);
+  // An escape after a held piece: the piece first, then the escape.
+  let t = joinerUnderTest();
+  t.joiner.accept(head);
+  assert.deepEqual(t.out, [], 'held');
+  t.joiner.accept('\x1b[B');
+  assert.deepEqual(t.out, [head, '\x1b[B']);
+  // A drop that is exactly two pieces long ends on the quiet timer.
+  t = joinerUnderTest();
+  t.joiner.accept(head);
+  t.joiner.accept('b'.repeat(PTY_CHUNK));
+  assert.deepEqual(t.out, []);
+  t.fire();
+  assert.deepEqual(t.out, [head + 'b'.repeat(PTY_CHUNK)]);
+});

@@ -51,7 +51,9 @@ test('before start, and long after, nothing is held', () => {
 
 test('cli-ui opens the window right before render, and stdin goes through it', () => {
   const src = readFileSync(new URL('../../src/ui/cli-ui.jsx', import.meta.url), 'utf8');
-  assert.match(src, /process\.stdin\.on\('data', \(raw\) => probeHold\.accept\(raw\)\)/);
+  // Through the drop joiner (v6.25), which delivers to the hold.
+  assert.match(src, /createDropJoiner\(\{ deliver: \(raw\) => probeHold\.accept\(raw\) \}\)/);
+  assert.match(src, /process\.stdin\.on\('data', \(raw\) => dropJoiner\.accept\(raw\)\)/);
   assert.match(src, /probeHold\.start\(\);\n\s*const instance = render\(/);
   assert.match(src, /kittyKeyboard: \{ mode: 'auto'/, 'without the probe the hold is a 300 ms delay for nothing');
 });
