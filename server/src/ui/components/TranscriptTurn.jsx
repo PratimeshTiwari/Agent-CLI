@@ -2,11 +2,12 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
 import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, turnEndLine } from '../format.js';
+import { renderMarkdown, oneLine, clampForDisplay, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, turnEndLine } from '../format.js';
 import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
 import { foldFiles, fileLink } from '../file-drop.js';
 import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
 import { T } from '../theme.js';
+import { STATE_TONE, actionState, actionHead, actionOutcome, commandOutputLines } from '../action-row.js';
 
 /**
  * The user's own message, shortened to fit.
@@ -124,6 +125,7 @@ export function TranscriptTurn({ turn, isLive, verbose, liveBudget, tick = 0, te
           verbose={verbose}
           liveBudget={liveBudget}
           terminalWidth={terminalWidth}
+          tick={tick}
         />
       ))}
 
@@ -315,7 +317,7 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
  * live frame is charged for strictly fewer rows than before — never more,
  * which is the only direction that is safe here.
  */
-export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalWidth }) {
+export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalWidth, tick = 0 }) {
   if (item.type !== 'text') {
     return (
       /*
@@ -325,7 +327,7 @@ export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalW
        * row is at most the newest one, so there is nothing above it to space.
        */
       <Box flexDirection="column" marginLeft={2} marginTop={!isLive && previous ? 1 : 0} width="100%">
-        <ActionRow act={item} verbose={verbose} isLive={isLive} width={terminalWidth} />
+        <ActionRow act={item} verbose={verbose} isLive={isLive} width={terminalWidth} tick={tick} />
       </Box>
     );
   }
@@ -424,7 +426,7 @@ const limitsFor = (isLive, verbose, toolName) => {
 };
 
 /** One step inside a turn. Collapsed to a line unless `verbose`. */
-function ActionRow({ act, verbose, isLive, width = 80 }) {
+function ActionRow({ act, verbose, isLive, width = 80, tick = 0 }) {
   const limit = limitsFor(isLive, verbose, act.toolName);
   /*
    * The subject is budgeted against the real terminal width, not a constant.
@@ -509,53 +511,78 @@ function ActionRow({ act, verbose, isLive, width = 80 }) {
         </Text>
       );
     }
-    const failed = act.success === false;
-    const subject = subjectOf(act.toolName, act.args, subjectRoom);
-    const summary = summarizeResult(act.toolName, act.result);
+    /*
+     * Claude Code's row (v6.5): a verb and what it acted on, one `●` whose
+     * colour is the state — `● Run(npm test) · exit 0 · 3.2s`. Collapsed, that
+     * is the whole row, live or committed. Expanded (ctrl+e), what came of it
+     * hangs under `⎿`: the command's output, the diff, the result — then the
+     * outcome line, so the last thing read is whether it worked.
+     *
+     * One Text for the head, not a row of them: in a flex row Yoga shrinks
+     * every child to fit, so a long subject squeezed the *verb* and wrapped it
+     * — `⏺ run_comma` over `nd`, reported with a screenshot 2026-10-26. Inline,
+     * the line is cut from the right, and the verb comes first.
+     */
+    const state = actionState(act);
+    const tone = T[STATE_TONE[state]];
+    const failed = state === 'failed';
+    const outcome = actionOutcome(act);
+    // A running step blinks its dot, about once a second at the 80ms tick; a
+    // space keeps the row's width, so the frame never changes height.
+    const dot = state === 'running' && Math.floor(tick / 6) % 2 ? '  ' : '● ';
+    const head = actionHead(act.toolName, act.args, subjectRoom);
+    const outcomeText = (text) => (failed
+      ? <Text color={T.danger}>{text}</Text>
+      : <Text dimColor>{text}</Text>);
+
+    if (!verbose || act.result === null || act.result === undefined) {
+      return (
+        <Text wrap="truncate">
+          <Text color={tone}>{dot}</Text>
+          <Text bold>{head}</Text>
+          {outcome ? <>{' '}<Text dimColor>·</Text>{' '}{outcomeText(outcome)}</> : null}
+        </Text>
+      );
+    }
+
+    // Expanded. A read, a listing or a search shows only its outcome: its
+    // output is a file you already have (NOT_WORTH_EXPANDING says why).
+    const output = commandOutputLines(act.result, limit);
+    // Three columns deeper than the old row (under the `⎿`), so three narrower.
+    const diff = output.length ? null : diffRowsFor(act, width - 3);
+    const generic = !output.length && !diff && !NOT_WORTH_EXPANDING.has(act.toolName)
+      ? clampForDisplay(act.result, limit.lines, limit.chars, limit).split('\n')
+      : [];
+    const body = output.length ? output : generic;
     return (
       <Box flexDirection="column" width="100%">
-        {/*
-          Two lines once it is in the scrollback: what was done, then what came
-          of it under a `⎿`, red when the step failed — so a failed command reads
-          as failed where it happened, not only in the reply. A live row stays
-          one line: the live frame is budgeted in rows, and committed rows cost
-          scrollback, not frame.
-        */}
-        {/* One Text, not a row of them: in a flex row Yoga shrinks every child
-            to fit, so a long subject squeezed the *name* and wrapped it —
-            `⏺ run_comma` over `nd`, reported with a screenshot 2026-10-26.
-            Inline, the line is cut from the right, and the name comes first. */}
         <Text wrap="truncate">
-          <Text color={failed ? T.danger : T.success}>{(failed ? '✗' : '⏺') + ' '}</Text>
-          <Text bold>{act.toolName}</Text>
-          {/* Which file, which pattern, which command. Without it two reads in
-              one turn are the same row twice, which is how a turn reading four
-              files reads as a turn that did nothing in particular. */}
-          {subject ? <Text color={T.muted}>{' '}{subject}</Text> : null}
-          {isLive && summary ? <Text dimColor> · {summary}</Text> : null}
+          <Text color={tone}>{dot}</Text>
+          <Text bold>{head}</Text>
         </Text>
-        {!isLive && summary ? (
+        {body.map((line, i) => (
+          <Text key={i} wrap="truncate">
+            <Text color={T.muted}>{i === 0 ? '  ⎿  ' : '     '}</Text>
+            <Text dimColor>{line || ' '}</Text>
+          </Text>
+        ))}
+        {/* An edit says its size first, then shows it — the plan's mockup,
+            `● Edit(…)` over `⎿ +2 −72`. */}
+        {diff && outcome ? (
           <Text wrap="truncate">
             <Text color={T.muted}>{'  ⎿  '}</Text>
-            {failed ? <Text color={T.danger}>{summary}</Text> : <Text dimColor>{summary}</Text>}
+            {outcomeText(outcome)}
           </Text>
         ) : null}
-        {verbose && act.result !== null && act.result !== undefined && (
-          <Box paddingLeft={2} width="100%">
-            {/* An edit gets diff shape, a shell result gets shell shape, and
-                everything else falls back to the generic clamp. The diff
-                renderer existed only on the approval prompt, so the one place a
-                change could be read in colour was the moment before it was
-                applied — and the transcript, which is what you read afterwards
-                and days later, showed it as a line of dim text. */}
-            {diffRowsFor(act, width) ?? (
-              <Text dimColor wrap="wrap">
-                {formatCommandResult(act.result, limit.lines, limit)
-                  ?? clampForDisplay(act.result, limit.lines, limit.chars, limit)}
-              </Text>
-            )}
-          </Box>
-        )}
+        {diff ? <Box paddingLeft={5} width="100%">{diff}</Box> : null}
+        {/* Otherwise the outcome closes the step; for a generic result it
+            would only repeat the body's first line, so it is left off there. */}
+        {outcome && !diff && (output.length || !generic.length) ? (
+          <Text wrap="truncate">
+            <Text color={T.muted}>{'  ⎿  '}</Text>
+            {outcomeText(outcome)}
+          </Text>
+        ) : null}
       </Box>
     );
   }

@@ -131,7 +131,16 @@ describe('the one-line argument preview', () => {
   });
 
   test('strings and numbers are unchanged', () => {
-    assert.match(previewOf({ path: 'a.js', line: 12 }), /path: a\.js, line: 12/);
+    assert.match(previewOf({ label: 'a.js', line: 12 }), /label: a\.js, line: 12/);
+  });
+
+  // v6.5: a call that names what it acts on is drawn as `Verb(subject)`.
+  test('a path or a command is the subject, in brackets after the verb', () => {
+    const { api, dom } = lift(['appendToolCall', 'escapeHtml']);
+    api.appendToolCall('run_command', { command: 'npm test', timeout: 30 }, 'Run');
+    const doc = dom.window.document;
+    assert.equal(doc.querySelector('.tool-name').textContent, 'Run');
+    assert.equal(doc.querySelector('.tool-args').textContent, '(npm test)');
   });
 });
 

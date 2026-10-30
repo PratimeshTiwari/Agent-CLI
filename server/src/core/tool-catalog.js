@@ -30,7 +30,11 @@
  */
 
 /**
- * @typedef {{name: string, dispatch: 'mcp'|'loop', when?: 'subagents', mutates?: boolean,
+ * `verb` is what a row on screen calls the tool — `● Run(npm test)`, never
+ * `run_command` (v6.5). One table, here beside the description, so the
+ * terminal and the side panel cannot name the same call two ways.
+ *
+ * @typedef {{name: string, dispatch: 'mcp'|'loop', verb: string, when?: 'subagents', mutates?: boolean,
  *   shell?: boolean, detached?: boolean, lead?: string, flash: string|Function,
  *   pro: string|Function}} ToolDoc
  */
@@ -40,6 +44,7 @@ export const TOOL_CATALOG = [
   {
     name: 'ask_question',
     dispatch: 'loop',
+    verb: 'Ask',
     flash: ` — Ask the user to choose. Blocks until they answer. Args: question (string), options (string[], 2-4 concrete choices), header (string, 2-3 word topic). Several at once: questions ([{question, options, header}], max 4)
 `,
     pro: `
@@ -68,6 +73,7 @@ Example:
   {
     name: 'search_files',
     dispatch: 'mcp',
+    verb: 'Find',
     flash: ` — Find files by name. Args: query (string), maxResults? (number)
 `,
     pro: `
@@ -82,6 +88,7 @@ Parameters:
   {
     name: 'grep_search',
     dispatch: 'mcp',
+    verb: 'Search',
     flash: ` — Search text across files, grouped by file. Args: pattern (string or string[] — pass several terms when unsure of the wording), isRegex? (bool), includes? (string[]), contextLines? (number), maxResults? (number)
 `,
     pro: `
@@ -101,6 +108,7 @@ Parameters:
   {
     name: 'find_symbol',
     dispatch: 'mcp',
+    verb: 'Symbol',
     flash: ` — Where a symbol is DEFINED (parses the code, not the text). Args: name (string, exact, case-sensitive)
 `,
     pro: `
@@ -118,6 +126,7 @@ Parameters:
   {
     name: 'find_references',
     dispatch: 'mcp',
+    verb: 'References',
     flash: ` — Every place a symbol is USED — calls, imports, JSX tags. Args: name (string, exact), includeDefinition? (bool)
 `,
     pro: `
@@ -133,6 +142,7 @@ Parameters:
   {
     name: 'read_file',
     dispatch: 'mcp',
+    verb: 'Read',
     flash: ` — Read a file (PDF, Word, PowerPoint too, as Markdown). Args: path (string), startLine? (number), endLine? (number)
 `,
     pro: `
@@ -149,6 +159,7 @@ Parameters:
   {
     name: 'edit_file',
     dispatch: 'mcp',
+    verb: 'Edit',
     mutates: true,
     flash: ` — Edit a file. Args: path (string), edits? ([{oldText, newText}]), append? (string: text added at the end)
 `,
@@ -168,6 +179,7 @@ Parameters:
   {
     name: 'create_file',
     dispatch: 'mcp',
+    verb: 'Write',
     mutates: true,
     flash: ` — Create a file. Args: path (string), content (string)
 `,
@@ -182,6 +194,7 @@ Parameters:
   {
     name: 'list_directory',
     dispatch: 'mcp',
+    verb: 'List',
     flash: ` — List dir contents. Args: path? (string), recursive? (bool), maxDepth? (number)
 `,
     pro: `
@@ -196,6 +209,7 @@ Parameters:
   {
     name: 'run_command',
     dispatch: 'mcp',
+    verb: 'Run',
     mutates: true,
     shell: true,
     flash: ` — Run shell command (needs approval). Args: command (string), cwd? (string), timeout? (number, ms)
@@ -214,6 +228,7 @@ Parameters:
   {
     name: 'manage_memory',
     dispatch: 'loop',
+    verb: 'Memory',
     flash: ` — Remember/forget a durable fact. Args: action ("add"|"remove"), fact? (string), index? (number, the number shown in <memory>)
 `,
     pro: `
@@ -231,6 +246,7 @@ Parameters:
   {
     name: 'run_background',
     dispatch: 'mcp',
+    verb: 'Start',
     mutates: true,
     shell: true,
     detached: true,
@@ -248,6 +264,7 @@ Parameters:
   {
     name: 'manage_task',
     dispatch: 'mcp',
+    verb: 'Task',
     flash: ` — Manage background tasks. Args: action ("status"|"read_logs"|"send_input"|"kill"|"list"|"watch"|"unwatch"), taskId? (string), lines? (number), pattern? (string, for watch)
 `,
     pro: `
@@ -265,6 +282,7 @@ Parameters:
   {
     name: 'get_editor_state',
     dispatch: 'mcp',
+    verb: 'Editor',
     flash: ` — Which file the user has open and where the cursor is. Location only, not contents. No args.
 `,
     pro: `
@@ -279,6 +297,7 @@ Parameters: None
   {
     name: 'recall_history',
     dispatch: 'mcp',
+    verb: 'Recall',
     flash: ` — Search earlier turns of this conversation, including ones a summary replaced. Args: query (string), limit? (number)
 `,
     pro: `
@@ -295,6 +314,7 @@ Parameters:
   {
     name: 'get_diagnostics',
     dispatch: 'mcp',
+    verb: 'Diagnostics',
     flash: ` — The editor's errors and warnings (VS Code Problems panel). Args: path? (string), severity? ("error"|"warning")
 `,
     pro: `
@@ -310,6 +330,7 @@ Parameters:
   {
     name: 'ask_subagent',
     dispatch: 'loop',
+    verb: 'Subagent',
     when: 'subagents',
     /*
      * A description is a **routing rule**, not a capability list.
@@ -409,6 +430,12 @@ export const DETACHED_TOOLS = new Set(
  *
  * @param {boolean|{subagents?: boolean}} [ctx]
  */
+/** What a row on screen calls a tool: `Run` for `run_command`; an unknown name keeps its own. */
+const VERBS = new Map(TOOL_CATALOG.map((t) => [t.name, t.verb]));
+export function toolVerb(name) {
+  return VERBS.get(name) || String(name || 'tool');
+}
+
 export function toolsFor(ctx) {
   const subagents = typeof ctx === 'object' && ctx !== null ? Boolean(ctx.subagents) : Boolean(ctx);
   return TOOL_CATALOG.filter((t) => !t.when || (t.when === 'subagents' && subagents));

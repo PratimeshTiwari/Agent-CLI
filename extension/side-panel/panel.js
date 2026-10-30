@@ -707,7 +707,7 @@ function appendMessage(role, content) {
   scrollToBottom();
 }
 
-function appendToolCall(name, args) {
+function appendToolCall(name, args, verb) {
   const div = document.createElement('div');
   div.className = 'message-tool';
 
@@ -732,11 +732,17 @@ function appendToolCall(name, args) {
     ? Object.entries(args).map(([k, v]) => `${k}: ${preview(v)}`).join(', ')
     : preview(args);
 
+  // The terminal's row (v6.5): `● Run(npm test)`. The verb is the server's,
+  // from the tool catalog, so both surfaces name a call one way; the subject
+  // is the one argument that says what the call is about, and a tool without
+  // one keeps the argument preview.
+  const subject = ['path', 'command', 'pattern', 'query', 'symbol', 'role']
+    .map((k) => args?.[k]).find((v) => typeof v === 'string' && v.trim());
   div.innerHTML = `
     <div class="tool-header">
-      <span class="tool-icon">⚙️</span>
-      <span class="tool-name">${escapeHtml(name)}</span>
-      <span class="tool-args">${escapeHtml(argsPreview)}</span>
+      <span class="tool-dot">●</span>
+      <span class="tool-name">${escapeHtml(verb || name)}</span>
+      <span class="tool-args">${escapeHtml(subject ? `(${preview(subject.trim())})` : argsPreview)}</span>
     </div>
     <div class="tool-details">${escapeHtml(JSON.stringify(args, null, 2))}</div>
   `;
@@ -1334,7 +1340,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'tool_call':
-      appendToolCall(payload.name, payload.args);
+      appendToolCall(payload.name, payload.args, payload.verb);
       break;
 
     case 'tool_result':

@@ -158,7 +158,7 @@ import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } fro
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory } from './compaction.js';
 import { runSubAgentSession } from './subagent-session.js';
-import { MUTATING_TOOLS, SHELL_TOOLS } from './tool-catalog.js';
+import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
 import { planModelSwitch, browserModelPin, rungForModel } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
@@ -2942,6 +2942,9 @@ export class AgentLoop {
         type: 'tool_call',
         payload: {
           name: call.name,
+          // What the row calls it (`Run`, `Edit`), from the catalog the
+          // terminal reads too, so the two surfaces name a call one way.
+          verb: toolVerb(call.name),
           args: call.args,
         },
         timestamp: Date.now(),
@@ -2956,6 +2959,9 @@ export class AgentLoop {
 
       // Execute the tool
       let result;
+      // How long an approved command ran, for its row (`exit 0 · 3.2s`). From
+      // when it started, not from the call: the approval wait is the person's.
+      let ranMs = null;
       
       if (isBlockedOutright(call, risk)) {
         result = { success: false, error: `❌ Command blocked by Security Constraints: ${risk.reason}` };
@@ -3011,6 +3017,7 @@ export class AgentLoop {
           // An empty view first: it says the command has *started*, which is
           // where its elapsed time is counted from — the approval is over.
           if (tail) sendTail({ lines: [], total: 0 });
+          const started = Date.now();
           try {
             result = await this.mcpServer.executeTool(call.name, call.args, {
               editor: this.editor,
@@ -3020,6 +3027,7 @@ export class AgentLoop {
             });
           } finally {
             tail?.stop();
+            ranMs = Date.now() - started;
           }
           // A command that *succeeded* is the one worth auditing — `git push
           // --force` does not fail, so the failure log never sees it.
@@ -3091,6 +3099,7 @@ export class AgentLoop {
         // `ask_question`: what was asked and answered, so the row can say it.
         ...(Array.isArray(result.answers) ? { answers: result.answers } : {}),
         ...(result.declined ? { declined: true } : {}),
+        ...(ranMs !== null ? { ms: ranMs } : {}),
         timestamp: Date.now(),
       };
       this.conversationHistory.push(resultTurn);
