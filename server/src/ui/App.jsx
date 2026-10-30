@@ -13,7 +13,7 @@ import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImage
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
 import { actionHead } from './action-row.js';
 import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
-import { statusBarLayout } from './status-bar.js';
+import { statusBarLayout, STATUS_RIGHT_GUTTER } from './status-bar.js';
 import { keysLayout } from './keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
@@ -1477,7 +1477,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
    */
   const chatStarted = history.some((m) => m.role === 'user' && !m.isLocal);
   const statusBar = statusBarLayout({
-    width: terminalWidth,
+    width: Math.max(1, terminalWidth - STATUS_RIGHT_GUTTER),
     mode,
     hint: !chatStarted && !isProcessing,
     notice: exitArmed ? 'Press Ctrl+C again to exit' : flash || null,
@@ -1791,9 +1791,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
         a boundary that was never in doubt.
       */}
       {/*
-        Flush with the input's rules at both ends (v5.24). It was indented two
+        Flush with the input's rules on the left (v5.24). It was indented two
         on the left (padding plus a leading space) and one on the right, so it
         sat visibly right of the `❯` above it — reported as "slightly off".
+        The right end stops short (v6.22): flush, its last character sat in the
+        terminal's last column, under VS Code's scrollbar, and read as running
+        off the edge.
       */}
       <Box marginTop={compact ? 0 : 1} flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexShrink={1} overflow="hidden">
@@ -1802,7 +1805,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
         </Text>
         </Box>
         {statusBar.right.length > 0 && (
-        <Box flexShrink={0} marginLeft={2}>
+        <Box flexShrink={0} marginLeft={2} marginRight={STATUS_RIGHT_GUTTER}>
         <Text wrap="truncate">
           {statusBar.right.map((seg, i) => <Text key={i} {...segmentStyle(seg.role)}>{seg.text}</Text>)}
         </Text>

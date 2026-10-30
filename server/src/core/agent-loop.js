@@ -3748,7 +3748,7 @@ export class AgentLoop {
     // Cut from the left, like the source labels below: the end names the repo.
     const where = tilde.length <= 80 ? tilde : `…${tilde.slice(-79)}`;
     const rows = [
-      ['tokens', `~${k(used)} of ${k(limit)} · everything sent to the tab`],
+      ['tokens', `~${k(used)} of ${k(limit)}`],
       ['turns', `${turns}${edits.length ? ` · edits ${edits.join(', ')}` : ''}`],
       ['workspace', where],
     ];
