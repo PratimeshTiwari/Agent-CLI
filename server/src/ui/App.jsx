@@ -20,7 +20,7 @@ import { DEFAULT_PROMPT_VERSION } from '../core/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
 import { modelMismatch, browserModelPin } from '../core/model-match.js';
 import { mismatchPolicy } from '../core/model-fallback.js';
-import { planBoxRow, findPlanFile } from './plan-box.js';
+import { planBoxRow, findPlanFile, planWorthReviewing } from './plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript.js';
 import { expandPastes, attachedPastes } from './paste.js';
 import { drainChatQueue } from './chat-queue.js';
@@ -834,7 +834,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
      * show. Measured under the pty: menu up, "The agent has written a plan",
      * no box. The idle edge (`onIdle`) lowers React's flag, which re-runs this.
      */
-    if (planReviewReady && !agentLoop.isProcessing) {
+    if (planReviewReady && !agentLoop.isProcessing) setPlanReviewReady(false);
+    // A greeting answered with a one-line plan, or a plan already carried out,
+    // is not waiting for a yes (`planWorthReviewing`, v6.7).
+    if (planReviewReady && !agentLoop.isProcessing && planWorthReviewing(agentLoop.workspace)) {
       // Clear any verdict left over from a previous review before opening this
       // one. The companion writes plan-approval.json whenever its lenses are
       // clicked, including when no review is running; the poller below only
@@ -850,7 +853,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
       const box = planBoxRow(agentLoop.workspace);
       if (box) setHistory((prev) => [...prev, box]);
       setActiveMenu({ type: 'plan_review', path: box?.path || null });
-      setPlanReviewReady(false);
       setFocus(FOCUS_INPUT);
       try {
         const planPath = findPlanFile(agentLoop.workspace);

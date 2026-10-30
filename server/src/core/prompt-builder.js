@@ -773,9 +773,15 @@ implying it was checked elsewhere.`;
     // with every one off, the text below is v1's, byte for byte.
     const tickSameReply = this._flag('tickWithNextCall')
       ? ', in the same reply as your next tool call — never a reply that only ticks' : '';
+    // v2 (v6.7): the pro rung's STEP 1 already says a greeting needs none of
+    // this; the cheap rungs never did, and "hi" on Flash-Lite in plan mode
+    // wrote a task.md and a one-line plan and ended on a plan review.
+    const taskWhen = this._flag('answerDirectly')
+      ? 'For a complex or multi-step task, create a `.agent/artifacts/task.md` checklist with `create_file` (never for a greeting, or a question you can answer without reading anything).'
+      : 'When tasked with a complex or multi-step objective, ALWAYS proactively create a `.agent/artifacts/task.md` checklist using the `create_file` tool to plan your work, similar to Antigravity IDE.';
     // In the original order, so the lite and flash prompts stay byte-identical.
     const taskBullet = proRung ? '' : `
-- When tasked with a complex or multi-step objective, ALWAYS proactively create a \`.agent/artifacts/task.md\` checklist using the \`create_file\` tool to plan your work, similar to Antigravity IDE. Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`${tickSameReply}. The user is reading that file to see where you are.`;
+- ${taskWhen} Its current contents are given back to you in \`<task_checklist>\` on every turn — tick an item the moment it is done, with \`edit_file\` replacing that exact line's \`- [ ]\` with \`- [x]\`${tickSameReply}. The user is reading that file to see where you are.`;
     const reviewBullets = proRung ? '' : this._flag('trustEditResult') ? `
 - After implementing changes, self-review: the edit result says whether it landed — re-read a file only after a mismatch — and verify correctness
 - If you're not confident in a change, tell the user explicitly rather than guessing` : `

@@ -7,10 +7,10 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planBoxRow, findPlanFile } from '../../src/ui/plan-box.js';
+import { planBoxRow, findPlanFile, planWorthReviewing } from '../../src/ui/plan-box.js';
 import { describeArtifactWrite, parseTurnActions, isPlanFile } from '../../src/ui/transcript.js';
 
 function workspace() {
@@ -89,5 +89,57 @@ describe('the transcript', () => {
       undefined);
     assert.equal(describeArtifactWrite('edit_file', { path: 'docs/plan.md', edits: [] }), null);
     assert.equal(isPlanFile('docs/notes.md'), false);
+  });
+});
+
+describe('planWorthReviewing (v6.7: "hi" ended on Plan ready for review)', () => {
+  const art = (ws, name) => join(ws, '.agent', 'artifacts', name);
+  const at = (file, secs) => utimesSync(file, secs, secs);
+
+  test('the reported turn: a one-line plan, then task.md ticked after it', () => {
+    const ws = workspace();
+    writeFileSync(art(ws, 'implementation_plan.md'),
+      '# Implementation Plan - Initial Setup\n\n- Understand user request and initialize tracking files.\n');
+    writeFileSync(art(ws, 'task.md'), '# Task Checklist\n\n- [x] Initialize task plan\n');
+    assert.equal(planWorthReviewing(ws), false);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('a real plan with steps still opens the review', () => {
+    const ws = workspace();
+    writeFileSync(art(ws, 'implementation_plan.md'),
+      '# Plan\n\n1. Add the flag to modes.js\n2. Read it in tool-policy.js\n3. Test both branches\n');
+    assert.equal(planWorthReviewing(ws), true);
+    // An open checklist beside it does not change that.
+    writeFileSync(art(ws, 'task.md'), '- [ ] Add the flag\n- [ ] Read it\n');
+    assert.equal(planWorthReviewing(ws), true);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('a prose plan with no list is kept by its length', () => {
+    const ws = workspace();
+    writeFileSync(art(ws, 'implementation_plan.md'), '# Plan\n\n' + 'Move the retry into reply-recovery and keep the verbatim resend. '.repeat(4));
+    assert.equal(planWorthReviewing(ws), true);
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('a finished task.md from an earlier task does not hide a new plan', () => {
+    const ws = workspace();
+    const plan = art(ws, 'implementation_plan.md');
+    const task = art(ws, 'task.md');
+    writeFileSync(task, '- [x] old work\n');
+    writeFileSync(plan, '# Plan\n\n- one\n- two\n');
+    at(task, 1_000_000);
+    at(plan, 2_000_000);
+    assert.equal(planWorthReviewing(ws), true, 'the checklist is older than the plan');
+    at(task, 3_000_000);
+    assert.equal(planWorthReviewing(ws), false, 'control: ticked after the plan means carried out');
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  test('no plan file: nothing to review', () => {
+    const ws = workspace();
+    assert.equal(planWorthReviewing(ws), false);
+    rmSync(ws, { recursive: true, force: true });
   });
 });
