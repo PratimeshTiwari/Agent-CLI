@@ -40,6 +40,24 @@ marked.use(markedTerminal({
 }));
 
 /**
+ * The last step `marked-terminal` applies to a paragraph, for inline text we
+ * render ourselves (list items, table cells).
+ *
+ * Its `codespan` swaps every `:` for `*#COLON|*` and only its paragraph and
+ * heading renderers swap it back, so a URL in backticks inside a list item
+ * came out with the placeholder where its colon should be (#103). Entities are decoded in the same
+ * step, or `&` shows as `&amp;`. Its emoji step is left out on purpose: it
+ * turns `:word:` into a picture, which in a reply about code is a bug.
+ */
+const COLON_PLACEHOLDER = /\*#COLON\|\*/g;
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+export function finishInline(text) {
+  return String(text ?? '')
+    .replace(COLON_PLACEHOLDER, ':')
+    .replace(/&(?:amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m]);
+}
+
+/**
  * Lists are drawn from the token tree, not from `marked-terminal`'s.
  *
  * Its list renderer is line-based: `listitem` prefixes every item with a `* `
@@ -114,7 +132,7 @@ marked.use({
      * terminal width.
      */
     table(token) {
-      const cell = (c) => this.parser.parseInline(c.tokens).replace(/\n+/g, ' ').trim();
+      const cell = (c) => finishInline(this.parser.parseInline(c.tokens)).replace(/\n+/g, ' ').trim();
       const header = (token.header || []).map(cell);
       const rows = (token.rows || []).map((r) => r.map(cell));
       if (header.length === 0) return '';
@@ -152,6 +170,12 @@ marked.use({
       ].join('\n');
     },
 
+    // A list item's text, already rendered (see `list`). Anything else is real
+    // HTML in a reply and goes to marked-terminal as before.
+    html(token) {
+      return token?.listText ? token.text : false;
+    },
+
     list(token) {
       let n = Number(token.start || 1);
       const lines = token.items.map((item) => {
@@ -164,10 +188,16 @@ marked.use({
         // A tight item's text is a `text` token holding inline children, and
         // marked-terminal's block `text` renderer returns it raw — which is how
         // `- \`docs/\`` came out with its backticks still on. Render those
-        // children as inline markdown, the way a paragraph is.
-        const tokens = item.tokens.map((t) => (t.type === 'text' && t.tokens
-          ? { type: 'html', raw: this.parser.parseInline(t.tokens), text: this.parser.parseInline(t.tokens), block: true, pre: false }
-          : t));
+        // children as inline markdown, the way a paragraph is — and finish
+        // them the way a paragraph is. It went out as an `html` token, which
+        // marked-terminal draws in grey with the colon placeholder left in:
+        // every list item read dim, and a URL in backticks lost its colon (#103).
+        // `listText` tells the `html` renderer below to pass it through as is.
+        const tokens = item.tokens.map((t) => {
+          if (!(t.type === 'text' && t.tokens)) return t;
+          const text = finishInline(this.parser.parseInline(t.tokens));
+          return { type: 'html', raw: text, text, block: true, pre: false, listText: true };
+        });
         const body = this.parser
           .parse(tokens, !!item.loose)
           // A loose item's first child is a block and opens with its own

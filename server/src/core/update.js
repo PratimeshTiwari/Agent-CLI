@@ -97,6 +97,65 @@ async function gitSucceeds(dir, args, { timeout = 5000 } = {}) {
  */
 export const UPDATE_BRANCH = 'main';
 
+// ── Which release ────────────────────────────────────────────────────
+
+/**
+ * The release a merge brought in, from GitHub's merge subject:
+ * `Merge pull request #105 from owner/v6.0/settings-…` → `v6.0`.
+ *
+ * Branches are named `vN.M/description` and every release reaches `main`
+ * through a PR (`CLAUDE.md`), so the merge subjects *are* the version history.
+ * `package.json` has said 1.0.0 since the start and is no help.
+ */
+export function releaseFromSubject(subject) {
+  const m = /\bfrom [^/\s]+\/(v\d+\.\d+)\//.exec(String(subject || ''));
+  return m ? m[1] : null;
+}
+
+/** The newest release merged into `ref`'s first-parent history, or null. */
+export async function releaseAt(dir, ref = 'HEAD') {
+  const log = await git(dir, ['log', '--merges', '--first-parent', '-50', '--format=%s', ref]);
+  for (const subject of (log || '').split('\n')) {
+    const v = releaseFromSubject(subject);
+    if (v) return v;
+  }
+  return null;
+}
+
+/** How many releases `to` has that `from` does not. */
+async function releasesBetween(dir, from, to) {
+  const log = await git(dir, ['log', '--merges', '--first-parent', '--format=%s', `${from}..${to}`]);
+  return (log || '').split('\n').filter((s) => releaseFromSubject(s)).length;
+}
+
+/*
+ * What `/update` says, one line each (owner's pick, 2026-10-30, "Compact";
+ * the old answer was a bare `✔ Up to date.` and read as bland). Pure, so the
+ * wording is tested without git.
+ */
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Bare `/update`: `✔ Up to date · v6.0`, or `⬆ v6.0 → v6.2 · 2 releases · /update pull`. */
+export function updateLine(state = {}) {
+  if (!state.available) return `✔ Up to date${state.version ? ` · ${state.version}` : '.'}`;
+  const span = state.version && state.latest && state.version !== state.latest
+    ? `${state.version} → ${state.latest}` : null;
+  const count = state.releases > 0 ? plural(state.releases, 'release') : plural(state.behind || 0, 'update');
+  return `⬆ ${span ? `${span} · ` : ''}${count} · \`/update pull\``;
+}
+
+/** After a pull: `✔ Updated v6.0 → v6.2 · 14 files · reload the Chrome extension`. */
+export function pulledLine(outcome = {}, { then = '' } = {}) {
+  const span = outcome.fromVersion && outcome.toVersion && outcome.fromVersion !== outcome.toVersion
+    ? ` ${outcome.fromVersion} → ${outcome.toVersion}` : '';
+  const parts = [`✔ Updated${span}`, plural((outcome.files || []).length, 'file')];
+  const steps = (outcome.steps || []).map((step) => step.what.charAt(0).toLowerCase() + step.what.slice(1));
+  if (steps.length) parts.push(steps.join(', '));
+  if (then) parts.push(then);
+  return parts.join(' · ');
+}
+
 /**
  * Is there a newer agent than this one?
  *
@@ -164,6 +223,10 @@ export async function checkForUpdate(dir) {
     behind: commits,
     branch,
     upstream,
+    // Which releases, for `updateLine`. Local git calls only, after the fetch.
+    version: await releaseAt(dir, 'HEAD'),
+    latest: await releaseAt(dir, upstream),
+    releases: commits > 0 ? await releasesBetween(dir, 'HEAD', upstream) : 0,
     // So a caller can say "already have it" rather than "up to date", which
     // are different facts to someone who just merged their own PR.
     mergedBack: commits > 0 && noContent,
@@ -333,6 +396,7 @@ export async function pullUpdate(dir) {
   }
 
   const from = await git(dir, ['rev-parse', 'HEAD']);
+  const fromVersion = await releaseAt(dir, 'HEAD');
   // From the same place `checkForUpdate` measured against, or the two would
   // disagree about what an update even is. Fast-forward only: a branch with
   // its own commits is not behind `main` in a way a pull can settle, and
@@ -348,11 +412,17 @@ export async function pullUpdate(dir) {
   }
 
   const to = await git(dir, ['rev-parse', 'HEAD']);
-  if (from && to && from === to) return { ok: true, from, to, files: [], steps: [], install: false, restored };
+  const toVersion = await releaseAt(dir, 'HEAD');
+  if (from && to && from === to) {
+    return { ok: true, from, to, files: [], steps: [], install: false, restored, fromVersion, toVersion };
+  }
 
   const diff = await git(dir, ['diff', '--name-only', `${from}..${to}`]);
   const files = diff ? diff.split('\n').filter(Boolean) : [];
-  return { ok: true, from, to, files, steps: reloadSteps(files), install: needsInstall(files), restored };
+  return {
+    ok: true, from, to, files, steps: reloadSteps(files), install: needsInstall(files), restored,
+    fromVersion, toVersion,
+  };
 }
 
 // ── The reminder that survives a restart ─────────────────────────────

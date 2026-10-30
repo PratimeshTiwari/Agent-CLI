@@ -26,7 +26,7 @@ import { drainChatQueue } from './chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
-import { checkForUpdate, readPendingReload } from '../core/update.js';
+import { checkForUpdate, updateLine, readPendingReload } from '../core/update.js';
 import { checkInstalled, startupWarning } from '../core/doctor.js';
 import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../core/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
@@ -1545,8 +1545,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
           )}
           {update.available && (
             <Text color={T.link} wrap="truncate">
-              {'⬆ '}{update.behind} update{update.behind === 1 ? '' : 's'} available
-              <Text dimColor>{'  —  /update to pull'}</Text>
+              {/* The same line `/update` answers with: versions, then the command. */}
+              {updateLine(update).replace(/`/g, '')}
             </Text>
           )}
           {/* The in-flight turn — the only transcript rows Ink repaints. Not

@@ -19,7 +19,7 @@ import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
-  reloadSteps, needsInstall, checkForUpdate, pullUpdate,
+  reloadSteps, needsInstall, checkForUpdate, pullUpdate, updateLine, pulledLine, releaseFromSubject, releaseAt,
   savePendingReload, readPendingReload, clearPendingReload, isDirty, treeState, nameFiles,
 } from '../../src/core/update.js';
 
@@ -428,5 +428,71 @@ describe('an update has to carry something you do not have', () => {
     assert.equal(state.behind, 0);
     assert.equal(state.available, false);
     assert.equal(state.mergedBack, false);
+  });
+});
+
+/*
+ * The one-line answers (owner's pick, 2026-10-30, "Compact"). Versions come
+ * from GitHub's merge subjects, because branches are `vN.M/…` and package.json
+ * has said 1.0.0 forever.
+ */
+describe('what /update says, one line each', () => {
+  test('a release from a merge subject', () => {
+    assert.equal(releaseFromSubject('Merge pull request #105 from PratimeshTiwari/v6.0/settings-and-update-fixes'), 'v6.0');
+    assert.equal(releaseFromSubject('Merge pull request #9 from x/beta-v3'), null);
+    assert.equal(releaseFromSubject('v6.0/x but not a merge subject'), null);
+    assert.equal(releaseFromSubject(undefined), null);
+  });
+
+  test('up to date, with the version when there is one', () => {
+    assert.equal(updateLine({ available: false, version: 'v6.0' }), '✔ Up to date · v6.0');
+    assert.equal(updateLine({ available: false }), '✔ Up to date.');
+  });
+
+  test('updates waiting: from → to, how many releases, the command', () => {
+    assert.equal(updateLine({ available: true, version: 'v6.0', latest: 'v6.2', releases: 2, behind: 7 }),
+      '⬆ v6.0 → v6.2 · 2 releases · `/update pull`');
+    assert.equal(updateLine({ available: true, version: 'v6.0', latest: 'v6.1', releases: 1 }),
+      '⬆ v6.0 → v6.1 · 1 release · `/update pull`');
+  });
+
+  test('no versions to name: commits, still one line', () => {
+    assert.equal(updateLine({ available: true, behind: 30 }), '⬆ 30 updates · `/update pull`');
+  });
+
+  test('after a pull: versions, files, what to reload, what happens next', () => {
+    const steps = reloadSteps(['extension/service-worker.js']);
+    assert.equal(pulledLine({ fromVersion: 'v6.0', toVersion: 'v6.2', files: Array(14).fill('f'), steps }, { then: 'restarting…' }),
+      '✔ Updated v6.0 → v6.2 · 14 files · reload the Chrome extension · restarting…');
+    assert.equal(pulledLine({ files: ['a'] }), '✔ Updated · 1 file');
+  });
+});
+
+describe('releaseAt reads the merge history', () => {
+  let repo;
+  const git = (...args) => execFileSync('git', args, {
+    cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' },
+  });
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'upd-rel-'));
+    git('init', '--initial-branch=main', '.');
+    git('commit', '--allow-empty', '-m', 'start');
+    for (const v of ['v6.0', 'v6.1']) {
+      git('checkout', '-q', '-b', `${v}/x`);
+      git('commit', '--allow-empty', '-m', `work ${v}`);
+      git('checkout', '-q', 'main');
+      git('merge', '--no-ff', '-q', '-m', `Merge pull request #1 from owner/${v}/x`, `${v}/x`);
+    }
+  });
+  afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+  test('the newest release merged', async () => {
+    assert.equal(await releaseAt(repo, 'HEAD'), 'v6.1');
+    assert.equal(await releaseAt(repo, 'HEAD~1'), 'v6.0');
+  });
+
+  test('a repo with no release merges says nothing rather than guessing', async () => {
+    assert.equal(await releaseAt(repo, 'HEAD~2'), null);
   });
 });
