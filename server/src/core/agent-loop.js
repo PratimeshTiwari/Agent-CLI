@@ -655,6 +655,13 @@ export class AgentLoop {
       return;
     }
 
+    // The clock for the gap to the next send (v6.6, #104): the next prompt's
+    // trace says how much of it was ours and how much was the person's.
+    if (!isSubagent) {
+      this._replyAt = Date.now();
+      this._parkedMs = 0;
+    }
+
     if (!this.callbacks && this._backgroundCallbacks) {
       this.callbacks = this._backgroundCallbacks;
     }
@@ -2503,6 +2510,19 @@ export class AgentLoop {
     return this.modelConfig.subagents !== false;
   }
 
+  /**
+   * Await something only the person can settle — an approval, a question —
+   * and count the time, so a round's latency is not charged with it (#104).
+   */
+  async _parked(promise) {
+    const started = Date.now();
+    try {
+      return await promise;
+    } finally {
+      this._parkedMs = (this._parkedMs || 0) + (Date.now() - started);
+    }
+  }
+
   _enqueueExtensionRequest(payload) {
     this.extensionLock.enqueue(payload);
   }
@@ -2886,10 +2906,19 @@ export class AgentLoop {
      */
     this._lastMainPrompt = prompt;
 
+    // Reply → this send, split into the person's share (approvals, questions)
+    // and ours. Only for a send that follows a reply; the first of a turn has
+    // no gap to measure, and the tab leaves both stages out.
+    const gap = this._replyAt
+      ? { wait: this._parkedMs || 0, work: Math.max(0, Date.now() - this._replyAt - (this._parkedMs || 0)) }
+      : null;
+    this._replyAt = null;
+
     this._enqueueExtensionRequest({
       prompt,
       expectResponse: true,
       targetModel: this.modelConfig.main || 'gemini',
+      ...(gap ? { gap } : {}),
     });
 
     // Notify side panel that we're waiting for Gemini
@@ -2984,7 +3013,7 @@ export class AgentLoop {
           isApproved = true;
         } else if (needsApproval) {
           // Pause and request user approval for risky commands
-          const approval = await new Promise((resolve) => {
+          const approval = await this._parked(new Promise((resolve) => {
             this.pendingCommandResolve = resolve;
             this.callbacks.sendToPanel({
               id: randomUUID(),
@@ -2997,7 +3026,7 @@ export class AgentLoop {
               },
               timestamp: Date.now(),
             });
-          });
+          }));
           isApproved = approval.approved;
         } else {
           // Safe commands in auto mode

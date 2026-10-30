@@ -73,9 +73,11 @@ export async function resolveDiff(loop, { call, diffResult, needsApproval, risk,
    * replied as if the edit were already under review while the prompt was still
    * on screen — and the user's answer went to chat, not the diff.
    */
+  // Parked: the time spent deciding is the person's, not the round's (#104).
+  const parked = (l, p) => (typeof l._parked === 'function' ? l._parked(p) : p);
   const decision = typeof loop.callbacks?.requestDiffApproval !== 'function'
     ? { action: 'reject' } // no UI wired: never block forever
-    : await new Promise((resolve) => {
+    : await parked(loop, new Promise((resolve) => {
       loop.pendingDiffResolve = resolve;
       // The engine's own record carries the whole proposed file, which the
       // tool result does not. The editor panel opens it in VS Code's diff view
@@ -93,7 +95,7 @@ export async function resolveDiff(loop, { call, diffResult, needsApproval, risk,
         isNewFile: pending?.isNewFile,
         newContent: pending?.newContent,
       });
-    });
+    }));
 
   const accepted = decision.action === 'accept';
   const message = accepted

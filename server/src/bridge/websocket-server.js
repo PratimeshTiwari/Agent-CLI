@@ -1021,7 +1021,9 @@ export class WebSocketServer {
     const message = {
       id: randomUUID(),
       type: 'inject_prompt',
-      payload: msg,
+      // `sentAt` is when it left here; the tab records the gap to its own start
+      // as `deliver` (v6.6, #104). Same machine, same wall clock.
+      payload: { ...msg, sentAt: Date.now() },
       timestamp: Date.now(),
     };
     if (this.broadcast('extension', message)) return true;
@@ -1050,6 +1052,8 @@ export class WebSocketServer {
     let sent = 0;
     for (const entry of queued) {
       if (now - entry.queuedAt > INJECT_BUFFER_TTL_MS) continue;
+      // Re-stamped: the time it sat here waiting for Chrome is not delivery.
+      if (entry.message.payload) entry.message.payload.sentAt = now;
       if (this.broadcast('extension', entry.message)) sent++;
     }
     return sent;

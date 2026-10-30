@@ -83,6 +83,10 @@ export function browserTimings(workspace) {
     + t.versions.map((v) => `  ${v.version.padEnd(6)} n=${String(v.n).padEnd(4)} median ${formatMs(v.complete).padStart(7)}   p90 ${formatMs(v.p90)}`).join('\n');
   return `**Browser timings** — median and slowest tenth, over ${t.samples} turn${t.samples === 1 ? '' : 's'}\n`
     + t.stages.map((st) => `  ${st.stage.padEnd(12)} ${formatMs(st.median).padStart(6)}   p90 ${formatMs(st.p90)}`).join('\n')
+    // v6.6 (#104): the three stages before the tab has the prompt need a key.
+    + (t.stages.some((st) => st.stage === 'deliver')
+      ? '\n  _between turns: round_wait is you (approvals, questions) · round_work is the agent · deliver is the send reaching the tab_'
+      : '')
     + rungs + versions;
 }
 

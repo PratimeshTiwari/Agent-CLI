@@ -208,7 +208,9 @@ export function buildAgentCallbacks({
       const success = wsServer.broadcast('extension', {
         id: crypto.randomUUID(),
         type: 'inject_prompt',
-        payload: msg,
+        // Stamped as `sendInjectPrompt` stamps it: the tab records the gap to
+        // its own receipt as `deliver` (v6.6, #104).
+        payload: { ...msg, sentAt: Date.now() },
         timestamp: Date.now(),
       });
       
