@@ -11,6 +11,10 @@ import { listWindow } from '../panel.js';
  *
  * `tone` colours the title, and the rule too when it is not an ordinary menu:
  * an approval or a destructive confirmation should not look like a picker.
+ *
+ * `statusTone` colours the status beside the title by role (v6.3): a menu that
+ * is a switch says `● on` in the success colour and `○ off` muted, which the
+ * owner found "very dull" as plain dim text. Without it the status is dim.
  */
 const TONES = {
   menu: () => T.accent,
@@ -19,7 +23,7 @@ const TONES = {
   review: () => T.review,
 };
 
-export function Panel({ ruled = true, head = null, title, status = null, tone = 'menu', sub = [], tight = false, width = 80, keys, children }) {
+export function Panel({ ruled = true, head = null, title, status = null, statusTone = null, tone = 'menu', sub = [], tight = false, width = 80, keys, children }) {
   const colour = (TONES[tone] || TONES.menu)();
   return (
     <Box flexDirection="column">
@@ -27,7 +31,9 @@ export function Panel({ ruled = true, head = null, title, status = null, tone = 
       {head ?? (
         <Text wrap="truncate">
           {' '}<Text bold color={colour}>{title}</Text>
-          {status ? <Text dimColor>{'  '}{status}</Text> : null}
+          {status ? (
+            <Text color={statusTone ? T[statusTone] ?? undefined : undefined} dimColor={!statusTone}>{'  '}{status}</Text>
+          ) : null}
         </Text>
       )}
       {sub.map((line, i) => <Text key={i} dimColor wrap="truncate">{` ${line}`}</Text>)}
@@ -53,8 +59,11 @@ export function Panel({ ruled = true, head = null, title, status = null, tone = 
  * pickers do. Off for anything that approves or destroys: a digit typed into
  * a prompt that appeared under the keyboard must not answer it.
  *
- * Items: `{label, value, key?, detail?, current?, colour?, tone?}`. `tone` is a
- * theme role for the detail; without one the detail is dim.
+ * Items: `{label, value, key?, detail?, current?, colour?, tone?, glyph?, glyphTone?}`.
+ * `tone` is a theme role for the detail; without one the detail is dim.
+ * `glyph` leads the label (`● On`, `+ Allow a command…`), coloured by the role
+ * `glyphTone` (v6.3). A list with glyphs hides the `1.` column — the glyph is
+ * the first thing read — and digits still pick when `numbered`.
  */
 export function Choices({
   items,
@@ -102,6 +111,8 @@ export function Choices({
   const hasDetail = items.some((it) => it.detail);
   const labelWidth = hasDetail ? Math.min(28, Math.max(...items.map((it) => String(it.label).length))) : 0;
   const numWidth = String(Math.min(count, 9)).length + 2;
+  const glyphs = items.some((it) => it.glyph);
+  const showNumbers = numbered && !glyphs;
 
   return (
     <>
@@ -113,7 +124,8 @@ export function Choices({
         return (
           <Text key={item.key ?? item.value ?? i} wrap="truncate">
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>
-            {numbered ? <Text color={sel ? T.accent : undefined} dimColor={!sel}>{(i < 9 ? `${i + 1}.` : '').padEnd(numWidth)}</Text> : null}
+            {showNumbers ? <Text color={sel ? T.accent : undefined} dimColor={!sel}>{(i < 9 ? `${i + 1}.` : '').padEnd(numWidth)}</Text> : null}
+            {glyphs ? <Text color={item.glyphTone ? T[item.glyphTone] ?? undefined : undefined}>{`${item.glyph || ' '} `}</Text> : null}
             <Text color={sel ? T.accent : item.colour} bold={sel}>{label}</Text>
             {item.detail ? (
               // `text` is the terminal's own foreground, never the palette's
