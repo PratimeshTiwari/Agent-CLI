@@ -2116,6 +2116,8 @@ export class AgentLoop {
     if (this.extensionLock?.isBusy?.(mainLane(this.mainModel))) return Promise.resolve(false);
     const previous = this.chatThread;
     this.chatThread = null;
+    // A new chat is a new decision about compacting it (v7.5).
+    this._compactDeclined = false;
 
     /*
      * **A new conversation has never seen the system prompt.** By definition.
@@ -2277,6 +2279,26 @@ export class AgentLoop {
    * status bar already says the tab is lower on purpose), never while a switch
    * is in flight, and once per disagreement — see `describeMismatch`.
    */
+  /**
+   * Past the compaction threshold: ask first (v7.5). Owner: "before
+   * auto-compact, lets give user option, auto-compact now or continue using,
+   * we will stop user once and lets not force it". Asked once per chat; the
+   * side panel never asks, so a message from it still compacts when due.
+   *
+   * @returns {{pct: number, tokens: number, limit: number}|null}
+   */
+  compactionToAsk() {
+    if (this._compactDeclined || this._compactAfterTurn || !this._wantsCompaction()) return null;
+    const tokens = this.contextTokens;
+    const limit = this.contextLimit;
+    return { pct: Math.round((tokens / limit) * 100), tokens, limit };
+  }
+
+  /** "Continue in this chat": not compacted, nor asked again, until the chat changes. */
+  declineCompaction() {
+    this._compactDeclined = true;
+  }
+
   mismatchToAsk() {
     if (mismatchPolicy(this.modelConfig) !== 'ask') return null;
     if (this.effortFallback || this._switchInFlight) return null;
@@ -3892,6 +3914,9 @@ export class AgentLoop {
   _wantsCompaction() {
     if (this.isCompacting) return false;
     if (this._compactAfterTurn) return true;
+    // "Continue in this chat" (v7.5): not compacted, and not asked again, until
+    // the chat changes. `/compact` still works (`_compactAfterTurn` above).
+    if (this._compactDeclined) return false;
     // A handover that failed is not retried every turn — each try is a round
     // trip — only once the thread has grown a tenth past where it failed.
     if (this._compactFailedAt && this.contextTokens < this._compactFailedAt * 1.1) return false;

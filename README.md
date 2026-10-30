@@ -39,7 +39,8 @@ editor in "From VS Code" and the architecture diagram are drawn.*
   running turn.
 - Long pastes fold to a marker. `ctrl+v` attaches an image as `[Image #1]`. Dropped files and
   folders become `[File #1: app.js]` tags, and only the path goes to the model.
-- Near the context limit it summarises in the same chat, opens a fresh one and carries on.
+- Near the context limit it asks once: compact now (a summary, then a fresh chat) or carry on in
+  this chat. `/compact` works any time.
 
 **Reading code, documents and logs**
 - `find_symbol` / `find_references` in JavaScript, TypeScript, Ruby, Python, Go, Java, C/C++ and

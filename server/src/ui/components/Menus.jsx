@@ -323,7 +323,7 @@ export function Menus({
     // The picker previews by applying each palette as you move; leaving
     // without choosing puts back the one you came in with.
     // The mismatch ask (v5.28): cancelling must not lose what was typed.
-    if (activeMenu?.type === 'effort_mismatch') {
+    if (activeMenu?.type === 'effort_mismatch' || activeMenu?.type === 'compaction_ask') {
       setActiveMenu(null);
       setFocus(FOCUS_INPUT);
       setInputAtEnd(activeMenu.query);
@@ -771,6 +771,38 @@ export function Menus({
           `core/model-fallback.js`). Asked before the message is typed, once per
           disagreement; the message waits here and comes back to the box on esc.
         */}
+        {/*
+          Past the compaction threshold (v7.5): compact now or carry on. Asked
+          once per chat, before the message is sent; esc puts it back in the box.
+        */}
+        {activeMenu?.type === 'compaction_ask' && (() => {
+          const { ask, query, opts } = activeMenu;
+          const k = (n) => (n < 1000 ? `${n}` : `${Math.round(n / 1000)}k`);
+          const { sub, tight, room } = fit(
+            `~${k(ask.tokens)} of ${k(ask.limit)} tokens. Compacting summarises this chat and carries on in a fresh one.`,
+          );
+          const items = [
+            { label: 'Compact now', detail: 'then send · about 15 s', value: 'now' },
+            { label: 'Continue in this chat', detail: 'not asked again here · /compact any time', value: 'continue' },
+          ];
+          return (
+            <Panel width={W} title={`Context is ${ask.pct}% full`} tone="attention" sub={sub} tight={tight}
+              keys="enter choose · esc cancel — your message goes back in the box">
+              <Choices
+                numbered
+                limit={room}
+                items={items}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  setFocus(FOCUS_INPUT);
+                  if (item.value === 'continue') agentLoop.declineCompaction();
+                  handleSubmit(query, { ...opts, compaction: item.value });
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
         {activeMenu?.type === 'effort_mismatch' && (() => {
           const { ask, query } = activeMenu;
           const setting = resolveEffort(ask.setting);

@@ -999,6 +999,13 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
   `_compactAndResume` and the automatic end-of-turn run are gone. A `/compact` typed during a
   turn still runs when it ends. The status bar says `N% until auto-compact` within 20 points.
   `startNewChat` refuses while the main lane is busy.
+- **Asked, not forced (v7.5, `compactionToAsk`).** Owner: *"before auto-compact, lets give user
+  option, auto-compact now or continue using, we will stop user once and lets not force it"*. Past
+  the threshold, `handleSubmit` stops before sending (after the mismatch ask, whose choice rides in
+  `opts`): **Compact now** (as before) or **Continue in this chat** (`declineCompaction`: not
+  compacted, not asked, no countdown in the status bar, until `startNewChat`). `/compact` still runs.
+  Esc gives the message back. The side panel never asks, so a panel message still compacts when
+  due. Pty: both paths and a third message at 13 and 24 rows, 0 clears.
 - **Handed over once** as `<compacted_context>`: summary, the archive pointer naming
   `recall_history`, and the kept turns capped (1.5k each, 6k total). The count restarts at **zero**
   — counting the kept turns in full re-triggered it on the next turn (a 335k-character reply).

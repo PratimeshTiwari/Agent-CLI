@@ -1024,8 +1024,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
 
   const handleSubmit = async (query, opts = {}) => {
     if (!query.trim()) return;
-    // A message coming back from the mismatch ask is already in the history.
-    if (!opts.mismatch) setInputHistory(prev => [...prev, query]);
+    // A message coming back from an ask (mismatch, compaction) is already in the history.
+    if (!opts.mismatch && !opts.compaction) setInputHistory(prev => [...prev, query]);
     setHistoryIdx(-1);
     setPaletteSuppressed(false);
     setInput('');
@@ -1154,6 +1154,17 @@ export function App({ agentLoop, wsServer, closing = false }) {
     const mismatchAsk = opts.mismatch ? null : agentLoop.mismatchToAsk?.();
     if (mismatchAsk) {
       setActiveMenu({ type: 'effort_mismatch', ask: mismatchAsk, query });
+      return;
+    }
+
+    /*
+     * Past the compaction threshold: compact now, or carry on in this chat
+     * (v7.5). Asked once per chat, after the mismatch ask, whose choice is
+     * carried through in `opts`.
+     */
+    const compactAsk = opts.compaction ? null : agentLoop.compactionToAsk?.();
+    if (compactAsk) {
+      setActiveMenu({ type: 'compaction_ask', ask: compactAsk, query, opts });
       return;
     }
 
@@ -1491,7 +1502,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
     effort: resolveEffort(agentLoop.modelConfig?.effort).id,
     pct: syncTokenEstimate > 0 ? tokenPct : null,
     meter: contextMeter(tokenPct),
-    compactAtPct,
+    // "Continue in this chat" (v7.5): no countdown to a compaction that will not come.
+    compactAtPct: agentLoop._compactDeclined ? null : compactAtPct,
   });
   const segmentStyle = (role) => role === 'mode' ? { color: modeColor(mode) }
     : role === 'attention' ? { color: T.attention }
