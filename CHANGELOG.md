@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#117](https://github.com/PratimeshTiwari/Agent-CLI/pull/117)
+### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#118](https://github.com/PratimeshTiwari/Agent-CLI/pull/118)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v6.10 | 2026-10-30 | `v6.10/prompt-menu` | [#115](https://github.com/PratimeshTiwari/Agent-CLI/pull/115) | v6.10: /prompt opens a menu |
 | v6.11 | 2026-10-30 | `v6.11/prompt-compare` | [#116](https://github.com/PratimeshTiwari/Agent-CLI/pull/116) | v6.11: /prompt compares the versions |
 | v6.12 | 2026-10-30 | `v6.12/reply-wrap` | [#117](https://github.com/PratimeshTiwari/Agent-CLI/pull/117) | v6.12: replies fit the terminal; bullets hang under their text |
+| v6.13 | 2026-10-30 | `v6.13/status-bar` | [#118](https://github.com/PratimeshTiwari/Agent-CLI/pull/118) | v6.13: a quieter status bar; shift+tab hint only at the start of a chat |
 | v6.2 | 2026-10-30 | `v6.2/readable-replies` | [#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107) | v6.2: list text readable again (#103); /update answers in one line |
 | v6.1 | 2026-10-30 | `v6.1/apply-or-revert-settings` | [#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106) | v6.1: settings wait for Apply; Revert says nothing; clearer theme names |
 | v6.0 | 2026-10-30 | `v6.0/settings-and-update-fixes` | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105) | v6.0: /update pull restores the lockfile (#102); short settings hints; /theme preview box; Put back says only what moved |

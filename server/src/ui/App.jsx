@@ -12,7 +12,8 @@ import { InputBar } from './components/InputBar.jsx';
 import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
 import { actionHead } from './action-row.js';
-import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, taskProgress, workBreakdown } from './format.js';
+import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
+import { statusBarLayout } from './status-bar.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -1436,13 +1437,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // places, two answers, and the bar was the one people watch.
   const tokenLimit = agentLoop.contextLimit || 50000;
   const tokenPct = Math.round((syncTokenEstimate / tokenLimit) * 100);
-  const tokenColor = tokenPct > 80 ? T.danger : tokenPct > 50 ? T.attention : T.accent;
   /*
    * How far to auto-compaction, once it is close — so it is never a surprise.
    * Same threshold the loop uses (COMPACT_AT), read rather than restated.
    */
   const compactAtPct = Math.round(COMPACT_AT * 100);
-  const contextText = contextField(tokenPct, tokenLimit, compactAtPct);
   const runningTasks = tasks.filter(t => t.status === 'running').length;
   const tasksDone = taskProgress(artifacts.task);
   // Which repo of a group we are on. Empty for an ordinary single-repo
@@ -1459,6 +1458,36 @@ export function App({ agentLoop, wsServer, closing = false }) {
     const leaf = scope.split('/').filter(Boolean).pop() || scope;
     return leaf.length > 20 ? `${leaf.slice(0, 19)}…` : leaf;
   })();
+
+  /*
+   * The bar under the input (v6.13, `ui/status-bar.js`). `shift+tab to cycle`
+   * is taught at the start of a chat, while idle, and not on every frame after:
+   * owner, "show this at the start of chat only". The model is the browser's
+   * when the picker has been read, the effort (ours) only while it has not —
+   * never an invented model, never a blank that reads as "off".
+   */
+  const chatStarted = history.some((m) => m.role === 'user' && !m.isLocal);
+  const statusBar = statusBarLayout({
+    width: terminalWidth,
+    mode,
+    hint: !chatStarted && !isProcessing,
+    notice: exitArmed ? 'Press Ctrl+C again to exit' : flash || null,
+    scope: activeScope,
+    pastes: attachedCount,
+    running: runningTasks,
+    tasks: isProcessing && tasksDone ? tasksDone : null,
+    version: agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION ? agentLoop.promptVersion : null,
+    model: browserModelLabel,
+    modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : mismatch ? '⚠' : null) : null,
+    effort: resolveEffort(agentLoop.modelConfig?.effort).id,
+    pct: syncTokenEstimate > 0 ? tokenPct : null,
+    meter: contextMeter(tokenPct),
+    compactAtPct,
+  });
+  const segmentStyle = (role) => role === 'mode' ? { color: modeColor(mode) }
+    : role === 'attention' ? { color: T.attention }
+    : role === 'danger' ? { color: T.danger }
+    : { dimColor: true };
 
   // The banner is committed with the rest of the scrollback rather than living
   // in the live frame: it is ten rows of figlet that would otherwise be
@@ -1759,68 +1788,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
       <Box marginTop={compact ? 0 : 1} flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate">
-          {/*
-            The mode the way Claude Code shows it. It used to be a label on the
-            input border, which read as floating above the box; `/help` gives
-            way to it (typing `/` lists everything). No connection dot: it was
-            reported as looking bad, and a lost connection already says so in
-            the input box (`disconnectedHint`).
-          */}
-          <Text color={modeColor(mode)}>{modeLine(mode)}</Text>
-          {exitArmed
-            ? <Text color={T.attention}>{'  ·  '}Press Ctrl+C again to exit</Text>
-            : flash
-              ? <Text color={T.attention}>{'  ·  '}{flash}</Text>
-              : <Text dimColor>{' (shift+tab to cycle)'}</Text>}
-          {activeScope ? <Text dimColor>{'  ·  '}{activeScope}</Text> : null}
+          {statusBar.left.map((seg, i) => <Text key={i} {...segmentStyle(seg.role)}>{seg.text}</Text>)}
         </Text>
         </Box>
+        {statusBar.right.length > 0 && (
         <Box flexShrink={0} marginLeft={2}>
-        <Text dimColor wrap="truncate">
-          {/*
-            An offer has to be visible or it is not an offer. Yellow because it
-            is the one field here that wants a decision from you; it appears
-            only when something is waiting and takes no room otherwise.
-          */}
-          {attachedCount > 0 ? `${attachedCount} paste${attachedCount === 1 ? '' : 's'}  ·  ` : ''}
-          {runningTasks > 0 ? <Text color={T.attention}>{runningTasks} bg{'  ·  '}</Text> : ''}
-          {/*
-            The checklist while a turn runs, when its panel is not drawn (it
-            draws only when idle, and says the same there).
-          */}
-          {isProcessing && tasksDone ? <Text>{`tasks ${tasksDone.done}/${tasksDone.total}`}{'  ·  '}</Text> : ''}
-          {/* The mode is on the input border now (InputBar), not repeated here. */}
-          {/*
-            Two different facts, and the row says which one it has.
-
-            The effort is **ours** — how hard to work, now `low`/`medium`/`high`
-            since it stopped being named after Google's models. The model is the
-            **browser's**, and it is whatever its picker currently offers. Naming
-            our rungs after their models is what made "flash" mean two things,
-            and the status bar inherited that confusion.
-
-            So: show the model when the picker has actually been read, because
-            that is the more specific fact and the one a mismatch is about. Fall
-            back to the rung when it has not — never invent a model, and never
-            leave the row blank, which would read as "off".
-          */}
-          {/* v5.32: only when it is not the default, so v1 changes nothing here. */}
-          {agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION && (
-            <><Text color={T.attention}>{`prompt ${agentLoop.promptVersion}`}</Text>{'  ·  '}</>
-          )}
-          {browserModelLabel && agentLoop.effortFallback
-            ? <Text color={T.attention}>{'↓ '}{browserModelLabel}</Text>
-            : browserModelLabel
-            ? (mismatch
-              // The row above says what is wrong and how to fix it; this marks
-              // the field it is about, and stays while that row scrolls away.
-              ? <Text color={T.attention}>{'⚠ '}{browserModelLabel}</Text>
-              : <Text color={T.link}>{browserModelLabel}</Text>)
-            : <Text>{`effort: ${resolveEffort(agentLoop.modelConfig?.effort).id}`}</Text>}
-          {'  ·  '}
-          <Text color={tokenColor}>{contextMeter(tokenPct)}{' '}{contextText}</Text>
+        <Text wrap="truncate">
+          {statusBar.right.map((seg, i) => <Text key={i} {...segmentStyle(seg.role)}>{seg.text}</Text>)}
         </Text>
         </Box>
+        )}
       </Box>
       </>)}
     </Box>
