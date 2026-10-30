@@ -13,6 +13,19 @@
  */
 
 import { symbolIndex } from '../../context/symbol-index.js';
+import { RUBY_NOTE } from '../../context/ruby-symbols.js';
+
+const isRuby = (file) => /\.(rb|rake)$/.test(file);
+
+/**
+ * The Ruby caveat, once, when Ruby is part of the answer — or, for an answer
+ * of nothing, when Ruby files were searched at all: "not found" in Ruby can
+ * mean "made at run time", and the model has to hear that before concluding.
+ */
+function rubyNote(index, files) {
+  if (!index.rubyFiles) return {};
+  return files === null || files.some(isRuby) ? { rubyNote: RUBY_NOTE } : {};
+}
 
 /** Results past this are a wall of text the model will not read. */
 const MAX_HITS = 60;
@@ -37,7 +50,7 @@ function coverage(index) {
 
 export async function findSymbol(args, context) {
   const { name } = args;
-  const index = symbolIndex(context.workspace);
+  const index = await symbolIndex(context.workspace);
   const hits = index.find(name);
 
   if (hits.length === 0) {
@@ -47,6 +60,7 @@ export async function findSymbol(args, context) {
       filesIndexed: index.indexed,
       message: `No definition of "${name}" in ${index.indexed} indexed files. `
         + (coverage(index) || 'Try grep_search — it may be a property, a string, or in a comment.'),
+      ...rubyNote(index, null),
     };
   }
 
@@ -57,12 +71,13 @@ export async function findSymbol(args, context) {
     definitions: hits.slice(0, MAX_HITS),
     ...(hits.length > MAX_HITS ? { truncated: hits.length - MAX_HITS } : {}),
     ...(coverage(index) ? { note: coverage(index) } : {}),
+    ...rubyNote(index, hits.map((h) => h.file)),
   };
 }
 
 export async function findReferences(args, context) {
   const { name, includeDefinition = true } = args;
-  const index = symbolIndex(context.workspace);
+  const index = await symbolIndex(context.workspace);
   const definitions = index.find(name);
   const defs = new Set(definitions.map((d) => `${d.file}:${d.line}`));
 
@@ -83,7 +98,9 @@ export async function findReferences(args, context) {
    * defined here, so the gate excludes them and keeps the names people
    * actually ask about.
    */
-  const isMethod = definitions.some((d) => d.kind === 'method');
+  // JavaScript methods only: a Ruby file is matched by text, `x.name` included,
+  // and a Ruby `def` must not widen the JavaScript search.
+  const isMethod = definitions.some((d) => d.kind === 'method' && !isRuby(d.file));
 
   let hits = index.references(name, { includeMembers: isMethod });
   if (!includeDefinition) {
@@ -118,6 +135,7 @@ export async function findReferences(args, context) {
       filesIndexed: index.indexed,
       message: `No uses of "${name}" in ${index.indexed} indexed files. `
         + (coverage(index) || 'It may be dead code, or reached by a computed name.'),
+      ...rubyNote(index, null),
     };
   }
 
@@ -142,7 +160,8 @@ export async function findReferences(args, context) {
     found: hits.length,
     filesIndexed: index.indexed,
     files: [...byFile.entries()]
-      .map(([file, lines]) => ({ file, count: lines.length, lines }))
+      // `byText`: a Ruby file, matched by word rather than parsed.
+      .map(([file, lines]) => ({ file, count: lines.length, ...(isRuby(file) ? { byText: true } : {}), lines }))
       .sort((a, b) => b.count - a.count || a.file.localeCompare(b.file)),
     ...(hits.length > MAX_HITS ? { truncated: hits.length - MAX_HITS } : {}),
     ...(isMethod ? {
@@ -151,5 +170,6 @@ export async function findReferences(args, context) {
         + 'before treating one as a call to this definition.',
     } : {}),
     ...(coverage(index) ? { note: coverage(index) } : {}),
+    ...rubyNote(index, [...byFile.keys()]),
   };
 }

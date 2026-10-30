@@ -1217,7 +1217,7 @@ ${firstCheck}
    */
   _buildToolDefinitions(subagents = true, modelConfig = {}) {
     const tier = resolveEffort(modelConfig.effort).tier;
-    return renderToolDefinitions(tier, subagents, modelConfig);
+    return renderToolDefinitions(tier, subagents, modelConfig, resolvePromptVersion(this.promptVersion).flags);
   }
 
   /**

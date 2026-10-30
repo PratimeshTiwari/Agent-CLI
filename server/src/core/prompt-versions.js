@@ -47,6 +47,7 @@ export const PROMPT_VERSIONS = {
       tickWithNextCall: true,    // tick task.md in the reply that makes the next call
       oneCopy: true,             // a repeated rule is kept once, nearest its use
       answerDirectly: true,      // lite/flash: a greeting gets no task.md and no plan (v6.7)
+      symbolLanguages: true,     // find_symbol names Ruby as well as JavaScript (v6.8)
     },
   },
 };

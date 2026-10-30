@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#112](https://github.com/PratimeshTiwari/Agent-CLI/pull/112)
+### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#113](https://github.com/PratimeshTiwari/Agent-CLI/pull/113)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v6.5 | 2026-10-30 | `v6.5/action-rows` | [#110](https://github.com/PratimeshTiwari/Agent-CLI/pull/110) | v6.5: action rows in Claude Code's shape |
 | v6.6 | 2026-10-30 | `v6.6/between-turns` | [#111](https://github.com/PratimeshTiwari/Agent-CLI/pull/111) | v6.6: measure the time between turns (#104) |
 | v6.7 | 2026-10-30 | `v6.7/plan-review-guard` | [#112](https://github.com/PratimeshTiwari/Agent-CLI/pull/112) | v6.7: a greeting no longer ends on a plan review |
+| v6.8 | 2026-10-30 | `v6.8/ruby-symbols` | [#113](https://github.com/PratimeshTiwari/Agent-CLI/pull/113) | v6.8: find_symbol and find_references read Ruby; acorn loads on first use |
 | v6.2 | 2026-10-30 | `v6.2/readable-replies` | [#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107) | v6.2: list text readable again (#103); /update answers in one line |
 | v6.1 | 2026-10-30 | `v6.1/apply-or-revert-settings` | [#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106) | v6.1: settings wait for Apply; Revert says nothing; clearer theme names |
 | v6.0 | 2026-10-30 | `v6.0/settings-and-update-fixes` | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105) | v6.0: /update pull restores the lockfile (#102); short settings hints; /theme preview box; Put back says only what moved |
