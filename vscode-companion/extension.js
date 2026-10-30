@@ -193,6 +193,36 @@ function activate(context) {
 
     sub(vscode.commands.registerCommand('agentCli.addToChat', addToChat));
 
+    // ── Attach to Agent CLI ───────────────────────────────────────────
+    //
+    // The explorer's files, queued by path: the CLI turns them into the
+    // [File #n] / [Image #n] tags a drop makes (v7.8). Antigravity's agent
+    // panel takes image, PDF and video drops for the whole window, so a drag
+    // never reaches its terminal; a menu command cannot be taken that way.
+    // VS Code passes the clicked item and, with several selected, all of them.
+    function attachToChat(clicked, selected) {
+        const uris = (Array.isArray(selected) && selected.length ? selected : [clicked])
+            .filter((u) => u && u.scheme === 'file');
+        if (!uris.length) {
+            vscode.window.showWarningMessage('Agent CLI: choose a file in the explorer first.');
+            return;
+        }
+        const file = statePath('chat-queue.jsonl');
+        if (!file) return;
+        try {
+            fs.appendFileSync(file, JSON.stringify({ paths: uris.map((u) => u.fsPath), timestamp: Date.now() }) + '\n');
+            const name = path.basename(uris[0].fsPath);
+            vscode.window.setStatusBarMessage(
+                `Agent CLI: attached ${uris.length === 1 ? name : `${uris.length} items`}`,
+                3000,
+            );
+        } catch (e) {
+            vscode.window.showErrorMessage(`Agent CLI: could not attach — ${e.message}`);
+        }
+    }
+
+    sub(vscode.commands.registerCommand('agentCli.attachToChat', attachToChat));
+
     // The floating "Chat ⌘L" widget that Antigravity and Copilot draw on a
     // selection is their own custom widget, not a VS Code extension point —
     // nothing can contribute to it. The native equivalent is a Code Action:

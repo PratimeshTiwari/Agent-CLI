@@ -11,10 +11,17 @@
  * Each entry becomes a marker in the prompt (`@src/app.js:12-40`) that expands
  * to the real text on submit, exactly like a pasted block. That is what keeps a
  * 400-line selection from blowing the live frame — see ui/paste.js.
+ *
+ * An entry with `paths` is "Attach to Agent CLI" from the explorer (v7.8): the
+ * files themselves, as a drop would give them. Antigravity's agent panel takes
+ * image, PDF and video drops for the whole window, so those never reach its
+ * terminal; a menu command cannot be intercepted that way. It comes back as
+ * `{drop: items}` and goes through the drop path (`[File #n]`, `[Image #n]`).
  */
 
 import fs from 'fs';
 import * as paths from '../core/paths.js';
+import { droppedItem } from './file-drop.js';
 
 /** How the attachment shows up in the prompt. Short, and unmistakably a reference. */
 export function selectionMarker(entry) {
@@ -42,7 +49,7 @@ export function selectionBody(entry) {
  * Cleared on read so a selection is attached once. The file is removed rather
  * than truncated: the companion appends, and truncating races with it.
  *
- * @returns {Array<{marker: string, text: string, file: string}>}
+ * @returns {Array<{marker: string, text: string, file: string} | {drop: Array<{path: string, kind: string}>}>}
  */
 export function drainChatQueue(workspace) {
   const file = paths.chatQueuePath(workspace);
@@ -67,6 +74,12 @@ export function drainChatQueue(workspace) {
       entry = JSON.parse(line);
     } catch {
       continue; // a half-written line from an append in flight
+    }
+    if (Array.isArray(entry?.paths)) {
+      // A file deleted since it was queued is left out, not an error.
+      const drop = entry.paths.map((p) => droppedItem(p)).filter(Boolean).slice(0, 20);
+      if (drop.length) out.push({ drop });
+      continue;
     }
     if (!entry?.text) continue;
     out.push({

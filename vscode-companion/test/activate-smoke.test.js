@@ -131,6 +131,17 @@ test('the companion activates and the chat view answers its page', async (t) => 
     assert.match(insert.payload.body, /^a\.js \(lines 1-1\):/);
   });
 
+  await t.test('Attach to Agent CLI queues the selected files by path', () => {
+    const queue = path.join(root, '.agent', 'state', 'chat-queue.jsonl');
+    fs.rmSync(queue, { force: true });
+    const a = vscode.Uri.file(path.join(root, 'a.js'));
+    const b = vscode.Uri.file(path.join(root, 'b.pdf'));
+    registered.commands.get('agentCli.attachToChat')(a, [a, b]);
+    registered.commands.get('agentCli.attachToChat')(a, undefined);
+    const lines = fs.readFileSync(queue, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepEqual(lines.map((l) => l.paths), [[a.fsPath, b.fsPath], [a.fsPath]]);
+  });
+
   await t.test('Start Agent runs `agent` in the folder', () => {
     registered.commands.get('agentCli.startAgent')();
     assert.ok(executed.some((a) => a[0] === 'terminal' && a[1] === root && a[2] === 'agent'));
