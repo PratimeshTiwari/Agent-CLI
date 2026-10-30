@@ -129,6 +129,7 @@ export async function readFile(args, context) {
   }
 
   const ext = extname(absPath).toLowerCase();
+  if (MARKDOWN.has(ext)) numberedContent += unreadOutline(allLines, rangeStart, rangeEnd);
   language ??= LANG_MAP[ext] || 'plaintext';
 
   return {
@@ -139,6 +140,38 @@ export async function readFile(args, context) {
     size: formatBytes(stat.size),
     content: numberedContent,
   };
+}
+
+const MARKDOWN = new Set(['.md', '.markdown', '.mdx']);
+const OUTLINE_MAX = 40;
+
+/**
+ * The headings of a Markdown file that a partial read did not show (v6.14).
+ *
+ * Asked "what is the architecture of this agent", the model read README lines
+ * 1–100 and 90–150 and answered from those. The pointer to CLAUDE.md, where
+ * the architecture is, was at line 258 under `## More`, and nothing in the
+ * read said that section existed. A document's headings are its table of
+ * contents; a read of part of it now ends with the rest of that table, so the
+ * next read can be aimed rather than paged.
+ *
+ * `#` to `###` only, fenced code skipped. Written `- ## More (line 258)`, never
+ * `258: …`, because `fitReadResult` reads a leading number as a shown line.
+ */
+export function unreadOutline(allLines, start, end) {
+  if (start <= 1 && end >= allLines.length) return '';
+  const out = [];
+  let fence = false;
+  allLines.forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) { fence = !fence; return; }
+    const n = i + 1;
+    if (fence || (n >= start && n <= end)) return;
+    const m = /^(#{1,3})\s+(\S.*)$/.exec(line);
+    if (m) out.push(`- ${m[1]} ${m[2].length > 70 ? `${m[2].slice(0, 69)}…` : m[2]} (line ${n})`);
+  });
+  if (!out.length) return '';
+  const more = out.length > OUTLINE_MAX ? `\n- … ${out.length - OUTLINE_MAX} more` : '';
+  return `\n\nHeadings outside lines ${start}–${end}:\n${out.slice(0, OUTLINE_MAX).join('\n')}${more}`;
 }
 
 function formatBytes(bytes) {

@@ -510,6 +510,14 @@ export class AgentLoop {
      * is what a flag nobody clears would do.
      */
     this._userStoppedAt = null;
+    /*
+     * And the reply clock: the last reply of the previous turn set it and
+     * nothing cleared it, so the first send of this turn was charged the time
+     * the person spent reading and typing as `round_work` (88s in one trace).
+     * The first send of a turn has no gap to measure.
+     */
+    this._replyAt = null;
+    this._parkedMs = 0;
 
     /*
      * Auto-compaction runs here, *before* the new message, and nowhere else —

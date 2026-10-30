@@ -94,6 +94,8 @@ emulator; the editor in the second one is an illustration.*
 The agent and the extension talk over a WebSocket on `127.0.0.1`. There is no tool-call API — the
 agent reads tool calls out of Gemini's reply text, runs them, and sends the results back as the next
 message. One Gemini tab holds the conversation; subagents get tabs of their own.
+The full design — the turn lifecycle, the bridge, prompt economics, tools, subagents — and the
+reasons behind it are in [`CLAUDE.md`](CLAUDE.md), under **Architecture**.
 
 ## Install
 
