@@ -90,6 +90,24 @@ export function recognizeDrop(text, { statSync = fs.statSync, home } = {}) {
   return items;
 }
 
+/**
+ * A drop that did not arrive as a paste (v6.23). VS Code's terminal types a
+ * dropped path in — `'/Users/…/x.jsonl' ` — with no bracketed-paste markers,
+ * so it reached the prompt as typed text and never became a tag. One stdin
+ * chunk holding nothing but existing absolute paths is a drop (typing never
+ * delivers a whole path in one read), so it is wrapped as the paste it is.
+ *
+ * @returns {string|null} the chunk inside paste markers, or null to leave it.
+ */
+export function asBracketedDrop(chunk, { statSync, home } = {}) {
+  const s = String(chunk ?? '');
+  if (s.length < 3 || s.includes('\x1b')) return null;
+  // Cheap gate first: this runs on every chunk, and a stat is not free.
+  if (!/^\s*(?:['"]?(?:\/|~\/|file:\/\/))/.test(s)) return null;
+  if (/[\r\n]/.test(s.trimEnd())) return null;
+  return recognizeDrop(s.trim(), { statSync, home }) ? `\x1b[200~${s.trim()}\x1b[201~` : null;
+}
+
 const LABEL = { file: 'File', folder: 'Folder' };
 
 /** `[File #2: agent-loop.js]` — the name only; the header line has the path. */

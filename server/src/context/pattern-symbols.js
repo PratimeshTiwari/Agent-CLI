@@ -40,6 +40,11 @@ const NOT_CALL = /^(?:if|for|while|switch|catch|synchronized|try|return|elif|els
 // the statement forms are kept out by the shape check instead.
 /** Java's: `await`, `yield`, `in` and friends are ordinary method names there. */
 const NOT_CALL_JAVA = /^(?:if|for|while|switch|catch|synchronized|try|return|else|new|throw|do|super|this)$/;
+/**
+ * C++'s, plus every ALL-CAPS name: `TEST_F(Suite, Name) {` is a macro call
+ * shaped exactly like a definition, and gtest alone has thousands.
+ */
+const NOT_CALL_CPP = /^(?:if|for|while|switch|catch|return|else|do|sizeof|alignof|decltype|static_assert|new|delete|throw|co_return|co_await|co_yield|defined|__attribute__|alignas|noexcept|requires|typeid|operator)$|^[A-Z][A-Z0-9_]+$/;
 const NOT_CALL_TS = /^(?:if|for|while|switch|catch|return|else|function|do|super|new)$/;
 
 export const LANGUAGES = [
@@ -190,15 +195,26 @@ export const LANGUAGES = [
   {
     name: 'C/C++',
     cLike: true,
+    bodyOnly: true,
     exts: ['.c', '.h', '.cc', '.cpp', '.cxx', '.hpp', '.hh', '.m', '.mm'],
     ...C_COMMENTS,
     strings: [{ open: 'R"(', close: ')"', multi: true, raw: true }, DQ, CHAR],
     defs: [
       [/^\s*#\s*define\s+([A-Za-z_]\w*)/, 'macro'],
-      [/^\s*(?:typedef\s+)?(?:class|struct|enum(?:\s+class)?|union|namespace)\s+([A-Za-z_]\w*)\s*(?:[:{]|$)/, 'type'],
+      // `template <…> class GTEST_API_ Foo final : Base {` — an export macro may sit before the name.
+      [/^\s*(?:template\s*<.*>\s*)?(?:typedef\s+)?(?:class|struct|enum(?:\s+class|\s+struct)?|union|namespace)\s+(?:alignas\([^)]*\)\s+)?(?:[A-Z][A-Z0-9_]*\s+)?([A-Za-z_]\w*)(?:\s*<[^;{]*>)?\s*(?:final\s*)?(?:[:{]|$)/, 'type'],
       [/^\s*typedef\b.*?\b([A-Za-z_]\w*)\s*;\s*$/, 'type'],
-      // A function definition starts at column 0: a type, the name, its parameters, and no `;`.
-      [/^(?!\s)(?:[\w:*&<>,]+\s+)*?[*&]*\s*(?:[A-Za-z_]\w*::)*~?([A-Za-z_]\w*)\s*\([^;]*$/, 'function', NOT_CALL],
+      [/^\s*(?:template\s*<.*>\s*)?using\s+([A-Za-z_]\w*)\s*=/, 'type'],
+      // C's `typedef struct { … } name;` names the type on the closing line.
+      [/^\s*\}\s*(?!(?:break|continue|return|else)\b)([A-Za-z_]\w*)\s*;\s*$/, 'type'],
+      // At column 0: a type (or none, with the type on the line above), the
+      // name, its parameters. `definitionShape` then wants a body.
+      [/^(?!\s)(?:template\s*<.*>\s*)?(?:[\w:*&<>,]+\s+)*?[*&]*\s*(?:[A-Za-z_]\w*::)*~?([A-Za-z_]\w*)\s*\(/, 'function', NOT_CALL_CPP],
+      // Indented — a method in a class body, or a function in a namespace:
+      // at least one type before the name, so a call statement never matches.
+      [/^\s+(?:template\s*<.*>\s*)?(?:(?:virtual|static|inline|constexpr|consteval|explicit|friend|[A-Z][A-Z0-9_]*)\s+)*(?:\w[\w:*&<>,]*\s+)+?[*&]*\s*(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)\s*\(/, 'function', NOT_CALL_CPP],
+      // A constructor or destructor in a class body: no type at all.
+      [/^\s+(?:(?:explicit|constexpr|inline|virtual)\s+)*~?([A-Z]\w*)\s*\(/, 'function', NOT_CALL_CPP],
     ],
   },
   {
@@ -266,6 +282,17 @@ function regexEnd(line, i) {
   return -1;
 }
 const CHAR_LITERAL = /^'(?:\\(?:x[0-9a-fA-F]{1,2}|u\{?[0-9a-fA-F]{1,6}\}?|.)|[^\\'\n])'/u;
+/**
+ * A `'` that cannot open a literal. TypeScript: straight after a letter or
+ * digit it is JSX text (`won't`), which otherwise blanks the code after it.
+ * C++14: inside a number it is a digit separator (`1'000'000`).
+ */
+function gluedQuote(line, i, lang) {
+  if (line[i] !== "'" || i === 0) return false;
+  if (lang.regex) return /[A-Za-z0-9_]/.test(line[i - 1]);
+  if (lang.bodyOnly) return /(?<![\w.])\d[\w']*$/.test(line.slice(0, i)) && /[0-9a-zA-Z]/.test(line[i + 1] || '');
+  return false;
+}
 const PY_PREFIX = /(?:^|[^\w])([rRbBuUfF]{1,2})$/;
 
 /**
@@ -334,7 +361,7 @@ export function patternCodeLines(source, lang) {
         if (end > i) { o += `/${' '.repeat(end - i - 1)}/`; i = end + 1; continue; }
       }
       const lit = lang.strings.find((s) => startsAt(line, i, s.open));
-      if (lit && !(lit.char && !CHAR_LITERAL.test(line.slice(i)))) {
+      if (lit && !(lit.char && !CHAR_LITERAL.test(line.slice(i))) && !gluedQuote(line, i, lang)) {
         let interp = lit.interp || null;
         if (lit.prefix) {
           // Python: a prefix with `f` makes `{…}` code; `r` makes backslashes plain.
@@ -371,8 +398,10 @@ export function patternCodeLines(source, lang) {
 export function patternDefinitionsIn(source, lang, code = patternCodeLines(source, lang)) {
   const out = [];
   let block = null;
+  // C and C++: the body of a multi-line `#define` is a template, not code.
+  const macroBody = lang.bodyOnly ? continuedDefines(source) : null;
   code.forEach((text, i) => {
-    if (!text.trim()) return;
+    if (!text.trim() || macroBody?.has(i)) return;
     if (lang.blocks) {
       if (block) {
         if (lang.blocks.close.test(text)) { block = null; return; }
@@ -402,6 +431,19 @@ export function patternDefinitionsIn(source, lang, code = patternCodeLines(sourc
  * `where` or nothing (they continue on the next line), and a call's by `;`,
  * `,`, `.` or an operator.
  */
+/** Line indexes that continue a `#define` ending in `\`. */
+function continuedDefines(source) {
+  const lines = source.split('\n');
+  const out = new Set();
+  let inside = false;
+  lines.forEach((line, i) => {
+    if (inside) out.add(i);
+    const cont = /\\\s*$/.test(line);
+    inside = cont && (inside || /^\s*#\s*define\b/.test(line));
+  });
+  return out;
+}
+
 function definitionShape(text, m, rest = [], lang = null) {
   const before = text.slice(0, m.index + m[0].lastIndexOf(m[1]));
   // `return make(`, `x = make(`, `foo(bar(`: the name is a call inside an expression.
@@ -409,7 +451,8 @@ function definitionShape(text, m, rest = [], lang = null) {
   // `void`, `delete` and `typeof` are operators only in TypeScript; in Java,
   // C# and C++ `void` is the commonest return type there is.
   if (lang?.regex && /(?:^|[^\w$])(?:delete|typeof|void)\s+$/.test(before)) return false;
-  if (/[=(,!?&|+%]\s*$/.test(before)) return false;
+  // A single `&` is C++'s reference return type (`const Foo& get()`), not an operator.
+  if (/(?:&&|[=(,!?|+%])\s*$/.test(before)) return false;
   const open = text.indexOf('(', m.index + m[0].lastIndexOf(m[1]));
   // Parameters may run onto the next lines; follow them until they close.
   const joined = [text, ...rest.slice(0, 30)].join('\n');
@@ -418,6 +461,15 @@ function definitionShape(text, m, rest = [], lang = null) {
     if (joined[i] === '(') depth++;
     else if (joined[i] === ')' && --depth === 0) {
       const after = joined.slice(i + 1).split('\n', 1)[0].trim();
+      // C and C++: only a body makes a definition. A prototype, `= 0`,
+      // `= default` and `= delete` are declarations, and a header has one
+      // for nearly every function its .cc file defines.
+      if (lang?.bodyOnly) {
+        // `) const;` and `) override = default;` are still declarations.
+        if (/;|=\s*(?:0|default|delete)\b/.test(after.split('{')[0])) return false;
+        // `-> Type {` is a trailing return type; `->Foo(` is a member call.
+        return after === '' || /^(?:\{|:|->\s*[\w:<>,*& ]+(?:\{|$)|const\b|override\b|noexcept\b|final\b|volatile\b|try\b|requires\b|&)/.test(after);
+      }
       return after === '' || /^(?:\{|:|throws\b|where\b|->|=>\s*\{?\s*$|const\b|override\b|noexcept\b|final\b|=\s*(?:0|default|delete)\s*;)/.test(after)
         || (after === ';' && /^\s*(?:(?:public|private|protected|static|abstract|declare|readonly|async|override)\s+)+/.test(text))
         // An interface method: in Java and C#, `Type name(...);` cannot be a statement.

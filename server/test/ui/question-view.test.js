@@ -27,7 +27,7 @@ const drawn = (layout, its, questionLines) => {
   return furniture + options;
 };
 
-test('tabs: one per question, ☐ until answered, then Submit — and none for one question', () => {
+test('tabs: one per question, ○ until answered, then Submit — and none for one question', () => {
   const qs = [q('Database'), q('Auth')];
   const tabs = questionTabs(qs, ['Postgres'], 1);
   assert.deepEqual(tabs.map((t) => [t.label, t.done, t.active]),

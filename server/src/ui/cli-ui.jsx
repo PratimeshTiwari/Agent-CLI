@@ -11,6 +11,7 @@ import { animationAllowed, OUTRO_MS } from './intro.js';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../core/user-settings.js';
 import { createProbeHold } from './ink-probe-hold.js';
+import { asBracketedDrop } from './file-drop.js';
 
 /**
  * The stream Ink reads: real stdin, with a trailing Enter delivered separately.
@@ -147,6 +148,8 @@ export class CliUI {
       // never reach Ink: `ink-text-input` types any key it does not recognise
       // straight into the prompt, so ctrl+e used to leave an "e" behind on its
       // way to toggling the transcript.
+      // A drop typed in rather than pasted (VS Code) becomes the paste it is.
+      if (!pasteState?.inPaste) chunk = asBracketedDrop(chunk) ?? chunk;
       const stripped = extractHotkeys(String(chunk), pasteState);
       pasteState = stripped.state;
       dispatchInOrder(stripped.parts, {

@@ -180,6 +180,75 @@ class Node {
       ['1 class Sink', '2 method accept', '3 method await', '5 class Node', '6 method Node']);
   });
 
+  // v6.23: clang's AST over googletest, spirv-tools and glslang (325 files)
+  // took C++ from 59% recall / 61% precision to 98.5% / 97.9%.
+  test('C++: methods in a class body, constructors, destructors, one-liners', () => {
+    const src = `class GTEST_API_ Printer final : public Base {
+ public:
+  explicit Printer(int n) : n_(n) {}
+  ~Printer() override {}
+  bool isShadow() const { return shadow_; }
+  const std::string& name() const {
+    return name_;
+  }
+  virtual void Print(
+      std::ostream* os) const {}
+  size_t Length() const;
+  virtual void Reset() = 0;
+  Printer(const Printer&) = delete;
+};
+`;
+    assert.deepEqual(defs('.cpp', src), ['1 type Printer', '3 function Printer', '4 function Printer',
+      '5 function isShadow', '6 function name', '9 function Print']);
+  });
+
+  test('C++: TEST(...) { is a macro call, and a call statement is never a method', () => {
+    const src = `TEST(PrinterTest, Prints) {
+  Printer p(3);
+  EXPECT_TRUE(p.isShadow());
+  if (!GetContext()->Choose(
+          GetContext()->Chance())) {
+    Configure(a,
+        b);
+  }
+}
+`;
+    assert.deepEqual(defs('.cpp', src), []);
+  });
+
+  test('C++: a multi-line #define body is not code; typedef struct names its closing line', () => {
+    const src = `#define DECLARE_FLAG(name) \\
+  namespace testing {         \\
+  extern int name;            \\
+  }
+typedef struct {
+  int x;
+} glslang_input_t;
+template <typename T>
+using Vec = std::vector<T>;
+switch (x) {
+  case 1: {
+  } break;
+}
+`;
+    assert.deepEqual(defs('.cpp', src), ['1 macro DECLARE_FLAG', '7 type glslang_input_t', '9 type Vec']);
+  });
+
+  test("C++14 digit separators and TSX's apostrophes do not open a literal", () => {
+    assert.deepEqual(refLines('.cpp', "int a = 1'000'000; g(a);\nauto s = \"g(\";\n", 'g'), [1]);
+    const tsx = `export function Card() {\n  return <p>Don't worry, it won't {render(x)}</p>;\n}\nconst y = 'render';\n`;
+    assert.deepEqual(refLines('.tsx', tsx, 'render'), [2]);
+  });
+
+  test('frameworks: Angular decorators, Spring annotations, Go generics', () => {
+    assert.deepEqual(defs('.ts', `@Component({\n  selector: 'app-root',\n})\nexport class AppComponent {\n  @Input() title: string;\n  @HostListener('window:resize')\n  onResize(e: Event) { this.load(); }\n  ngOnInit(): void {}\n}\n`),
+      ['4 class AppComponent', '7 method onResize', '8 method ngOnInit']);
+    assert.deepEqual(defs('.java', `@RestController\npublic class OrderController {\n    @GetMapping("/{id}")\n    public ResponseEntity<Order> getOrder(@PathVariable Long id) {\n        return ok(service.find(id));\n    }\n}\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    List<Order> findByCustomerId(Long customerId);\n}\n`),
+      ['2 class OrderController', '4 method getOrder', '8 class OrderRepository', '9 method findByCustomerId']);
+    assert.deepEqual(defs('.go', 'package s\ntype Set[T comparable] struct{}\nfunc (s *Set[T]) Add(v T) {}\nfunc Map[T, U any](xs []T) []U { return nil }\n'),
+      ['2 type Set', '3 method Add', '4 function Map']);
+  });
+
   test('a parameter list that never closes is not a definition', () => {
     assert.deepEqual(defs('.java', 'class A {\n  int broken(int a,\n'), ['1 class A']);
   });

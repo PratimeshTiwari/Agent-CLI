@@ -649,11 +649,18 @@ language's own parser, as definitions / references, recall/precision:
 | `go/ast`, every 3rd GOROOT file | 1,501 | 99.96 / 100 | 100 / 100 |
 | TypeScript compiler, `.d.ts` | 108 | 99.11 / 99.98 | 99.98 / 100 |
 | `javac` + its scanner, JDK 23 `java.util/io/net/sql/http` | 410 | 99.31 / 99.97 | 100 / 100 |
+| clang AST + raw lexer, googletest/spirv-tools/glslang (v6.23) | 325 | 98.50 / 97.90 | 100 / 100 |
+| TypeScript compiler, Radix UI's React `.tsx` (v6.23) | 149 | 99.35 / 99.22 | 99.53 / 100 |
 
 Java's oracle found what fixtures had not: `void` was in the "expression keyword" list (it is an
 operator in TypeScript only), so every `void` method in Java, C# and C++ was rejected; and the type
-class accepted spaces, so indentation counted as a return type. **Kotlin, C#, Swift, Scala, Rust, PHP,
-C/C++, Elixir, Lua and shell have fixtures, not an oracle.** The index skips files over 2 MB as
+class accepted spaces, so indentation counted as a return type. C++ was **59 / 61** until v6.23
+measured it: methods in a class body were never found (column 0 only), `TEST(…) {` read as a
+function (ALL-CAPS names are macro calls now), and `) const;` passed as a body. C++ counts only
+definitions with a body (`bodyOnly`), skips multi-line `#define` bodies, and compares on lines
+`clang -E` keeps. A `'` after a letter is JSX text in TypeScript, and inside a number a C++14
+digit separator (`gluedQuote`). **Kotlin, C#, Swift, Scala, Rust, PHP, Elixir, Lua and shell
+have fixtures, not an oracle.** The index skips files over 2 MB as
 generated, plus `vendor`, `.venv`, `site-packages`, `target`, `Pods`, `.gradle`, `.next` and
 `*.d.ts`. 821 JDK files index in 0.9 s cold, 14 ms warm. Answers carry `patternNote` and mark
 such files `byText`. v2's `find_symbol` names the languages; v1 keeps "JavaScript and JSX only".
@@ -1506,6 +1513,10 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   and saves nothing**: the context is identical when the task arrives, plus the
   model's acknowledgements. Make turn 0 smaller; do not spread it out.
 
+- **A drop that arrives typed is a drop too (v6.23, `asBracketedDrop`).** VS Code's terminal types a
+  dropped path in with no paste markers, so it stayed text. One stdin chunk of nothing but existing
+  absolute paths is wrapped as a paste in `cli-ui.jsx`; `/help`, a missing path and a sentence are
+  not. Pty (`{"raw": …}` step): `[File #1: drop-me.jsonl]`, 0 clears at 13 and 24 rows.
 - **A dropped file is a tag too (v5.33, `ui/file-drop.js`).** A terminal has no drop event: a drop
   is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
   (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays
