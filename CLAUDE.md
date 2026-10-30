@@ -887,6 +887,34 @@ writes a `delegated_read` notice (lines, ms, rounds, outcome). v2 documents `pur
 (`largeFileDigest`), only while delegation is on. Pty: main prompt 850 characters after a
 2,000-line read (43.7k on the fallback, which is page 1); 0 clears at 13 and 24 rows.
 
+**`query_log` reads log exports (v6.20, `mcp/tools/query-log.js` + `log-records.js`, plan
+`.agent/artifacts/plans/2026-10-30-log-query.md`).** Asked for Grafana/Datadog exports "to debug
+issues". `read_file` pages 800 lines, and `grep_search` is line-based. A Datadog JSON export is
+often one line, so a hit is the whole file; a CSV message holds newlines, so a hit is half a record.
+`log-records.js` streams NDJSON, JSON arrays and wrappers (Datadog `data[].attributes`, Loki
+`data.result[].values`, Grafana columnar frames), CSV/TSV with quoted multi-line fields, and text,
+where an indented line joins the record above. Any of them may be `.gz`. Each comes out as a flat
+record with dotted keys.
+
+`query_log` finds time, level, message and source by name, and answers in ≤6k characters of text.
+- **With only a path**: the levels, a 12-bucket histogram with errors per bucket, and the repeated
+  messages, numbers, ids and quoted values replaced, errors first. Then the fields and their top
+  values, where values repeat.
+- **Narrowing**: `where` (`field=value` … `>=`, a field by its last part, `level`/`message`/`time`
+  whatever the file calls them), `text`, `from`/`to`, `groupBy` (counts only, unless `limit` is
+  given) and `around` (`#n` or a time, unfiltered, and reading stops after it).
+- **Times**: epoch values are read by magnitude. A time with no zone is UTC, so it is shown as
+  written; it was local time at first, five and a half hours off.
+
+Measured: 200 MB NDJSON overview 4.0 s; a 248 MB one-line Datadog JSON 5.3 s; RSS under 215 MB.
+It is **v2 only** (`logQuery`). A catalog entry's `flag` keeps it out of the frozen v1 tool list,
+and the reachability guards hold a gated tool to the version that offers it. On v2, an unranged
+`read_file` of a large log (`core/log-read.js`) gets the overview, headed as one. That applies to
+`.log`, `.jsonl`, `.ndjson`, `.csv`, `.tsv` and `.gz`, and to a `.json` whose head has a time key
+and a message or level key, so `package-lock.json` is not one. It runs before the v6.16 subagent
+digest. Pty: a 1.4 MB one-line export read with `read_file` became a 2,370-character prompt; 0
+clears at 13 and 24 rows.
+
 **`read_file` reads documents (v5.29, `mcp/tools/documents.js`).** Before it, a PDF was decoded as
 UTF-8 and handed to the model as mojibake with no error. Now PDF (`unpdf`, pinned exact,
 lazy-imported), `.docx` and `.pptx` (a small zip reader over `zlib`, no dependency) come back as

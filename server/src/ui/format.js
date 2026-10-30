@@ -424,6 +424,7 @@ export function subjectOf(toolName, args, max = 44) {
     case 'create_file':
     case 'list_directory':
     case 'undo_edit':
+    case 'query_log':
       raw = pick('path', 'filePath', 'file');
       isPath = true;
       break;
@@ -531,11 +532,21 @@ export function summarizeResult(toolName, result) {
         break;
       }
       case 'read_file':
+        // v6.20: a large log answered with query_log's overview.
+        if (r?.delegated === 'query_log') return `${plural(Number(r.records || 0).toLocaleString(), 'record')} · log overview`;
         // { path, totalLines, size, content }
         if (typeof r?.totalLines === 'number') {
           // v6.16: a large file read in a subagent's tab.
           if (r.delegated) return `${plural(r.totalLines.toLocaleString(), 'line')} · summarised by a subagent`;
           return `${plural(r.totalLines, 'line')}${r.size ? ` · ${r.size}` : ''}`;
+        }
+        break;
+      case 'query_log':
+        // { records, matched } — v6.20
+        if (typeof r?.records === 'number') {
+          return r.matched === null || r.matched === undefined
+            ? plural(r.records.toLocaleString(), 'record')
+            : `${r.matched.toLocaleString()} of ${plural(r.records.toLocaleString(), 'record')}`;
         }
         break;
       case 'grep_search':

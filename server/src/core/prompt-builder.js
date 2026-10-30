@@ -480,7 +480,9 @@ export class PromptBuilder {
         // and indentation is the single largest avoidable cost there — a plain
         // list_directory result is 40% smaller without it. The model does not
         // read the whitespace; the token budget does.
-        text: read ?? (typeof result === 'string' ? result : CodeMinifier.minifyJson(result)),
+        // A log query's answer is already a report written for reading (v6.20).
+        text: read ?? (name === 'query_log' && typeof result?.report === 'string' ? result.report
+          : typeof result === 'string' ? result : CodeMinifier.minifyJson(result)),
       };
     });
     const allowances = allocate(serialised.map((r) => r.text.length), RESULT_BUDGET_CHARS);

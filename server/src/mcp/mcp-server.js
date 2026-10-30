@@ -9,6 +9,7 @@
 import { searchFiles } from './tools/search-files.js';
 import { grepSearch } from './tools/grep-search.js';
 import { findSymbol, findReferences } from './tools/find-symbol.js';
+import { queryLog } from './tools/query-log.js';
 import { readFile } from './tools/read-file.js';
 import { editFile } from './tools/edit-file.js';
 import { createFile } from './tools/create-file.js';
@@ -79,6 +80,28 @@ const TOOL_DEFINITIONS = [
       endLine: { type: 'number', description: 'End line (1-indexed, inclusive)', required: false },
     },
     handler: readFile,
+  },
+  {
+    name: 'query_log',
+    description: 'Ask questions of a log file or export (JSON, NDJSON, CSV/TSV, text, gzipped; Grafana, Loki, '
+      + 'Datadog, Kibana). Reads the whole file as a stream however large. With only a path: time range, levels, '
+      + 'errors over time, repeated messages and fields. Then filter with where/text/from/to, count with groupBy, '
+      + 'or see what led up to a record with around.',
+    parameters: {
+      path: { type: 'string', description: 'The log file', required: true },
+      where: { type: 'array', description: 'Filters, all must hold: field=value, field!=value, field~regex, field>=n, field=*', required: false },
+      text: { type: 'string', description: 'Regex over the message, then the whole record', required: false },
+      from: { type: 'string', description: 'ISO time, inclusive', required: false },
+      to: { type: 'string', description: 'ISO time, inclusive', required: false },
+      groupBy: { type: 'string', description: 'A field, "message" or "time"', required: false },
+      around: { type: 'string|number', description: 'A record number (#1234) or a time', required: false },
+      context: { type: 'number', description: 'Records each side of around (default 5)', required: false },
+      fields: { type: 'array', description: 'Fields to show per record; ["*"] for all', required: false },
+      limit: { type: 'number', description: 'Records to list (default 20, max 100)', required: false },
+      offset: { type: 'number', description: 'Records to skip, for paging', required: false },
+      format: { type: 'string', description: 'json | ndjson | csv | tsv | text, when detection is wrong', required: false },
+    },
+    handler: queryLog,
   },
   {
     name: 'edit_file',

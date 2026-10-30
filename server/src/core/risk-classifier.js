@@ -91,6 +91,7 @@ export class RiskClassifier {
       case 'grep_search':
       case 'read_file':
       case 'list_directory':
+      case 'query_log':
         return { level: 'safe', reason: 'Read-only operation' };
 
       // Conditional — shell commands. `run_background` runs the same shell, and

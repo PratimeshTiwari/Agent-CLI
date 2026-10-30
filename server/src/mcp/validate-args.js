@@ -66,6 +66,9 @@ function schemaForType(type) {
        * way, and it is declared on the parameter rather than guessed here.
        */
       return z.union([z.string(), z.array(z.string())]);
+    case 'string|number':
+      // `query_log.around` is `#1234` or a time, and a bare 1234 means the first.
+      return z.union([z.string(), z.number()]).transform(String);
     case 'string':
     default:
       return z.string();
