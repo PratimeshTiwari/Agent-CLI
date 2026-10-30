@@ -23,6 +23,14 @@ import * as paths from './paths.js';
 
 /** Stages, in the order they happen. Unknown ones are kept but sort last. */
 export const STAGES = [
+  // Between turns (v6.6, #104), before the tab has the prompt. `round_wait`
+  // is the loop parked on the person — an approval, a question — and is not
+  // latency; `round_work` is the rest of reply → next send on the server
+  // (tools, building the prompt); `deliver` is that send → the tab starting
+  // to type (the worker, the tab coming forward, the bridge handshake).
+  'round_wait',
+  'round_work',
+  'deliver',
   'find_input',
   'type',
   'send',
@@ -90,6 +98,8 @@ export function logTrace(workspace, trace) {
       ...(trace.effort ? { effort: String(trace.effort) } : {}),
       ...(trace.outcome ? { outcome: String(trace.outcome) } : {}),
       ...(trace.promptVersion ? { promptVersion: String(trace.promptVersion) } : {}),
+      // How long the prompt was, so a slow `type` can be told from a long one.
+      ...(Number.isFinite(Number(trace.chars)) ? { chars: Math.round(Number(trace.chars)) } : {}),
       stages,
     });
     const file = tracePath(workspace);

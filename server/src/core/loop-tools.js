@@ -56,7 +56,8 @@ export async function dispatchLoopTool(loop, call) {
  * surface renders the payload as an unanswerable picker, the turn hangs.
  */
 function askQuestion(loop, call) {
-  return new Promise((resolve) => {
+  // Parked: the time it takes to answer is the person's, not the round's.
+  const asked = new Promise((resolve) => {
     loop.pendingQuestionResolve = resolve;
     /**
      * Normalised here, once, rather than by each front-end.
@@ -98,6 +99,7 @@ function askQuestion(loop, call) {
       timestamp: Date.now(),
     });
   });
+  return typeof loop._parked === 'function' ? loop._parked(asked) : asked;
 }
 
 /** Hand the work to a second Gemini tab, or hand it back labelled. */

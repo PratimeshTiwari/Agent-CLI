@@ -251,6 +251,24 @@ let responseStartTime = 0;
  * sent once, on completion; nothing here waits on anything.
  */
 let turnTrace = null;
+/**
+ * The part of a turn's latency that happens before this tab has the prompt
+ * (v6.6, #104 — "could be faster in between turns", which the stages below
+ * could not answer: they all start here). `deliver` is the server's send to
+ * this script receiving it: the worker, the tab coming forward, the bridge
+ * handshake. `round_work` and `round_wait` are the server's reply → send,
+ * split into its own time and the person's. Same machine, same wall clock.
+ * A number outside ten minutes is a clock jump, not a measurement.
+ */
+const foldDeliveryIntoTrace = (req, text) => {
+  if (!turnTrace) return;
+  const sane = (ms) => Number.isFinite(ms) && ms >= 0 && ms < 600_000;
+  const deliver = Number(req?.receivedAt) - Number(req?.sentAt);
+  if (sane(deliver)) turnTrace.stages.deliver = deliver;
+  if (sane(Number(req?.gap?.work))) turnTrace.stages.round_work = Number(req.gap.work);
+  if (sane(Number(req?.gap?.wait))) turnTrace.stages.round_wait = Number(req.gap.wait);
+  turnTrace.chars = String(text || '').length;
+};
 const traceStart = () => { turnTrace = { t0: Date.now(), last: Date.now(), stages: {} }; };
 const traceMark = (stage) => {
   if (!turnTrace) return;
@@ -659,6 +677,7 @@ async function injectPrompt(text) {
   // model switch is normal, and folding the wait into `find_input` would send
   // the next reader after a selector that is fine.
   if (waitedForPicker && turnTrace) turnTrace.stages.picker_wait = pickerWaitMs;
+  foldDeliveryIntoTrace(currentRequestData, text);
   lastTypedPrefix = String(text || '').replace(/\s+/g, ' ').trim().slice(0, TYPED_PREFIX_CHARS);
 
   // What was clickable before the prompt had anything in it. Send is whatever is
@@ -2586,7 +2605,7 @@ function extractTextContent(element) {
 function sendTurnTrace(outcome) {
   if (!turnTrace) return;
   // Sent separately from the reply, so a trace can never delay or break one.
-  safeSend({ type: 'turn_trace', payload: { model: 'gemini', outcome, stages: turnTrace.stages } });
+  safeSend({ type: 'turn_trace', payload: { model: 'gemini', outcome, stages: turnTrace.stages, chars: turnTrace.chars } });
   turnTrace = null;
 }
 
@@ -2666,6 +2685,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       currentRequestData = {
         requestId: payload.requestId,
         isSubagent: payload.isSubagent,
+        // Between turns (v6.6, #104): when the server sent this, when it got
+        // here, and the server's own share of the gap. Folded into the trace.
+        sentAt: payload.sentAt,
+        receivedAt: Date.now(),
+        gap: payload.gap,
       };
       injectPrompt(payload.prompt).then(success => {
         sendResponse({ success });
