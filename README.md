@@ -119,7 +119,7 @@ Then two things no installer can do for you:
 2. **Open gemini.google.com and sign in.** Leave the tab open.
 
 **Optional — the VS Code companion.** Extensions panel → `…` → **Install from VSIX…** →
-`vscode-companion/cli-agent-companion-1.8.5.vsix`. It gives the agent your open file, cursor and
+`vscode-companion/cli-agent-companion-1.8.6.vsix`. It gives the agent your open file, cursor and
 Problems panel, and adds a chat panel to the sidebar (`cmd+alt+j`).
 
 ## First run

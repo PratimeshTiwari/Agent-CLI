@@ -33,7 +33,7 @@ function panel(value = '', caret = value.length) {
   commandInput.setSelectionRange(caret, caret);
   const api = new Function('commandInput', 'FileReader', 'Event', `let pastedImages = []; let pastedCount = 0;
     const imageTag = (n) => \`[Image #\${n}]\`;
-    ${take('insertAtCaret')} ${take('onPasteImage')} ${take('backspaceTag')}
+    ${take('insertAtCaret')} ${take('addImage')} ${take('onPasteImage')} ${take('backspaceTag')}
     return { onPasteImage, backspaceTag, images: () => pastedImages };`)(commandInput, window.FileReader, window.Event);
   return { window, commandInput, ...api };
 }

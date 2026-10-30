@@ -179,6 +179,11 @@ export function foldFiles(content, workspace = base) {
     text = text.slice(m[0].length);
   }
   if (files.length) text = text.replace(/^\n+/, '');
+  // A small file dropped on a side panel rides inline after its header (v6.17);
+  // the row is the tag, so the text is not drawn twice.
+  if (files.length) {
+    while ((m = /^<file name="[^"\n]*">\n[\s\S]*?\n<\/file>\n*/.exec(text))) text = text.slice(m[0].length);
+  }
   return { text, files };
 }
 

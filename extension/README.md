@@ -14,7 +14,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 ---
 
-## Current version: **1.51.0**
+## Current version: **1.52.0**
 
 **Since 1.26.0 the CLI checks this for you.** The extension reports
 `chrome.runtime.getManifest().version` — read out of the bundle Chrome actually
@@ -118,6 +118,13 @@ per-change history below.
 >
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
+
+### 1.52.0 — 2026-10-30
+
+- **Files can be dropped on the side panel.** An image goes in as a pasted one does
+  (`[Image #n]`). A text file up to 8 KB becomes a `[File #n: name]` tag and is sent whole;
+  Chrome never gives a page a dropped file's path, so anything larger is refused with "drop it
+  in the terminal, which can send the path". The box is outlined while a file is over it.
 
 ### 1.51.0 — 2026-10-27
 

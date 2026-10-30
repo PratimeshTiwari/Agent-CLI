@@ -85,3 +85,14 @@ test('the recorded prompt folds back to the text plus a row per file, after any 
   assert.deepEqual(files, [{ kind: 'file', n: f.n, path: join(root, 'app.js') }]);
   assert.deepEqual([...img.links.keys()], [3]);
 });
+
+test('a panel-dropped file folds to its tag, and its inline text is not drawn (v6.17)', async () => {
+  const { foldFiles } = await import('../../src/ui/file-drop.js');
+  const sent = '[File #1: a.js] (1 KB, 2 lines, dropped in the panel) — its text follows\n\n'
+    + '<file name="a.js">\nconst a = 1;\nconst b = 2;\n</file>\n\nexplain [File #1: a.js]';
+  const { text, files } = foldFiles(sent, '/ws');
+  assert.equal(text, 'explain [File #1: a.js]');
+  assert.deepEqual(files.map((f) => f.n), [1]);
+  // Control: a message that merely mentions <file> is left alone.
+  assert.equal(foldFiles('<file name="x">\ny\n</file>').text, '<file name="x">\ny\n</file>');
+});
