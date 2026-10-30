@@ -510,6 +510,14 @@ writes a `delegated_read` notice (lines, ms, rounds, outcome). v2 documents `pur
 (`largeFileDigest`), only while delegation is on. Pty: main prompt 850 characters after a
 2,000-line read (43.7k on the fallback, which is page 1); 0 clears at 13 and 24 rows.
 
+**Project commands are detected (v7.4, `core/project-commands.js`).** Asked by the codebase-support
+findings: the model opened `package.json` or `Gemfile` to learn how to run tests, a round trip each,
+and guessed `npm test` in Ruby repos. Root marker files give test, lint and build (`package.json` by
+lockfile, `Gemfile` → rspec / Rails / rubocop, `go.mod`, `pyproject.toml`, Maven, Gradle, Cargo,
+CMake, then a `Makefile` for what is missing); a `Test: …` line in `AGENT.md` wins. v2 says it in a
+`<project_commands>` block on turn 0 (`projectCommands`; nothing found, no block); `/context` shows
+each with its source. Pty: `/context` in a Gemfile repo at 13 and 24 rows, 0 clears.
+
 **`query_log` reads log exports (v6.20, `mcp/tools/query-log.js` + `log-records.js`, plan
 `.agent/artifacts/plans/2026-10-30-log-query.md`).** Asked for Grafana/Datadog exports "to debug
 issues". `read_file` pages 800 lines, and `grep_search` is line-based. A Datadog JSON export is

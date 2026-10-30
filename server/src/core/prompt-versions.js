@@ -51,6 +51,7 @@ export const PROMPT_VERSIONS = {
       subagentEffortWords: true, // ask_subagent's effort is low | medium | high | max (v6.15)
       largeFileDigest: true,     // read_file says a large unranged read comes back as a digest (v6.16)
       logQuery: true,            // query_log is offered: log files and exports, however large (v6.20)
+      projectCommands: true,     // turn 0 says how this project tests, lints and builds (v7.4)
     },
   },
 };
@@ -71,6 +72,7 @@ export const FLAG_NOTES = {
   subagentEffortWords: 'ask_subagent takes the /effort words, max included',
   largeFileDigest: 'read_file says a large file comes back as a subagent\'s digest',
   logQuery: 'query_log reads log files and Grafana/Datadog exports',
+  projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
 };
 
 /** What a version changes from v1, one line per switch that is on. */

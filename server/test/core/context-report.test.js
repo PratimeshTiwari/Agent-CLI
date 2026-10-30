@@ -71,3 +71,24 @@ describe('no row outgrows the viewport', () => {
     assert.match(row, /template/);
   });
 });
+
+// v7.4: what the prompt says runs the tests, and where that came from.
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('/context names the detected commands and their source', async (t) => {
+  const ws = mkdtempSync(join(tmpdir(), 'ctx-cmds-'));
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  writeFileSync(join(ws, 'go.mod'), 'module x\n');
+  const run = (agentMdContent) => AgentLoop.prototype._getContextInfo.call({
+    workspace: ws, mode: 'auto', contextTokens: 0, contextLimit: 1000,
+    conversationHistory: [], diffEngine: { getPendingDiffs: () => [], appliedDiffs: [] },
+    promptBuilder: { lastAgentMdFiles: [], agentMdContent },
+  });
+  assert.match((await run('')).message, /commands\s+test go test \.\/\.\.\. \(go\.mod\) · lint go vet \.\/\.\.\. \(go\.mod\)/);
+  assert.match((await run('Test: make check')).message, /test make check \(AGENT\.md\)/);
+  // Control: no markers, no row.
+  rmSync(join(ws, 'go.mod'));
+  assert.doesNotMatch((await run('')).message, /\bcommands\b/);
+});

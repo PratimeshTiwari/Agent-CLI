@@ -20,6 +20,7 @@ import { resolve, relative, join, dirname } from 'path';
 import { CodeMinifier } from '../context/code-minifier.js';
 import { allocate, headAndTail, planSpoolPruning, formatReadResult, fitReadResult } from './result-budget.js';
 import { skillCatalogue } from './skills.js';
+import { detectProjectCommands, describeCommands } from './project-commands.js';
 import { resolveEffort } from './effort.js';
 import { renderToolDefinitions } from './tool-catalog.js';
 import { prompt } from './prompt-loader.js';
@@ -314,6 +315,14 @@ export class PromptBuilder {
     // Workspace context removed to save tokens, rely on `search_files` tool instead.
     if (this.agentMdContent) {
       parts.push(`<agent_instructions>\n${this.agentMdContent}\n</agent_instructions>`);
+    }
+
+    // How this project tests, lints and builds (v7.4, v2): read from marker
+    // files and AGENT.md, so the model does not spend a round trip opening
+    // package.json or Gemfile to find out. Nothing found, no line.
+    if (this._flag('projectCommands')) {
+      const line = describeCommands(detectProjectCommands(this.workspace, { agentMd: this.agentMdContent }));
+      if (line) parts.push(`<project_commands>\n${line}\n(detected from the project; a line in AGENT.md overrides)\n</project_commands>`);
     }
 
     // What the agent learned here on earlier runs. This is the half that was

@@ -14,6 +14,7 @@ import { looksLikeMultipleDrafts, looksLikeCodeQuestion } from './drift-detector
 import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
 import { logError, logNotice } from './error-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
+import { detectProjectCommands, KINDS as COMMAND_KINDS } from './project-commands.js';
 import { logCommand } from './command-log.js';
 
 // MAX_PROVIDER_RETRIES and MAX_PARSE_RETRIES live in reply-recovery.js with
@@ -3764,6 +3765,12 @@ export class AgentLoop {
       ['turns', `${turns}${edits.length ? ` · edits ${edits.join(', ')}` : ''}`],
       ['workspace', where],
     ];
+    // v7.4: what the prompt says runs the tests, and where that came from, so a
+    // wrong guess is visible rather than silently believed.
+    const detected = detectProjectCommands(this.workspace, { agentMd: this.promptBuilder?.agentMdContent });
+    const commandText = COMMAND_KINDS.filter((kind) => detected.commands[kind])
+      .map((kind) => `${kind} ${detected.commands[kind]} (${detected.sources[kind]})`).join(' · ');
+    if (commandText) rows.push(['commands', commandText]);
 
     /**
      * What is in the window, *and* where it came from.
