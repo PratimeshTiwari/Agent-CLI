@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#125](https://github.com/PratimeshTiwari/Agent-CLI/pull/125)
+### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#126](https://github.com/PratimeshTiwari/Agent-CLI/pull/126)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v6.18 | 2026-10-30 | `v6.18/keys` | [#123](https://github.com/PratimeshTiwari/Agent-CLI/pull/123) | v6.18: ? shows the keys; the / palette no longer overflows 10 rows |
 | v6.19 | 2026-10-30 | `v6.19/ruby-precision` | [#124](https://github.com/PratimeshTiwari/Agent-CLI/pull/124) | v6.19: Ruby references 99.5% precise; Rails production blocked; one-line extension notice |
 | v6.20 | 2026-10-30 | `v6.20/log-query` | [#125](https://github.com/PratimeshTiwari/Agent-CLI/pull/125) | v6.20: query_log reads log exports (Grafana, Loki, Datadog) however large |
+| v6.21 | 2026-10-30 | `v6.21/generic-symbols` | [#126](https://github.com/PratimeshTiwari/Agent-CLI/pull/126) | Symbols in every common language, from one table |
 | v6.2 | 2026-10-30 | `v6.2/readable-replies` | [#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107) | v6.2: list text readable again (#103); /update answers in one line |
 | v6.1 | 2026-10-30 | `v6.1/apply-or-revert-settings` | [#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106) | v6.1: settings wait for Apply; Revert says nothing; clearer theme names |
 | v6.0 | 2026-10-30 | `v6.0/settings-and-update-fixes` | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105) | v6.0: /update pull restores the lockfile (#102); short settings hints; /theme preview box; Put back says only what moved |

@@ -12,19 +12,27 @@
  * chat tab on the next turn, and fifty flat rows repeat the path fifty times.
  */
 
+import { extname } from 'node:path';
 import { symbolIndex } from '../../context/symbol-index.js';
 import { RUBY_NOTE } from '../../context/ruby-symbols.js';
+import { PATTERN_NOTE, languageFor } from '../../context/pattern-symbols.js';
 
 const isRuby = (file) => /\.(rb|rake)$/.test(file);
+const isPattern = (file) => Boolean(languageFor(extname(file)));
+/** Matched by text rather than parsed: Ruby, and every language in the table. */
+const byText = (file) => isRuby(file) || isPattern(file);
 
 /**
- * The Ruby caveat, once, when Ruby is part of the answer — or, for an answer
- * of nothing, when Ruby files were searched at all: "not found" in Ruby can
- * mean "made at run time", and the model has to hear that before concluding.
+ * The caveat, once, when a text-matched language is part of the answer — or,
+ * for an answer of nothing, when such files were searched at all: "not found"
+ * there can mean "made at run time", and the model has to hear that before
+ * concluding.
  */
-function rubyNote(index, files) {
-  if (!index.rubyFiles) return {};
-  return files === null || files.some(isRuby) ? { rubyNote: RUBY_NOTE } : {};
+function languageNotes(index, files) {
+  const out = {};
+  if (index.rubyFiles && (files === null || files.some(isRuby))) out.rubyNote = RUBY_NOTE;
+  if (index.patternFiles && (files === null || files.some(isPattern))) out.patternNote = PATTERN_NOTE;
+  return out;
 }
 
 /** Results past this are a wall of text the model will not read. */
@@ -60,7 +68,7 @@ export async function findSymbol(args, context) {
       filesIndexed: index.indexed,
       message: `No definition of "${name}" in ${index.indexed} indexed files. `
         + (coverage(index) || 'Try grep_search — it may be a property, a string, or in a comment.'),
-      ...rubyNote(index, null),
+      ...languageNotes(index, null),
     };
   }
 
@@ -71,7 +79,7 @@ export async function findSymbol(args, context) {
     definitions: hits.slice(0, MAX_HITS),
     ...(hits.length > MAX_HITS ? { truncated: hits.length - MAX_HITS } : {}),
     ...(coverage(index) ? { note: coverage(index) } : {}),
-    ...rubyNote(index, hits.map((h) => h.file)),
+    ...languageNotes(index, hits.map((h) => h.file)),
   };
 }
 
@@ -100,7 +108,7 @@ export async function findReferences(args, context) {
    */
   // JavaScript methods only: a Ruby file is matched by text, `x.name` included,
   // and a Ruby `def` must not widen the JavaScript search.
-  const isMethod = definitions.some((d) => d.kind === 'method' && !isRuby(d.file));
+  const isMethod = definitions.some((d) => d.kind === 'method' && !byText(d.file));
 
   let hits = index.references(name, { includeMembers: isMethod });
   if (!includeDefinition) {
@@ -135,7 +143,7 @@ export async function findReferences(args, context) {
       filesIndexed: index.indexed,
       message: `No uses of "${name}" in ${index.indexed} indexed files. `
         + (coverage(index) || 'It may be dead code, or reached by a computed name.'),
-      ...rubyNote(index, null),
+      ...languageNotes(index, null),
     };
   }
 
@@ -160,8 +168,8 @@ export async function findReferences(args, context) {
     found: hits.length,
     filesIndexed: index.indexed,
     files: [...byFile.entries()]
-      // `byText`: a Ruby file, matched by word rather than parsed.
-      .map(([file, lines]) => ({ file, count: lines.length, ...(isRuby(file) ? { byText: true } : {}), lines }))
+      // `byText`: Ruby or a table language, matched by word rather than parsed.
+      .map(([file, lines]) => ({ file, count: lines.length, ...(byText(file) ? { byText: true } : {}), lines }))
       .sort((a, b) => b.count - a.count || a.file.localeCompare(b.file)),
     ...(hits.length > MAX_HITS ? { truncated: hits.length - MAX_HITS } : {}),
     ...(isMethod ? {
@@ -170,6 +178,6 @@ export async function findReferences(args, context) {
         + 'before treating one as a call to this definition.',
     } : {}),
     ...(coverage(index) ? { note: coverage(index) } : {}),
-    ...rubyNote(index, [...byFile.keys()]),
+    ...languageNotes(index, [...byFile.keys()]),
   };
 }

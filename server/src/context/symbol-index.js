@@ -35,12 +35,13 @@ import { relative, extname } from 'path';
 import fg from 'fast-glob';
 import { AGENT_DIR } from '../core/paths.js';
 import { RUBY, rubyCodeLines, rubyDefinitionsIn, rubyReferencesIn } from './ruby-symbols.js';
+import { PATTERN_EXTS, languageFor, patternCodeLines, patternDefinitionsIn, patternReferencesIn } from './pattern-symbols.js';
 
 /** What acorn can read. Everything else is reported, not silently dropped. */
 export const PARSEABLE = new Set(['.js', '.jsx', '.mjs', '.cjs']);
 
-/** Extensions worth *mentioning* when skipped — code we simply cannot read. */
-const CODE_LIKE = new Set(['.ts', '.tsx', '.py', '.go', '.rs', '.java', '.php', '.c', '.cpp']);
+/** A file larger than this is generated (a bundle, a vendored parser table), not code anyone asks about. */
+const MAX_PATTERN_BYTES = 2 * 1024 * 1024;
 
 /**
  * acorn, acorn-jsx and acorn-walk, loaded on first use (v6.8).
@@ -301,7 +302,9 @@ export class SymbolIndex {
 
   /** Every file worth parsing, plus the code-like ones we cannot. */
   _candidates() {
-    const entries = fg.sync(['**/*.{js,jsx,mjs,cjs,ts,tsx,py,go,rb,rake,rs,java,php,c,cpp}'], {
+    // v6.21: every language in `pattern-symbols.js`'s table, not a fixed list.
+    const exts = ['js', 'jsx', 'mjs', 'cjs', 'rb', 'rake', ...PATTERN_EXTS.map((e) => e.slice(1))];
+    const entries = fg.sync([`**/*.{${exts.join(',')}}`], {
       cwd: this.workspace,
       // `node_modules/**` matches only the top level, and this is a workspaces
       // repo — `server/node_modules` and `extension/node_modules` were being
@@ -316,6 +319,9 @@ export class SymbolIndex {
         '**/dist/**', '**/build/**', '**/*.min.js',
         // Bundler's installed gems: a Rails app vendors thousands of them.
         '**/vendor/bundle/**',
+        // And every other ecosystem's installed or built copies (v6.21).
+        '**/vendor/**', '**/.venv/**', '**/venv/**', '**/site-packages/**', '**/__pycache__/**',
+        '**/target/**', '**/Pods/**', '**/.gradle/**', '**/.next/**', '**/*.d.ts',
         'extension/service-worker.js',
       ],
       absolute: true,
@@ -341,11 +347,9 @@ export class SymbolIndex {
       seen.add(abs);
 
       const ruby = RUBY.has(ext);
-      if (!ruby && !PARSEABLE.has(ext)) {
-        if (CODE_LIKE.has(ext)) this.skipped.push({ file: rel, reason: `acorn cannot parse ${ext}` });
-        continue;
-      }
-      if (!ruby && !js) {
+      const lang = !ruby && !PARSEABLE.has(ext) ? languageFor(ext) : null;
+      if (!ruby && !lang && !PARSEABLE.has(ext)) continue;
+      if (!ruby && !lang && !js) {
         this.skipped.push({ file: rel, reason: 'JavaScript not indexed (acorn is not installed, see /doctor)' });
         continue;
       }
@@ -366,6 +370,16 @@ export class SymbolIndex {
       if (ruby) {
         const code = rubyCodeLines(source);
         this.files.set(abs, { mtime, defs: rubyDefinitionsIn(source, code), source, code, ruby: true });
+        continue;
+      }
+      if (lang) {
+        if (source.length > MAX_PATTERN_BYTES) {
+          this.files.delete(abs);
+          this.skipped.push({ file: rel, reason: 'over 2 MB (generated?)' });
+          continue;
+        }
+        const code = patternCodeLines(source, lang);
+        this.files.set(abs, { mtime, defs: patternDefinitionsIn(source, lang, code), source, code, lang });
         continue;
       }
       try {
@@ -391,6 +405,11 @@ export class SymbolIndex {
   /** How many of those are Ruby, read by pattern rather than parsed. */
   get rubyFiles() {
     return [...this.files.values()].filter((f) => f.ruby).length;
+  }
+
+  /** How many are read from the language table (v6.21). */
+  get patternFiles() {
+    return [...this.files.values()].filter((f) => f.lang).length;
   }
 
   /**
@@ -450,7 +469,10 @@ export class SymbolIndex {
       try {
         // Ruby is a word match on its code lines (`ruby-symbols.js`), which
         // already includes `x.name`: in Ruby that is how a method is called.
-        hits = entry.ruby ? rubyReferencesIn(entry.code, name) : referencesIn(entry.source, name, { includeMembers });
+        hits = entry.ruby ? rubyReferencesIn(entry.code, name)
+          : entry.lang ? patternReferencesIn(entry.code, name, entry.lang,
+            new Set(entry.defs.filter((d) => d.name === name).map((d) => d.line)))
+          : referencesIn(entry.source, name, { includeMembers });
       } catch {
         continue;
       }
