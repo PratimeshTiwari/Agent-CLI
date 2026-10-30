@@ -156,7 +156,7 @@ import { threadFromUrl } from './chat-thread.js';
 import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
-import { compactHistory } from './compaction.js';
+import { compactHistory, countTurns } from './compaction.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
@@ -3705,7 +3705,7 @@ export class AgentLoop {
     const limit = this.contextLimit;
     const pct = Math.min(100, Math.round((used / limit) * 100));
 
-    const turns = this.conversationHistory.length;
+    const turns = countTurns(this.conversationHistory);
     const pending = this.diffEngine.getPendingDiffs().length;
     const applied = this.diffEngine.appliedDiffs.length;
 

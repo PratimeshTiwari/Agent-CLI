@@ -163,7 +163,8 @@ test('compaction sets it, restarts the count at zero, and records how far the fr
   assert.match(fake.promptBuilder.pendingCompactedContext.summary, /Goal: fix the parser/);
   // Counting the kept turns in full re-triggered compaction on the next turn.
   assert.equal(fake.reset, 0);
-  assert.equal(fake.historyOffset, 12 - 5 - 1);
+  // Three exchanges kept (v6.15): six rows here, so six summarised.
+  assert.equal(fake.historyOffset, 12 - 6 - 1);
 });
 
 test('control: a refused handover hands nothing over and leaves the count', async () => {

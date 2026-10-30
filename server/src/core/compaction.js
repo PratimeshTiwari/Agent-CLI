@@ -48,7 +48,54 @@ const MIN_ROWS = 6;
  */
 const MIN_COMPACT_CHARS = 2000;
 
-const charsOf = (turns) => turns.reduce((n, t) => n + (t.content?.length || 0), 0);
+const charsOf = (turns) => turns.reduce((n, t) => n + (countsAsTurn(t) ? t.content?.length || 0 : 0), 0);
+
+/**
+ * Whether a history row is a turn, for every count a person reads (v6.15).
+ *
+ * The file watcher writes a `[System Event] File X was modified` row for every
+ * save, and across the real histories that was 9,173 rows against 182 user
+ * messages. Counted, they passed `/compact`'s "too short" guard, inflated
+ * "Compacted N turns" and `/context`'s turns, and filled the local summary
+ * with file notices. Storage is unchanged: the rows are still written and
+ * still drawn; they are not counted.
+ */
+export function countsAsTurn(t) {
+  return Boolean(t) && t.type !== 'fs_event';
+}
+
+export function countTurns(history) {
+  return (history || []).filter(countsAsTurn).length;
+}
+
+/** Exchanges handed to the fresh chat: a user message and what answered it. */
+export const KEEP_EXCHANGES = 3;
+
+const isUserMessage = (t) => t?.role === 'user' && typeof t.content === 'string' && t.content.trim() && !t.isLocal;
+
+/**
+ * Where the history splits: what is summarised, and what the fresh chat gets.
+ *
+ * It kept the last five rows of *any* kind. Replayed against 79 points in the
+ * real histories where compaction could have run, the "last few messages" the
+ * fresh chat received were **empty in 28%** and **one row in 41%**, because
+ * watcher rows and tool rows filled the window. Now the window starts at the
+ * third-last user message, however many rows sit after it; `recentMessages`
+ * still hands over only the conversation in it, under the same caps.
+ *
+ * With fewer exchanges than that, as many as leave something to summarise;
+ * a history that is one long turn falls back to the old last-five-rows.
+ */
+export function splitForCompaction(history, keepExchanges = KEEP_EXCHANGES) {
+  const users = [];
+  history.forEach((t, i) => { if (isUserMessage(t)) users.push(i); });
+  for (let n = Math.min(keepExchanges, users.length); n >= 1; n--) {
+    const from = users[users.length - n];
+    if (from > 0) return { toCompact: history.slice(0, from), toKeep: history.slice(from) };
+  }
+  const keep = Math.min(5, history.length);
+  return { toCompact: history.slice(0, history.length - keep), toKeep: history.slice(history.length - keep) };
+}
 
 /** The question asked of the thread. Short: the thread already has everything. */
 export function summaryPrompt(focus) {
@@ -124,17 +171,16 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
   // Auto-compaction skips the size guards: it fires because the *browser
   // thread* is full, and a few huge tool results fill it as surely as many
   // turns. The guards are about whether a person's `/compact` is worth a trip.
-  if (!auto && loop.conversationHistory.length < MIN_ROWS) {
+  if (!auto && countTurns(loop.conversationHistory) < MIN_ROWS) {
     return { message: 'Conversation is too short to compact.' };
   }
 
-  const pending = loop.conversationHistory.slice(0, -5);
-  const pendingChars = charsOf(pending);
+  const pendingChars = charsOf(splitForCompaction(loop.conversationHistory).toCompact);
   if (!auto && pendingChars < MIN_COMPACT_CHARS) {
     // The two numbers here measure different things, and side by side they
     // used to read as the tool contradicting itself — "only 114 characters"
     // next to "~23,248 tokens" with nothing saying why. This one is
-    // `conversationHistory.slice(0, -5)`: everything /compact would actually
+    // `splitForCompaction(...).toCompact`: everything /compact would actually
     // summarise, which is small because there just isn't much history yet.
     // `loop.contextTokens` is everything ever typed into the browser tab —
     // system prompt, tool definitions, every prior turn — which starts large
@@ -143,7 +189,7 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
     // the reader to guess.
     return {
       message: `Nothing worth compacting yet — the older turns eligible for compaction `
-        + `(everything but the last 5) are only ${pendingChars.toLocaleString()} characters, `
+        + `(everything before the last ${KEEP_EXCHANGES} exchanges) are only ${pendingChars.toLocaleString()} characters, `
         + `below the ${MIN_COMPACT_CHARS.toLocaleString()}-character threshold where a browser `
         + `round trip pays for itself.\n\n`
         + `_That's not the number in the status bar. This one is just the turns \`/compact\` `
@@ -160,12 +206,12 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
   if (ownsBusy) loop.isProcessing = true;
 
   try {
-    const keep = Math.min(5, loop.conversationHistory.length);
-    const toCompact = loop.conversationHistory.slice(0, loop.conversationHistory.length - keep);
-    const toKeep = loop.conversationHistory.slice(loop.conversationHistory.length - keep);
+    const { toCompact, toKeep } = splitForCompaction(loop.conversationHistory);
+    const compactedTurns = countTurns(toCompact);
 
     // Deterministic condensation — the fallback when the thread does not answer.
-    const localSummary = toCompact.map((turn) => {
+    // File notices are left out: they were most of what it pasted.
+    const localSummary = toCompact.filter(countsAsTurn).map((turn) => {
       if (turn.role === 'system' && turn.content) {
         if (turn.content.includes('**Command Output:**')) return '[System: Command executed. Output truncated for context compaction.]';
         if (turn.content.includes('**File Contents:**') || turn.content.includes('**Search Results:**')) return '[System: File/Search data truncated for context compaction.]';
@@ -194,7 +240,7 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
       message: fromThread ? 'Compacted from the thread\'s own summary'
         : `Compacted locally — the thread ${asked.timedOut ? 'did not answer in time' : 'gave no usable summary'}`,
       meta: { auto, path: fromThread ? 'thread' : 'local', ms: Date.now() - startedAt,
-        summaryChars: summary.length, turns: toCompact.length },
+        summaryChars: summary.length, turns: compactedTurns, kept: countTurns(toKeep) },
     });
 
     const compactedTurn = {
@@ -254,13 +300,13 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
 
     return {
       handedOver,
-      turns: toCompact.length,
+      turns: compactedTurns,
       summary,
       message: handedOver
-        ? `✓ Compacted ${toCompact.length} turn${toCompact.length === 1 ? '' : 's'}, ${how}; `
+        ? `✓ Compacted ${compactedTurns} turn${compactedTurns === 1 ? '' : 's'}, ${how}; `
           + 'continuing in a fresh chat, with the full history still searchable.'
-        : `✓ Compacted ${toCompact.length} turn${toCompact.length === 1 ? '' : 's'}, ${how}. `
-          + `Kept the last ${toKeep.length} as they were.\n\n${where}`,
+        : `✓ Compacted ${compactedTurns} turn${compactedTurns === 1 ? '' : 's'}, ${how}. `
+          + `Kept the last ${countTurns(toKeep)} as they were.\n\n${where}`,
     };
   } finally {
     loop.isCompacting = false;

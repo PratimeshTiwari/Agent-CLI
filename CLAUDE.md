@@ -1285,6 +1285,19 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
   changed); the status bar says `N% to auto-compact` within 20 points; every compaction writes a
   `compaction` notice with which path ran.
 
+**Compaction keeps what it promises (v6.15, plan Phase 6).** The fresh chat gets the summary plus
+the last **3 exchanges** (`splitForCompaction`: from the third-last user message, however many rows
+follow), not the last five rows of any kind — replayed against real history those were empty in 28%
+and one row in 41%, filled by watcher and tool rows. Watcher rows (`type: 'fs_event'`) are not
+turns for any count a person reads (`countTurns`: `/compact`'s guard, "Compacted N turns",
+`/context`, settings, the local summary); storage is unchanged. The agent's own writes are no
+longer announced as edits "made externally by the user": `DiffEngine._writeFileAtomic` notes the
+path and its temp file in `core/own-writes.js` and the watcher drops events for that path within
+3 s, so a real edit meanwhile still shows. v2's `ask_subagent` says `low | medium | high | max`
+(`subagentEffortWords`); the code already folded both vocabularies. Pty: the fresh chat's first
+prompt held exchanges 4–6 with 8 watcher rows after them; the one `ESC[2J` at compaction is on
+`main` too (13 and 24 rows).
+
 **Session history is written to both copies on every turn** (`storage/session-store.js`). The
 workspace copy sits next to the code; the home copy survives a clean checkout or a wiped
 `.agent/`. On startup the two are reconciled — more turns wins, the other is rebuilt from it.

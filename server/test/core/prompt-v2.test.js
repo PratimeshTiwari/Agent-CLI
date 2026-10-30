@@ -22,7 +22,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v2 is a set of switches, all on', () => {
   const flags = PROMPT_VERSIONS.v2.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'oneCopy', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'oneCopy', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -150,4 +150,11 @@ test('v2 is shorter on every turn 0, and only turn 0 and the handovers move', ()
   for (const key of ['high/plan/sub/short', 'batch', 'subagent/review', 'compaction']) {
     assert.equal(v2[key], v1[key], key);
   }
+});
+
+test('ask_subagent takes the /effort words on v2, max included; v1 keeps its own (v6.15)', () => {
+  const high = v2['high/plan/sub/turn0'];
+  assert.match(high, /effort \(string, optional\): "low", "medium", "high" or "max"/);
+  assert.doesNotMatch(high, /"lite", "flash" or "pro"/);
+  assert.match(v1['high/plan/sub/turn0'], /"lite", "flash" or "pro"/);
 });

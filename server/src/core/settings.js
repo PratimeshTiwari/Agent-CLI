@@ -33,6 +33,7 @@ import * as paths from './paths.js';
 import { countToday } from './command-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
 import { changed } from './slash-commands.js';
+import { countTurns } from './compaction.js';
 
 /**
  * The tabs, in the order they are shown.
@@ -89,7 +90,8 @@ export function describeSettings(agentLoop) {
   const scope = safe(() => paths.getActiveScope(agentLoop.workspace), '');
   const commandsToday = safe(() => countToday(agentLoop.workspace), 0);
 
-  const history = agentLoop?.conversationHistory || [];
+  // Turns, not watcher rows (v6.15): `countTurns`.
+  const turnCount = countTurns(agentLoop?.conversationHistory);
   // Everything the tab holds, not just the turns kept locally — see
   // AgentLoop.contextTokens.
   const tokens = agentLoop?.contextTokens ?? 0;
@@ -270,7 +272,7 @@ export function describeSettings(agentLoop) {
     {
       group: 'Context',
       label: 'Turns',
-      value: String(history.length),
+      value: String(turnCount),
       hint: 'messages this session',
     },
     {
@@ -303,7 +305,7 @@ export function describeSettings(agentLoop) {
     {
       group: 'Context',
       label: 'Session',
-      value: `${history.length} turn${history.length === 1 ? '' : 's'} kept`,
+      value: `${turnCount} turn${turnCount === 1 ? '' : 's'} kept`,
       hint: 'saved here and in ~/.agent',
       run: '/clear',
     },
