@@ -52,6 +52,12 @@ server/src/
 └── ui/               # the terminal front-end (App.jsx, hooks/, components/)
 ```
 
+**How it works** — the turn lifecycle, the bridge to the browser, prompt
+economics, tools, subagents, the context engine — is `CLAUDE.md`, section
+`## Architecture`. For a question about the architecture, read that section
+first (`grep_search` for `^## Architecture` gives its line); the README is the
+user's guide, not the design.
+
 Modules are kebab-case; React components keep PascalCase. To add a tool: write
 the handler in `mcp/tools/`, add one entry to `TOOL_DEFINITIONS` in
 `mcp/mcp-server.js` — that schema is what gets rendered into the prompt, so

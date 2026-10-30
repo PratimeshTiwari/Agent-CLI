@@ -963,6 +963,13 @@ strings, `x.name` is any object's), and a Ruby file in `find_references` is mark
 reason. `find_symbol`'s "JavaScript and JSX only" is v1's frozen text; v2 names Ruby
 (`symbolLanguages`), since a tool description is part of the prompt.
 
+**A partial read of Markdown ends with the headings it did not show (v6.14, `unreadOutline` in
+`mcp/tools/read-file.js`).** Asked about this agent's architecture, the model read README lines
+1–100 and 90–150 and answered from them; the pointer to this file sat under `## More` at line 258,
+and nothing in either read said that section existed. `#`–`###`, fenced code skipped, capped at
+40, written `- ## More (line 258)` because `fitReadResult` reads a leading number as a shown line.
+`AGENT.md` (in every turn-0 prompt) and README's "How it works" now point here too.
+
 `executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
 backoff and rewrites `errno` codes into LLM-readable instructions.
 

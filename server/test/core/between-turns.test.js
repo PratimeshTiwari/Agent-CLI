@@ -68,6 +68,13 @@ test('the three stages come first in the order, and a trace keeps the prompt len
   }
 });
 
+test('a new message starts with no reply clock, so idle time is never round_work', () => {
+  const src = readFileSync(new URL('../../src/core/agent-loop.js', import.meta.url), 'utf8');
+  const start = src.indexOf('async handleUserMessage(content, callbacks, options = {}) {');
+  const body = src.slice(start, src.indexOf('this._wantsCompaction()', start));
+  assert.match(body, /this\._replyAt = null;\s*this\._parkedMs = 0;/);
+});
+
 test('the reply clock and the gap are wired where the turn passes them', () => {
   const src = readFileSync(new URL('../../src/core/agent-loop.js', import.meta.url), 'utf8');
   assert.match(src, /this\._replyAt = Date\.now\(\);\s*this\._parkedMs = 0;/);
