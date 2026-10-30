@@ -22,7 +22,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v2 is a set of switches, all on', () => {
   const flags = PROMPT_VERSIONS.v2.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'oneCopy', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'oneCopy', 'projectCommands', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });

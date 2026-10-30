@@ -54,7 +54,8 @@ export function validateWorkspace(abs) {
 
 /** A directory that looks like a project is worth offering first. */
 function looksLikeProject(dir) {
-  return ['.git', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml']
+  return ['.git', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml', 'Gemfile',
+    'build.gradle', 'build.gradle.kts', 'CMakeLists.txt']
     .some((marker) => fs.existsSync(path.join(dir, marker)));
 }
 
