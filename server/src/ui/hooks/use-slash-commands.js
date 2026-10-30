@@ -533,6 +533,14 @@ export async function handleSlashCommand(query, {
       return;
     }
 
+    // Bare `/prompt` is a menu (v6.10, asked with a screenshot of the old text
+    // table wrapping); `/prompt v2` still just sets.
+    if (command === 'prompt' && args.length === 0) {
+      setActiveMenu({ type: 'prompt' });
+      setIsProcessing(false);
+      return;
+    }
+
     // /model and /reasoning were two knobs with five meaningful combinations.
     // Both names still work — typing one you have used for months and being
     // told it does not exist is a worse trade than one line of redirection.

@@ -69,19 +69,32 @@ export const AGENT_COMMANDS = new Set([
  * they compare so far — rounds per turn from `tool-usage.jsonl`, the number
  * that says whether a prompt costs round trips.
  */
-export function promptVersionReport(loop) {
+/**
+ * One row per prompt version with how much it has been used here — what the
+ * `/prompt` menu lists and the text report prints, from one place.
+ *
+ * @returns {Array<{id: string, hint: string, summary: string, use: string, current: boolean}>}
+ */
+export function promptVersionRows(loop) {
   const current = loop.promptVersion || DEFAULT_PROMPT_VERSION;
   let versions = [];
   try { versions = summariseToolUsage(loop.workspace).versions || []; } catch { /* nothing recorded */ }
   const byId = new Map(versions.map((v) => [v.version, v]));
-  const width = Math.max(...PROMPT_VERSION_IDS.map((id) => id.length));
-  const rows = PROMPT_VERSION_IDS.map((id) => {
+  return PROMPT_VERSION_IDS.map((id) => {
     const v = byId.get(id);
     const use = !v ? 'not used yet'
       : `${v.turns} turn${v.turns === 1 ? '' : 's'}`
         + (v.rounds ? ` · rounds median ${v.rounds.median}, p90 ${v.rounds.p90}` : '');
-    return `${id === current ? '❯' : ' '} ${id.padEnd(width)}  ${PROMPT_VERSIONS[id].summary} · ${use}`;
+    const { hint, summary } = PROMPT_VERSIONS[id];
+    return { id, hint, summary, use, current: id === current };
   });
+}
+
+export function promptVersionReport(loop) {
+  const current = loop.promptVersion || DEFAULT_PROMPT_VERSION;
+  const width = Math.max(...PROMPT_VERSION_IDS.map((id) => id.length));
+  const rows = promptVersionRows(loop).map((r) =>
+    `${r.current ? '❯' : ' '} ${r.id.padEnd(width)}  ${r.summary} · ${r.use}`);
   const other = PROMPT_VERSION_IDS.find((id) => id !== current);
   return `Prompt **${current}**\n\n\`\`\`\n${rows.join('\n')}\n\`\`\`\n`
     + `\`/prompt ${other}\` to switch · the chat is sent the new prompt with your next message`;
