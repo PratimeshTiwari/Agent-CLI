@@ -58,6 +58,11 @@ is how someone installs the wrong one.
 
 ## Version history
 
+### 1.8.5 — 2026-10-30
+
+**Action rows read `● Run(npm test)`**, as in the terminal since v6.5: one verb per tool from the
+server's catalog, the dot green or red by outcome. Only the copied-in panel changed.
+
 ### 1.8.4 — 2026-10-26
 
 **Images in the panel are `[Image #n]` tags**, as in the terminal: a pasted image puts a tag in
