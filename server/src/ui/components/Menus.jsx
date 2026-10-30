@@ -23,7 +23,7 @@ import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
-import { MAX_AGENT_NAME, changed } from '../../core/slash-commands.js';
+import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../core/slash-commands.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import {
@@ -826,6 +826,26 @@ export function Menus({
                   { label: 'Warm', detail: 'when Chrome connects · one extra message', value: 'warm', current: warm },
                 ]}
                 onSelect={(item) => applyAndReturn(activeMenu, 'startup', [item.value])}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'prompt' && (() => {
+          const rows = promptVersionRows(agentLoop);
+          const current = rows.find((r) => r.current) || rows[0];
+          const { sub, tight, room } = fit('A switch reaches the chat with your next message.');
+          return (
+            <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
+              keys={`↑↓ move · 1–${rows.length} or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
+              <Choices
+                numbered
+                limit={room}
+                initialIndex={Math.max(0, rows.indexOf(current))}
+                items={rows.map((r) => ({
+                  label: r.id, detail: `${r.hint} · ${r.use}`, value: r.id, current: r.current,
+                }))}
+                onSelect={(item) => applyAndReturn(activeMenu, 'prompt', [item.value])}
               />
             </Panel>
           );

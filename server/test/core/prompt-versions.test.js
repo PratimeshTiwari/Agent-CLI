@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentLoop } from '../../src/core/agent-loop.js';
 import { PromptBuilder } from '../../src/core/prompt-builder.js';
-import { handleSlashCommand, AGENT_COMMANDS } from '../../src/core/slash-commands.js';
+import { handleSlashCommand, AGENT_COMMANDS, promptVersionRows } from '../../src/core/slash-commands.js';
 import { logToolUsage, summariseToolUsage } from '../../src/core/tool-usage.js';
 import { PROMPT_VERSIONS, DEFAULT_PROMPT_VERSION, resolvePromptVersion, isPromptVersion } from '../../src/core/prompt-versions.js';
 import { userSettingsPath } from '../../src/core/paths.js';
@@ -62,6 +62,21 @@ test('/prompt: bare compares, a version switches, a wrong word is refused', asyn
   assert.match((await handleSlashCommand(l, 'prompt', ['v2'])).message, /already \*\*v2\*\*/);
   assert.match((await handleSlashCommand(l, 'prompt', ['v7'])).message, /No prompt version \*\*v7\*\*/);
   l.setPromptVersion('v1');
+});
+
+test('the /prompt menu rows: short hint, use, current marked (v6.10)', (t) => {
+  const l = loop(t);
+  logToolUsage(l.workspace, { read_file: 1 }, { rounds: 2, promptVersion: 'v2' });
+  const rows = promptVersionRows(l);
+  assert.deepEqual(rows.map((r) => r.id), Object.keys(PROMPT_VERSIONS));
+  assert.deepEqual(rows.map((r) => r.current), rows.map((r) => r.id === DEFAULT_PROMPT_VERSION));
+  const v2 = rows.find((r) => r.id === 'v2');
+  assert.equal(v2.hint, PROMPT_VERSIONS.v2.hint);
+  assert.match(v2.use, /^1 turn · rounds median 2/);
+  assert.equal(rows.find((r) => r.id === 'v1').use, 'not used yet');
+  // The menu opens on bare /prompt only; typed with a version it still sets.
+  const hook = readFileSync(new URL('../../src/ui/hooks/use-slash-commands.js', import.meta.url), 'utf8');
+  assert.match(hook, /command === 'prompt' && args\.length === 0\) \{\s*setActiveMenu\(\{ type: 'prompt' \}\)/);
 });
 
 test('the usage log splits by version; rows from before count as v1', (t) => {
