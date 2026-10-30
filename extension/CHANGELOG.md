@@ -18,6 +18,14 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.53.0 — 2026-10-30
+
+**A formula is scraped once, as its TeX.** KaTeX draws maths three times (MathML, a TeX
+annotation, the glyphs), and the reply read all three: `≥80%\ge 80\%≥80%`. `extractTextContent`
+now returns `$\ge 80\%$` (`$$…$$` for a display formula), from `data-math` or the annotation, or
+the glyphs once when neither is there. The terminal draws simple formulas as text (`≥ 80%`).
+Reload the extension; no build is needed (content script).
+
 ### 1.52.0 — 2026-10-30
 
 - **Files can be dropped on the side panel.** An image goes in as a pasted one does

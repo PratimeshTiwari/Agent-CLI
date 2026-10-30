@@ -2476,6 +2476,19 @@ function extractTextContent(element) {
     const children = (over = {}) => [...node.childNodes]
       .map((child) => render(child, { ...ctx, ...over })).join('');
 
+    // Maths, once (v7.1). KaTeX draws a formula three times — MathML, the TeX
+    // as an annotation, and the glyphs — and walking it read all three
+    // (`≥80%\ge 80\%≥80%`). The TeX is what the model wrote, so it is kept.
+    const cls = node.classList;
+    if (cls && (cls.contains('katex') || cls.contains('katex-display') || node.hasAttribute('data-math'))) {
+      const display = cls.contains('katex-display') || cls.contains('math-block');
+      const annotation = node.querySelector('annotation[encoding="application/x-tex"]');
+      const tex = (node.getAttribute('data-math') || annotation?.textContent || '').trim();
+      if (tex) return display ? `\n\n$$${tex}$$\n\n` : `$${tex}$`;
+      const glyphs = node.querySelector('.katex-html');
+      if (glyphs) return glyphs.textContent.replace(/\s+/g, ' ').trim();
+    }
+
     switch (tag) {
       case 'CODE-BLOCK':
       case 'PRE': {

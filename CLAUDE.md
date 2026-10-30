@@ -1815,6 +1815,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   buffered and two back-to-back writes would arrive as the one chunk this exists to split.
 - Running the CLI without a TTY fails with Ink's "Raw mode is not supported". That is the
   harness, not a bug — use `script -q /dev/null <cmd>` to test under a pty.
+- **A formula is scraped as its TeX, once (v7.1).** KaTeX draws maths three times (MathML, a
+  TeX annotation, the glyphs), and the walker read all three: `≥80%\ge 80\%≥80%` went into history
+  and compaction summaries. `extractTextContent` returns `$tex$` (`$$…$$` for `katex-display`),
+  preferring `data-math`, then the annotation, then the glyphs once. The terminal draws a formula
+  of known symbols as text (`texToText` in `format.js`: `≥ 80%`, `π r²`) and leaves anything
+  else as TeX; `$5 to $10` is not maths. Fixtures are KaTeX's standard markup, not a capture of
+  Gemini's page, which v7.6 should check.
 - Content-script DOM selectors break when the chat sites change; `extractLatestResponse` must
   wait for a *new* block before scraping. Gemini's editor only ingests text via a synthetic
   `ClipboardEvent('paste')` — setting `innerHTML` breaks it.
