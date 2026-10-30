@@ -77,3 +77,34 @@ test('every settings tone is a role a palette defines', () => {
     assert.ok(ROLES.includes(tone), `${row.label}: ${tone}`);
   }
 });
+
+/*
+ * v6.3, owner: the Subagents menu "seems very cluttered" — a 169-character
+ * paragraph under the title. Every literal description a menu passes to
+ * `fit` is one plain line now; a dynamic one (`${…}`) is not ours to measure.
+ */
+const SUB_MAX = 60;
+test('every menu description is one short plain line', () => {
+  const src = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
+  const subs = [...src.matchAll(/fit\(\s*('([^'\\]|\\.)*'|`[^`]*`)/g)].map((m) => m[1].slice(1, -1));
+  assert.ok(subs.length >= 8, `found only ${subs.length} descriptions — the scan is broken`);
+  for (const sub of subs) {
+    if (!sub || sub.includes('${')) continue;
+    assert.ok(sub.length <= SUB_MAX, `${sub.length} characters: "${sub}"`);
+    assert.doesNotMatch(sub, / — /, `two clauses: "${sub}"`);
+  }
+  // A description built with `+` across lines is how the long ones hid.
+  assert.doesNotMatch(src, /fit\(\s*\n?\s*'[^']*'\s*\n?\s*\+/, 'a description is concatenated');
+});
+
+test('switch menus say their state in colour, and options lead with a glyph', () => {
+  const src = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
+  for (const title of ['Subagents', 'Command rules']) {
+    assert.match(src, new RegExp(`title="${title}" \\{\\.\\.\\.onOff\\(`), `${title} has no coloured state`);
+  }
+  assert.match(src, /glyph: '●', glyphTone: 'success', label: 'On'/);
+  assert.match(src, /glyph: '\+', glyphTone: 'success', label: 'Allow a command…'/);
+  const panel = readFileSync(new URL('../../src/ui/components/Panel.jsx', import.meta.url), 'utf8');
+  assert.match(panel, /statusTone/, 'Panel colours its status');
+  assert.match(panel, /showNumbers = numbered && !glyphs/, 'a glyph list hides the number column');
+});

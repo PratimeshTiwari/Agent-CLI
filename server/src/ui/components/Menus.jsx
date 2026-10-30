@@ -68,6 +68,17 @@ function localStamp(when) {
     + `${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }
 
+/**
+ * A switch's state for a `Panel` title row (v6.3): `● on` in the success
+ * colour, `○ off` muted, then anything else worth knowing at a glance.
+ */
+function onOff(on, more = '') {
+  return {
+    status: `${on ? '● on' : '○ off'}${more ? ` · ${more}` : ''}`,
+    statusTone: on ? 'success' : 'muted',
+  };
+}
+
 export function Menus({
   activeMenu,
   setActiveMenu,
@@ -726,21 +737,21 @@ export function Menus({
         {activeMenu?.type === 'config' && (() => {
           const on = agentLoop.subagentsEnabled;
           const run = async (args) => { await applyAndReturn(activeMenu, 'subagents', args); };
-          const { sub, tight, room } = fit(
-            'A subagent is a second tab of this model that has never seen this conversation — '
-              + 'the point of the review role, and the cost of the others: it knows only what it is sent.',
-          );
+          // v6.3, owner: "this seems very cluttered". The state is on the title
+          // row in colour, one short line says what it is, options lead with
+          // what they are.
+          const { sub, tight, room } = fit('Extra tabs that research or review in parallel.');
 
           return (
-            <Panel width={W} title="Subagents" status={on ? 'on' : 'off'} sub={sub} tight={tight}
-              keys="↑↓ move · 1–2 or enter choose · esc cancel">
+            <Panel width={W} title="Subagents" {...onOff(on)} sub={sub} tight={tight}
+              keys={`↑↓ move · 1–2 or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
               <Choices
                 numbered
                 limit={room}
                 initialIndex={on ? 0 : 1}
                 items={[
-                  { label: 'On', detail: 'ask_subagent can research, review and run errands', value: 'subagents on', current: on },
-                  { label: 'Off', detail: 'one tab, start to finish', value: 'subagents off', current: !on },
+                  { glyph: '●', glyphTone: 'success', label: 'On', detail: 'research, review, errands', value: 'subagents on', current: on },
+                  { glyph: '○', glyphTone: 'muted', label: 'Off', detail: 'one tab does everything', value: 'subagents off', current: !on },
                 ]}
                 onSelect={(item) => run(item.value.split(' '))}
               />
@@ -802,20 +813,17 @@ export function Menus({
 
         {activeMenu?.type === 'startup' && (() => {
           const warm = agentLoop.startupMode === 'warm';
-          const { sub, tight, room } = fit(
-            'Every new chat has to be sent the setup once: rules, tools, AGENT.md and memory, about 20k '
-              + 'characters. This decides when.',
-          );
+          const { sub, tight, room } = fit('When a new chat gets the setup (about 20k characters).');
           return (
-            <Panel width={W} title="Startup" status={warm ? 'warm' : 'cold'} sub={sub} tight={tight}
-              keys="↑↓ move · 1–2 or enter choose · esc cancel">
+            <Panel width={W} title="Startup" status={warm ? 'warm' : 'cold'} statusTone="accent" sub={sub} tight={tight}
+              keys={`↑↓ move · 1–2 or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
               <Choices
                 numbered
                 limit={room}
                 initialIndex={warm ? 1 : 0}
                 items={[
-                  { label: 'Cold', detail: 'sent with your first message · nothing extra, the first reply takes longer', value: 'cold', current: !warm },
-                  { label: 'Warm', detail: 'sent when Chrome connects and after /new · one extra Gemini message per start', value: 'warm', current: warm },
+                  { label: 'Cold', detail: 'with your first message', value: 'cold', current: !warm },
+                  { label: 'Warm', detail: 'when Chrome connects · one extra message', value: 'warm', current: warm },
                 ]}
                 onSelect={(item) => applyAndReturn(activeMenu, 'startup', [item.value])}
               />
@@ -842,13 +850,16 @@ export function Menus({
           // lines left behind by a change that had been put back.
           if (activeMenu.view === 'leaving') {
             const changes = activeMenu.changes || [];
+            const labelCol = Math.max(...changes.map((c) => c.label.length + 1));
             const { sub, tight } = fit('', changes.length + 1);
             return (
               <Panel width={W} title={`${changes.length} change${changes.length === 1 ? '' : 's'} not applied`}
                 sub={sub} tight={tight} keys="↑↓ move · enter choose · esc back">
+                {/* `Label:` then the values in one column — `Browser differs  ask`
+                    read as one phrase (owner, 2026-10-30, with a screenshot). */}
                 {changes.map((c) => (
                   <Text key={c.label} wrap="truncate">
-                    {'   '}<Text>{c.label}</Text>
+                    {'   '}<Text>{`${c.label}:`.padEnd(labelCol)}</Text>
                     <Text dimColor>{'  '}{c.from}{' → '}</Text>
                     <Text color={T.link}>{c.to}</Text>
                   </Text>
@@ -1044,7 +1055,7 @@ export function Menus({
 
         {activeMenu?.type === 'commands' && (() => {
           const { sub, tight, room } = fit(
-            'Every shell command, and every one that was blocked. Kept per day, and never read back into a prompt — this is for you, not for the model.',
+            'Every shell command run or blocked, kept per day.',
           );
           return (
             <Panel width={W} title="Commands run" sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
@@ -1080,7 +1091,7 @@ export function Menus({
             is not, so the next message has to carry a recap.
           */
           const n = activeMenu.sessions.length;
-          const { sub, tight, room } = fit('↩ continue — the tab still has that thread · ↻ replay — the model gets a recap first');
+          const { sub, tight, room } = fit('↩ continue in the same tab · ↻ replay with a recap');
           return (
             <Panel width={W} title="Past conversations" status={String(n)} sub={sub} tight={tight}
               keys="↑↓ move · enter reopen · esc cancel">
@@ -1113,7 +1124,7 @@ export function Menus({
 
         {activeMenu?.type === 'plans' && (() => {
           const n = activeMenu.plans.length;
-          const { sub, tight, room } = fit('Each one was archived when the next replaced it. Enter opens it in your editor.');
+          const { sub, tight, room } = fit('Archived plans. Enter opens one in your editor.');
           return (
             <Panel width={W} title="Past plans" status={String(n)} sub={sub} tight={tight}
               keys="↑↓ move · enter open · esc cancel">
@@ -1366,23 +1377,26 @@ export function Menus({
           // The rules used to be listed right here, so opening /allowlist to
           // toggle it meant reading every rule you had ever added. What belongs
           // on the first screen is the things you can do.
+          // v6.3, owner: "these blocks just look very dull". The counts moved
+          // up beside the state, and each action leads with a glyph.
           const items = [
             on
-              ? { label: 'Turn off', detail: 'ask before every command', value: 'disable' }
-              : { label: 'Turn on', detail: 'let allowed commands run without asking', value: 'enable' },
-            { label: 'Allow a command…', value: '\u0000add' },
-            { label: 'Block a command…', value: '\u0000block' },
+              ? { glyph: '○', glyphTone: 'muted', label: 'Turn off', detail: 'ask before every command', value: 'disable' }
+              : { glyph: '●', glyphTone: 'success', label: 'Turn on', detail: 'allowed commands run without asking', value: 'enable' },
+            { glyph: '+', glyphTone: 'success', label: 'Allow a command…', value: '\u0000add' },
+            { glyph: '−', glyphTone: 'danger', label: 'Block a command…', value: '\u0000block' },
             ...(all.length > 0
               ? [
-                { label: 'View rules', detail: `${rules.allow.length} allowed · ${rules.block.length} blocked`, value: '\u0000list' },
-                { label: 'Clear every rule', value: 'clear', colour: T.danger },
+                { glyph: '≡', glyphTone: 'accent', label: `See the ${all.length} rule${all.length === 1 ? '' : 's'}`, value: '\u0000list' },
+                { glyph: '✕', glyphTone: 'danger', label: 'Clear every rule', value: 'clear', colour: T.danger },
               ]
               : []),
           ];
-          const { sub, tight, room } = fit('Allowed commands run without asking. Blocked ones are refused outright.');
+          const counts = `${rules.allow.length} allowed · ${rules.block.length} blocked`;
+          const { sub, tight, room } = fit('');
 
           return (
-            <Panel width={W} title="Command rules" status={on ? 'on' : 'off'} sub={sub} tight={tight}
+            <Panel width={W} title="Command rules" {...onOff(on, counts)} sub={sub} tight={tight}
               keys={`↑↓ move · 1–${items.length} or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
               <Choices
                 numbered
@@ -1431,7 +1445,7 @@ export function Menus({
             return false;
           };
           const { sub, tight, room } = fit(
-            'Markdown files the agent opens when their description matches the task. Only the descriptions sit in the prompt, so each one costs a line.',
+            'Markdown files the agent opens when the task matches.',
           );
 
           return (
@@ -1483,7 +1497,7 @@ export function Menus({
         {activeMenu?.type === 'workspace' && (() => {
           // Here and State: two rows besides the list.
           const { sub, tight, room } = fit(
-            'The agent restarts into it. This conversation belongs to the project you are leaving, and so do its memory, config and command rules.',
+            'The agent restarts there, with that project\'s history.',
             2,
           );
           return (
