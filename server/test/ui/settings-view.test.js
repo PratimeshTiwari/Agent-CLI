@@ -71,6 +71,9 @@ test('the filter: underlined, accent once typing; keys say what applies', () => 
   assert.match(settingsKeys(), /type to filter.*←\/→ change.*tab tabs.*esc close/);
   assert.doesNotMatch(settingsKeys({ query: 's' }), /tab tabs/, 'a filter searches every tab');
   assert.match(settingsKeys({ query: 's' }), /esc clear/);
+  // v6.1: with changes waiting, esc is where Apply is.
+  assert.match(settingsKeys({ staged: 2 }), /2 pending · esc apply or revert/);
+  assert.doesNotMatch(settingsKeys({ staged: 2 }), /esc close/);
 });
 
 test('printable keys filter; control bytes and the page keys do not', () => {
@@ -100,7 +103,13 @@ test('the page: tabs on tab only, no detached hint, changes through the owning c
   assert.doesNotMatch(page, /↳/, 'the hint under the list is gone');
   assert.doesNotMatch(page, /<TextInput/, 'the filter does not hold the caret');
   assert.doesNotMatch(page, /settingTone/, 'no per-value colours');
-  assert.match(page, /row\.restore\(value\)/);
+  // v6.1: a key on the page only stages; Apply runs each change through the
+  // command that owns it.
+  const step = page.slice(page.indexOf('const step = (row, value) =>'), page.indexOf('const staged = stagedChanges('));
+  assert.ok(step.length > 0, 'step() found');
+  assert.doesNotMatch(step, /handleSlashCommand/, 'a key on the page runs nothing');
+  assert.match(page, /change\.restore\.slice\(1\)/);
+  assert.match(page, /label: 'Apply'.*label: 'Revert'/);
   assert.match(menus, /if \(key\.tab && activeMenu\?\.type === 'settings'/);
   // The selected row's detail is no longer recoloured in every menu.
   const panel = readFileSync(new URL('../../src/ui/components/Panel.jsx', import.meta.url), 'utf8');

@@ -76,7 +76,7 @@ export function SettingsList({
         return (
           <Text key={row.label} wrap="truncate">
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>
-            <Text color={sel ? T.accent : undefined} bold={sel}>{String(row.label).padEnd(labelWidth)}</Text>
+            <Text color={row.staged ? T.attention : sel ? T.accent : undefined} bold={sel}>{String(row.label).padEnd(labelWidth)}</Text>
             {'  '}
             {parts.map((p, i) => (
               <Text key={i} color={warn ? T.attention : ROLE_COLOUR[p.role] ? T[ROLE_COLOUR[p.role]] : undefined}

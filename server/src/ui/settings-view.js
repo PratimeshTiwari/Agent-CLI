@@ -105,9 +105,11 @@ export function filterUnderline(query = '') {
 }
 
 /** The keys line. Tabs are not on it while a filter searches every tab. */
-export function settingsKeys({ query = '' } = {}) {
-  return query
-    ? '↑↓ move · ←/→ change · enter open · esc clear'
+export function settingsKeys({ query = '', staged = 0 } = {}) {
+  if (query) return '↑↓ move · ←/→ change · enter open · esc clear';
+  // With changes waiting, esc is where Apply is — so the line says so.
+  return staged
+    ? `↑↓ move · ←/→ change · enter open · tab tabs · ${staged} pending · esc apply or revert`
     : 'type to filter · ↑↓ move · ←/→ change · enter open · tab tabs · esc close';
 }
 

@@ -18,12 +18,12 @@ import { logsHomeItems, failureItems } from '../logs-view.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
-import { describeSettings, filterSettings, settingsChanged, putBackLines, SETTING_GROUPS } from '../../core/settings.js';
+import { describeSettings, filterSettings, stagedChanges, changedLines, SETTING_GROUPS } from '../../core/settings.js';
 import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
-import { MAX_AGENT_NAME } from '../../core/slash-commands.js';
+import { MAX_AGENT_NAME, changed } from '../../core/slash-commands.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import {
@@ -84,9 +84,6 @@ export function Menus({
   setInputAtEnd,
   resetScreen,
 }) {
-  // `/settings` changes, run one after another (see `step` on that page).
-  const settingsChain = React.useRef(Promise.resolve());
-
   /**
    * Change a setting, and put the answer where it can actually be read.
    *
@@ -103,6 +100,18 @@ export function Menus({
    * belongs when nothing is covering it.
    */
   const applyAndReturn = React.useCallback(async (menu, command, args) => {
+    // From the settings page, a chooser's pick waits for Apply like a ←/→ on
+    // the row does (v6.1) — found by the command the row would run for it.
+    if (menu?.returnTo?.type === 'settings') {
+      const wanted = `/${[command, ...args].join(' ')}`;
+      const row = describeSettings(agentLoop).find((r) => r.restore && r.restore(args[0]) === wanted);
+      if (row) {
+        const { [row.label]: _old, ...rest } = menu.returnTo.pending || {};
+        const pending = String(args[0]) === String(row.value) ? rest : { ...rest, [row.label]: args[0] };
+        setActiveMenu({ ...menu.returnTo, pending });
+        return;
+      }
+    }
     const result = await agentLoop.handleSlashCommand(command, args);
     if (menu?.returnTo) {
       setActiveMenu(menu.returnTo);
@@ -320,13 +329,16 @@ export function Menus({
       setActiveMenu({ ...activeMenu, query: '' });
       return;
     }
-    // On the way out, say what changed — and only then. Settings here apply the
-    // moment you pick one, so there is nothing to save; what is worth showing
-    // is what you just did and a way to put it back. No dialog when nothing
+    // On the way out, Apply or Revert — and only when something is waiting
+    // (v6.1: nothing on the page runs until Apply). No dialog when nothing
     // changed: a confirmation you always dismiss teaches people to dismiss
-    // confirmations.
-    if (activeMenu?.type === 'settings' && activeMenu.view !== 'leaving') {
-      const changes = settingsChanged(activeMenu.baseline, describeSettings(agentLoop));
+    // confirmations. Esc on the dialog goes back to the page, changes kept.
+    if (activeMenu?.type === 'settings' && activeMenu.view === 'leaving') {
+      setActiveMenu({ ...activeMenu, view: undefined, changes: undefined });
+      return;
+    }
+    if (activeMenu?.type === 'settings') {
+      const changes = stagedChanges(describeSettings(agentLoop), activeMenu.pending);
       if (changes.length > 0) {
         setActiveMenu({ ...activeMenu, view: 'leaving', changes });
         return;
@@ -616,9 +628,9 @@ export function Menus({
            * committed transcript keeps the old colours until enter reprints it.
            */
           const names = Object.keys(PALETTES);
-          // blurb and gap, then the biggest preview that keeps all six visible
-          const size = previewSize((extra) => fit('', extra), names.length, 2);
-          const { sub, tight, room } = fit('', 2 + PREVIEW_ROWS[size]);
+          // a gap, then the biggest preview that keeps all six visible
+          const size = previewSize((extra) => fit('', extra), names.length, 1);
+          const { sub, tight, room } = fit('', 1 + PREVIEW_ROWS[size]);
           return (
             <Panel width={W} title="Theme" sub={sub} tight={tight}
               keys={`↑↓ preview · enter keep · esc ${activeMenu.returnTo ? 'back' : 'put it back'}`}>
@@ -627,7 +639,7 @@ export function Menus({
                 limit={room}
                 initialIndex={Math.max(0, names.indexOf(activeMenu.original))}
                 items={names.map((n) => ({
-                  label: PALETTE_INFO[n].label, value: n, current: n === activeMenu.original,
+                  label: PALETTE_INFO[n].label, detail: PALETTE_INFO[n].blurb, value: n, current: n === activeMenu.original,
                 }))}
                 onHighlight={(item) => {
                   setTheme(item.value);
@@ -643,12 +655,11 @@ export function Menus({
                   setFocus(FOCUS_INPUT);
                   setHistory((prev) => [...prev, {
                     role: 'assistant', isLocal: true,
-                    content: `🎨 Theme: **${PALETTE_INFO[item.value].label}**`
-                      + (saved ? '' : ' — for this session only; ~/.agent/settings.json could not be written'),
+                    content: changed('theme', PALETTE_INFO[activeMenu.original]?.label || activeMenu.original,
+                      PALETTE_INFO[item.value].label, saved ? '' : 'this session only; ~/.agent/settings.json could not be written'),
                   }]);
                 }}
               />
-              <Text dimColor wrap="truncate">{'   '}{PALETTE_INFO[activeMenu.at || activeMenu.original]?.blurb}</Text>
               <ThemePreview size={size} marginTop={1} marginLeft={size === 'rows' ? 3 : 2} />
             </Panel>
           );
@@ -825,50 +836,49 @@ export function Menus({
           const group = activeMenu.group || SETTING_GROUPS[0];
           const matches = filterSettings(rows, query, group);
 
-          // ── Leaving, with something to report ──────────────────────
+          // ── Leaving, with changes waiting ──────────────────────────
+          // Apply runs them; Revert drops them and prints nothing, because
+          // nothing changed. Owner, 2026-10-30, with a screenshot of three
+          // lines left behind by a change that had been put back.
           if (activeMenu.view === 'leaving') {
             const changes = activeMenu.changes || [];
-            const undoable = changes.filter((c) => c.restore);
-            const { sub, tight } = fit('These applied as you picked them — nothing is waiting to be saved.', changes.length + 1);
+            const { sub, tight } = fit('', changes.length + 1);
             return (
-              <Panel width={W} title={`${changes.length} setting${changes.length === 1 ? '' : 's'} changed`}
-                sub={sub} tight={tight} keys="↑↓ move · enter choose">
+              <Panel width={W} title={`${changes.length} change${changes.length === 1 ? '' : 's'} not applied`}
+                sub={sub} tight={tight} keys="↑↓ move · enter choose · esc back">
                 {changes.map((c) => (
                   <Text key={c.label} wrap="truncate">
                     {'   '}<Text>{c.label}</Text>
                     <Text dimColor>{'  '}{c.from}{' → '}</Text>
                     <Text color={T.link}>{c.to}</Text>
-                    {c.restore ? null : <Text dimColor>{'  (cannot be undone from here)'}</Text>}
                   </Text>
                 ))}
                 <Text> </Text>
                 <Choices
-                  items={[
-                    { label: 'Keep them', value: 'keep' },
-                    ...(undoable.length
-                      ? [{ label: `Put ${undoable.length === changes.length ? 'them' : `${undoable.length} of them`} back`, value: 'undo' }]
-                      : []),
-                  ]}
+                  items={[{ label: 'Apply', value: 'apply' }, { label: 'Revert', value: 'revert' }]}
                   onSelect={async (item) => {
                     setActiveMenu(null);
                     setFocus(FOCUS_INPUT);
-                    if (item.value !== 'undo') return;
+                    if (item.value !== 'apply') return;
                     // One at a time and in order: each runs the command that
-                    // owns that setting, which is the same path the user took.
+                    // owns that setting, which is the same path typing it takes.
                     const before = describeSettings(agentLoop);
-                    for (const change of undoable) {
-                      await agentLoop.handleSlashCommand(
-                        change.restore.slice(1).split(' ')[0],
-                        change.restore.slice(1).split(' ').slice(1),
-                      );
+                    const refused = [];
+                    for (const change of changes) {
+                      const [command, ...args] = change.restore.slice(1).split(' ');
+                      let reply = '';
+                      try {
+                        reply = (await agentLoop.handleSlashCommand(command, args))?.message || '';
+                      } catch (err) {
+                        reply = err?.message || String(err);
+                      }
+                      const now = describeSettings(agentLoop).find((r) => r.label === change.label)?.value;
+                      // Refused (`/effort max` with no Argon): its reply says why.
+                      if (String(now) !== String(change.to)) refused.push(oneLine(reply, 160));
                     }
-                    // Only what moved, and nothing when nothing did.
-                    const lines = putBackLines(before, describeSettings(agentLoop));
+                    const lines = [...changedLines(before, describeSettings(agentLoop)), ...refused];
                     if (!lines.length) return;
-                    setHistory(prev => [...prev, {
-                      role: 'assistant', isLocal: true,
-                      content: lines.join('\n'),
-                    }]);
+                    setHistory(prev => [...prev, { role: 'assistant', isLocal: true, content: lines.join('\n') }]);
                   }}
                 />
               </Panel>
@@ -884,10 +894,12 @@ export function Menus({
           const pending = activeMenu.pending || {};
           const shown = matches.map((row) => {
             const value = pending[row.label] ?? row.value;
-            if (row.label !== 'Effort') return { ...row, value };
+            // Waiting for Apply: the label says so in the attention colour.
+            const staged = String(value) !== String(row.value);
+            if (row.label !== 'Effort') return { ...row, value, staged };
             // Your model, not the rung's generic one — what the slider says.
             return {
-              ...row, value,
+              ...row, value, staged,
               hint: `runs on ${stops[value]?.text ?? row.hint}`,
               skip: stops.max?.available === false ? ['max'] : [],
             };
@@ -910,33 +922,20 @@ export function Menus({
             </Text>
           );
 
-          // Set a value by the command that owns it, in order: a second press
-          // before the first has answered steps from what the row *shows*,
-          // which is `pending`, not from the value still on the loop.
+          // Pending until Apply (v6.1): the row shows the new value and
+          // nothing runs. Stepping back to the live value is no change.
           const step = (row, value) => {
-            setActiveMenu((m) => ({ ...m, pending: { ...(m.pending || {}), [row.label]: value }, notes: {} }));
-            settingsChain.current = settingsChain.current.then(async () => {
-              const [command, ...args] = row.restore(value).slice(1).split(' ');
-              let reply = '';
-              try {
-                reply = (await agentLoop.handleSlashCommand(command, args))?.message || '';
-              } catch (err) {
-                reply = err?.message || String(err);
-              }
-              const now = describeSettings(agentLoop).find((r) => r.label === row.label)?.value;
-              setActiveMenu((m) => {
-                if (m?.type !== 'settings') return m;
-                const { [row.label]: _done, ...rest } = m.pending || {};
-                // Refused (`/effort max` with no Argon): the reply says why,
-                // on the row, where the eye already is.
-                const notes = now === value ? m.notes : { [row.label]: oneLine(reply.replace(/\*\*|`|^⚙\s*/g, ''), 120) };
-                return { ...m, pending: rest, notes };
-              });
+            setActiveMenu((m) => {
+              const { [row.label]: _old, ...rest } = m.pending || {};
+              const live = rows.find((r) => r.label === row.label)?.value;
+              const pending = String(value) === String(live) ? rest : { ...rest, [row.label]: value };
+              return { ...m, pending, notes: {} };
             });
           };
+          const staged = stagedChanges(rows, pending).length;
 
           return (
-            <Panel width={W} head={tabs} tight={tight} keys={settingsKeys({ query })}>
+            <Panel width={W} head={tabs} tight={tight} keys={settingsKeys({ query, staged })}>
               <Text wrap="truncate">
                 <Text color={query ? T.accent : T.muted}>{'  ⌕ '}</Text>
                 {query ? <Text>{query}<Text color={T.accent}>▏</Text></Text> : <Text dimColor>filter…</Text>}
@@ -987,7 +986,7 @@ export function Menus({
                       return;
                     }
                     if (picked.run === '/effort') {
-                      setActiveMenu({ type: 'effort', returnTo: back });
+                      setActiveMenu({ type: 'effort', at: pending.Effort, returnTo: back });
                       return;
                     }
                     if (picked.run === '/startup') {

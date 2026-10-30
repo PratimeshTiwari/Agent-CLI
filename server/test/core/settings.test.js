@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeSettings, filterSettings, settingsChanged, settingsColumns, SETTING_GROUPS, VALUE_MAX, HINT_MAX, putBackLines } from '../../src/core/settings.js';
+import { describeSettings, filterSettings, settingsChanged, settingsColumns, SETTING_GROUPS, VALUE_MAX, HINT_MAX, stagedChanges, changedLines } from '../../src/core/settings.js';
 
 /** Enough of an AgentLoop for the page to describe. */
 const loop = (over = {}) => ({
@@ -301,26 +301,34 @@ test('settingsColumns measures the rows being drawn', async (t) => {
 });
 
 /*
- * "Put them back" (owner, 2026-10-28): the `⚙` line every other setting reply
- * uses, and only for what really moved.
+ * v6.1: nothing on the page runs until Apply (owner, 2026-10-30). A change put
+ * back by hand is no change, and Apply says only what moved.
  */
-test('putBackLines', async (t) => {
+test('stagedChanges', async (t) => {
+  const rows = describeSettings(loop());
+  await t.test('a pending value is a change, with the command that applies it', () => {
+    assert.deepEqual(stagedChanges(rows, { 'Edit approval': 'auto' }),
+      [{ label: 'Edit approval', from: 'plan', to: 'auto', restore: '/auto' }]);
+  });
+  await t.test('stepping away and back again is no change', () => {
+    assert.deepEqual(stagedChanges(rows, { 'Edit approval': 'plan', Effort: 'high' }), []);
+  });
+  await t.test('nothing pending, nothing to ask', () => {
+    assert.deepEqual(stagedChanges(rows, {}), []);
+    assert.deepEqual(stagedChanges(rows, undefined), []);
+  });
+  await t.test('a row with no command to apply it is never staged', () => {
+    assert.deepEqual(stagedChanges(rows, { Theme: 'light', Turns: '9' }), []);
+  });
+});
+
+test('changedLines', async (t) => {
   await t.test('one ⚙ line per setting that moved, no ↩️', () => {
     const before = describeSettings(loop({ mode: 'auto' }));
     const after = describeSettings(loop({ mode: 'plan' }));
-    assert.deepEqual(putBackLines(before, after), ['⚙ edit approval  **auto** → **plan**']);
+    assert.deepEqual(changedLines(before, after), ['⚙ edit approval  **auto** → **plan**']);
   });
-
-  await t.test('a restore that landed on the value already there says nothing', () => {
-    const rows = describeSettings(loop());
-    assert.deepEqual(putBackLines(rows, describeSettings(loop())), []);
-  });
-
-  await t.test('two put back, one already at its old value: one line', () => {
-    const before = describeSettings(loop({ mode: 'auto' }));
-    const after = describeSettings(loop({ mode: 'plan' })); // memory was on before and after
-    const lines = putBackLines(before, after);
-    assert.equal(lines.length, 1);
-    assert.doesNotMatch(lines.join('\n'), /memory|↩️/i);
+  await t.test('nothing moved, nothing said', () => {
+    assert.deepEqual(changedLines(describeSettings(loop()), describeSettings(loop())), []);
   });
 });
