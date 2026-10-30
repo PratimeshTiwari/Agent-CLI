@@ -28,6 +28,7 @@ export const HELP_TABS = [
  */
 export const KEY_ROWS = [
   ['/', 'commands, filtered as you type'],
+  ['?', 'on an empty prompt, the keys at a glance'],
   ['↑ ↓', 'move a line, or recall an earlier prompt'],
   ['shift+tab', 'plan → auto → strict'],
   ['esc', 'stop the run, or close a menu'],

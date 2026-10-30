@@ -14,6 +14,7 @@ import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspac
 import { actionHead } from './action-row.js';
 import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
 import { statusBarLayout } from './status-bar.js';
+import { keysLayout } from './keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -734,17 +735,25 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // turn — or the warm-up, which draws `Getting ready` there — they are taken,
   // and a `/` typed then overflowed 13 rows: 4 clears, and the `/` arrived twice
   // (`//help`, "No such command"). On `main` too, found 2026-10-27.
+  // Below 13 rows the spinner's margin is one of the spacing rows shed, so
+  // only the spinner row is free: `+ 2` there drew one row too many, and both
+  // `/` and `?` cleared the screen once at 10 rows (v6.18).
   const paletteRoom = Math.max(1, Math.min(6, terminalHeight - reservedRows(terminalHeight)
-    + (isProcessing ? -1 : 2) - noticeRows - queuedRows - (extensionConnected ? 0 : 1)));
+    + (isProcessing ? -1 : compact ? 1 : 2) - noticeRows - queuedRows - (extensionConnected ? 0 : 1)));
   const slashMatches = slashQuery === null
     ? []
     : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery)).slice(0, paletteRoom);
   const slashOpen = slashMatches.length > 0;
   const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
+  // `?` as the whole input shows the keys (v6.18, `ui/keys-view.js`), in the
+  // palette's place and out of the palette's room.
+  const keysGrid = focus === FOCUS_INPUT && input === '?' && !activeMenu
+    ? keysLayout(terminalWidth, paletteRoom) : null;
   const frameBudget = Math.max(1, terminalHeight - reservedRows(terminalHeight)
     - queuedRows
     - promptExtraRows
     - (slashOpen ? slashMatches.length : 0)
+    - (keysGrid ? keysGrid.length : 0)
     - (extensionConnected ? 0 : 1)
     - (isThinkingTooLong || isThinkingStuck ? 1 : 0)
     - noticeRows);
@@ -1722,6 +1731,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             setSlashIdx={setSlashIdx}
             slashMatches={slashMatches}
             slashOpen={slashOpen}
+            keysGrid={keysGrid}
             slashSelected={slashSelected}
             status={status}
             syncTokenEstimate={syncTokenEstimate}

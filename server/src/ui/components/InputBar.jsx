@@ -8,6 +8,7 @@ import { recognizeDrop } from '../file-drop.js';
 import { oneLine, taskProgress } from '../format.js';
 import { hasClipboardImage } from '../clipboard-image.js';
 import { T } from '../theme.js';
+import { keyCell } from '../keys-view.js';
 
 /** First `n` non-empty lines of an artifact, for the one-glance summary. */
 /**
@@ -55,6 +56,7 @@ export function InputBar({
   slashMatches,
   slashOpen,
   slashSelected,
+  keysGrid = null,
   status,
   syncTokenEstimate,
   liveTally = '',
@@ -289,6 +291,19 @@ export function InputBar({
 
           {!extensionConnected && (
             <Text color={T.attention} wrap="truncate">{disconnectedText}</Text>
+          )}
+
+          {keysGrid && (
+            <Box flexDirection="column" paddingX={1}>
+              {keysGrid.map((row, r) => (
+                <Text key={r} wrap="truncate">
+                  {row.map((cell, c) => {
+                    const { key, desc } = keyCell(cell);
+                    return <Text key={c}><Text color={T.menu}>{key}</Text><Text dimColor>{desc}</Text></Text>;
+                  })}
+                </Text>
+              ))}
+            </Box>
           )}
 
           {slashOpen && (

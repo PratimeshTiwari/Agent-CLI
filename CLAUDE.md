@@ -1987,6 +1987,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `snap` is the raw stream with escapes stripped and invents blank rows; use `{"screen": file}`,
   pyte's rendered viewport, for anything about layout.
 
+- **`?` as the whole input shows the keys (v6.18, `ui/keys-view.js`).** A grid of `KEY_HINTS`
+  (two or three words each; every key must be one `/help`'s `KEY_ROWS` lists) in the `/` palette's
+  place, 1–3 columns by width, filled down then across, charged `paletteRoom` rows like the palette;
+  short of rows, the last cell is `/help`. Making it found the palette's own overflow: below 13 rows
+  `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
+  one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
+  and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
 - **The status bar is laid out in `ui/status-bar.js` (v6.13, Option A of
   `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
   coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest
