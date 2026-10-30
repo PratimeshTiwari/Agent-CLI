@@ -14,10 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106)
+### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v6.2 | 2026-10-30 | `v6.2/readable-replies` | [#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107) | v6.2: list text readable again (#103); /update answers in one line |
 | v6.1 | 2026-10-30 | `v6.1/apply-or-revert-settings` | [#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106) | v6.1: settings wait for Apply; Revert says nothing; clearer theme names |
 | v6.0 | 2026-10-30 | `v6.0/settings-and-update-fixes` | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105) | v6.0: /update pull restores the lockfile (#102); short settings hints; /theme preview box; Put back says only what moved |
 

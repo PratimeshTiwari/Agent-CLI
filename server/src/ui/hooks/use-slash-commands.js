@@ -57,7 +57,7 @@ import { summariseTraces, formatMs } from '../../core/trace-log.js';
 import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../core/channel-health.js';
 import { summariseToolUsage } from '../../core/tool-usage.js';
 import { TOOL_CATALOG } from '../../core/tool-catalog.js';
-import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload } from '../../core/update.js';
+import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload, updateLine, pulledLine } from '../../core/update.js';
 import { installRoot, installDependencies } from '../../core/dep-recovery.js';
 import { claim, exclusive, INSTALL_SLOT } from '../../core/local-jobs.js';
 import {
@@ -323,24 +323,17 @@ export async function handleSlashCommand(query, {
         }
         // Which branch it compared, and how far ahead yours is, is not what
         // was asked. "Is there an update?" has a one-word answer.
-        if (!state.available) { say('✔ Up to date.'); return; }
-
-        const n = state.behind;
-        const lines = [`**${n} update${n === 1 ? '' : 's'} available**`, ''];
-        // Said here rather than after the pull is attempted: it is the one
-        // thing that would stop this working, and knowing now is worth more
-        // than finding out when you ask for it.
-        // Untracked files and a lockfile npm rewrote do not stop a pull
-        // (issue #90); anything else is named, so there is something to act on.
+        // One line (owner's pick, "Compact"): `✔ Up to date · v6.0`, or
+        // `⬆ v6.0 → v6.2 · 2 releases · /update pull`.
+        if (!state.available) { say(updateLine(state)); return; }
+        const lines = [updateLine(state)];
+        // Said now rather than when the pull is refused: it is the one thing
+        // that would stop it. Untracked files and a lockfile npm rewrote do
+        // not (issue #90, #102); anything else is named, to act on.
         const tree = await treeState(agentLoop.agentSourceDir);
         if (tree?.blocking.length) {
           lines.push(`! Uncommitted changes in the agent's own repo: ${nameFiles(tree.blocking)}. `
             + 'Commit or stash them first — `/update` will not pull over your work.');
-        } else if (tree?.regenerable.length) {
-          lines.push(`\`/update pull\` to take them. It puts back ${nameFiles(tree.regenerable)} first — `
-            + 'npm rewrote it, and the install after the pull writes it again.');
-        } else {
-          lines.push('`/update pull` to take them.');
         }
         say(lines.join('\n'));
         return;
@@ -358,11 +351,11 @@ export async function handleSlashCommand(query, {
         throw err;
       }
       if (!outcome.ok) { slot.release(); say(`! ${outcome.error}`); return; }
-      if (!outcome.files.length) { slot.release(); say('✔ Already up to date.'); return; }
-
-      const n = outcome.files.length;
-      const heading = `**Updated**  ${n} file${n === 1 ? '' : 's'} changed`
-        + (outcome.restored?.length ? ` · put back ${nameFiles(outcome.restored)}` : '');
+      if (!outcome.files.length) {
+        slot.release();
+        say(updateLine({ available: false, version: outcome.toVersion }));
+        return;
+      }
       const lines = [];
 
       /**
@@ -395,9 +388,7 @@ export async function handleSlashCommand(query, {
        */
       let installed = null;
       if (outcome.install) {
-        // The heading goes out with the announcement rather than being held
-        // back for the summary, so the wait has something above it.
-        say([heading, '', 'Dependencies moved, so installing them now…'].join('\n'));
+        say('⬇ Dependencies moved, so installing them now…');
         const root = installRoot(agentLoop.agentSourceDir);
         try {
           installed = root
@@ -407,37 +398,26 @@ export async function handleSlashCommand(query, {
           slot.release();
         }
 
-        if (installed.ok) {
-          lines.push('`npm install` done — dependencies are in sync.', '');
-        } else {
+        if (!installed.ok) {
           lines.push('! `npm install` failed, so the new code has not been started:', '',
             '```', installed.error, '```', '',
             'Run `npm install` by hand, then `/restart`.', '');
         }
       }
       slot.release();
-      if (!outcome.install) lines.unshift(heading, '');
-      if (outcome.steps.length) {
-        // Saved before the restart, and kept until acknowledged: the failure
-        // this prevents is silent, so a notice that scrolls past once and is
-        // gone would reproduce it.
-        savePendingReload(outcome.steps, { to: outcome.to });
-        lines.push('**Then these, because the pull touched them:**', '');
-        for (const step of outcome.steps) lines.push(`  - **${step.what}** — ${step.how}`);
-        lines.push('', '_Shown again on every start until you run `/update done`._');
-      } else {
-        lines.push('_Only the server changed — a restart is all it needs._');
-      }
+      // Saved before the restart, and kept until acknowledged: the failure
+      // this prevents is silent, so a notice that scrolls past once and is
+      // gone would reproduce it. The startup row repeats it until `/update done`.
+      if (outcome.steps.length) savePendingReload(outcome.steps, { to: outcome.to });
       // Restart unless an install was needed and failed — going back into a
       // tree we know is out of sync is how the reported crash happened.
       const willRestart = Boolean(process.env.AGENT_CLI_SUPERVISED)
         && (!outcome.install || installed?.ok === true);
-      lines.push('', willRestart
-        ? '_Restarting into the new version…_'
-        : process.env.AGENT_CLI_SUPERVISED
-          ? '_Not restarting until the dependencies are in._'
-          : '_Quit with `/exit` and start again to run the new version._');
-      say(lines.join('\n'));
+      const then = willRestart
+        ? 'restarting…'
+        : process.env.AGENT_CLI_SUPERVISED ? 'not restarting until the dependencies are in' : '`/exit` and start again to run it';
+      // One line (owner's pick, "Compact"); an install failure above it stays in full.
+      say([...lines, pulledLine(outcome, { then })].join('\n'));
 
       if (willRestart) {
         setTimeout(() => leaveWhenIdle(RESTART_EXIT_CODE, { wsServer, agentLoop }), 1200);
