@@ -587,8 +587,21 @@ describe('PromptBuilder — a dispatchable tool the prompt never mentions is unr
     const pb = new PromptBuilder(ws, ws);
     const prompt = build(pb, { modelConfig: { effort: 'standard', main: 'gemini' } });
 
-    const missing = registered.filter((name) => !prompt.includes(name));
+    // A tool newer than the frozen v1 prompt (`flag` in the catalog) is held to
+    // the version that offers it instead — reachable there, absent from v1.
+    const { TOOL_CATALOG } = await import('../../src/core/tool-catalog.js');
+    const gated = new Set(TOOL_CATALOG.filter((t) => t.flag).map((t) => t.name));
+    const missing = registered.filter((name) => !gated.has(name) && !prompt.includes(name));
     assert.deepEqual(missing, [], `dispatchable but never mentioned: ${missing.join(', ')}`);
+
+    const latest = new PromptBuilder(ws, ws);
+    latest.promptVersion = 'v2';
+    const v2 = build(latest, { modelConfig: { effort: 'standard', main: 'gemini' } });
+    for (const name of gated) {
+      assert.ok(registered.includes(name), `${name} is gated and not registered`);
+      assert.ok(v2.includes(`## ${name}`), `${name} is offered by no prompt version`);
+      assert.ok(!prompt.includes(`## ${name}`), `${name} reached the frozen v1 prompt`);
+    }
   });
 });
 

@@ -40,6 +40,7 @@ before(() => {
   writeFileSync(join(ws, 'src', 'a.js'),
     'export function hello() { return 1; }\nexport class Box { open() { return hello(); } }\n');
   writeFileSync(join(ws, 'README.md'), '# fixture\n\nhello lives in src/a.js\n');
+  writeFileSync(join(ws, 'app.ndjson'), '{"timestamp":"2026-10-29T10:00:00Z","level":"error","msg":"boom"}\n');
 
   // The server is constructed with a DiffEngine in main.js — the write tools
   // reach it through `this.diffEngine`, not through the per-call context.
@@ -69,6 +70,7 @@ const HAPPY_PATH = {
   grep_search: { pattern: 'hello' },
   find_symbol: { name: 'hello' },
   find_references: { name: 'hello' },
+  query_log: { path: 'app.ndjson', where: ['level=error'] },
   run_command: { command: 'echo ok' },
   run_background: { command: 'sh -c "sleep 5"' },
   manage_task: { action: 'list' },

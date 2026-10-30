@@ -158,6 +158,7 @@ import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } fro
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory, countTurns } from './compaction.js';
 import { runDelegatedRead, shouldDelegateRead } from './delegated-read.js';
+import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
@@ -2948,7 +2949,13 @@ export class AgentLoop {
       // A large file read without a range goes to a subagent (v6.16,
       // `core/delegated-read.js`), and like `ask_subagent` it runs beside the
       // rest of the batch, each in its own tab.
-      const delegate = shouldDelegateRead(call, {
+      // A large log is answered by query_log's overview first (v6.20,
+      // `core/log-read.js`), where the prompt offers that tool.
+      const logRead = logReadRedirect(call, {
+        workspace: this.workspace,
+        offered: Boolean(resolvePromptVersion(this.promptVersion).flags?.logQuery),
+      });
+      const delegate = !logRead && shouldDelegateRead(call, {
         workspace: this.workspace,
         subagentsEnabled: this.subagentsEnabled,
         largeFiles: this.modelConfig?.largeFiles,
@@ -3093,6 +3100,8 @@ export class AgentLoop {
         // The three the loop answers itself — `core/loop-tools.js`. Which three
         // is the catalog's `dispatch: 'loop'`, not a list repeated here.
         result = await dispatchLoopTool(this, call);
+      } else if (logRead) {
+        result = await runLogRead(this.mcpServer, call, logRead, { editor: this.editor, taskManager: this.taskManager });
       } else if (delegate) {
         result = await runDelegatedRead(this, call, delegate, () => this.mcpServer.executeTool(call.name, call.args, {
           editor: this.editor,

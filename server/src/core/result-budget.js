@@ -187,6 +187,11 @@ export function formatReadResult(result) {
   if (!result || typeof result !== 'object' || typeof result.content !== 'string') return null;
   // A large file read by a subagent (v6.16): a digest, and the header says so,
   // so the model never quotes it as the file.
+  if (result.delegated === 'query_log') {
+    return `${result.path} is a log (${result.size}), so this is query_log's overview, not the file. `
+      + 'Narrow it with query_log (where, text, from/to, groupBy, around); read_file with a range for exact lines.\n'
+      + result.content;
+  }
   if (result.delegated) {
     return `${result.path} · ${result.totalLines} lines · read by a subagent; this is its digest, not the file\n${result.content}`;
   }

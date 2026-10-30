@@ -34,7 +34,7 @@
  * `run_command` (v6.5). One table, here beside the description, so the
  * terminal and the side panel cannot name the same call two ways.
  *
- * @typedef {{name: string, dispatch: 'mcp'|'loop', verb: string, when?: 'subagents', mutates?: boolean,
+ * @typedef {{name: string, dispatch: 'mcp'|'loop', verb: string, when?: 'subagents', flag?: string, mutates?: boolean,
  *   shell?: boolean, detached?: boolean, lead?: string, flash: string|Function,
  *   pro: string|Function}} ToolDoc
  */
@@ -169,6 +169,43 @@ ${digest ? `  - purpose (string, optional): what you are looking for, for a larg
 ` : ''}
 `;
     },
+  },
+  {
+    // v6.20: offered by prompt versions with `logQuery` (v2); v1 is frozen and
+    // its tool list is part of the prompt.
+    name: 'query_log',
+    dispatch: 'mcp',
+    verb: 'Log',
+    flag: 'logQuery',
+    flash: ` — For a LOG file or export (JSON, NDJSON, CSV, text, .gz; Grafana, Loki, Datadog), never read_file. No filters = overview: time range, levels, errors over time, repeated messages, fields. Args: path, where? (["level=error","status_code>=500","message~timeout"]), text?, from?/to? (ISO), groupBy? (field | "message" | "time"), around? (#n or time), context?, fields?, limit?, offset?, format?
+`,
+    pro: `
+Ask questions of a **log file or log export** — JSON, NDJSON, CSV/TSV or plain text, gzipped or
+not, from Grafana, Loki, Datadog, Kibana, CloudWatch or an app's own logs. Use it instead of
+read_file and grep_search for any log: it reads the whole file however large (hundreds of MB),
+understands records (a one-line JSON export, a CSV message with newlines, a stack trace), and
+answers in a few thousand characters.
+
+Debug the way a person would: call it first with only \`path\` for the overview — time range,
+levels, a histogram of records and errors over time (when did it start?), the most repeated
+messages with numbers and ids taken out, and the fields with their top values. Then narrow.
+Parameters:
+  - path (string, required): the file; \`~\` and absolute paths work
+  - where (string[], optional): all must hold. \`field=value\`, \`field!=value\`, \`field~regex\`,
+    \`field!~regex\`, \`field>=n\` (also > < <=), \`field=*\` (present). A field can be named by its
+    last part (\`status_code\` finds \`attributes.http.status_code\`); \`level\`, \`message\` and
+    \`time\` work whatever the file calls them
+  - text (string, optional): regex, case-insensitive, over the message, then the whole record
+  - from, to (string, optional): ISO times, inclusive
+  - groupBy (string, optional): a field to count by, \`message\` for repeated messages, \`time\` for
+    the histogram. Returns counts only unless you also pass limit
+  - around (string, optional): \`#1234\` or a time — the records just before and after it, unfiltered
+    (what led up to an error); \`context\` sets how many each side (default 5)
+  - fields (string[], optional): fields to show on each record; \`["*"]\` for all of them
+  - limit (number, optional): records to list, default 20, max 100; \`offset\` pages on
+  - format (string, optional): json | ndjson | csv | tsv | text, only if detection got it wrong
+
+`,
   },
   {
     name: 'edit_file',
@@ -457,9 +494,11 @@ export function toolVerb(name) {
   return VERBS.get(name) || String(name || 'tool');
 }
 
-export function toolsFor(ctx) {
+export function toolsFor(ctx, flags = {}) {
   const subagents = typeof ctx === 'object' && ctx !== null ? Boolean(ctx.subagents) : Boolean(ctx);
-  return TOOL_CATALOG.filter((t) => !t.when || (t.when === 'subagents' && subagents));
+  return TOOL_CATALOG.filter((t) => (!t.when || (t.when === 'subagents' && subagents))
+    // A tool newer than the frozen prompt is offered only by a version that has its flag.
+    && (!t.flag || Boolean(flags?.[t.flag])));
 }
 
 /** Just the names — what the anchor and the reminder index need. */
@@ -491,7 +530,7 @@ export function renderToolDefinitions(tier, ctx, modelConfig = {}, flags = {}) {
    */
   const isFlash = tier === 'lite' || tier === 'flash';
   let out = '<available_tools>\n';
-  for (const tool of toolsFor(ctx)) {
+  for (const tool of toolsFor(ctx, flags)) {
     const text = (isFlash ? tool.flash : (tool.pro ?? tool.flash));
     out += `${tool.lead || ''}## ${tool.name}${typeof text === 'function' ? text(modelConfig, flags, ctx) : text}`;
   }

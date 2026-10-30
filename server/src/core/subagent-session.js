@@ -197,7 +197,7 @@ RULES: Make up to 5 tool calls before calling return_result with your final answ
       }
       
       let result;
-      if (!['grep_search', 'read_file', 'list_directory', 'search_files'].includes(call.name)) {
+      if (!['grep_search', 'read_file', 'list_directory', 'search_files', 'query_log'].includes(call.name)) {
         result = { success: false, error: `Tool ${call.name} not permitted for subagents.` };
       } else {
         result = await loop.mcpServer.executeTool(call.name, call.args, {

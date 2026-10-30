@@ -50,6 +50,7 @@ export const PROMPT_VERSIONS = {
       symbolLanguages: true,     // find_symbol names Ruby as well as JavaScript (v6.8)
       subagentEffortWords: true, // ask_subagent's effort is low | medium | high | max (v6.15)
       largeFileDigest: true,     // read_file says a large unranged read comes back as a digest (v6.16)
+      logQuery: true,            // query_log is offered: log files and exports, however large (v6.20)
     },
   },
 };
@@ -69,6 +70,7 @@ export const FLAG_NOTES = {
   symbolLanguages: 'find_symbol says it reads Ruby as well as JavaScript',
   subagentEffortWords: 'ask_subagent takes the /effort words, max included',
   largeFileDigest: 'read_file says a large file comes back as a subagent\'s digest',
+  logQuery: 'query_log reads log files and Grafana/Datadog exports',
 };
 
 /** What a version changes from v1, one line per switch that is on. */

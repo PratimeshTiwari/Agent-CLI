@@ -66,6 +66,12 @@ Markdown (headings, lists, tables, a line per page or slide), so the model reads
 the way it reads code. `.doc`, `.rtf` and `.odt` work on macOS. Other binary files are refused
 with a reason rather than read as garbage.
 
+**It debugs from logs** — hand it a Grafana, Loki or Datadog export (JSON, NDJSON, CSV, plain text,
+gzipped or not) and `query_log` reads the whole file however large: 200 MB in about four seconds.
+It starts where a person would — the time range, the levels, when the errors started and the
+messages that repeat — then narrows with filters, counts and the records around an error. It is on
+prompt v2 (`/prompt v2`).
+
 ![Reading a PDF policy against the code it describes](docs/images/pdf-read.svg)
 
 **A health check for the install** — `/doctor` lists every package the agent uses: whether it is
