@@ -10,6 +10,9 @@ import { readFileSync, statSync, existsSync } from 'fs';
 import { resolve, extname } from 'path';
 import { displayPath } from '../../core/paths.js';
 import { documentKind, extractDocument, looksBinary } from './documents.js';
+import { PARSEABLE, loadJsParser, definitionsIn } from '../../context/symbol-index.js';
+import { RUBY, rubyDefinitionsIn } from '../../context/ruby-symbols.js';
+import { languageFor, patternDefinitionsIn } from '../../context/pattern-symbols.js';
 
 // Language detection by extension
 const LANG_MAP = {
@@ -130,6 +133,7 @@ export async function readFile(args, context) {
 
   const ext = extname(absPath).toLowerCase();
   if (MARKDOWN.has(ext)) numberedContent += unreadOutline(allLines, rangeStart, rangeEnd);
+  else numberedContent += await codeOutline(content, ext, rangeStart, rangeEnd, totalLines);
   language ??= LANG_MAP[ext] || 'plaintext';
 
   return {
@@ -172,6 +176,47 @@ export function unreadOutline(allLines, start, end) {
   if (!out.length) return '';
   const more = out.length > OUTLINE_MAX ? `\n- … ${out.length - OUTLINE_MAX} more` : '';
   return `\n\nHeadings outside lines ${start}–${end}:\n${out.slice(0, OUTLINE_MAX).join('\n')}${more}`;
+}
+
+/**
+ * The definitions of a code file that a partial read did not show (v7.6).
+ *
+ * The Markdown outline's twin, for code: a read of lines 1–800 of a 2,000-line
+ * file used to end at "call read_file with startLine=801", so the next read was
+ * paged rather than aimed, a round trip per page. Now it ends with what is
+ * defined past the range — `- method total (line 840)` — from the same engines
+ * as `find_symbol` (acorn for JavaScript, patterns for Ruby and the rest).
+ * Silent when the whole file was shown, the language is unknown, the file is
+ * over 2 MB, or the parser fails: an outline is a help, never a reason for a
+ * read to fail.
+ */
+export async function codeOutline(content, ext, start, end, total) {
+  if (start <= 1 && end >= total) return '';
+  if (content.length > 2 * 1024 * 1024) return '';
+  let defs = [];
+  try {
+    if (PARSEABLE.has(ext)) {
+      if (!(await loadJsParser())) return '';
+      defs = definitionsIn(content);
+    } else if (RUBY.has(ext)) {
+      defs = rubyDefinitionsIn(content);
+    } else {
+      const lang = languageFor(ext);
+      if (!lang) return '';
+      defs = patternDefinitionsIn(content, lang);
+    }
+  } catch {
+    return '';
+  }
+  const seen = new Set();
+  const out = defs
+    .filter((d) => d.line < start || d.line > end)
+    .sort((a, b) => a.line - b.line)
+    .filter((d) => { const key = `${d.line}:${d.name}`; if (seen.has(key)) return false; seen.add(key); return true; })
+    .map((d) => `- ${d.kind} ${d.name} (line ${d.line})`);
+  if (!out.length) return '';
+  const more = out.length > OUTLINE_MAX ? `\n- … ${out.length - OUTLINE_MAX} more` : '';
+  return `\n\nDefined outside lines ${start}–${end}:\n${out.slice(0, OUTLINE_MAX).join('\n')}${more}`;
 }
 
 function formatBytes(bytes) {
