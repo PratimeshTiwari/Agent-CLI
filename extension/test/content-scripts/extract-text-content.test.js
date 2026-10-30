@@ -316,3 +316,38 @@ for (const [label, file] of BRIDGES) {
     assert.match(out, /Visible\./);
   });
 }
+
+/*
+ * Maths, scraped once (v7.1). KaTeX renders a formula three times over — MathML
+ * for screen readers, the TeX source as an annotation, and the visible glyphs —
+ * so the walker read `≥80%\ge 80\%≥80%`, and that text went into history and
+ * compaction summaries. The TeX is what the model wrote; it is kept, once.
+ */
+const katex = (tex, glyphs) =>
+  `<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>${glyphs}</mo></mrow>` +
+  `<annotation encoding="application/x-tex">${tex}</annotation></semantics></math></span>` +
+  `<span class="katex-html" aria-hidden="true"><span class="base"><span class="mrel">${glyphs}</span></span></span></span>`;
+
+for (const [label, file] of BRIDGES) {
+  test(`${label}: an inline formula is its TeX, once`, () => {
+    const out = scrape(file, `<p>Compact at ${katex('\\ge 80\\%', '≥80%')} of the window.</p>`);
+    assert.equal(out.trim(), 'Compact at $\\ge 80\\%$ of the window.');
+  });
+
+  test(`${label}: a display formula is a $$ block`, () => {
+    const out = scrape(file, `<p>Where</p><span class="katex-display">${katex('\\frac{a}{b}', 'ab')}</span><p>holds.</p>`);
+    assert.match(out, /Where\s+\$\$\\frac\{a\}\{b\}\$\$\s+holds\./);
+    assert.doesNotMatch(out, /ab/);
+  });
+
+  test(`${label}: a wrapper that carries data-math is read from it`, () => {
+    const out = scrape(file, `<p>x <span class="math-inline" data-math="x^2">${katex('x^2', 'x2')}</span> y</p>`);
+    assert.equal(out.trim(), 'x $x^2$ y');
+  });
+
+  test(`${label}: with no TeX annotation, the visible glyphs, once`, () => {
+    const bare = '<span class="katex"><span class="katex-mathml"><math><mi>π</mi></math></span>' +
+      '<span class="katex-html" aria-hidden="true">π</span></span>';
+    assert.equal(scrape(file, `<p>${bare} is pi</p>`).trim(), 'π is pi');
+  });
+}

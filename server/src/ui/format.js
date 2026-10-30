@@ -57,6 +57,52 @@ marked.use({
 });
 
 /**
+ * Inline maths as text (v7.1). The tab now scrapes a formula as its TeX,
+ * `$\ge 80\%$`, where it used to read it three times over. A formula made only
+ * of symbols a terminal can draw is drawn (`≥80%`); anything else — a fraction
+ * of expressions, a matrix — stays as the TeX the model wrote, which is exact.
+ */
+const TEX_SYMBOLS = {
+  ge: '≥', geq: '≥', le: '≤', leq: '≤', neq: '≠', ne: '≠', approx: '≈', sim: '~', times: '×',
+  div: '÷', pm: '±', cdot: '·', to: '→', rightarrow: '→', leftarrow: '←', Rightarrow: '⇒',
+  infty: '∞', degree: '°', circ: '°', ldots: '…', dots: '…', cdots: '⋯', in: '∈', sum: 'Σ',
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', Delta: 'Δ', epsilon: 'ε', lambda: 'λ', mu: 'μ',
+  pi: 'π', sigma: 'σ', theta: 'θ', omega: 'ω', sqrt: '√', log: 'log', ln: 'ln', max: 'max', min: 'min',
+  '%': '%', $: '$', '{': '{', '}': '}', _: '_', ',': ' ', ' ': ' ', ';': ' ', '!': '',
+};
+const SUPERSCRIPTS = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', n: 'ⁿ', '-': '⁻' };
+
+/** `\ge 80\%` → `≥ 80%`, or null when any part has no plain-text form. */
+export function texToText(tex) {
+  let s = String(tex)
+    .replace(/\\(?:text|mathrm|mathbf|operatorname)\{([^{}]*)\}/g, '$1')
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2')
+    .replace(/\^\{?([0-9n-]+)\}?/g, (m, p) => ([...p].every((c) => SUPERSCRIPTS[c]) ? [...p].map((c) => SUPERSCRIPTS[c]).join('') : m));
+  let failed = false;
+  s = s.replace(/\\([A-Za-z]+|.)/g, (m, name) => {
+    if (name in TEX_SYMBOLS) return TEX_SYMBOLS[name];
+    failed = true;
+    return m;
+  });
+  if (failed || /[\\^{}]/.test(s)) return null;
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+const INLINE_MATH = /^\$(?![\s$])((?:\\.|[^\\$\n])+?)(?<!\s)\$(?![0-9])/;
+marked.use({
+  extensions: [{
+    name: 'inlineMath',
+    level: 'inline',
+    start(src) { return src.indexOf('$'); },
+    tokenizer(src) {
+      const m = INLINE_MATH.exec(src);
+      if (m) return { type: 'inlineMath', raw: m[0], tex: m[1] };
+    },
+    renderer(token) { return texToText(token.tex) ?? token.raw; },
+  }],
+});
+
+/**
  * The last step `marked-terminal` applies to a paragraph, for inline text we
  * render ourselves (list items, table cells).
  *

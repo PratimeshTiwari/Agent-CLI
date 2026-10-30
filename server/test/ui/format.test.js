@@ -329,3 +329,21 @@ test('one tilde is "about", not strikethrough; two still strike (v6.25)', () => 
   assert.match(struck, /gone/);
   assert.doesNotMatch(struck, /~~/);
 });
+
+import { texToText } from '../../src/ui/format.js';
+
+test('inline maths: symbols are drawn, anything else stays TeX (v7.1)', () => {
+  const plain = (s) => renderMarkdown(s).replace(/\x1b\[[0-9;]*m/g, '').trim();
+  assert.equal(plain('Compact at $\\ge 80\\%$ of the window.'), 'Compact at ≥ 80% of the window.');
+  assert.equal(plain('Area is $\\pi r^2$ here.'), 'Area is π r² here.');
+  assert.equal(plain('Half is $\\frac{1}{2}$.'), 'Half is 1/2.');
+  // Controls: no plain form, so the TeX is kept as written.
+  assert.equal(plain('Use $\\begin{pmatrix} a \\end{pmatrix}$ there.'), 'Use $\\begin{pmatrix} a \\end{pmatrix}$ there.');
+  assert.equal(plain('Then $\\frac{a+b}{\\sqrt{c}}$.'), 'Then $\\frac{a+b}{\\sqrt{c}}$.');
+  // Money is not maths.
+  assert.equal(plain('It costs $5 and $10 a month.'), 'It costs $5 and $10 a month.');
+  assert.equal(plain('Between $5 to $10.'), 'Between $5 to $10.');
+  // Inside code it is code.
+  assert.match(plain('Run `echo $HOME$`.'), /echo \$HOME\$/);
+  assert.equal(texToText('\\unknowncmd'), null);
+});
