@@ -507,6 +507,12 @@ body {
   flex-shrink: 0;
 }
 
+/* A file dragged over the panel (v6.17): the box it will land in says so. */
+#input-area.drop-target .input-wrapper {
+  border-color: var(--text-accent);
+  border-style: dashed;
+}
+
 .input-wrapper {
   display: flex;
   align-items: flex-end;

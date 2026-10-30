@@ -66,6 +66,22 @@ function setupEventListeners() {
   });
   // An image on the clipboard goes in as an `[Image #n]` tag.
   commandInput.addEventListener('paste', onPasteImage);
+  // A dropped file goes in as a `[File #n: name]` tag (v6.17), anywhere on
+  // the panel. `dragover` must be cancelled or the browser never fires `drop`.
+  const dragHasFiles = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === 'Files' || t === 'text/uri-list');
+  document.addEventListener('dragover', (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    inputArea.classList.add('drop-target');
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!e.relatedTarget) inputArea.classList.remove('drop-target');
+  });
+  document.addEventListener('drop', (e) => {
+    inputArea.classList.remove('drop-target');
+    onDropFiles(e);
+    commandInput.focus();
+  });
 
   // Auto-resize textarea, and light the send button once there is something
   // to send. Muted-until-useful was half the idea; without this half the
@@ -537,15 +553,87 @@ function onPasteImage(e) {
     .filter(Boolean);
   if (!files.length) return;            // text pastes as text
   e.preventDefault();
+  for (const file of files) addImage(file);
+}
+
+function addImage(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    pastedCount += 1;
+    pastedImages.push({ n: pastedCount, dataUrl: reader.result, mime: file.type, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
+    insertAtCaret(commandInput, imageTag(pastedCount));
+    commandInput.dispatchEvent(new Event('input'));
+  };
+  reader.readAsDataURL(file);
+}
+
+/*
+ * Files dropped on the panel (v6.17, plan Phase 8).
+ *
+ * The terminal sends a dropped file's *path* and lets the model read the range
+ * it needs. A panel cannot always do that:
+ * - **Chrome** hands the page the file but never its path. An image goes in as
+ *   a pasted one would; a text file up to 8 KB goes in whole, as a
+ *   `<file name=…>` block; anything larger is refused, with the way that works.
+ * - **VS Code** passes `text/uri-list` for a file dragged from the explorer
+ *   (hold shift to drop into a webview), so the path is sent, as the terminal
+ *   sends it, and nothing is read here.
+ * Either way it is a `[File #n: name]` tag at the caret, and it goes only while
+ * the tag is in the text — the same rule as images.
+ */
+const DROP_INLINE_MAX = 8 * 1024;
+let droppedFiles = [];
+let droppedCount = 0;
+const fileTag = (f) => `[File #${f.n}: ${f.name}]`;
+const baseName = (p) => String(p).split(/[\\/]/).filter(Boolean).pop() || String(p);
+
+/** `file://` URLs from a uri-list; comments and anything else are skipped. */
+function droppedPaths(uriList) {
+  return String(uriList || '').split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && line.startsWith('file://'))
+    .map((u) => {
+      try { return decodeURIComponent(new URL(u).pathname).replace(/^\/([A-Za-z]:\/)/, '$1'); } catch { return null; }
+    })
+    .filter(Boolean);
+}
+
+function addFileTag(f) {
+  droppedCount += 1;
+  const entry = { n: droppedCount, ...f };
+  droppedFiles.push(entry);
+  insertAtCaret(commandInput, fileTag(entry));
+  commandInput.dispatchEvent(new Event('input'));
+}
+
+function onDropFiles(e) {
+  const dt = e.dataTransfer;
+  if (!dt) return;
+  const paths = droppedPaths(dt.getData?.('text/uri-list'));
+  const files = [...(dt.files || [])];
+  if (!paths.length && !files.length) return;   // a text drag stays the browser's
+  e.preventDefault();
+  if (paths.length) {
+    for (const p of paths) addFileTag({ name: baseName(p), path: p });
+    return;
+  }
   for (const file of files) {
+    if (file.type?.startsWith('image/')) { addImage(file); continue; }
+    if (file.size > DROP_INLINE_MAX) {
+      appendStatus(`${file.name} is ${Math.round(file.size / 1024)} KB — too large to drop here. `
+        + 'Drop it in the terminal, which can send the path.');
+      continue;
+    }
     const reader = new FileReader();
     reader.onload = () => {
-      pastedCount += 1;
-      pastedImages.push({ n: pastedCount, dataUrl: reader.result, mime: file.type, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
-      insertAtCaret(commandInput, imageTag(pastedCount));
-      commandInput.dispatchEvent(new Event('input'));
+      const text = String(reader.result ?? '');
+      if (text.includes('\u0000')) {
+        appendStatus(`${file.name} is not a text file. Drop it in the terminal, which can send the path.`);
+        return;
+      }
+      addFileTag({ name: file.name, text, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
     };
-    reader.readAsDataURL(file);
+    reader.readAsText(file);
   }
 }
 
@@ -554,7 +642,7 @@ function backspaceTag(e) {
   const el = commandInput;
   if (el.selectionStart !== el.selectionEnd) return;
   const at = el.selectionStart;
-  const m = /\[Image #\d+\] ?$/.exec(el.value.slice(0, at));
+  const m = /\[(?:Image #\d+|File #\d+: [^\]\n]+)\] ?$/.exec(el.value.slice(0, at));
   if (!m) return;
   e.preventDefault();
   el.value = el.value.slice(0, m.index) + el.value.slice(at);
@@ -569,6 +657,23 @@ function imageBlock(content) {
     ? `${used.map((img) => `[Image #${img.n}: pasted] (${img.sizeKB}KB, ${img.mime})\n<image_data>\n${img.dataUrl}\n</image_data>`).join('\n')}\n\n`
     : '';
   return { used, block };
+}
+
+/**
+ * The dropped files whose tags are in `content`, as the block in front of it:
+ * every header line first (the server folds those off for display, as it does
+ * the terminal's), then the inline texts.
+ */
+function fileBlock(content) {
+  const used = droppedFiles.filter((f) => content.includes(fileTag(f)));
+  if (!used.length) return { used, block: '' };
+  const lines = (t) => t.split('\n').length - (t.endsWith('\n') ? 1 : 0);
+  const headers = used.map((f) => (f.path
+    ? `[File #${f.n}: ${f.path}] (dropped from the editor) — read it with read_file`
+    : `[File #${f.n}: ${f.name}] (${f.sizeKB} KB, ${lines(f.text)} lines, dropped in the panel) — its text follows`));
+  const bodies = used.filter((f) => !f.path)
+    .map((f) => `<file name="${f.name.replace(/"/g, "'")}">\n${f.text.replace(/\n$/, '')}\n</file>`);
+  return { used, block: `${headers.join('\n')}\n\n${bodies.length ? `${bodies.join('\n')}\n\n` : ''}` };
 }
 
 function sendMessage() {
@@ -614,9 +719,12 @@ function sendMessage() {
   // Send to service worker → server, with the images whose tags it carries.
   const { used, block } = imageBlock(content);
   pastedImages = pastedImages.filter((img) => !used.includes(img));
+  const dropped = fileBlock(content);
+  droppedFiles = droppedFiles.filter((f) => !dropped.used.includes(f));
   chrome.runtime.sendMessage({
     type: 'user_message',
-    payload: { content: block + content },
+    // The terminal's order: images, then file headers, then the message.
+    payload: { content: block + dropped.block + content },
   });
 
   // Clear input

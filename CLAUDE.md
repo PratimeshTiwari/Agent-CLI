@@ -1825,6 +1825,14 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   files was planned and is not built: it would save a round trip only if `/logs tools` says
   dropped files are read whole. Pty (`{"paste": …}` step in drive2.py): a folder, a 1,200-line
   file and an image at 13 and 24 rows, 0 clears; the prompt holds headers and no file text.
+- **A file dropped on a side panel is a tag too (v6.17, `onDropFiles` in `side-panel/panel.js`).**
+  Chrome gives a page the dropped file but never its path: an image goes in as a pasted one, a
+  text file up to 8 KB is sent whole as a `<file name=…>` block after its header, and anything
+  larger is refused with "drop it in the terminal, which can send the path". VS Code's webview gets
+  `text/uri-list` for a file dragged from the explorer (with shift), so the path is sent with
+  `— read it with read_file`, as the terminal does. Order on send is the terminal's: image blocks,
+  file headers, message; `foldFiles` also folds the inline blocks so the text is not drawn twice.
+  Not driven in a live browser: a real drag cannot be scripted here; jsdom covers the handler.
 - **An image is a tag in the prompt, Claude Code's way (v5.24, `ui/image-attach.js`).**
   ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
   an image goes with a message only while its tag is in the text, so backspace — which takes a

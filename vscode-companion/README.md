@@ -58,6 +58,13 @@ is how someone installs the wrong one.
 
 ## Version history
 
+### 1.8.6 — 2026-10-30
+
+**Files dragged from the explorer onto the chat panel** (hold shift, as VS Code requires for a
+webview) become `[File #n: name]` tags and send the path, as the terminal does; the agent reads
+the range it needs. Files from Finder and images behave as in Chrome's panel. Only the copied-in
+panel changed.
+
 ### 1.8.5 — 2026-10-30
 
 **Action rows read `● Run(npm test)`**, as in the terminal since v6.5: one verb per tool from the
