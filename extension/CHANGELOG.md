@@ -18,6 +18,14 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.54.0 — 2026-10-30
+
+**Each trace says how the prompt was typed** (#104): `typed` (`pasted`, `pasted_late` or
+`inserted`), its line count, and whether the tab was hidden. Typing took 0.2 s to 35 s over 41
+turns, and nothing said which path each one took. **`generating_start` is marked by the
+observer**: the completion check skips its first 3 s and ticks every 2 s, so it never read below
+~4 s and looked like a fixed delay. Measurement only; nothing the turn does changed.
+
 ### 1.53.0 — 2026-10-30
 
 **A formula is scraped once, as its TeX.** KaTeX draws maths three times (MathML, a TeX

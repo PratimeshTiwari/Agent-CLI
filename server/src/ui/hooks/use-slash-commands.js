@@ -82,13 +82,16 @@ export function browserTimings(workspace) {
     + byRung.map((e) => `  ${e.effort.padEnd(6)} n=${String(e.n).padEnd(4)} first token ${formatMs(e.firstToken).padStart(7)}   reply ${formatMs(e.complete)}`).join('\n');
   const versions = (t.versions || []).length < 2 ? '' : '\n\n**By prompt version** — reply time\n'
     + t.versions.map((v) => `  ${v.version.padEnd(6)} n=${String(v.n).padEnd(4)} median ${formatMs(v.complete).padStart(7)}   p90 ${formatMs(v.p90)}`).join('\n');
+  // v7.2 (#104): typing split by path, once the tab reports it.
+  const typing = (t.typing || []).length === 0 ? '' : '\n\n**Typing the prompt** — by path, median\n'
+    + t.typing.map((r) => `  ${r.path.padEnd(20)} n=${String(r.n).padEnd(4)} ${formatMs(r.median).padStart(7)}   p90 ${formatMs(r.p90).padStart(6)}   ${formatMs(r.perK)} per 1k chars`).join('\n');
   return `**Browser timings** — median and slowest tenth, over ${t.samples} turn${t.samples === 1 ? '' : 's'}\n`
     + t.stages.map((st) => `  ${st.stage.padEnd(12)} ${formatMs(st.median).padStart(6)}   p90 ${formatMs(st.p90)}`).join('\n')
     // v6.6 (#104): the three stages before the tab has the prompt need a key.
     + (t.stages.some((st) => st.stage === 'deliver')
       ? '\n  _between turns: round_wait is you (approvals, questions) · round_work is the agent · deliver is the send reaching the tab_'
       : '')
-    + rungs + versions;
+    + typing + rungs + versions;
 }
 
 function safePlanReset(workspace, args = []) {

@@ -220,3 +220,36 @@ test('the generating marks sit between send and complete', () => {
   assert.ok(order('generating_end') < order('complete'));
   assert.ok(order('generating_end') > order('generating_start'));
 });
+
+// v7.2 (#104): how the prompt was typed, so a 35 s `type` can be explained.
+test('a trace keeps how it was typed, and the summary splits typing by path', () => {
+  const ws = mkdtempSync(join(tmpdir(), 'trace-typed-'));
+  logTrace(ws, { stages: { type: 300 }, chars: 1000, typed: 'pasted', lines: 12, hidden: false });
+  logTrace(ws, { stages: { type: 400 }, chars: 2000, typed: 'pasted', lines: 30, hidden: false });
+  logTrace(ws, { stages: { type: 30000 }, chars: 30000, typed: 'inserted', lines: 600, hidden: true });
+  logTrace(ws, { stages: { type: 50 }, chars: 10, typed: 'by magic', hidden: 'yes' });
+  const rows = readTraces(ws);
+  assert.deepEqual([rows[2].typed, rows[2].lines, rows[2].hidden], ['inserted', 600, true]);
+  assert.equal('typed' in rows[3], false, 'an unknown path is not written');
+  assert.equal('hidden' in rows[3], false, 'only a boolean is a visibility');
+  const { typing } = summariseTraces(ws);
+  const by = Object.fromEntries(typing.map((r) => [r.path, r]));
+  assert.equal(by.pasted.n, 2);
+  assert.equal(by['inserted · hidden'].median, 30000);
+  assert.equal(by['inserted · hidden'].perK, 1000);
+  // Control: rows from before the field exist are not counted in the split.
+  const old = mkdtempSync(join(tmpdir(), 'trace-typed-old-'));
+  logTrace(old, { stages: { type: 300 }, chars: 1000 });
+  assert.deepEqual(summariseTraces(old).typing, []);
+  rmSync(ws, { recursive: true, force: true });
+  rmSync(old, { recursive: true, force: true });
+});
+
+test('the tab reports the typing path and marks generation from the observer', () => {
+  const src = readFileSync(new URL('../../../extension/content-scripts/gemini-bridge.js', import.meta.url), 'utf8');
+  assert.match(src, /turnTrace\.typed = landed \? typedBy : 'inserted'/);
+  assert.match(src, /typed: turnTrace\.typed, lines: turnTrace\.lines, hidden: turnTrace\.hidden/);
+  // From the observer, and the completion check never overwrites it.
+  assert.match(src, /new MutationObserver\(\(mutations\) => \{[\s\S]{0,700}!turnTrace\.stages\.generating_start && stopButtonVisible\(\)/);
+  assert.match(src, /isGenerating && !sawGenerating && !turnTrace\?\.stages\?\.generating_start\) traceMark\('generating_start'\)/);
+});
