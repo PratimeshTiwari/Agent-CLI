@@ -14,9 +14,10 @@ import { readFileSync } from 'node:fs';
 const turn = readFileSync(new URL('../../src/ui/components/TranscriptTurn.jsx', import.meta.url), 'utf8');
 
 test('the tool row is a single truncated Text', () => {
-  const at = turn.indexOf("{(failed ? '✗' : '⏺') + ' '}");
+  // v6.5: `● Run(…)`, the dot coloured by state. The head is still one Text.
+  const at = turn.indexOf('<Text color={tone}>{dot}</Text>');
   assert.ok(at > -1, 'control: the row is still drawn here');
-  const before = turn.slice(Math.max(0, at - 160), at);
-  assert.match(before, /<Text wrap="truncate">\s*<Text color=\{failed/);
-  assert.doesNotMatch(before, /<Box flexDirection="row">\s*<Text color=\{failed/);
+  const before = turn.slice(Math.max(0, at - 60), at);
+  assert.match(before, /<Text wrap="truncate">\s*$/);
+  assert.doesNotMatch(before, /<Box flexDirection="row">\s*$/);
 });

@@ -11,7 +11,8 @@ import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
 import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
-import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, subjectOf, taskProgress, workBreakdown } from './format.js';
+import { actionHead } from './action-row.js';
+import { approvalLayout, contextField, contextMeter, disconnectedHint, elapsedLabel, modeLine, runningLayout, taskProgress, workBreakdown } from './format.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../core/effort.js';
@@ -1582,7 +1583,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
                  * — so the name and subject, which say *what* is running,
                  * come first, and the age and hidden-line count after.
                  */
-                const subject = subjectOf(call.name, call.args);
+                const head = actionHead(call.name, call.args, Math.max(12, terminalWidth - 24));
                 const lines = running.outputFor === call.id ? running.output : [];
                 const hidden = (call.outputTotal || 0) - lines.length;
                 const meta = [
@@ -1591,9 +1592,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
                 ].filter(Boolean).join(' · ');
                 return (
                   <React.Fragment key={call.id}>
-                    <Text color={T.accent} wrap="truncate">
-                      {'  '}◌{' '}{call.name}
-                      {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
+                    {/* The transcript's own row (v6.5), running: the dot blinks
+                        about once a second, a space holding its width. */}
+                    <Text wrap="truncate">
+                      {'  '}<Text color={T.accent}>{Math.floor(animTick / 6) % 2 ? '  ' : '● '}</Text>
+                      <Text bold>{head}</Text>
                       {meta ? <Text dimColor>{` · ${meta}`}</Text> : null}
                     </Text>
                     {lines.map((line, i) => (

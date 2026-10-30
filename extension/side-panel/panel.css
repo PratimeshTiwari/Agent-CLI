@@ -293,12 +293,21 @@ body {
   user-select: none;
 }
 
-.tool-icon {
-  font-size: 12px;
+/* One dot whose colour is the state, as in the terminal: running, then done or failed. */
+.tool-dot {
+  font-size: 10px;
+  color: var(--cyan);
+}
+
+.tool-result-success .tool-dot {
+  color: var(--green);
+}
+
+.tool-result-error .tool-dot {
+  color: var(--red);
 }
 
 .tool-name {
-  color: var(--purple);
   font-weight: 600;
   font-size: 12px;
 }
