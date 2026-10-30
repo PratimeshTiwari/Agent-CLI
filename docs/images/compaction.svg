@@ -10,5 +10,5 @@
 <rect x="34.9" y="179" width="9.5" height="19" fill="#d4d4d4"/>
 <text x="16" y="193" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68" font-weight="bold">❯ </tspan><tspan fill="#1e1e1e">A</tspan><tspan fill="#d4d4d4" fill-opacity="0.5">sk anything, or / for commands</tspan></text>
 <text x="16" y="212" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
-<text x="16" y="250" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">⏸ plan mode on</tspan><tspan fill="#d4d4d4" fill-opacity="0.5"> (shift+tab to cycle)</tspan><tspan fill="#d4d4d4">                             </tspan><tspan fill="#d4d4d4" fill-opacity="0.5">effort: high  ·  </tspan><tspan fill="#7aa2f7" fill-opacity="0.5">▰▱▱▱▱ 6% of 96k</tspan></text>
+<text x="16" y="250" xml:space="preserve" textLength="889.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">⏸</tspan><tspan fill="#d4d4d4" fill-opacity="0.5"> plan mode</tspan><tspan fill="#d4d4d4">                                                                    </tspan><tspan fill="#d4d4d4" fill-opacity="0.5">high · ▰▱▱▱▱ 6%</tspan></text>
 </svg>

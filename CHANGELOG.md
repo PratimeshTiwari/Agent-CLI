@@ -14,7 +14,13 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
+### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)
+
+| Version | Date | Branch | PR | What |
+| --- | --- | --- | --- | --- |
+| v7.0 | 2026-10-30 | `v7.0/docs-refresh-and-screenshots` | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131) | READMEs lead with pictures; every screenshot re-captured; the extension's history moves to its CHANGELOG |
+
+### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -547,7 +553,7 @@ message dispatch went from 53% to 70% covered (#47).
 #### Extension versions in this range
 
 1.35.0 → 1.40.0, three of which are listed above as bugs they fixed. The
-per-change record is in [`extension/README.md`](extension/README.md).
+per-change record is in [`extension/CHANGELOG.md`](extension/CHANGELOG.md).
 
 ---
 
@@ -636,7 +642,7 @@ written.
 #### Extension versions in this range
 
 1.26.0 → 1.34.0. The per-change record is in
-[`extension/README.md`](extension/README.md), including the four releases that
+[`extension/CHANGELOG.md`](extension/CHANGELOG.md), including the four releases that
 fixed the wrong thing and the measurements that disproved them. They are kept
 deliberately: this repo keeps its mistakes, because the reasoning that produced
 them is the reasoning that would produce them again.
