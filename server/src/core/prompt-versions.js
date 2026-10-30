@@ -46,6 +46,7 @@ export const PROMPT_VERSIONS = {
       walkthroughWithTask: true, // walkthrough.md only after a task.md; the plan files say what each is for
       tickWithNextCall: true,    // tick task.md in the reply that makes the next call
       oneCopy: true,             // a repeated rule is kept once, nearest its use
+      answerDirectly: true,      // lite/flash: a greeting gets no task.md and no plan (v6.7)
     },
   },
 };

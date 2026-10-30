@@ -58,3 +58,44 @@ export function planBoxRow(workspace) {
     timestamp: Date.now(),
   };
 }
+
+/**
+ * Whether a plan written this turn should stop and ask (v6.7).
+ *
+ * Reported 2026-10-30 with a screenshot: "hi" in plan mode, on Flash-Lite,
+ * wrote `task.md`, wrote a one-line `implementation_plan.md` ("Understand user
+ * request and initialize tracking files."), ticked the task, answered "Hello!"
+ * — and then the turn ended on **Plan ready for review**, with the editor
+ * opened on the plan. Proceed sent "approve it, proceed with execution" and
+ * spent another round on nothing.
+ *
+ * Two shapes are not plans waiting for a yes:
+ * - **already carried out**: `task.md` was written after the plan and nothing
+ *   in it is left unticked. A real plan in plan mode stops *before* the work.
+ * - **too small to be one**: fewer than two steps and under 200 characters of
+ *   body. Prose plans with no list are kept by the length test.
+ *
+ * Either way the write is still drawn (`● Wrote plan ⎿ /plan show to preview`);
+ * only the menu and the editor stay shut.
+ */
+export function planWorthReviewing(workspace) {
+  const at = findPlanFile(workspace);
+  if (!at) return false;
+  let text;
+  let planMtime;
+  try {
+    text = fs.readFileSync(at, 'utf8');
+    planMtime = fs.statSync(at).mtimeMs;
+  } catch {
+    return false;
+  }
+  try {
+    const taskPath = paths.artifactPath(workspace, 'task.md');
+    const list = fs.readFileSync(taskPath, 'utf8');
+    const done = /^\s*[-*] \[[xX]\]/m.test(list) && !/^\s*[-*] \[ \]/m.test(list);
+    if (done && fs.statSync(taskPath).mtimeMs >= planMtime) return false;
+  } catch { /* no task.md: decided by the plan alone */ }
+  const body = text.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n').trim();
+  const steps = body.split('\n').filter((l) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(l)).length;
+  return steps >= 2 || body.length >= 200;
+}

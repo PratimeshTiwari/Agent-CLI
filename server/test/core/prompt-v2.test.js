@@ -22,7 +22,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v2 is a set of switches, all on', () => {
   const flags = PROMPT_VERSIONS.v2.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['gateReview', 'oneCopy', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'oneCopy', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -43,6 +43,19 @@ test('A1: no read-back after every edit, on every rung and in the handovers', ()
   assert.doesNotMatch(v2['medium/handover'], /Read back/);
   assert.match(v2['high/handover'], /\*\*What landed\*\*/);
   assert.doesNotMatch(v2['high/handover'], /read back what you wrote/);
+});
+
+test('v6.7: on the cheap rungs a greeting gets no task.md and no plan', () => {
+  const line = '(never for a greeting, or a question you can answer without reading anything)';
+  for (const effort of ['low', 'medium']) {
+    assert.equal(count(v2[`${effort}/plan/sub/turn0`], line), 1, effort);
+    assert.equal(count(v1[`${effort}/plan/sub/turn0`], line), 0, `control: v1 ${effort}`);
+    assert.doesNotMatch(v2[`${effort}/plan/sub/turn0`], /ALWAYS proactively create/);
+    assert.match(v1[`${effort}/plan/sub/turn0`], /ALWAYS proactively create a `\.agent\/artifacts\/task\.md`/, 'control: v1 unchanged');
+  }
+  // High already says it in STEP 1, so it is not said twice.
+  assert.equal(count(v2['high/plan/sub/turn0'], line), 0);
+  assert.match(v2['high/plan/sub/turn0'], /A greeting, or a question you can answer without reading anything, needs none of this/);
 });
 
 test('A2: task.md is ticked in the reply that makes the next call', () => {
