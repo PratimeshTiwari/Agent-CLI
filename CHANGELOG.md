@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#119](https://github.com/PratimeshTiwari/Agent-CLI/pull/119)
+### v6 — 2026-10-30 … · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#120](https://github.com/PratimeshTiwari/Agent-CLI/pull/120)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v6.12 | 2026-10-30 | `v6.12/reply-wrap` | [#117](https://github.com/PratimeshTiwari/Agent-CLI/pull/117) | v6.12: replies fit the terminal; bullets hang under their text |
 | v6.13 | 2026-10-30 | `v6.13/status-bar` | [#118](https://github.com/PratimeshTiwari/Agent-CLI/pull/118) | v6.13: a quieter status bar; shift+tab hint only at the start of a chat |
 | v6.14 | 2026-10-30 | `v6.14/architecture-pointer` | [#119](https://github.com/PratimeshTiwari/Agent-CLI/pull/119) | v6.14: the architecture is findable; idle time is not round_work |
+| v6.15 | 2026-10-30 | `v6.15/compaction` | [#120](https://github.com/PratimeshTiwari/Agent-CLI/pull/120) | v6.15: compaction keeps the last 3 exchanges; watcher rows and own writes stop counting |
 | v6.2 | 2026-10-30 | `v6.2/readable-replies` | [#107](https://github.com/PratimeshTiwari/Agent-CLI/pull/107) | v6.2: list text readable again (#103); /update answers in one line |
 | v6.1 | 2026-10-30 | `v6.1/apply-or-revert-settings` | [#106](https://github.com/PratimeshTiwari/Agent-CLI/pull/106) | v6.1: settings wait for Apply; Revert says nothing; clearer theme names |
 | v6.0 | 2026-10-30 | `v6.0/settings-and-update-fixes` | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105) | v6.0: /update pull restores the lockfile (#102); short settings hints; /theme preview box; Put back says only what moved |
