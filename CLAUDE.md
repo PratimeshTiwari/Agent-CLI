@@ -1556,6 +1556,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   Ink has read it before the chord runs. **A component that reads its props inside an input
   handler is a stale closure waiting for a slow frame.**
 
+- **A word a command does not take stops it (v6.24, `COMMAND_OPTIONS` / `invalidOption` in
+  `core/slash-commands.js`).** `/update ayz` ran the update check, and twelve commands answered a
+  wrong word as if it were absent — `/subagents zzz` printed the status, which reads as a
+  confirmation. Checked before dispatch (and before a destructive confirm), it names the word and
+  lists every form with what it does. Free-text commands are absent from the table. A live action
+  row is spaced like a committed one when `spaceLive` says the budget holds it, so the newest read
+  no longer sits tight and then jumps. Pty: 0 clears at 13, 24 and 30 rows.
 - **A setting reply is one line (v5.25, `changed()` in `core/slash-commands.js`).** `⚙ <setting>
   **from** → **to**`, or `already **x**`, plus at most one `·` clause the status bar does not
   already say — owner's words: "subagent on -> off or already off/on". No emoji and no paragraph:
