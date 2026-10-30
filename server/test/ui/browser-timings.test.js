@@ -19,3 +19,12 @@ test('/logs speed shows typing by path once the tab reports it', (t) => {
   assert.match(out, /inserted · hidden\s+n=1\s+35\.0s/);
   assert.match(out, /per 1k chars/);
 });
+
+test('/logs speed shows reply time by context fill once traces carry it (v7.3)', (t) => {
+  const ws = mkdtempSync(join(tmpdir(), 'timings-fill-'));
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  logTrace(ws, { stages: { first_token: 2000 } });
+  assert.doesNotMatch(browserTimings(ws), /By context fill/, 'control: no fill recorded yet');
+  logTrace(ws, { stages: { first_token: 2000, complete: 1500 }, contextTokens: 80000, contextLimit: 96000 });
+  assert.match(browserTimings(ws), /\*\*By context fill\*\*[\s\S]*over 80%\s+n=1\s+first token\s+2\.0s/);
+});

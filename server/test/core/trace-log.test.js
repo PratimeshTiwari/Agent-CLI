@@ -253,3 +253,22 @@ test('the tab reports the typing path and marks generation from the observer', (
   assert.match(src, /new MutationObserver\(\(mutations\) => \{[\s\S]{0,700}!turnTrace\.stages\.generating_start && stopButtonVisible\(\)/);
   assert.match(src, /isGenerating && !sawGenerating && !turnTrace\?\.stages\?\.generating_start\) traceMark\('generating_start'\)/);
 });
+
+// v7.3: the budgets are guesses; each trace says how full the thread was.
+test('a trace keeps the context fill, and the summary bands reply time by it', () => {
+  const ws = mkdtempSync(join(tmpdir(), 'trace-fill-'));
+  logTrace(ws, { stages: { first_token: 2000, complete: 2000 }, contextTokens: 5000, contextLimit: 96000 });
+  logTrace(ws, { stages: { first_token: 9000, complete: 4000 }, contextTokens: 90000, contextLimit: 96000 });
+  logTrace(ws, { stages: { first_token: 3000 }, contextTokens: 30000, contextLimit: 48000 });
+  logTrace(ws, { stages: { complete: 1 }, contextTokens: 0, contextLimit: 0 });
+  const rows = readTraces(ws);
+  assert.deepEqual([rows[1].contextTokens, rows[1].contextLimit], [90000, 96000]);
+  assert.equal('contextTokens' in rows[3], false, 'an empty fill is not written');
+  const fill = Object.fromEntries(summariseTraces(ws).fill.map((b) => [b.band, b]));
+  assert.equal(fill['under 25%'].firstToken, 2000);
+  assert.equal(fill['50–80%'].n, 1, '30k of 48k is 62%: banded by its own rung');
+  assert.equal(fill['50–80%'].complete, null);
+  assert.equal(fill['over 80%'].firstToken, 9000);
+  assert.equal(fill['25–50%'], undefined, 'an empty band is not shown');
+  rmSync(ws, { recursive: true, force: true });
+});

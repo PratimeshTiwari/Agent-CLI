@@ -998,6 +998,11 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
   `mergeLoopHistory` positions are absolute, or the kept turns are drawn twice. The turn commits
   while compaction runs (`turnInFlight` excludes `isCompacting`): holding a long final reply live
   under the progress row was 8 full clears and 3.1 MB for one compaction; now 0.
+- **The budgets are tested by the log, not argued (v7.3).** `contextFill` (tokens and the rung's
+  budget) rides on every trace and on every `provider_error`, `tool_amnesia` and `compaction` row;
+  `/logs speed` shows first token and reply time by fill band (under 25%, 25–50%, 50–80%, over
+  80%). Before this, none of those rows said how full the thread was, so 24k / 48k / 96k could
+  not be checked. Change a budget only when a band says to.
 - A three-stage progress row (`Compacting ▰▰▱ opening a fresh chat…`, esc cancels with nothing
   changed); the status bar says `N% to auto-compact` within 20 points; every compaction writes a
   `compaction` notice with which path ran.

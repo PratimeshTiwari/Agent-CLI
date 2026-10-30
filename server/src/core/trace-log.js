@@ -104,6 +104,9 @@ export function logTrace(workspace, trace) {
       ...(['pasted', 'pasted_late', 'inserted'].includes(trace.typed) ? { typed: trace.typed } : {}),
       ...(Number.isFinite(Number(trace.lines)) ? { lines: Math.round(Number(trace.lines)) } : {}),
       ...(typeof trace.hidden === 'boolean' ? { hidden: trace.hidden } : {}),
+      // How full the thread was (v7.3): the budgets are guesses until this says otherwise.
+      ...(trace.contextTokens > 0 && trace.contextLimit > 0
+        ? { contextTokens: Math.round(trace.contextTokens), contextLimit: Math.round(trace.contextLimit) } : {}),
       stages,
     });
     const file = tracePath(workspace);
@@ -241,7 +244,22 @@ export function summariseTraces(workspace, { limit = 200 } = {}) {
     }))
     .sort((a, b) => b.n - a.n);
 
-  return { samples: traces.length, stages, efforts, versions, typing };
+  /*
+   * Reply time by how full the thread was (v7.3). If replies slow down, or
+   * first tokens stretch, well before the budget, the budget is too high; if
+   * nothing moves until past it, too low. Bands of the rung's own budget, so
+   * rungs with different budgets are comparable.
+   */
+  const FILL_BANDS = [[0, 0.25, 'under 25%'], [0.25, 0.5, '25–50%'], [0.5, 0.8, '50–80%'], [0.8, Infinity, 'over 80%']];
+  const fill = FILL_BANDS.map(([lo, hi, band]) => {
+    const rows = traces.filter((t) => t.contextLimit > 0 && t.contextTokens / t.contextLimit >= lo
+      && t.contextTokens / t.contextLimit < hi);
+    const first = rows.map((t) => t.stages?.first_token).filter(Number.isFinite);
+    const done = rows.map((t) => t.stages?.complete).filter(Number.isFinite);
+    return { band, n: rows.length, firstToken: percentile(first, 50), complete: percentile(done, 50) };
+  }).filter((b) => b.n > 0);
+
+  return { samples: traces.length, stages, efforts, versions, typing, fill };
 }
 
 /** `2.1s`, `340ms` — the unit people would say out loud. */
