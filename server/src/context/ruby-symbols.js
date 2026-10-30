@@ -26,35 +26,100 @@
 /** Files read as Ruby. */
 export const RUBY = new Set(['.rb', '.rake']);
 
+/** A character that can start a literal or a comment; a line with none is code as it stands. */
+const PLAIN_STOP = /["'`\/%?#$]/;
+/** How far an unclosed literal may run on; past it, the start was misread. */
+const CARRY_MAX = 40;
+const PAIRS = { '(': ')', '[': ']', '{': '}', '<': '>' };
+/** `%w[]`, `%i[]`, `%q()` and `%s()` have no `#{}`; the others do. */
+const PERCENT_PLAIN = new Set(['q', 'w', 'i', 's']);
+// After one of these a `/` or `%` starts a literal rather than dividing.
+const VALUE_BEFORE = /(?:^|[(,=!~|&{[;:?+\-*<>^%]|\b(?:if|unless|elsif|when|while|until|and|or|not|return|then|do|case|in|puts|p|yield))\s*$/;
+
+/** A string, regex or `%` literal being read; `close` null means it never closes (a heredoc body). */
+const literal = (close, interp, open = null) => ({ close, interp, open, nest: 0 });
+
 /**
- * One line with its comment removed and string contents blanked to spaces, so
- * columns still line up with the source. `#{…}` inside double quotes is code
- * and kept. A string that spans lines is read per line — a known blind spot.
+ * One line with its comment removed and literal contents blanked to spaces,
+ * so columns still line up with the source. `#{…}` is code wherever it may
+ * appear (double quotes, backticks, regexes, `%Q` and friends, heredocs), and
+ * a string inside it is a string again. A literal still open at the end of
+ * the line carries into the next (`carry`), for at most `CARRY_MAX` lines.
+ *
+ * Measured against Ripper's lexer (v6.19): regex contents, `%w[]` words and
+ * strings nested in `#{}` used to count as code, and a `#` in a regex
+ * (`/^\s*#{START}/`) ended the line as a comment.
+ *
+ * @param {string} line
+ * @param {object} [start]  a literal the line begins inside, for heredoc bodies
  */
-function codeOf(line) {
+function codeOf(line, start = null, carry = null) {
+  const stack = carry || (start ? [start] : []); // literals, and the `#{` depth inside each
+  if (!stack.length && !PLAIN_STOP.test(line)) return line; // most lines: nothing to blank
   let out = '';
-  let quote = null;
-  let depth = 0; // inside `#{ }` of a double-quoted string
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (depth > 0) {
-      if (ch === '{') depth++;
-      else if (ch === '}') depth--;
-      out += ch;
-      continue;
-    }
-    if (quote) {
+    const top = stack[stack.length - 1];
+    if (top && !top.code) {
       if (ch === '\\') { out += i + 1 < line.length ? '  ' : ' '; i++; continue; }
-      if (ch === quote) { quote = null; out += ch; continue; }
-      if (quote === '"' && ch === '#' && line[i + 1] === '{') { depth = 1; out += '#{'; i++; continue; }
+      if (top.interp && ch === '#' && line[i + 1] === '{') {
+        stack.push({ code: true, braces: 0 });
+        out += '#{';
+        i++;
+        continue;
+      }
+      if (top.open && ch === top.open) { top.nest++; out += ' '; continue; }
+      if (ch === top.close) {
+        if (top.nest > 0) { top.nest--; out += ' '; continue; }
+        stack.pop();
+        out += ch;
+        continue;
+      }
       out += ' ';
       continue;
     }
-    if (ch === '"' || ch === "'") { quote = ch; out += ch; continue; }
+    // Code: at the top level, or inside a `#{ }`.
+    if (top?.code) {
+      if (ch === '{') top.braces++;
+      else if (ch === '}' && top.braces-- === 0) { stack.pop(); out += ch; continue; }
+    }
     if (ch === '#') break;
+    if (ch === '$' && i + 1 < line.length && /[^\w\s]/.test(line[i + 1])) { out += line.slice(i, i + 2); i++; continue; } // `$'`, `$"`, `$/`
+    // `?a`, `?/`, `?\n`: a one-character string. `?/` read as a regex blanked
+    // the next forty lines of fileutils.rb.
+    const char = ch === '?' && /(?:^|[\s(,=[])$/.test(out.slice(-1)) && /^\?(?:\\.|[^\s\\])(?!\w)/.exec(line.slice(i));
+    if (char) {
+      out += `?${' '.repeat(char[0].length - 1)}`;
+      i += char[0].length - 1;
+      continue;
+    }
+    if (ch === '"' || ch === '`') { stack.push(literal(ch, true)); out += ch; continue; }
+    if (ch === "'") { stack.push(literal(ch, false)); out += ch; continue; }
+    if (ch === '/' && startsLiteral(out.slice(-24), line[i + 1])) { stack.push(literal('/', true)); out += ch; continue; }
+    if (ch === '%') {
+      const m = /^%([qQwWiIrsx]?)([^\w\s])/.exec(line.slice(i));
+      if (m && (m[1] ? !/\w$/.test(out.slice(-1)) || /\s$/.test(out.slice(-1)) : VALUE_BEFORE.test(out.slice(-24)))) {
+        const delim = m[2];
+        stack.push(literal(PAIRS[delim] || delim, !PERCENT_PLAIN.has(m[1]), PAIRS[delim] ? delim : null));
+        out += m[0];
+        i += m[0].length - 1;
+        continue;
+      }
+    }
     out += ch;
   }
+  if (carry) carry.splice(0, carry.length, ...stack);
   return out;
+}
+
+/**
+ * Whether a `/` starts a regex, given the code before it. After an operator
+ * or keyword it must; after a value it divides; after a name and a space with
+ * no space following (`split /,/`) Ruby reads a regex argument, and so do we.
+ */
+function startsLiteral(before, next) {
+  if (VALUE_BEFORE.test(before)) return true;
+  return /[a-z_]\w*[?!]?\s+$/.test(before) && next !== undefined && !/[\s=]/.test(next);
 }
 
 /**
@@ -68,6 +133,8 @@ export function rubyCodeLines(source) {
   const out = new Array(lines.length);
   let inDoc = false;
   const heredocs = []; // terminators still awaited, in order
+  const open = []; // a literal still open at the end of a line
+  let openFor = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (inDoc) {
@@ -76,22 +143,37 @@ export function rubyCodeLines(source) {
       continue;
     }
     if (heredocs.length) {
-      out[i] = '';
-      if (line.trim() === heredocs[0]) heredocs.shift();
+      const doc = heredocs[0];
+      if (line.trim() === doc.end) {
+        out[i] = '';
+        heredocs.shift();
+      } else {
+        // A body is a string: blank, but for its `#{}` unless the tag was quoted ('EOS').
+        out[i] = doc.interp ? codeOf(line, literal(null, true)) : '';
+      }
       continue;
+    }
+    if (line === '__END__') {
+      out.fill('', i); // what follows is data, read by DATA, never run
+      break;
     }
     if (/^=begin\b/.test(line)) {
       out[i] = '';
       inDoc = true;
       continue;
     }
-    const code = codeOf(line);
+    const code = codeOf(line, null, open);
     out[i] = code;
+    // An open literal runs on, but never far: a misread start must not blank a file.
+    if (open.length && ++openFor > CARRY_MAX) { open.length = 0; openFor = 0; }
+    if (!open.length) openFor = 0;
     // `<<~SQL`, `<<-EOS`, `<<EOS`, `<<~'EOS'`. Not `x << y`: a heredoc has no space.
     // Read from the raw line up to where its comment starts: `# puts <<-EOF` in
     // a comment is not a heredoc, and taking it for one blanked the rest of
     // getoptlong.rb (measured against Ripper).
-    for (const m of line.slice(0, code.length).matchAll(/<<[~-]?(['"`]?)([A-Z_][A-Za-z0-9_]*)\1/g)) heredocs.push(m[2]);
+    for (const m of line.slice(0, code.length).matchAll(/<<[~-]?(['"`]?)([A-Z_][A-Za-z0-9_]*)\1/g)) {
+      heredocs.push({ end: m[2], interp: m[1] !== "'" });
+    }
   }
   return out;
 }
@@ -147,6 +229,10 @@ export function rubyDefinitionsIn(source, code = rubyCodeLines(source)) {
   return out;
 }
 
+const KEYWORDS = new Set(('BEGIN END alias and begin break case class def defined do else elsif end ensure '
+  + 'false for if in module next nil not or redo rescue retry return self super then true undef unless until '
+  + 'when while yield __FILE__ __LINE__ __ENCODING__').split(' '));
+
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -161,7 +247,10 @@ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * @returns {Array<{line: number, column: number}>}
  */
 export function rubyReferencesIn(code, name) {
-  const re = new RegExp(`(?<![\\w@$])${escape(name)}(?![\\w?!])(?!:(?!:))`, 'g');
+  // A method named like a keyword (`next`, `class`, `alias`) is only that
+  // method after `.`, as a `:symbol` or behind `def`; bare, it is the keyword.
+  const only = KEYWORDS.has(name) ? '(?<=(?:[.:]|\\bdef\\s+))' : '';
+  const re = new RegExp(`${only}(?<![\\w@$])${escape(name)}(?![\\w?!])(?!:(?!:))`, 'g');
   const out = [];
   code.forEach((text, i) => {
     if (!text.includes(name)) return;

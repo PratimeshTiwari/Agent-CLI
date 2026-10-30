@@ -31,6 +31,11 @@ const SENSITIVE_FILE_PATTERNS = [
 /** Ordering, so the worst segment of a command line can win. */
 const RANK = { safe: 0, risky: 1, critical: 2 };
 
+/** Rails and Rack aimed at production, by environment variable or flag. */
+const PRODUCTION_TARGET = /\b(?:RAILS_ENV|RACK_ENV)=["']?production\b|\bDISABLE_DATABASE_ENVIRONMENT_CHECK=1\b|\s(?:-e|--environment)[= ]["']?production\b/;
+/** Rails tasks that throw a database's contents away. */
+const DESTRUCTIVE_DB_TASK = /\bdb:(?:drop|reset|purge|schema:load|structure:load|truncate_all|seed:replant|migrate:reset)\b(?::all)?/;
+
 /**
  * Binaries that cannot change anything on their own.
  *
@@ -231,6 +236,27 @@ export class RiskClassifier {
     // Privilege escalation is never auto-approved, wherever it runs.
     if (PRIVILEGE_BINARIES.has(binary)) {
       return tag('critical', `Runs as another user (\`${binary}\`)`);
+    }
+
+    /*
+     * Rails against production is never the agent's to run (v6.19). The
+     * agent's commands are for this checkout; a production database is
+     * someone else's, and `critical` is blocked outright, so the person runs
+     * it themselves if they mean it. Only for a command that runs something:
+     * `grep -rn RAILS_ENV=production config` is a search, not a deploy.
+     */
+    const runs = !READ_ONLY_BINARIES.has(binary) && binary !== 'git';
+    const prod = runs && PRODUCTION_TARGET.exec(segment);
+    if (prod) return tag('critical', `Targets production (\`${prod[0].trim()}\`) — run it yourself if you mean it`);
+
+    /*
+     * And a task that destroys the database says so (v6.19). It was already
+     * asked about in every mode, under "Mutating shell command" — the same
+     * words as `rspec`, which is how a prompt gets approved without reading.
+     */
+    const db = runs && DESTRUCTIVE_DB_TASK.exec(segment);
+    if (db && /\b(?:rails|rake)\b/.test(segment)) {
+      return tag('risky', `Drops or rewrites the database (\`${db[0]}\`)`);
     }
 
     // A read-only binary writing through a redirection is not read-only.

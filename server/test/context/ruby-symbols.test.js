@@ -194,3 +194,54 @@ describe('the index and the tools', () => {
     }
   });
 });
+
+/*
+ * v6.19: the five causes of noise found against Ripper's lexer (precision
+ * 91.8% → 99.5%, recall 99.1% → 99.96%, over every name defined in macOS's Ruby
+ * standard library). Each case is one cause, with its control.
+ */
+describe('Ruby references: literals are not code', () => {
+  const refs = (src, name) => rubyReferencesIn(rubyCodeLines(src), name).map((r) => r.line);
+
+  test('a regex is a literal, but its #{} is code — and a # in it is not a comment', () => {
+    assert.deepEqual(refs('x =~ /HTTP\\/(\\d+) token/', 'token'), []);
+    assert.deepEqual(refs('s.split /token/', 'token'), [], 'a regex argument');
+    assert.deepEqual(refs('m =~ /^\\s*#{START}/ ? token : 2', 'token'), [1]);
+    assert.deepEqual(refs('m =~ /^\\s*#{START}/', 'START'), [1]);
+    assert.deepEqual(refs('x = %r{a/token}i', 'token'), []);
+    // control: division is not a regex
+    assert.deepEqual(refs('y = total / token / 2', 'token'), [1]);
+    assert.deepEqual(refs('dir.chomp(?/); token', 'token'), [1], '?/ is a character, not a regex');
+  });
+
+  test('a string inside #{} is a string', () => {
+    assert.deepEqual(refs('"#{x || \'token\'} rest"', 'token'), []);
+    assert.deepEqual(refs('"#{token || \'other\'}"', 'token'), [1]);
+  });
+
+  test('%w and %i words are strings, % after a value divides', () => {
+    assert.deepEqual(refs('%w[token other] + %i(token)', 'token'), []);
+    assert.deepEqual(refs('"%s" % [token]', 'token'), [1]);
+  });
+
+  test('a heredoc body keeps its #{}, unless the tag is quoted', () => {
+    assert.deepEqual(refs('s = <<~SQL\n  select token from #{token}\nSQL\n', 'token'), [2]);
+    assert.deepEqual(refs("s = <<~'SQL'\n  select #{token}\nSQL\n", 'token'), []);
+  });
+
+  test('a method named like a keyword is that method only after . : or def', () => {
+    const src = 'def next\nend\nitems.next\nsend(:next)\nnext if done';
+    assert.deepEqual(refs(src, 'next'), [1, 3, 4]);
+    assert.deepEqual(refs('x.class; class Foo', 'class'), [1]);
+  });
+
+  test('a literal may span lines, but not far', () => {
+    assert.deepEqual(refs('x = "first\ntoken\nlast"\ntoken', 'token'), [4]);
+    const runaway = ['x = "never closed', ...Array(60).fill('token')].join('\n');
+    assert.ok(refs(runaway, 'token').length >= 15, 'a misread start blanks at most 40 lines');
+  });
+
+  test('__END__ ends the code', () => {
+    assert.deepEqual(refs('token\n__END__\ntoken data', 'token'), [1]);
+  });
+});
