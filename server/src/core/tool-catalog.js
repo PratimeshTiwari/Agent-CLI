@@ -119,7 +119,7 @@ returns the definition rather than forty call sites, and never a match inside a 
 string: reach for this instead of grep_search whenever you know the exact name.
 
 ${flags.symbolLanguages
-    ? 'JavaScript and JSX are parsed; Ruby is matched by line patterns, and the result says what that misses.'
+    ? 'JavaScript and JSX are parsed; Ruby, TypeScript, Python, Go, Java, Kotlin, C#, Swift, Scala, Rust, PHP, C/C++, Elixir, Lua and shell are matched by line patterns, and the result says what that misses.'
     : 'JavaScript and JSX only.'} "No definition found" plus a note about skipped files means *not found
 here*, not "does not exist" — follow up with grep_search.
 Parameters:

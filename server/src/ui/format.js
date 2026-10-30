@@ -549,6 +549,17 @@ export function summarizeResult(toolName, result) {
             : `${r.matched.toLocaleString()} of ${plural(r.records.toLocaleString(), 'record')}`;
         }
         break;
+      case 'find_symbol':
+        // { found, definitions } — v6.21: it drew its raw JSON until then.
+        if (typeof r?.found === 'number') return plural(r.found, 'definition');
+        break;
+      case 'find_references':
+        // { found, files: [{ file, count, lines }] }
+        if (typeof r?.found === 'number') {
+          const files = Array.isArray(r.files) ? r.files.length : 0;
+          return `${plural(r.found, 'reference')}${files ? ` in ${plural(files, 'file')}` : ''}`;
+        }
+        break;
       case 'grep_search':
       case 'search_files': {
         // { pattern, matchCount, matches } | { query, count, files }

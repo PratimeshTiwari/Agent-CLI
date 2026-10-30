@@ -1018,6 +1018,30 @@ code. Definitions lost by the carry were all inside strings (Ripper's `def` coun
 session scratchpad: `ruby lex.rb $(cat files.txt) > lex.json`, then `ALL=1 node compare.mjs lex.json`
 from `server/`.
 
+**Every other language comes from one table since v6.21 (`context/pattern-symbols.js`).** Asked
+"can't we make it generic?": a row per language (TypeScript, Python, Go, Java, Kotlin, C#, Swift,
+Scala, Rust, PHP, C/C++, Elixir, Lua, shell) gives comments, string forms (raw, triple, interpolated,
+char) and definition patterns. One scanner blanks literals and one matcher finds names. C-like
+rows also pass `definitionShape`, which follows the parameters across lines, rejects a call inside
+an expression, and needs a body, `throws`, `:` or `->` after the `)`. Measured against each
+language's own parser, as definitions / references, recall/precision:
+
+| oracle | files | definitions | references |
+| --- | --- | --- | --- |
+| Python `ast`, stdlib | 626 | 99.80 / 99.99 | 100 / 100 |
+| `go/ast`, every 3rd GOROOT file | 1,501 | 99.96 / 100 | 100 / 100 |
+| TypeScript compiler, `.d.ts` | 108 | 99.11 / 99.98 | 99.98 / 100 |
+| `javac` + its scanner, JDK 23 `java.util/io/net/sql/http` | 410 | 99.31 / 99.97 | 100 / 100 |
+
+Java's oracle found what fixtures had not: `void` was in the "expression keyword" list (it is an
+operator in TypeScript only), so every `void` method in Java, C# and C++ was rejected; and the type
+class accepted spaces, so indentation counted as a return type. **Kotlin, C#, Swift, Scala, Rust, PHP,
+C/C++, Elixir, Lua and shell have fixtures, not an oracle.** The index skips files over 2 MB as
+generated, plus `vendor`, `.venv`, `site-packages`, `target`, `Pods`, `.gradle`, `.next` and
+`*.d.ts`. 821 JDK files index in 0.9 s cold, 14 ms warm. Answers carry `patternNote` and mark
+such files `byText`. v2's `find_symbol` names the languages; v1 keeps "JavaScript and JSX only".
+The oracles are in the session scratchpad's `gen/` folder (`compare.mjs <oracle.json>`).
+
 **A partial read of Markdown ends with the headings it did not show (v6.14, `unreadOutline` in
 `mcp/tools/read-file.js`).** Asked about this agent's architecture, the model read README lines
 1–100 and 90–150 and answered from them; the pointer to this file sat under `## More` at line 258,

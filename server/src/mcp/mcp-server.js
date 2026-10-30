@@ -54,7 +54,9 @@ const TOOL_DEFINITIONS = [
     description: 'Find where a symbol is DEFINED — a class, function, method, or const. '
       + 'Parses the code rather than matching text, so it returns the definition and not the forty call sites, '
       + 'and never the name inside a comment or a string. Use it instead of grep_search whenever you know the '
-      + 'exact name and want the definition. JavaScript and JSX only; it says so when a file could not be read.',
+      + 'exact name and want the definition. JavaScript and JSX are parsed; Ruby, TypeScript, Python, Go, Java, '
+      + 'Kotlin, C#, Swift, Scala, Rust, PHP, C/C++, Elixir, Lua and shell are matched by line patterns. '
+      + 'It says so when a file could not be read.',
     parameters: {
       name: { type: 'string', description: 'Exact symbol name, case-sensitive', required: true },
     },

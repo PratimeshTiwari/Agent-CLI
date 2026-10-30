@@ -246,11 +246,18 @@ describe('SymbolIndex over a tree', () => {
   test('what cannot be read is named, not silently dropped', () => {
     // The failure that matters is the model searching, finding nothing, and
     // concluding the symbol does not exist.
+    // Since v6.21 TypeScript is read from the language table; what is still
+    // skipped is a generated file too large to be code anyone asks about.
     writeFileSync(join(ws, 'src', 'c.ts'), 'export const typed: number = 1;\n');
+    writeFileSync(join(ws, 'src', 'tables.py'), 'X = 1\n'.repeat(400_000));
     const idx = new SymbolIndex(ws).refresh();
-    const skip = idx.skipped.find((s) => s.file.endsWith('c.ts'));
-    assert.ok(skip, 'a TypeScript file vanished without a word');
-    assert.match(skip.reason, /\.ts/);
+    assert.ok(!idx.skipped.some((s) => s.file.endsWith('c.ts')), 'TypeScript is indexed now');
+    assert.ok(idx.find('typed').some((d) => d.file.endsWith('c.ts')));
+    const skip = idx.skipped.find((s) => s.file.endsWith('tables.py'));
+    assert.ok(skip, 'a generated file vanished without a word');
+    assert.match(skip.reason, /2 MB/);
+    rmSync(join(ws, 'src', 'c.ts'));
+    rmSync(join(ws, 'src', 'tables.py'));
   });
 
   test('node_modules is not indexed, at any depth', () => {

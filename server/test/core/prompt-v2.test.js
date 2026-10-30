@@ -58,8 +58,8 @@ test('v6.7: on the cheap rungs a greeting gets no task.md and no plan', () => {
   assert.match(v2['high/plan/sub/turn0'], /A greeting, or a question you can answer without reading anything, needs none of this/);
 });
 
-test('v6.8: find_symbol names Ruby on v2, and v1 keeps its sentence', () => {
-  assert.match(v2['high/plan/sub/turn0'], /JavaScript and JSX are parsed; Ruby is matched by line patterns/);
+test('v6.8/v6.21: find_symbol names its languages on v2, and v1 keeps its sentence', () => {
+  assert.match(v2['high/plan/sub/turn0'], /JavaScript and JSX are parsed; Ruby, TypeScript, Python, Go, .* are matched by line patterns/);
   assert.doesNotMatch(v2['high/plan/sub/turn0'], /JavaScript and JSX only\./);
   assert.match(v1['high/plan/sub/turn0'], /JavaScript and JSX only\./, 'control: v1 frozen');
 });

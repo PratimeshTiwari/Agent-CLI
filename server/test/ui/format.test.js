@@ -35,6 +35,10 @@ describe('summarizeResult', () => {
 
   it('counts matches across the search tools', () => {
     assert.strictEqual(summarizeResult('grep_search', { matchCount: 3 }), '3 matches');
+    // v6.21: the symbol tools drew their raw JSON before.
+    assert.strictEqual(summarizeResult('find_symbol', { found: 1, definitions: [{}] }), '1 definition');
+    assert.strictEqual(summarizeResult('find_references', { found: 3, files: [{}, {}] }), '3 references in 2 files');
+    assert.strictEqual(summarizeResult('find_references', { found: 0, files: [] }), '0 references');
     assert.strictEqual(summarizeResult('search_files', { files: ['a'] }), '1 match');
   });
 

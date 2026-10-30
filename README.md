@@ -66,6 +66,11 @@ Markdown (headings, lists, tables, a line per page or slide), so the model reads
 the way it reads code. `.doc`, `.rtf` and `.odt` work on macOS. Other binary files are refused
 with a reason rather than read as garbage.
 
+**It finds definitions and callers in most languages**: `find_symbol` and `find_references` parse
+JavaScript, and read Ruby, TypeScript, Python, Go, Java, Kotlin, C#, Swift, Scala, Rust, PHP,
+C/C++, Elixir, Lua and shell by pattern. Against each language's own parser, they find over 99% of
+definitions and references, and skip names inside comments and strings.
+
 **It debugs from logs** — hand it a Grafana, Loki or Datadog export (JSON, NDJSON, CSV, plain text,
 gzipped or not) and `query_log` reads the whole file however large: 200 MB in about four seconds.
 It starts where a person would — the time range, the levels, when the errors started and the
