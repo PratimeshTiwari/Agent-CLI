@@ -36,9 +36,10 @@ describe('the extension version', () => {
     assert.equal(stated, manifest);
   });
 
-  test('the README has a section for it', () => {
+  // The history moved out of the README into CHANGELOG.md (v7.0).
+  test('the CHANGELOG has a section for it', () => {
     assert.match(
-      read('README.md'),
+      read('CHANGELOG.md'),
       new RegExp(`^### ${manifest.replace(/\./g, '\\.')}\\b`, 'm'),
       `no "### ${manifest}" entry in the version history`,
     );

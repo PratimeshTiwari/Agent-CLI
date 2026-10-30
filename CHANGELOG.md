@@ -547,7 +547,7 @@ message dispatch went from 53% to 70% covered (#47).
 #### Extension versions in this range
 
 1.35.0 → 1.40.0, three of which are listed above as bugs they fixed. The
-per-change record is in [`extension/README.md`](extension/README.md).
+per-change record is in [`extension/CHANGELOG.md`](extension/CHANGELOG.md).
 
 ---
 
@@ -636,7 +636,7 @@ written.
 #### Extension versions in this range
 
 1.26.0 → 1.34.0. The per-change record is in
-[`extension/README.md`](extension/README.md), including the four releases that
+[`extension/CHANGELOG.md`](extension/CHANGELOG.md), including the four releases that
 fixed the wrong thing and the measurements that disproved them. They are kept
 deliberately: this repo keeps its mistakes, because the reasoning that produced
 them is the reasoning that would produce them again.

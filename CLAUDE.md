@@ -1236,6 +1236,9 @@ them, and do not squash their history away.
   for the reply path, then an editor chat panel in the VS Code companion. **v6 opens with
   `v6.0/settings-and-update-fixes`** (owner, 2026-10-30): the open GitHub issues and the
   small UI asks first, then `.agent/artifacts/plans/2026-10-28-plan-by-effort.md` in order.
+  **v7 opens with `v7.0/docs-refresh-and-screenshots`** (2026-10-30): v6 closed at v6.25 (#130),
+  and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
+  branch is named for what it does, never for the file it touches.
   `/update` runs git in `server/`, and status names paths from the repo root — any path
   handed back to git there needs `:(top)` (#102).
 - Open a PR into `main`. That is the only way work reaches `main`.
