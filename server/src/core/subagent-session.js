@@ -45,7 +45,7 @@ import { pickModelFor, browserModelPin } from './model-match.js';
  * is a `return` — `return_result`, the prose fallback, the empty failure — and
  * a session that is never ended leaves a tab open for the life of the browser.
  */
-export async function runSubAgentSession(loop, role, prompt, targetModel, effort = null) {
+export async function runSubAgentSession(loop, role, prompt, targetModel, effort = null, { timeoutMs = null } = {}) {
   const session = randomUUID();
 
   /*
@@ -68,7 +68,10 @@ export async function runSubAgentSession(loop, role, prompt, targetModel, effort
   const model = pick?.model?.label || null;
 
   try {
-    return await runSession(loop, role, prompt, targetModel, session, model);
+    // A budget for the whole session, not per turn (v6.16): a delegated read
+    // gives up after 90s, and each turn gets what is left of it.
+    const deadline = timeoutMs ? Date.now() + timeoutMs : null;
+    return await runSession(loop, role, prompt, targetModel, session, model, deadline);
   } finally {
     // Best effort, like every other teardown here: a tab that outlives its
     // task is untidy, and failing the task over the tidy-up would be worse.
@@ -76,7 +79,7 @@ export async function runSubAgentSession(loop, role, prompt, targetModel, effort
   }
 }
 
-async function runSession(loop, role, prompt, targetModel, session, model) {
+async function runSession(loop, role, prompt, targetModel, session, model, deadline = null) {
   const wrapper = loop.promptBuilder.buildSubagentWrapper(role);
   const baseSystem = `${wrapper}\nYou also have access to read-only tools to explore the codebase if needed.
 Workspace root path: ${loop.workspace}
@@ -110,14 +113,21 @@ RULES: Make up to 5 tool calls before calling return_result with your final answ
     return t.content;
   }).join('\n\n');
 
+  // Each turn's share of the deadline, when there is one.
+  const budget = () => (deadline ? { timeoutMs: Math.max(1000, deadline - Date.now()) } : {});
+  let rounds = 0;
   for (let turn = 0; turn < 6; turn++) {
+    if (deadline && Date.now() >= deadline) {
+      return { success: false, timedOut: true, rounds, error: `The ${role} subagent ran out of time.` };
+    }
+    rounds++;
     // Only what the tab has not seen. On the first pass, or after a lost
     // session, that is everything; after that it is the tool results alone.
     const continuing = sent > 0;
     let response = await loop._executeSubagent(
       targetModel,
       serialise(continuing ? localHistory.slice(sent) : localHistory),
-      { session, continuing, model },
+      { session, continuing, model, ...budget() },
     );
 
     /*
@@ -132,11 +142,13 @@ RULES: Make up to 5 tool calls before calling return_result with your final answ
     if (continuing && response?.sessionLost) {
       sent = 0;
       response = await loop._executeSubagent(
-        targetModel, serialise(localHistory), { session, continuing: false, model },
+        targetModel, serialise(localHistory), { session, continuing: false, model, ...budget() },
       );
     }
 
-    if (!response.success) return { success: false, error: response.error };
+    if (!response.success) {
+      return { success: false, error: response.error, rounds, ...(response.timedOut ? { timedOut: true } : {}) };
+    }
     // Everything to here is in the tab's thread now. What follows — the reply
     // and the tool results — is what the next pass has to send.
     sent = localHistory.length;
@@ -181,7 +193,7 @@ RULES: Make up to 5 tool calls before calling return_result with your final answ
     let returned = false;
     for (const call of toolCalls) {
       if (call.name === 'return_result') {
-        return { success: true, result: call.args.result };
+        return { success: true, result: call.args.result, rounds };
       }
       
       let result;
@@ -225,7 +237,7 @@ RULES: Make up to 5 tool calls before calling return_result with your final answ
       message: `${role} answered in prose instead of calling return_result`,
       detail: lastCleanContent.slice(0, 500),
     });
-    return { success: true, result: lastCleanContent, unstructured: true };
+    return { success: true, result: lastCleanContent, unstructured: true, rounds };
   }
 
   return { success: false, error: `The ${role} subagent returned no output at all.` };

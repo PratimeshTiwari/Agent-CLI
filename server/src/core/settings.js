@@ -142,6 +142,17 @@ export function describeSettings(agentLoop) {
     },
     {
       group: 'Settings',
+      label: 'Large files',
+      // v6.16: a file over 1,200 lines or 80 KB, read without a range.
+      value: mc.largeFiles === 'direct' ? 'direct' : 'subagent',
+      hint: mc.largeFiles === 'direct' ? 'paged into this chat'
+        : subagents ? 'a subagent sends a digest' : 'direct while subagents are off',
+      run: mc.largeFiles === 'direct' ? '/subagents large-files subagent' : '/subagents large-files direct',
+      restore: (value) => `/subagents large-files ${value}`,
+      control: { kind: 'switch', options: ['subagent', 'direct'] },
+    },
+    {
+      group: 'Settings',
       label: 'Prompt',
       // v5.32: which prompt version is sent; `/prompt` shows how they compare.
       value: agentLoop?.promptVersion || DEFAULT_PROMPT_VERSION,

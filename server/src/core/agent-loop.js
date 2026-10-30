@@ -157,6 +157,7 @@ import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
 import { compactHistory, countTurns } from './compaction.js';
+import { runDelegatedRead, shouldDelegateRead } from './delegated-read.js';
 import { runSubAgentSession } from './subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
@@ -2944,7 +2945,15 @@ export class AgentLoop {
 
     for (let i = 0; i < toolCalls.length; i++) {
       const call = toolCalls[i];
-      const isParallel = call.name === 'ask_subagent';
+      // A large file read without a range goes to a subagent (v6.16,
+      // `core/delegated-read.js`), and like `ask_subagent` it runs beside the
+      // rest of the batch, each in its own tab.
+      const delegate = shouldDelegateRead(call, {
+        workspace: this.workspace,
+        subagentsEnabled: this.subagentsEnabled,
+        largeFiles: this.modelConfig?.largeFiles,
+      });
+      const isParallel = call.name === 'ask_subagent' || Boolean(delegate);
 
       // Counted where they are dispatched, not where they succeed: "I ran the
       // tests and they failed" is a true claim, and a tally that only counted
@@ -3084,6 +3093,11 @@ export class AgentLoop {
         // The three the loop answers itself — `core/loop-tools.js`. Which three
         // is the catalog's `dispatch: 'loop'`, not a list repeated here.
         result = await dispatchLoopTool(this, call);
+      } else if (delegate) {
+        result = await runDelegatedRead(this, call, delegate, () => this.mcpServer.executeTool(call.name, call.args, {
+          editor: this.editor,
+          taskManager: this.taskManager,
+        }));
       } else {
         result = await this.mcpServer.executeTool(call.name, call.args, {
           editor: this.editor,
@@ -3588,6 +3602,7 @@ export class AgentLoop {
           this._releaseExtension(subLane(requestId));
           resolve({
             success: false,
+            timedOut: true,
             error: `${targetModel} did not answer within ${Math.round(timeoutMs / 1000)}s.`,
           });
         }
@@ -3596,8 +3611,8 @@ export class AgentLoop {
   }
 
   /** @see core/subagent-session.js — one subagent turn, in its own tab. */
-  async _runSubAgentSession(role, prompt, targetModel, effort = null) {
-    return runSubAgentSession(this, role, prompt, targetModel, effort);
+  async _runSubAgentSession(role, prompt, targetModel, effort = null, options = {}) {
+    return runSubAgentSession(this, role, prompt, targetModel, effort, options);
   }
 
 

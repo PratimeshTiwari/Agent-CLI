@@ -874,6 +874,19 @@ document is built a section at a time instead of rewriting the whole file each r
 addition-only, so auto mode does not stop on every section). Edit rows read `edit_file doc.md · +3 −0`
 (v5.12 dropped the repeated file name the result first carried).
 
+**A large file is read by a subagent (v6.16, `core/delegated-read.js`, plan Phase 7).** An
+unranged `read_file` of a text file over 1,200 lines or 80 KB, with subagents on and `/settings` →
+Large files on `subagent`, goes to a `research` tab; the main chat gets a digest (outline, quoted
+passages with line numbers, how to get exact text) capped at 6k, headed "read by a subagent; this
+is its digest, not the file". A range always reads directly — it is how exact text for an edit is
+fetched. Subagents' own reads never pass through `_executeToolCalls`, so it cannot recurse.
+Documents and files over 1 MB are not delegated. The session has a **90 s** budget for all its
+turns (`runSubAgentSession(..., { timeoutMs })`), and only on a failure, timeout or empty answer
+does the main chat get page 1 headed "Read it yourself: continue with startLine=801". Each one
+writes a `delegated_read` notice (lines, ms, rounds, outcome). v2 documents `purpose`
+(`largeFileDigest`), only while delegation is on. Pty: main prompt 850 characters after a
+2,000-line read (43.7k on the fallback, which is page 1); 0 clears at 13 and 24 rows.
+
 **`read_file` reads documents (v5.29, `mcp/tools/documents.js`).** Before it, a PDF was decoded as
 UTF-8 and handed to the model as mojibake with no error. Now PDF (`unpdf`, pinned exact,
 lazy-imported), `.docx` and `.pptx` (a small zip reader over `zlib`, no dependency) come back as
