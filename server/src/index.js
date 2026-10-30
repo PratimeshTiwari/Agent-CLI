@@ -23,7 +23,7 @@ import { homedir } from 'os';
 // finding; the shim is the consumer, so it imports rather than declares.
 export { RESTART_EXIT_CODE } from './core/restart.js';
 import { RESTART_EXIT_CODE } from './core/restart.js';
-import { shouldRevert, revertChange } from './core/doctor-guard.js';
+import { shouldRevert, revertChange, readRecord } from './core/doctor-guard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mainJs = resolve(__dirname, 'main.js');
@@ -102,10 +102,12 @@ for (let restarts = 0; ; restarts++) {
   // A start that broke after `/doctor` changed a package: put it back, once,
   // and start again (`core/doctor-guard.js`).
   if (result.status !== RESTART_EXIT_CODE && shouldRevert(result.status, process.env, result.pid)) {
-    const { ok, changes, error } = revertChange({ env: process.env });
-    console.error(ok
-      ? `↶ The agent did not start after /doctor changed ${changes.join(', ')}. Put back the previous package.json and lockfile; starting again.`
-      : `✗ The agent did not start after /doctor changed ${changes.join(', ')}, and putting it back failed: ${error}`);
+    // Said before npm runs: its output is the next thing on screen, and
+    // without this line nothing says why an install started after a crash.
+    const pending = readRecord(process.env)?.changes || [];
+    console.error(`↶ The agent did not start after /doctor changed ${pending.join(', ')}. Putting back the previous package.json and lockfile…`);
+    const { ok, error } = revertChange({ env: process.env });
+    console.error(ok ? '↶ Put back; starting again.' : `✗ Putting it back failed: ${error}`);
     if (ok) continue;
   }
   if (result.status !== RESTART_EXIT_CODE) {

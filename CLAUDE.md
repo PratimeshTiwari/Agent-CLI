@@ -598,8 +598,11 @@ the range's style (`installArgs`: `^`, `~`, exact). `/doctor report` prints the 
 that breaks the next start is undone** (`core/doctor-guard.js`): manifests and lockfile are copied to
 `~/.agent/doctor-change.json` first; a start up 8 s confirms; a non-zero exit before that makes
 `index.js` restore, `npm install` and start again, once. The record holds the changing session's pid,
-because that session crashing proves nothing about the change. Not yet driven end to end: the unit
-tests fake the install.
+because that session crashing proves nothing about the change. **Driven end to end in v7.7**, in a
+scratch clone under the pty: `/doctor ink` → ink 6.8.0 (no `usePaste`) → `/restart` crashed, the bin
+put the files back, `npm install` ran, and the next start said `↶ ink 7.1.1 → 6.8.0 broke the start`,
+with the clone's tree clean and no record left. The run's one fault was order: npm's output came
+before the line saying why it was running, so that line is now printed first.
 
 **Two things at once (v5.30).** Messages typed during a turn or the warm-up queue; local commands
 run beside the turn. Two gaps closed. Overlapping slow commands lowered each other's spinner, and a
