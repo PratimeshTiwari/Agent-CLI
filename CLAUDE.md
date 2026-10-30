@@ -215,7 +215,13 @@ entry before changing the mechanism it describes.
 - **One recovery table** (`core/reply-recovery.js`): a provider error re-sends the failed prompt
   verbatim after 3s then 8s (±20%, cancelled by `abortExtensionWork`); a usage limit is never
   retried on the same model — it steps down (v5.28).
-- **Traces:** five stages per turn; `first_token` is marked when the observer first sees text.
+- **Traces:** five stages per turn; `first_token` is marked when the observer first sees text. Since
+  v7.2 (#104) each trace also says how the prompt was typed (`typed`: `pasted` / `pasted_late` /
+  `inserted`, `lines`, `hidden`) and `/logs speed` splits `type` by it; `generating_start` is
+  marked by the observer, because the check's 3 s guard and 2 s tick made it read ~4 s every time.
+  Measured first: typing is most of the gap between turns (0.6 s median, 35 s for 28k
+  characters). The ~2 s completion settle is the other part, and shortening it once truncated
+  replies, so it waits for the live page.
   Rounds per turn are on every `tool-usage.jsonl` row. Prompt length is not what a turn costs —
   round trips are.
 - **The screen:** `mergeLoopHistory` uses recorded positions (`__loopIndex`, `__echo`), never a

@@ -135,8 +135,12 @@ test('both timeout paths send a trace before reporting the failure', () => {
 });
 
 test('the Stop button’s edges are marked once each', () => {
-  assert.match(src, /if \(isGenerating && !sawGenerating\) traceMark\('generating_start'\)/,
+  // Two sites since v7.2 (the observer and the check); each marks only when
+  // the stage is not there yet, so the first sighting is never overwritten.
+  assert.match(src, /if \(isGenerating && !sawGenerating && !turnTrace\?\.stages\?\.generating_start\) traceMark\('generating_start'\)/,
     'generating_start is re-marked on every check, which overwrites the first sighting');
+  assert.match(src, /if \(turnTrace && !turnTrace\.stages\.generating_start && stopButtonVisible\(\)\) \{\s*traceMark\('generating_start'\)/,
+    'the observer marks generating_start without checking it is already there');
   assert.match(src, /generating_end/);
   // Guarded on the mark not already existing, or every quiet check past the
   // end would move it and the span would read as zero.

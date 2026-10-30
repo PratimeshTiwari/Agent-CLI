@@ -100,6 +100,10 @@ export function logTrace(workspace, trace) {
       ...(trace.promptVersion ? { promptVersion: String(trace.promptVersion) } : {}),
       // How long the prompt was, so a slow `type` can be told from a long one.
       ...(Number.isFinite(Number(trace.chars)) ? { chars: Math.round(Number(trace.chars)) } : {}),
+      // How it was typed, in how many lines, and whether the tab was hidden (#104, v7.2).
+      ...(['pasted', 'pasted_late', 'inserted'].includes(trace.typed) ? { typed: trace.typed } : {}),
+      ...(Number.isFinite(Number(trace.lines)) ? { lines: Math.round(Number(trace.lines)) } : {}),
+      ...(typeof trace.hidden === 'boolean' ? { hidden: trace.hidden } : {}),
       stages,
     });
     const file = tracePath(workspace);
@@ -214,7 +218,30 @@ export function summariseTraces(workspace, { limit = 200 } = {}) {
     }))
     .sort((a, b) => a.version.localeCompare(b.version));
 
-  return { samples: traces.length, stages, efforts, versions };
+  /*
+   * Typing, by how it was typed (v7.2, #104). `type` ran from 0.2 s to 35 s
+   * over 41 turns and nothing said which path each one took. Split by path and
+   * by whether the tab was hidden, with time per 1,000 characters so a long
+   * prompt is not mistaken for a slow path.
+   */
+  const byTyping = new Map();
+  for (const trace of traces) {
+    const ms = trace.stages?.type;
+    if (!trace.typed || !Number.isFinite(ms)) continue;
+    const key = `${trace.typed}${trace.hidden ? ' · hidden' : ''}`;
+    if (!byTyping.has(key)) byTyping.set(key, { ms: [], perK: [], chars: [] });
+    const row = byTyping.get(key);
+    row.ms.push(ms);
+    if (trace.chars > 0) { row.chars.push(trace.chars); row.perK.push((ms * 1000) / trace.chars); }
+  }
+  const typing = [...byTyping.entries()]
+    .map(([path, v]) => ({
+      path, n: v.ms.length, median: percentile(v.ms, 50), p90: percentile(v.ms, 90),
+      chars: percentile(v.chars, 50), perK: percentile(v.perK, 50),
+    }))
+    .sort((a, b) => b.n - a.n);
+
+  return { samples: traces.length, stages, efforts, versions, typing };
 }
 
 /** `2.1s`, `340ms` — the unit people would say out loud. */

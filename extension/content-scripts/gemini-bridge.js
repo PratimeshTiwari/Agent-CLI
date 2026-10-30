@@ -692,6 +692,9 @@ async function injectPrompt(text) {
       throw new Error('[find_input] Could not find the Gemini input field — the editor selector has probably changed');
     }
     traceMark('find_input');
+    // Whether the tab was in front while typing (#104): a hidden tab is where
+    // page work is slowest, and nothing recorded it.
+    if (turnTrace) turnTrace.hidden = Boolean(document.hidden);
 
     // Record how many responses exist BEFORE we send
     initialResponseCount = getResponseCount();
@@ -829,8 +832,16 @@ async function injectPrompt(text) {
      * text is waited for exactly when something claimed it.
      */
     let landed = !text || Boolean(composerText());
+    // Which path typed it, for #104: `pasted` at once, `pasted_late` after a
+    // claimed paste was waited for, `inserted` by the fallback.
+    let typedBy = landed ? 'pasted' : '';
     if (!landed && pasteClaimed) {
       landed = Boolean(await waitForDom(() => (composerText() ? true : null), PASTE_LAND_BUDGET_MS));
+      if (landed) typedBy = 'pasted_late';
+    }
+    if (turnTrace && text) {
+      turnTrace.typed = landed ? typedBy : 'inserted';
+      turnTrace.lines = String(text).split('\n').length;
     }
 
     if (!landed && text) {
@@ -1171,6 +1182,16 @@ function startResponseObserver() {
   quietPending = () => quietStreak > 0 && quietStreak < RESPONSE_SETTLE_CHECKS;
 
   responseObserver = new MutationObserver((mutations) => {
+    /*
+     * When generation really started (v7.2, #104). The completion check skips
+     * its first 3 s and runs on a 2 s tick, so `generating_start` could never
+     * read below ~4 s and looked like a fixed delay in 20 of 29 traces. The
+     * observer runs at full rate, so it marks it here; measurement only — the
+     * resend decision still reads `sawGenerating` from the check, as before.
+     */
+    if (turnTrace && !turnTrace.stages.generating_start && stopButtonVisible()) {
+      traceMark('generating_start');
+    }
     // Only process if a NEW response element has appeared
     const currentCount = getResponseCount();
     if (currentCount <= initialResponseCount) {
@@ -1275,7 +1296,7 @@ function startResponseObserver() {
      * there, so a timeout that recorded a start and no end is a scrape that
      * lost a reply still being written.
      */
-    if (isGenerating && !sawGenerating) traceMark('generating_start');
+    if (isGenerating && !sawGenerating && !turnTrace?.stages?.generating_start) traceMark('generating_start');
     if (!isGenerating && sawGenerating && !turnTrace?.stages?.generating_end) {
       traceMark('generating_end');
     }
@@ -2618,7 +2639,10 @@ function extractTextContent(element) {
 function sendTurnTrace(outcome) {
   if (!turnTrace) return;
   // Sent separately from the reply, so a trace can never delay or break one.
-  safeSend({ type: 'turn_trace', payload: { model: 'gemini', outcome, stages: turnTrace.stages, chars: turnTrace.chars } });
+  safeSend({ type: 'turn_trace', payload: {
+    model: 'gemini', outcome, stages: turnTrace.stages, chars: turnTrace.chars,
+    typed: turnTrace.typed, lines: turnTrace.lines, hidden: turnTrace.hidden,
+  } });
   turnTrace = null;
 }
 
