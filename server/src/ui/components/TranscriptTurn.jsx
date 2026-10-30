@@ -318,6 +318,8 @@ export function TurnSummary({ isLive, duration, worked, touched, tick = 0, break
  * which is the only direction that is safe here.
  */
 export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalWidth, tick = 0 }) {
+  // The columns beside the `● ` a reply is drawn after.
+  const textWidth = Math.max(10, terminalWidth - (item.msg?.isLocal ? 0 : 2));
   if (item.type !== 'text') {
     return (
       /*
@@ -338,18 +340,26 @@ export function TurnRow({ item, previous, isLive, verbose, liveBudget, terminalW
       marginTop={previous && previous.type !== 'text' ? 1 : 0}
       width="100%"
     >
-      {/* Default foreground, not green: a finished tool's dot is green, and the two read as one. */}
-      {!item.msg.isLocal && <Text bold>● </Text>}
+      {/*
+        Default foreground, not green: a finished tool's dot is green, and the
+        two read as one. In a box that cannot shrink (v6.12): Yoga shrinks
+        every child in proportion to its natural width, the reply's is the
+        whole paragraph on one line, and the 2-column dot was rounded down to
+        1 — so the reply was laid out a column wider than the terminal, and
+        every wrapped row spilled a character onto a row of its own.
+      */}
+      {!item.msg.isLocal && <Box flexShrink={0}><Text bold>● </Text></Box>}
       <Box flexGrow={1} flexShrink={1}>
         {/*
           Clamped while live and whole once committed — the reply is the
           tallest row there is, and `items.slice` above counts it as one.
-          See `liveMessageText`.
+          See `liveMessageText`. Rendered to the width beside the dot, so
+          `fitLines` has wrapped every row and Ink wraps nothing.
         */}
         <Text wrap="wrap">
           {isLive
-            ? liveMessageText(renderMarkdown(item.content, terminalWidth), liveBudget, terminalWidth)
-            : renderMarkdown(item.content, terminalWidth)}
+            ? liveMessageText(renderMarkdown(item.content, textWidth), liveBudget, textWidth)
+            : renderMarkdown(item.content, textWidth)}
         </Text>
       </Box>
     </Box>

@@ -1936,6 +1936,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   The screens are live frames: `onboardingLayout` drops the theme preview and the name preview, then
   spacing by height. Pty: 0 clears at 12, 16, 20, 30 rows.
 
+- **A fixed-width glyph beside flexible text must be in a `flexShrink={0}` box (v6.12).** Yoga
+  shrinks children in proportion to their natural width; a reply's is the whole paragraph on one
+  line, so the reply's 2-column `● ` was rounded down to 1 and the reply laid out a column wider
+  than the terminal. Each wrapped row spilled a character onto a row of its own, Ink counted fewer
+  rows than the terminal drew, and a long reply left ~20 blank rows above the prompt. Replies are
+  also wrapped by `fitLines` (`format.js`) now, to the width beside the dot, with bullets hanging
+  at their text column — Ink kept the space it broke at and knew nothing of lists. The harness's
+  `snap` is the raw stream with escapes stripped and invents blank rows; use `{"screen": file}`,
+  pyte's rendered viewport, for anything about layout.
+
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80
