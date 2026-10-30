@@ -685,6 +685,11 @@ The oracles are in the session scratchpad's `gen/` folder (`compare.mjs <oracle.
 1–100 and 90–150 and answered from them; the pointer to this file sat under `## More` at line 258,
 and nothing in either read said that section existed. `#`–`###`, fenced code skipped, capped at
 40, written `- ## More (line 258)` because `fitReadResult` reads a leading number as a shown line.
+**Code gets the same since v7.6 (`codeOutline`):** a partial read ends with `Defined outside lines
+1–800:` and `- method total (line 840)`, from the `find_symbol` engines (acorn, Ruby, the pattern
+table), so the next read is aimed rather than paged. Silent on a whole read, an unknown language, a
+file over 2 MB or a parse error. Pty: a scripted ranged read of a Ruby file put `method charge (line
+32)` in the next prompt; 0 clears at 13 and 24 rows.
 `AGENT.md` (in every turn-0 prompt) and README's "How it works" now point here too.
 
 `executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with

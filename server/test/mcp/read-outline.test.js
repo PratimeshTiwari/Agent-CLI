@@ -70,3 +70,40 @@ test('the outline is not mistaken for shown lines when a read is cut to fit', as
     rmSync(ws, { recursive: true, force: true });
   }
 });
+
+// v7.6: the same for code — the definitions a partial read did not show.
+import { codeOutline } from '../../src/mcp/tools/read-file.js';
+
+test('code: a partial read lists the definitions outside it, per language', async () => {
+  const js = ['export class Invoice {', '  total() { return 1; }', '}', 'function refund() {}', 'export const fee = () => 2;'].join('\n');
+  const top = await codeOutline(js, '.js', 1, 3, 5);
+  assert.match(top, /Defined outside lines 1–3:\n- function refund \(line 4\)\n- function fee \(line 5\)/);
+  assert.doesNotMatch(top, /Invoice|total/, 'what was shown is not listed');
+  const rb = ['class Invoice', '  def total', '  end', '', '  def refund!', '  end', 'end'].join('\n');
+  assert.match(await codeOutline(rb, '.rb', 1, 3, 7), /- method refund! \(line 5\)/);
+  const go = ['package billing', '', 'func Total() int {', '  return 1', '}', '', 'type Fee struct{}'].join('\n');
+  assert.match(await codeOutline(go, '.go', 1, 5, 7), /- type Fee \(line 7\)/);
+});
+
+test('code: silent on a whole read, an unknown language and a file that does not parse', async () => {
+  const js = 'function a() {}\nfunction b() {}\n';
+  assert.equal(await codeOutline(js, '.js', 1, 3, 3), '', 'control: whole file shown');
+  assert.equal(await codeOutline('x = 1\ny = 2\n', '.xyz', 1, 1, 3), '');
+  assert.equal(await codeOutline('function (( {\nfunction b() {}\n', '.js', 1, 1, 3), '', 'a parse error is no outline, not a failed read');
+});
+
+test('code through the tool: a ranged read ends with the outline, a whole one does not', async () => {
+  const ws = mkdtempSync(join(tmpdir(), 'outline-code-'));
+  try {
+    writeFileSync(join(ws, 'billing.rb'), ['class Billing', ...Array.from({ length: 30 }, () => '  # pad'), '  def charge', '  end', 'end'].join('\n'));
+    const part = await readFile({ path: 'billing.rb', startLine: 1, endLine: 10 }, { workspace: ws });
+    assert.match(part.content, /Defined outside lines 1–10:\n- method charge \(line 32\)/);
+    const whole = await readFile({ path: 'billing.rb' }, { workspace: ws });
+    assert.doesNotMatch(whole.content, /Defined outside/);
+    // And the cut-to-fit note still reads the outline as text, not as shown lines.
+    const fitted = fitReadResult(part, 200);
+    assert.doesNotMatch(fitted, /lines 32/);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
