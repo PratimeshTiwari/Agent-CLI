@@ -89,9 +89,42 @@ Then two things no installer can do for you:
    unpacked** → pick the `extension/` folder. Pin **Agent CLI Bridge**.
 2. **Open gemini.google.com and sign in.** Leave the tab open.
 
-**Optional: the VS Code companion.** Extensions panel → `…` → **Install from VSIX…** →
-`vscode-companion/cli-agent-companion-1.8.6.vsix`. It gives the agent your open file, cursor and
-Problems panel, and adds a chat panel to the sidebar (`cmd+alt+j`).
+**Optional: the VS Code companion** (VS Code, Cursor, Antigravity, Windsurf). It gives the
+agent your open file, cursor and Problems panel, adds a chat panel to the sidebar
+(`cmd+alt+j`), and **Attach to Agent CLI** on the explorer's right-click menu. Extensions panel →
+`…` → **Install from VSIX…** → `vscode-companion/cli-agent-companion-1.8.7.vsix`.
+
+From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigravity`,
+`windsurf`; if it is not found, run **Shell Command: Install '…' command in PATH** from the
+editor's command palette):
+
+```bash
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.7.vsix
+```
+
+`<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
+knows. This works for any install:
+
+```bash
+AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.7.vsix
+```
+
+Three common setups:
+
+```bash
+# setup.sh's default location, VS Code
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.7.vsix
+
+# a checkout from before the rename (setup.sh keeps it), Cursor
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.7.vsix
+
+# a custom AGENT_INSTALL_DIR, Antigravity
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.7.vsix
+```
+
+Then reload the window (**Developer: Reload Window**). Installing over an older version
+replaces it.
 
 ## First run
 
