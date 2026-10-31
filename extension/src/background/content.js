@@ -772,7 +772,8 @@ export async function sendWithRepairs(tabId, message, targetModel) {
     {
       stage: 'reload',
       before: async () => {
-        await chrome.tabs.reload(tabId);
+        // Hard, as the old advice told people to do by hand (1.56.0).
+        await chrome.tabs.reload(tabId, { bypassCache: true });
         await waitForBridge(tabId, 15000);
       },
     },
@@ -1067,9 +1068,11 @@ export async function injectPromptIntoModel(payload) {
         targetModel,
         url: targetUrl,
         detail: lastTabFailure?.message,
-        message: `Failed to communicate with ${targetModel} tab after multiple retries`
-          + `${lastTabFailure?.message ? ` — ${lastTabFailure.message}` : ''}`
-          + '. Hard-refresh the tab (Cmd+Shift+R) and try again.',
+        // Says what was already tried; the terminal rewrites it with its own
+        // keys (server bridge/tab-failure.js).
+        message: `Could not send to the ${targetModel} tab, even after reloading it`
+          + `${lastTabFailure?.message ? ` (${lastTabFailure.message})` : ''}`
+          + '. Check the tab shows a chat you can type in, then send again.',
       },
     };
     lastTabFailure = null;

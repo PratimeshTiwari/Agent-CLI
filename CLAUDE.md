@@ -205,7 +205,9 @@ entry before changing the mechanism it describes.
   claimed paste or an image waits. The send-button fallback vetoes `Expand input to Fullscreen`.
 - **Repairs:** `prepareTabForTurn` (no discarding, reload a discarded tab); `sendWithRepairs` —
   send, re-inject, reload, and **never a fresh tab** (a new conversation answers a question it
-  never saw). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
+  never saw). Since 1.56.0 the reload bypasses the cache and a failed inject carries the page's
+  reason (`lastInjectError`); the terminal words `tab_unreachable` itself (`bridge/tab-failure.js`):
+  what was tried, the reason, ctrl+b, and that the message is kept. The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.

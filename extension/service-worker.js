@@ -459,7 +459,7 @@
       {
         stage: "reload",
         before: async () => {
-          await chrome.tabs.reload(tabId);
+          await chrome.tabs.reload(tabId, { bypassCache: true });
           await waitForBridge(tabId, 15e3);
         }
       }
@@ -635,7 +635,9 @@
           targetModel,
           url: targetUrl,
           detail: lastTabFailure?.message,
-          message: `Failed to communicate with ${targetModel} tab after multiple retries${lastTabFailure?.message ? ` \u2014 ${lastTabFailure.message}` : ""}. Hard-refresh the tab (Cmd+Shift+R) and try again.`
+          // Says what was already tried; the terminal rewrites it with its own
+          // keys (server bridge/tab-failure.js).
+          message: `Could not send to the ${targetModel} tab, even after reloading it${lastTabFailure?.message ? ` (${lastTabFailure.message})` : ""}. Check the tab shows a chat you can type in, then send again.`
         }
       };
       lastTabFailure = null;
