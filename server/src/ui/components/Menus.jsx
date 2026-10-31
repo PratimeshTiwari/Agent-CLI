@@ -597,7 +597,7 @@ export function Menus({
           const model = stops[at];
           const tick = marked.id === current ? '  ✔ current' : '';
           const differs = tabDiffers(model, agentLoop.modelOptions);
-          const warn = differs ? `  ⚠ model mismatch · browser ${differs}` : '';
+          const warn = differs ? `  ⚠ browser ${differs}` : '';
           const { tight } = fit('', 5);
           // A blank row each side of the model line (owner, 2026-10-26: "fix
           // spacing between effort, model name and description, just a bit"),
@@ -815,21 +815,25 @@ export function Menus({
           const setting = resolveEffort(ask.setting);
           const browserRung = ask.browserRung ? resolveEffort(ask.browserRung) : null;
           const { sub, tight, room } = fit(
-            `Effort is ${setting.name} (${ask.wanted}); the browser tab is on ${ask.current}.`,
+            `Browser ${ask.current} ≠ agent ${ask.wanted} (effort ${setting.name}).`,
           );
+          /*
+           * Two answers (v7.9): one side moves to the other. There were three,
+           * and "Send on 3.8 Flash" (this once, effort unchanged) sat between
+           * the two real choices; asked "what is this third option, is it
+           * needed?". Matching the browser sets the effort to the rung that
+           * maps to the tab's model; with no such rung (a model no rung answers
+           * to) it can only mean sending on it, not asked again.
+           */
+          const matchBrowser = browserRung && browserRung.id !== setting.id
+            ? { detail: `set effort to ${browserRung.name} (${ask.current}), then send`, value: 'set' }
+            : { detail: `send on ${ask.current} · not asked again for this`, value: 'follow' };
           const items = [
-            { label: `Switch the browser to ${ask.wanted}`, detail: 'then send · steps down if it will not switch', value: 'switch' },
-            {
-              label: `Send on ${ask.current}`,
-              detail: `with ${(browserRung || setting).name}'s prompt · not asked again for this`,
-              value: 'follow',
-            },
-            ...(browserRung && browserRung.id !== setting.id
-              ? [{ label: `Set effort to ${browserRung.name}`, detail: 'matches the browser from now on', value: 'set' }]
-              : []),
+            { label: 'Match the agent', detail: `switch the tab to ${ask.wanted}, then send`, value: 'switch' },
+            { label: 'Match the browser', ...matchBrowser },
           ];
           return (
-            <Panel width={W} title="Effort and browser differ" tone="attention" sub={sub} tight={tight}
+            <Panel width={W} title="Model mismatch" tone="attention" sub={sub} tight={tight}
               keys="enter choose · esc cancel — your message goes back in the box">
               <Choices
                 numbered
@@ -890,7 +894,7 @@ export function Menus({
                 limit={room}
                 initialIndex={Math.max(0, order.indexOf(policy))}
                 items={[
-                  { label: 'Ask', detail: 'stop first; you pick switch, send anyway or change effort', value: 'ask', current: policy === 'ask' },
+                  { label: 'Ask', detail: 'stop first: match the agent or match the browser', value: 'ask', current: policy === 'ask' },
                   { label: 'Follow', detail: "send on the tab's model and never ask", value: 'follow', current: policy === 'follow' },
                   { label: 'Switch', detail: "move the tab to the effort's model before sending", value: 'switch', current: policy === 'switch' },
                 ]}

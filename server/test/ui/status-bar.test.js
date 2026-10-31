@@ -36,7 +36,7 @@ test('auto, v2, a turn with a checklist, 38% used', () => {
 
 test('the wrong model, near compaction: marked, and says how far', () => {
   const r = render({ width: 120, mode: 'plan', model: '3 Flash', modelMark: '⚠', ...ctx(68) });
-  assert.equal(r.right, '⚠ 3 Flash · model mismatch · ▰▰▰▱▱ 12% to compact'); // v7.9: says what the mark means
+  assert.equal(r.right, '⚠ 3 Flash · ▰▰▰▱▱ 12% to compact');
   assert.equal(r.right_.find((s) => s.text.includes('Flash')).role, 'attention');
 });
 

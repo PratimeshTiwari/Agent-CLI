@@ -1936,6 +1936,7 @@ export class AgentLoop {
     clearTimeout(this._modelOptionsWatchdog);
     this._modelOptionsWatchdog = null;
     this.modelOptions = models;
+    this._emitModels();
     // A fresh reading ends the suppression whether it agrees or not: from here
     // a disagreement is standing rather than in flight, and worth the row.
     this._switchInFlight = null;
@@ -2003,6 +2004,41 @@ export class AgentLoop {
 
     const plan = planModelSwitch(wanted, models, browserModelPin(this.modelConfig, wanted));
     if (plan.action === 'switch') this.switchModelTo(plan.model.label);
+  }
+
+  /**
+   * A model picked by hand in the tab (v7.9, extension 1.55.0): the picker's
+   * label, not the list. Marked in the list we have when it names one entry:
+   * exactly, or as its last word (`Flash` is `3.8 Flash`, not `3.1 Flash-Lite`).
+   * Otherwise the list is asked for again, which opens the menu once.
+   */
+  noteSelectedModel(label) {
+    const want = String(label || '').trim().toLowerCase();
+    if (!want) return;
+    const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
+    const name = (m) => m.label.trim().toLowerCase();
+    const exact = options.filter((m) => name(m) === want);
+    const tail = options.filter((m) => name(m).endsWith(` ${want}`));
+    const hit = exact.length === 1 ? exact[0] : tail.length === 1 ? tail[0] : null;
+    if (!hit) {
+      this.requestModelOptions?.(false);
+      return;
+    }
+    if (hit.selected) return;
+    this.modelOptions = this.modelOptions.map((m) => (m?.isMode ? m : { ...m, selected: m === hit }));
+    this._emitModels();
+  }
+
+  /** Told when the model list or its selection changes, so an idle screen redraws. */
+  onModels(fn) {
+    (this._modelListeners ||= new Set()).add(fn);
+    return () => this._modelListeners.delete(fn);
+  }
+
+  _emitModels() {
+    for (const fn of this._modelListeners || []) {
+      try { fn(this.modelOptions); } catch { /* a listener must not stop the update */ }
+    }
   }
 
   /**

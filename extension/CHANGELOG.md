@@ -26,7 +26,9 @@ server's fresh-session new chat (v7.9), a warm start sends straight after that a
 now navigates the tab itself, keeps the `/u/<n>` account, waits for the load and for the bridge,
 and skips the whole thing when the tab is already a new chat. **`tab_status` says which tab the
 main lane uses** (`mainTab`: id, window, chat id, title) and lists subagent tabs, for `/settings` →
-Gemini tab.
+Gemini tab. **A model picked by hand in the tab reaches the CLI in about 1.5 s**: the bridge
+watches the picker's label (no menu opened) and sends `model_selected`. It used to be noticed only
+at the end of the next turn.
 
 ### 1.54.0 — 2026-10-30
 

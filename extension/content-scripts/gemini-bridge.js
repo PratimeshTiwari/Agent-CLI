@@ -2194,6 +2194,32 @@ function currentModelLabel() {
   return m ? m[1].trim() : null;
 }
 
+/*
+ * A model chosen by hand in the tab, reported when it happens (1.55.0).
+ *
+ * The list was read at connect, when a tab opens, and once at the end of each
+ * turn, so a model picked by hand was noticed only after the next reply:
+ * "it picked up almost a minute later". The trigger's label says what is
+ * selected with one query and no menu (`currentModelLabel`), so it is watched.
+ * A page timer: the person changing it is looking at this tab, where timers
+ * run, and leaving the tab checks once more. The first reading is not a change.
+ */
+let lastSeenModel = null;
+function reportModelIfChanged() {
+  if (bridgeInvalidated) return;
+  const now = currentModelLabel();
+  if (!now || now === lastSeenModel) return;
+  const first = lastSeenModel === null;
+  lastSeenModel = now;
+  if (!first) safeSend({ type: 'model_selected', payload: { label: now } });
+}
+const modelWatch = setInterval(reportModelIfChanged, 1500);
+document.addEventListener('visibilitychange', reportModelIfChanged);
+onInvalidated.push(() => {
+  clearInterval(modelWatch);
+  document.removeEventListener('visibilitychange', reportModelIfChanged);
+});
+
 /** One option's label, its own description, and whether it is the current one. */
 /**
  * An entry's text pieces, by element rather than by line: the name, then the

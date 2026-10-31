@@ -14,7 +14,6 @@ import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspac
 import { actionHead } from './action-row.js';
 import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
 import { statusBarLayout, STATUS_RIGHT_GUTTER } from './status-bar.js';
-import { mismatchNext, mismatchRows, MISMATCH_KEYS } from './mismatch-row.js';
 import { keysLayout } from './keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
@@ -681,9 +680,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
     agentLoop.modelOptions || [],
     browserModelPin(agentLoop.modelConfig, effortRung.id),
   );
-  // The row above the input is shed on a short terminal; the footer's `⚠`
-  // is not (v7.9), so a mismatch is never silent at any height.
-  const mismatch = isCompactHeight(terminalHeight) ? null : modelDiffers;
   /*
    * What the browser's picker says is selected, or null when it has never been
    * read. `modelOptions` is not cleared by a failed ask, so this can be a
@@ -709,10 +705,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * of the last reply. Only while the prompt is up and no spinner sits between;
    * otherwise the margin stays where it was. One row moved, none added.
    */
-  const noticeHugsInput = Boolean(warmNote || mismatch) && !isProcessing
+  const noticeHugsInput = Boolean(warmNote) && !isProcessing
     && !diffRequest && !terminalOpen && !activeMenu && !compact;
 
-  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + mismatchRows(mismatch, terminalHeight)
+  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0)
     + (warmNote ? 1 : 0) + (healthNote ? 1 : 0);
 
   /**
@@ -1262,6 +1258,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * loop's busy → idle edge, wherever it is written from. The busy flag comes
    * down with it — the turn is over, and a spinner must not outlive it.
    */
+  // The tab's model changed (v7.9): redraw, so the footer's ⚠ comes and goes
+  // when you switch by hand, not at the end of the next turn.
+  useEffect(() => agentLoop.onModels?.(() => setIdleTick((n) => n + 1)), [agentLoop]);
+
   useEffect(() => agentLoop.onIdle?.(() => {
     setIsProcessing(false);
     setIdleTick((n) => n + 1);
@@ -1690,17 +1690,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
           />
 
           {/*
-            The model the prompt is written for, against the one the tab is on.
-            Both names, because "wrong model" without saying which is a warning
-            you cannot act on — and `ctrl+b` is the key that shows the tab, so
-            the row carries the fix rather than only the complaint.
-
-            Directly above the input, in a slot of its own (2026-10-26). It used
-            to sit at the top of the live frame, above the in-flight turn, so it
-            appeared over a turn's rows mid-turn and moved with them — reported
-            as "looks odd". Here it stays put while the turn above it grows.
-            Still one truncated row charged through `noticeRows`, so the frame
-            budget is unchanged; the part to keep is on the left.
+            The slot above the input: the warm-up's answer. The model-mismatch
+            row lived here too until v7.9, when the owner cut it to the footer's
+            `⚠ 3 Flash` and nothing else ("keep it simple and minimal"): the
+            next message asks anyway, and the ask says both names.
           */}
           <Box flexDirection="column" marginTop={noticeHugsInput ? 1 : 0}>
           {warmNote === 'ready' && (
@@ -1713,29 +1706,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
             <Text dimColor wrap="truncate">
               {'· Warm-up did not finish — your first message carries the setup, as on a cold start'}
             </Text>
-          )}
-          {mismatch && (
-            <>
-              {/* Line 1, the facts (v7.9): the two names lead, so a narrow
-                  terminal cuts the policy word, not them. */}
-              <Text color={T.attention} wrap="truncate">
-                {'⚠ Model mismatch · browser '}<Text bold>{mismatch.current}</Text>
-                {' ≠ agent '}<Text bold>{mismatch.wanted}</Text>
-                <Text dimColor>{` · ${mismatchPolicy(agentLoop.modelConfig)}`}</Text>
-              </Text>
-              {/* Line 2, what the next message does and where to change it. */}
-              {mismatchRows(mismatch, terminalHeight) === 2 && (
-                <Text dimColor wrap="truncate">
-                  {'  '}{mismatchNext({
-                    current: mismatch.current,
-                    wanted: mismatch.wanted,
-                    policy: mismatchPolicy(agentLoop.modelConfig),
-                    asks: Boolean(agentLoop.mismatchToAsk?.()),
-                    sentPrompt: sentRung.id !== effortRung.id ? sentRung.name : null,
-                  })}{` · ${MISMATCH_KEYS}`}
-                </Text>
-              )}
-            </>
           )}
           </Box>
 

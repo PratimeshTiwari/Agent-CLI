@@ -1826,19 +1826,23 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   **Status → Gemini tab (v7.9)** names the tab the main lane types into and its chat
   (`tab 1873 · chat 17d6…`), from `tab_status`'s `mainTab`, which extension 1.55.0 sends on connect,
   on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so).
-- **The warning slot hugs the input (v7.9, `noticeHugsInput`).** The warm-up and browser-differs rows
-  sat under the transcript with the prompt's blank row between them and the box, so they read as
-  the end of the last reply. The blank row moves above them when either shows and nothing sits
-  between (no spinner, menu, diff or shell). One row moved, none added. The `/effort mismatch` echo
-  is the chooser's own words now, not `/effort`. **The mismatch row is two lines** (owner's layout,
-  `ui/mismatch-row.js`): `⚠ Model mismatch · browser 3.8 Flash ≠ agent 3.1 Pro · ask`, then what the
-  next message does `· ctrl+b shows the tab · /settings → Browser differs`. Line 2 is charged and
-  drawn from 16 rows (`mismatchRows`). The footer keeps `⚠ 3.8 Flash · model mismatch` at every
-  height (`modelDiffers`; the row is hidden below 13 rows but the mark was too, until now), the words
-  shedding before the model's number. The Effort slider adds `⚠ model mismatch · browser …` beside
-  the marked stop's model (`tabDiffers`), where it said `✔ current` alone. The warm-up row is just
-  `✔ Ready` ("too verbose"). An extension *newer* than the running agent says `Agent restart needed`
-  instead of `Extension update · 1.55.0 → 1.54.0` (`compareVersions`). Pty: 0 clears at 13, 16, 24.
+- **A model mismatch is the footer's `⚠ 3.8 Flash` and nothing else (v7.9).** The row above the
+  input went through two redesigns in one afternoon and was then cut (owner: "just show ⚠ 3 Flash,
+  that's it nothing else"): the next message asks anyway, and the ask says both names. The footer's
+  mark now shows at every height (`modelDiffers`; it went with the row below 13). The ask is two
+  answers, **Match the agent** (switch the tab) and **Match the browser** (set the effort to the
+  tab's rung, or send on it when no rung maps); "Send on 3.8 Flash" once was the confusing third.
+  The Effort slider adds `⚠ browser 3.8 Flash` beside the marked stop's model (`tabDiffers`). **A
+  model picked by hand in the tab is seen in ~1.5 s** (extension 1.55.0): the bridge watches the
+  picker's label (`currentModelLabel`, no menu) and sends `model_selected`; `noteSelectedModel`
+  marks the one entry it names, exactly or as its last word (`Flash` is `3.8 Flash`, not
+  `3.1 Flash-Lite`), else asks for the list; `onModels` redraws an idle screen. It was read only at
+  connect, on a new tab and at the end of a turn: "picked up almost a minute later". `Choices` cuts
+  a label past its 28-column cap (`fitLabel`), which had pushed that row's detail a column right.
+  The warm-up row is just `✔ Ready`, and it sits on the input with the blank row above it
+  (`noticeHugsInput`). An extension *newer* than the running agent says `Agent restart needed`
+  instead of `Extension update · 1.55.0 → 1.54.0` (`compareVersions`). The watcher ignores an
+  editor's atomic-save temp files (`x.js.tmp.<pid>.<hex>`, `x~`). Pty: 0 clears at 13, 16 and 24.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input

@@ -586,6 +586,11 @@ export class WebSocketServer {
         this.agentLoop.noteModelOptions(payload?.models, payload?.switchedTo, payload?.requested);
         break;
 
+      case 'model_selected':
+        // Picked by hand in the tab (extension 1.55.0): just the name.
+        this.agentLoop.noteSelectedModel?.(payload?.label);
+        break;
+
       /**
        * The side panel answering something the turn is blocked on.
        *

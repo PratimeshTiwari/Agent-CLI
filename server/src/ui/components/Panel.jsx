@@ -65,6 +65,11 @@ export function Panel({ ruled = true, head = null, title, status = null, statusT
  * `glyphTone` (v6.3). A list with glyphs hides the `1.` column — the glyph is
  * the first thing read — and digits still pick when `numbered`.
  */
+/** Exactly `width` columns: padded, or cut with an ellipsis. */
+export function fitLabel(text, width) {
+  return text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text.padEnd(width);
+}
+
 export function Choices({
   items,
   onSelect,
@@ -120,7 +125,9 @@ export function Choices({
       {items.slice(view.start, view.end).map((item, k) => {
         const i = view.start + k;
         const sel = i === at;
-        const label = hasDetail ? String(item.label).padEnd(labelWidth) : String(item.label);
+        // A label past the cap is cut, not let through: one long label pushed
+        // its own detail a column right of the others (v7.9, "a bit left/right").
+        const label = hasDetail ? fitLabel(String(item.label), labelWidth) : String(item.label);
         return (
           <Text key={item.key ?? item.value ?? i} wrap="truncate">
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>

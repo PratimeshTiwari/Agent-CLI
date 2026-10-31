@@ -108,3 +108,23 @@ test('switch menus say their state in colour, and options lead with a glyph', ()
   assert.match(panel, /statusTone/, 'Panel colours its status');
   assert.match(panel, /showNumbers = numbered && !glyphs/, 'a glyph list hides the number column');
 });
+
+test('a label past the column cap is cut, so every detail starts in one column (v7.9)', async () => {
+  const { fitLabel } = await import('../../src/ui/components/Panel.jsx').catch(() => ({}));
+  // Panel.jsx is JSX; when it cannot be imported under plain node, read the source.
+  if (fitLabel) {
+    assert.equal(fitLabel('Switch the browser to 3.1 Pro', 28).length, 28);
+    assert.equal(fitLabel('Ask', 6), 'Ask   ');
+  } else {
+    const src = readFileSync(new URL('../../src/ui/components/Panel.jsx', import.meta.url), 'utf8');
+    assert.match(src, /const label = hasDetail \? fitLabel\(String\(item\.label\), labelWidth\)/);
+    assert.match(src, /text\.length > width \? `\$\{text\.slice\(0, Math\.max\(0, width - 1\)\)\}…` : text\.padEnd\(width\)/);
+  }
+});
+
+test('the mismatch ask has two answers: match the agent, match the browser (v7.9)', () => {
+  const src = readFileSync(new URL('../../src/ui/components/Menus.jsx', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf("activeMenu?.type === 'effort_mismatch'"), src.indexOf("activeMenu?.type === 'startup'"));
+  assert.equal((block.match(/label: 'Match the (agent|browser)'/g) || []).length, 2);
+  assert.doesNotMatch(block, /label: `Send on /, 'the third, one-off answer is gone');
+});

@@ -85,7 +85,7 @@ export function statusBarLayout(o) {
   const compactAt = o.compactAtPct === null ? null : (o.compactAtPct ?? 80);
   // Each step gives one thing up, in the order the plan fixed; `build` reads them.
   const shed = { hint: false, pastes: false, modeWord: false, scope: false, meter: false,
-    version: false, mismatchWord: false, modelNumber: false, tasks: false, context: false };
+    version: false, modelNumber: false, tasks: false, context: false };
 
   const build = () => {
     const left = [];
@@ -104,10 +104,7 @@ export function statusBarLayout(o) {
     if (o.version && !shed.version) fields.push([{ text: o.version, role: 'dim' }]);
     if (o.model) {
       const label = shed.modelNumber ? shortModel(o.model) : o.model;
-      // `⚠ 3.8 Flash · model mismatch` (v7.9): the mark says something is
-      // wrong, the words say what. The words go before the model's number does.
-      const words = o.modelMark === '⚠' && !shed.mismatchWord ? `${SEP}model mismatch` : '';
-      fields.push([{ text: o.modelMark ? `${o.modelMark} ${label}${words}` : label, role: o.modelMark ? 'attention' : 'dim' }]);
+      fields.push([{ text: o.modelMark ? `${o.modelMark} ${label}` : label, role: o.modelMark ? 'attention' : 'dim' }]);
     } else if (o.effort) {
       fields.push([{ text: o.effort, role: 'dim' }]);
     }

@@ -64,7 +64,13 @@ function stubChrome(tabs, owned = []) {
         return tab;
       },
       remove: async (id) => { open.delete(id); },
-      sendMessage: async (id, message) => { sent.push({ id, message }); return { success: true }; },
+      // A ping is answered as a mounted bridge does, and not recorded: a stub
+      // that never answers makes every wait for the bridge sit out its budget.
+      sendMessage: async (id, message) => {
+        if (message?.type === 'ping') return { ready: true, canType: true };
+        sent.push({ id, message });
+        return { success: true };
+      },
       /**
        * Fires `complete` on the next tick, as a real navigation does.
        *
@@ -174,12 +180,34 @@ test('a subagent turn claims its tab before it waits for the load', async () => 
 });
 
 test('a new chat goes to the lane\'s tab, never a subagent\'s', async () => {
-  const { sent } = stubChrome([{ id: 5, url: GEMINI }, { id: 9, url: GEMINI }], [5, 9]);
+  const { open } = stubChrome([
+    { id: 5, url: 'https://gemini.google.com/app/aaa111' },
+    { id: 9, url: 'https://gemini.google.com/app/bbb222' },
+  ], [5, 9]);
   content.claimSubagentTab(9);
-  await content.triggerNewChatInModel({ targetModel: 'gemini' });
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].id, 5, 'a new chat would have wiped a subagent mid-turn');
-  assert.equal(sent[0].message.type, 'new_chat');
+  assert.equal(await content.triggerNewChatInModel({ targetModel: 'gemini' }), true);
+  assert.equal(open.get(5).url, 'https://gemini.google.com/app', 'the lane\'s tab is on a new chat');
+  assert.equal(open.get(9).url, 'https://gemini.google.com/app/bbb222', 'a new chat would have wiped a subagent mid-turn');
+});
+
+/*
+ * 1.55.0: navigated by the worker and waited for, not a message the content
+ * script answered before the page had changed; kept on the same account; and
+ * skipped when the tab is already a new chat.
+ */
+test('a new chat keeps the account, and is not reopened when already new', async () => {
+  const { open, sent } = stubChrome([{ id: 5, url: 'https://gemini.google.com/u/1/app/aaa111' }], [5]);
+  assert.equal(await content.triggerNewChatInModel({ targetModel: 'gemini' }), true);
+  assert.equal(open.get(5).url, 'https://gemini.google.com/u/1/app');
+  assert.ok(!sent.some((m) => m.message.type === 'new_chat'), 'no message to a page about to be replaced');
+
+  const fresh = stubChrome([{ id: 5, url: 'https://gemini.google.com/app' }], [5]);
+  let navigated = false;
+  const update = globalThis.chrome.tabs.update;
+  globalThis.chrome.tabs.update = async (...a) => { navigated = true; return update(...a); };
+  assert.equal(await content.triggerNewChatInModel({ targetModel: 'gemini' }), true);
+  assert.equal(navigated, false, 'a reload of an empty chat for nothing');
+  assert.equal(fresh.open.get(5).url, 'https://gemini.google.com/app');
 });
 
 test('the mode picker is read in the lane\'s tab', async () => {

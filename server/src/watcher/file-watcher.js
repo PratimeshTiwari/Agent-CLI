@@ -39,6 +39,15 @@ export const IGNORED_DIRS = new Set([
   'node_modules', 'dist', 'build', 'vendor', 'tmp', 'log', 'coverage',
 ]);
 
+/**
+ * An editor's atomic-save temp file: written, renamed over the real file, gone.
+ * `name.tmp.<pid>.<hex>` (write-file-atomic, and the tools that edit files for
+ * an agent), `name~` (backups), JetBrains' `___jb_tmp___`. Reported as
+ * "changed on disk — app.js.tmp.49691.0c7a4b70e972" beside the real change
+ * (v7.9); the rename that follows reports the real file anyway.
+ */
+const EDITOR_TEMP = /\.tmp\.\d+\.[0-9a-f]+$|~$|___jb_(tmp|old)___$/i;
+
 /** Quiet time before a change is reported, so an editor's burst of writes is one report. */
 export const SETTLE_MS = 1000;
 
@@ -49,7 +58,9 @@ export const SETTLE_MS = 1000;
 export function isIgnored(relPath) {
   // The root itself is '' — and ignoring it means watching nothing at all.
   if (!relPath) return false;
-  return relPath.split(/[\\/]/).some((seg) => seg.startsWith('.') || IGNORED_DIRS.has(seg));
+  const segments = relPath.split(/[\\/]/);
+  if (EDITOR_TEMP.test(segments[segments.length - 1])) return true;
+  return segments.some((seg) => seg.startsWith('.') || IGNORED_DIRS.has(seg));
 }
 
 export class FileWatcher {
