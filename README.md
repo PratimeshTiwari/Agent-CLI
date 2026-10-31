@@ -204,6 +204,9 @@ A command given a word it does not take says so and lists the ones it does.
   it.
 - **Monorepos**: one `.agent/` at the top, with a folder per repo.
 
+[`docs/agent-folder.md`](docs/agent-folder.md) maps both folders: what each file is, what answers
+which question, and what is safe to delete.
+
 ## Troubleshooting
 
 | You see | Do |

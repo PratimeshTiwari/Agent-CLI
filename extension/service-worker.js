@@ -517,13 +517,13 @@
     }
     return success;
   }
-  async function ensureModelTab(targetModel = "gemini") {
+  async function ensureModelTab(targetModel = "gemini", opts) {
     const targetUrl = MODEL_URLS[targetModel];
     if (!targetUrl) return null;
     const existing = await pickMainTab(targetModel);
     if (existing) return existing;
     console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
-    const openUrl = targetModel === "gemini" ? "https://gemini.google.com/app" : targetUrl.replace("/*", "");
+    const openUrl = targetModel === "gemini" ? chatPath(opts?.url || "")?.thread ? opts.url : "https://gemini.google.com/app" : targetUrl.replace("/*", "");
     const newTab = await chrome.tabs.create({ url: openUrl, active: true });
     await new Promise((resolve) => {
       let resolved = false;
@@ -604,7 +604,7 @@
           type: "status",
           payload: { message: `\u{1F310} Reopening ${targetModel} in a new tab...` }
         });
-        const newTab = await ensureModelTab(targetModel);
+        const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl });
         if (newTab) {
           tabs = [newTab];
         }

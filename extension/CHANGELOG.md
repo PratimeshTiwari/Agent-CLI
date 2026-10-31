@@ -28,7 +28,9 @@ and skips the whole thing when the tab is already a new chat. **`tab_status` say
 main lane uses** (`mainTab`: id, window, chat id, title) and lists subagent tabs, for `/settings` →
 Gemini tab. **A model picked by hand in the tab reaches the CLI in about 1.5 s**: the bridge
 watches the picker's label (no menu opened) and sends `model_selected`. It used to be noticed only
-at the end of the next turn.
+at the end of the next turn. **A tab reopened for the main lane goes back to its conversation**:
+`inject_prompt` carries `threadUrl`, and `ensureModelTab` opens it rather than a blank chat, which
+had never seen the task the next prompt assumed (after a reload, which forgets the owned tab).
 
 ### 1.54.0 — 2026-10-30
 

@@ -325,6 +325,18 @@ const CODE_QUESTION = [
    * quietly answering "no".
    */
   /\b(ui|cli|api|watcher|bridge|extension|agent|subagent|loop|prompt|tool|tier|effort|hook|endpoint|schema|config|session|transcript|side ?panel|content script|service worker|daemon|middleware|migration)\b/i,
+  /*
+   * "In this node server", and a name written the way code writes it (v7.9).
+   *
+   * Missed: "can you check how the symbol matching is done in this node
+   * server" — answered on Flash-Lite from AGENT.md's map with nothing opened,
+   * the founding failure exactly, and no row. *This* plus the kind of thing it
+   * is points at the one in front of us; `find_symbol` and `buildPrompt` are
+   * nobody's prose.
+   */
+  /\bth(is|e) (\w+ )?(server|project|app|cli|codebase|extension|backend|frontend|service|script|tool|code)\b/i,
+  /\b[a-z][a-z0-9]*_[a-z0-9_]+\b|\b[a-z]+[A-Z][A-Za-z0-9]+\b/,
+  /\bhow (is|are) [^?.!]{1,40}\b(done|implemented|handled|matched|computed|built|parsed|stored|wired)\b/i,
 ];
 
 export function looksLikeCodeQuestion(text) {

@@ -874,7 +874,7 @@ async function trySendToTab(tab, message, targetModel) {
   return success;
 }
 
-export async function ensureModelTab(targetModel = 'gemini') {
+export async function ensureModelTab(targetModel = 'gemini', opts) {
   const targetUrl = MODEL_URLS[targetModel];
   if (!targetUrl) return null;
 
@@ -882,10 +882,11 @@ export async function ensureModelTab(targetModel = 'gemini') {
   const existing = await pickMainTab(targetModel);
   if (existing) return existing;
 
-  // No tab found: automatically reopen in a new tab
+  // No tab found: automatically reopen in a new tab — on the conversation
+  // asked for, when it is a Gemini chat URL, else a new chat.
   console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
   const openUrl = targetModel === 'gemini'
-    ? 'https://gemini.google.com/app'
+    ? (chatPath(opts?.url || '')?.thread ? opts.url : 'https://gemini.google.com/app')
     : targetUrl.replace('/*', '');
 
   const newTab = await chrome.tabs.create({ url: openUrl, active: true });
@@ -1024,7 +1025,10 @@ export async function injectPromptIntoModel(payload) {
         type: 'status',
         payload: { message: `🌐 Reopening ${targetModel} in a new tab...` }
       });
-      const newTab = await ensureModelTab(targetModel);
+      // Back into this session's conversation when the server named one
+      // (v7.9): a blank chat has never seen the task, and the next prompt is
+      // the short turn that assumes it has.
+      const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl });
       if (newTab) {
         tabs = [newTab];
       }

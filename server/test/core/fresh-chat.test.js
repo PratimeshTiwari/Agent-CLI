@@ -187,3 +187,30 @@ test('the first message spends it before the model switch and the send', () => {
   assert.ok(fresh > body.indexOf('_runCompaction'), 'compaction opens its own chat; it goes first');
   assert.ok(fresh < body.indexOf('ensureRungForTurn'), 'a switch in the old chat would be undone by the new one');
 });
+
+/*
+ * Reported: the extension was reloaded, forgot its tab, and opened a blank
+ * chat for a short turn that assumed the old one. A main-lane prompt now names
+ * its conversation, so a tab the extension has to open goes back to it.
+ */
+test('a main-lane prompt names its conversation; a subagent\'s does not (v7.9)', () => {
+  const l = Object.create(AgentLoop.prototype);
+  const queued = [];
+  l.extensionLock = { enqueue: (p) => queued.push(p) };
+  l.chatThread = THREAD;
+  l.browserTab = { id: 7, thread: THREAD.id, url: `https://gemini.google.com/u/1/app/${THREAD.id}` };
+  l._enqueueExtensionRequest({ prompt: 'p', targetModel: 'gemini' });
+  l._enqueueExtensionRequest({ prompt: 's', targetModel: 'gemini', isSubagent: true, requestId: 'r' });
+  assert.equal(queued[0].threadUrl, `https://gemini.google.com/u/1/app/${THREAD.id}`, 'the account prefix is kept');
+  assert.equal(queued[1].threadUrl, undefined);
+
+  // The tab on another chat: its URL is not this conversation's.
+  l.browserTab = { id: 7, thread: 'other', url: 'https://gemini.google.com/app/other' };
+  l._enqueueExtensionRequest({ prompt: 'p', targetModel: 'gemini' });
+  assert.equal(queued[2].threadUrl, `https://gemini.google.com/app/${THREAD.id}`);
+
+  // Control: a new chat has no conversation to go back to.
+  l.chatThread = null;
+  l._enqueueExtensionRequest({ prompt: 'p', targetModel: 'gemini' });
+  assert.equal(queued[3].threadUrl, undefined);
+});

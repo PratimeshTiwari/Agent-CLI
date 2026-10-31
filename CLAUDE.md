@@ -325,6 +325,14 @@ sends the moment the ack lands. The "Ready" row shows until the first *user* mes
 transcript is empty, or `/new`'s own row hid it. Pty: `new_chat` before prompt 0 and before the
 warm-up after `/new`; the one `ESC[2J` is `/new`'s reset.
 
+**A reopened tab goes back to the conversation (v7.9, `threadUrl`).** Reported: after the extension
+was reloaded (which clears `chrome.storage.session`, so it no longer knows its own tab),
+`ensureModelTab` opened a blank `/app` and a 508-character short turn went into a chat that had
+never seen the task; the reply was an essay about LLM agents, and `thread_changed` fired only
+after it. `_enqueueExtensionRequest` now adds `threadUrl` to every main-lane prompt (the tab's own
+URL when it is this chat, which keeps `/u/<n>`), and a tab the extension has to open goes there.
+Subagents and a new chat send none. Owned tabs are still the only ones adopted.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local
@@ -901,6 +909,9 @@ hands it the command's output. **Any new long-lived resource per file is the sam
 is backed by a local TF-IDF index.
 
 ### Where `.agent/` actually is
+
+The user-facing map of both folders, and what is safe to delete, is
+[`docs/agent-folder.md`](docs/agent-folder.md). Keep it in step with `paths.js`.
 
 `workspace` used to mean two things: where state lives, and what the agent works on. In a
 monorepo those come apart, so `paths.resolveState(workspace)` walks *up* looking for an

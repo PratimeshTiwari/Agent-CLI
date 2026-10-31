@@ -387,3 +387,23 @@ test('a thread with no id does nothing', async () => {
   assert.equal(await content.openThread({ model: 'nosuch', id: 'x' }), false);
   assert.equal(created.length, 0);
 });
+
+/*
+ * Reported (v7.9): after the extension was reloaded it had forgotten its tab —
+ * a reload clears session storage — opened a blank /app, and the next short
+ * prompt went into a chat that had never seen the task.
+ */
+test('a tab reopened for the main lane goes back to the session\'s conversation', async () => {
+  const { created } = stubChrome([], []);
+  const tab = await content.ensureModelTab('gemini', { url: 'https://gemini.google.com/u/1/app/2b76222db7a564fd' });
+  assert.equal(tab.url, 'https://gemini.google.com/u/1/app/2b76222db7a564fd');
+  assert.equal(created.length, 1);
+});
+
+test('control: no conversation, or a URL that is not one, opens a new chat', async () => {
+  for (const url of [undefined, 'https://evil.example/app/abc', 'https://gemini.google.com/gems/view']) {
+    stubChrome([], []);
+    const tab = await content.ensureModelTab('gemini', { url });
+    assert.equal(tab.url, 'https://gemini.google.com/app', String(url));
+  }
+});

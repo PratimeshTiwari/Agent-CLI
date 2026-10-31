@@ -198,6 +198,16 @@ describe('looksLikeCodeQuestion', () => {
     ]) assert.ok(looksLikeCodeQuestion(q), `missed: ${q}`);
   });
 
+  test('"this server", and names written as code (v7.9)', () => {
+    for (const q of [
+      // Verbatim: answered from AGENT.md with nothing opened, and not counted.
+      'can you check how the symbol matching is done in this node server',
+      'how does find_symbol work',
+      'what does buildPrompt return',
+      'how is the retry handled',
+    ]) assert.ok(looksLikeCodeQuestion(q), `missed: ${q}`);
+  });
+
   // A false positive costs one log row a human reads; a false negative costs
   // the measurement. But it must not fire on everything, or the rate is 100%
   // and says nothing — these are the control.
@@ -213,6 +223,10 @@ describe('looksLikeCodeQuestion', () => {
       'what year did the roman empire fall',
       'give me a recipe for banana bread',
       'is it going to rain tomorrow',
+      // Added with the "this <thing>" and identifier patterns (v7.9).
+      'how are you doing today',
+      'what is the best way to learn the piano',
+      'recommend a good book about the history of rome',
     ]) assert.equal(looksLikeCodeQuestion(q), false, `fired on: ${q}`);
   });
 

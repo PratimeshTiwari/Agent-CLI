@@ -17,7 +17,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { compactHistory } from '../../src/core/compaction.js';
 
 const rows = (n, len) => Array.from({ length: n }, (_, i) => ({
@@ -29,7 +31,10 @@ function stubLoop(history, answer = { ok: false, timedOut: true }) {
   const seen = { askOpts: null, prompt: null, calls: 0, statuses: [], newChat: 0 };
   const loop = {
     conversationHistory: history,
-    workspace: process.cwd(),
+    // Never the repo: compaction archives the turns and logs a notice, and
+    // with `process.cwd()` that was `.agent/server/` in this checkout — a
+    // 4 MB archive grown by every `npm test` since 2026-09-21.
+    workspace: mkdtempSync(join(tmpdir(), 'compact-budget-')),
     contextTokens: 1234,
     sessionStore: { saveHistory() {}, appendTurn() {} },
     promptBuilder: { resetPromptState() {} },

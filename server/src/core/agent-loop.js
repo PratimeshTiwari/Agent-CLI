@@ -2662,7 +2662,25 @@ export class AgentLoop {
   }
 
   _enqueueExtensionRequest(payload) {
-    this.extensionLock.enqueue(payload);
+    /*
+     * The conversation a main-lane prompt belongs to (v7.9). Reported: after
+     * the extension was reloaded it no longer knew its own tab (Chrome clears
+     * session storage on a reload), opened a blank `/app`, and typed a short
+     * turn into a chat that had never seen the task — the reply was a generic
+     * essay. A tab the extension has to open goes to this conversation instead.
+     */
+    const url = payload.isSubagent ? null : this._threadUrl();
+    this.extensionLock.enqueue(url ? { ...payload, threadUrl: url } : payload);
+  }
+
+  /** This session's Gemini conversation as a URL, or null for a new chat. */
+  _threadUrl() {
+    const id = this.chatThread?.id;
+    if (!id) return null;
+    const seen = this.browserTab?.url;
+    // The tab's own URL when it is this chat: it carries the `/u/<n>` account.
+    if (seen && this.browserTab?.thread === id) return seen;
+    return `https://gemini.google.com/app/${id}`;
   }
 
   /**

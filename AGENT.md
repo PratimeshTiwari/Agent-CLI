@@ -46,9 +46,10 @@ server/src/
 ├── core/             # agent-loop, prompt-builder, diff-engine, risk-classifier,
 │                     #   paths, migrate, workspaces, slash-commands, effort
 ├── bridge/           # the Chrome-extension transport
-├── context/          # token budget: minifier, counter, context, memory
-├── github/           # PR agent: poller, classifier, ci-log-parser, plan-generator
-├── mcp/              # mcp-server.js + tools/
+├── context/          # token budget (minifier, context, memory) and code search:
+│                     #   symbol-index (find_symbol / find_references: acorn for JS,
+│                     #   ruby-symbols, pattern-symbols for every other language)
+├── mcp/              # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
 └── ui/               # the terminal front-end (App.jsx, hooks/, components/)
 ```
 
