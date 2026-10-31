@@ -36,3 +36,21 @@ export function freshChatUrl(url) {
   const at = chatPath(url);
   return `https://gemini.google.com${at?.account || ''}/app`;
 }
+
+/**
+ * Where the tab has to go before a prompt for this session is typed, or null
+ * when it is already there or the server named no chat (1.58.0).
+ *
+ * Owner: "the agent should be intelligent enough to check whether it is
+ * continuing on the same chat". The server sends `threadUrl` with every main
+ * prompt; a tab on any other chat — or on a blank one — would answer a
+ * question that chat never saw. The tab's account wins when the server's URL
+ * has none, or `/app/<id>` would look on account 0 and not find it.
+ */
+export function chatToReturnTo(tabUrl, threadUrl) {
+  const want = chatPath(threadUrl || '');
+  if (!want?.thread) return null;
+  const at = chatPath(tabUrl || '');
+  if (at?.thread === want.thread) return null;
+  return `https://gemini.google.com${want.account || at?.account || ''}/app/${want.thread}`;
+}

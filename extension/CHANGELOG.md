@@ -37,6 +37,11 @@ closed after its first turn: a large-file digest's second turn typed into a tab 
 now asks its own session map. And `tab_unreachable` says `isSubagent` and `requestId`, so the agent
 fails that subagent request instead of ending the user's turn in another tab.
 
+**A prompt goes into this session's chat or nowhere.** Before typing a main-lane prompt the worker
+compares the tab's chat with the server's `threadUrl` and, if they differ, moves the tab there
+(keeping its `/u/<n>` account) and checks it arrived. If the chat will not load (deleted, another
+account) it sends `chat_unreachable` and types nothing.
+
 ### 1.57.0 — 2026-10-31
 
 **A prompt the server resends after a silent reply goes into a fresh tab** (`freshTab`). Reported

@@ -257,3 +257,20 @@ test('a session tab outlives its turn: the worker asks its own map, not the repl
   const content = readFileSync(new URL('../../../extension/src/background/content.js', import.meta.url), 'utf8');
   assert.match(content, /\.\.\.\(payload\.isSubagent \? \{ isSubagent: true, requestId: payload\.requestId \} : \{\}\)/);
 });
+
+// v8.1, owner: "the agent should check whether it is continuing on the same
+// chat … if it fails, show a warning and tell the user to switch manually".
+test('a chat the tab could not return to: the turn ends, the message is carried, and the way out is named', async () => {
+  const shown = [];
+  const loop = fakeLoop({
+    isProcessing: true,
+    noteUndelivered() { this.calls.push(['noteUndelivered']); },
+    callbacks: { sendToPanel: (m) => shown.push(m) },
+  });
+  await deliver(loop, { type: 'error', payload: { op: 'chat_unreachable', wanted: 'aaa111', landed: 'bbb222' } });
+  assert.equal(loop.isProcessing, false);
+  assert.ok(loop.calls.some(([c]) => c === 'noteUndelivered'), 'carried into the next message');
+  const text = shown.at(-1).payload.message;
+  assert.match(text, /^Not sent · the tab could not get back to this session's chat aaa111\n/);
+  assert.match(text, /\/chat <link or id>.*\/new/);
+});

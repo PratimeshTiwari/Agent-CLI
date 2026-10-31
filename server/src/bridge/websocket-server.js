@@ -27,7 +27,7 @@ import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
 import { logError, logNotice } from '../core/error-log.js';
 import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/extension-version.js';
-import { tabUnreachableMessage } from './tab-failure.js';
+import { tabUnreachableMessage, chatUnreachableMessage } from './tab-failure.js';
 import { tabLink } from '../core/compaction.js';
 
 /**
@@ -964,10 +964,13 @@ export class WebSocketServer {
         if (payload?.level === 'notice') break;
 
         // A prompt the tab never sent is carried into the next message (v7.10).
-        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab') {
+        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab' || payload?.op === 'chat_unreachable') {
           this.agentLoop.noteUndelivered?.();
         }
         // Said in the terminal's own words, with what was already tried (v7.10).
+        if (payload?.op === 'chat_unreachable') {
+          message.payload = { ...payload, message: chatUnreachableMessage(payload.wanted) };
+        }
         if (payload?.op === 'tab_unreachable') {
           message.payload = {
             ...payload,

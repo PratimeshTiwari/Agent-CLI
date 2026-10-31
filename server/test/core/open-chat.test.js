@@ -57,3 +57,29 @@ test('not during a turn, not with nothing connected, not for something that is n
     assert.deepEqual(saved, []);
   }
 });
+
+test('a reply from another chat is said on screen, with the way back', async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const rows = [];
+  const l = Object.create(AgentLoop.prototype);
+  Object.assign(l, {
+    workspace: mkdtempSync(join(tmpdir(), 'chat-')),
+    chatThread: { model: 'gemini', id: 'aaaaaaaaaaaa' },
+    modelConfig: {},
+    promptBuilder: { resetPromptState() {} },
+    sessionStore: { setThread() {} },
+    _noticeRow: (m) => rows.push(m),
+  });
+  l._recordThread('https://gemini.google.com/app/bbbbbbbbbbbb');
+  assert.equal(rows.length, 1);
+  assert.match(rows[0], /another chat \(bbbbbbbbbbbb\), not this session's \(aaaaaaaaaaaa\).*\/chat aaaaaaaaaaaa goes back/);
+
+  rows.length = 0;
+  l._recordThread('https://gemini.google.com/app/bbbbbbbbbbbb');
+  assert.deepEqual(rows, [], 'once, not on every reply after');
+  const first = Object.assign(Object.create(AgentLoop.prototype), { ...l, chatThread: null, _noticeRow: (m) => rows.push(m) });
+  first._recordThread('https://gemini.google.com/app/cccccccccccc');
+  assert.deepEqual(rows, [], "a session's first chat is not a change");
+});

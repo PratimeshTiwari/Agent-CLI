@@ -113,6 +113,13 @@
     const at = chatPath(url);
     return `https://gemini.google.com${at?.account || ""}/app`;
   }
+  function chatToReturnTo(tabUrl, threadUrl) {
+    const want = chatPath(threadUrl || "");
+    if (!want?.thread) return null;
+    const at = chatPath(tabUrl || "");
+    if (at?.thread === want.thread) return null;
+    return `https://gemini.google.com${want.account || at?.account || ""}/app/${want.thread}`;
+  }
 
   // src/background/content.js
   var MODEL_URLS = {
@@ -657,6 +664,23 @@
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
         if (fresh) tabs = [fresh];
       }
+      const placed = await ensureOnChat(tabs[0], payload.threadUrl);
+      if (!placed.ok) {
+        const errorMsg = {
+          type: "error",
+          payload: {
+            op: "chat_unreachable",
+            stage: "navigate",
+            targetModel,
+            wanted: placed.wanted,
+            landed: placed.landed,
+            message: "Could not get back to this session's chat"
+          }
+        };
+        broadcastToSidePanel(errorMsg);
+        sendToServer(errorMsg);
+        return;
+      }
       success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
       if (!success && targetModel === "gemini") {
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
@@ -683,6 +707,38 @@
       lastTabFailure = null;
       broadcastToSidePanel(errorMsg);
       sendToServer(errorMsg);
+    }
+  }
+  async function ensureOnChat(tab, threadUrl) {
+    let current;
+    try {
+      current = await chrome.tabs.get(tab.id);
+    } catch {
+      return { ok: true };
+    }
+    const target = chatToReturnTo(current.url, threadUrl);
+    if (!target) return { ok: true };
+    const wanted = chatPath(target)?.thread;
+    try {
+      await chrome.tabs.update(tab.id, { url: target });
+      await waitForTabLoad(tab.id, 1e4);
+      await waitForBridge(tab.id, 15e3);
+      const after = await chrome.tabs.get(tab.id);
+      const landed = chatPath(after.url || "")?.thread || null;
+      if (landed !== wanted) return { ok: false, wanted, landed };
+      sendToServer({
+        type: "error",
+        payload: {
+          op: "chat_restored",
+          level: "notice",
+          targetModel: "gemini",
+          message: "The tab was on another chat; moved it back before sending",
+          detail: `${chatPath(current.url || "")?.thread || "a new chat"} \u2192 ${wanted}`
+        }
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, wanted, landed: chatPath(current.url || "")?.thread || null, error: err?.message };
     }
   }
   async function focusModelTab(targetModel = "gemini") {

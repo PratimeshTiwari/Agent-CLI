@@ -654,8 +654,7 @@ passes the probe's reply through. The palette also lost the spinner's two rows d
 clears at 13 rows on `/`). Settings rows for Theme and Workspace now open with `returnTo`, so esc
 steps back to settings. Pty: 0 clears at 13 and 24 on every path.
 
-**Jira (v8.1, `jira_issue`, prompt v4, `.agent/artifacts/plans/2026-10-31-atlassian-tools.md`).**
-Owner: "all write/modify changes ask for my permission as a mandatory step". Reads (`get`,
+**Jira (v8.1, `jira_issue`, prompt v4).** Owner: every write asks, as a mandatory step. Reads (`get`,
 `search`) answer in Markdown; every other action, an unknown one included, is a write. Three locks,
 each tested with a negative control: `requiresApproval`'s **first** statement returns
 `isExternalWrite` for an `EXTERNAL_TOOLS` call, before mode or risk (a source assertion pins its
@@ -667,17 +666,19 @@ the outcome as `risk: 'external'`; and the handler refuses without a one-use tok
 with wiki markup (`atlassian/adf.js`, `wiki.js`); what a write would lose (panels, mentions) is
 named in the box. The token is only in the Keychain or `~/.agent/atlassian-token.json` (0600), set
 by `agent atlassian login` (run by the bin before `tsx`); never in a prompt, log or settings file.
-v4 offers the tool only once a site is set up, and is v3 byte for byte without one. `/jira` checks
-the sign-in. Pty against the suite's fake Jira: Don't send sent nothing, Send one request, 0 clears
-at 13 and 24 rows. Not yet run against a real Jira (work laptop).
+v4 offers it only once a site is set up (else v3 byte for byte); `/jira` checks the sign-in. Pty
+on the fake Jira: Don't send sends nothing, Send one request, 0 clears. No real Jira run yet.
 
 **A subagent's tab failure is the subagent's (v8.1, extension 1.58.0).** Reported with
 screenshots: digests of CLAUDE.md and CHANGELOG.md failed and the user's turn ended with the
 failed-send line. The worker kept a session tab only when the reply carried `sessionId`, which the
 page never sends, so each session tab closed after turn 1 (`isSessionTab` asks the worker's map
 now); and `tab_unreachable` ended the main turn whoever sent the prompt (it carries `isSubagent`
-and `requestId` now, and settles that request only). `/chat <link or id>` points the tab at a
-chat you name and records it (`openChat`), for when a send went to the wrong one.
+and `requestId` now, and settles that request only). **The tab is put back on the session's chat
+before every main prompt** (`ensureOnChat`, `chatToReturnTo`; owner: "the agent should check
+whether it is continuing on the same chat"): `threadUrl` names it, the tab's account is kept. If it
+will not load there nothing is typed: `chat_unreachable`, one warning naming `/chat <link or id>`
+(`openChat`) and `/new`, and the message is carried. A reply from another chat says so too.
 `_cleanJsonString` is a scan now: its regex did not know `\"`, so a long edit's newlines after
 the first escaped quote stayed raw ("Bad control character", a lost round). An extension
 since 1.58.0 that is older than the checkout is asked to reload itself (`reload_extension`), once
@@ -1404,9 +1405,8 @@ document here. The reasoning is in [`docs/history.md`](docs/history.md#standing-
 
 ### Measured and discarded
 
-The address theory for the reconnect, the anti-throttling audio hack, and "fixing" the batch
-loop's re-serialisation: each measured and dropped, in
-[`docs/history.md`](docs/history.md#measured-and-discarded). Read it before re-trying any of them.
+The reconnect address theory, the audio hack, the batch re-serialisation "fix": measured and
+dropped, in [`docs/history.md`](docs/history.md#measured-and-discarded).
 
 ## History
 

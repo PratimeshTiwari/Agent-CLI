@@ -1590,6 +1590,13 @@ export class AgentLoop {
         message: 'The browser moved to a different Gemini conversation; the model no longer has this one',
         meta: { from: previous.id, to: thread.id, effort: this.modelConfig?.effort || null },
       });
+      /*
+       * And said on screen (v8.1). The extension now returns the tab to this
+       * session's chat before every send, so a reply from another chat means
+       * the tab moved while it was answering. Owner: warn, and say how to
+       * switch by hand. It carries on here, re-taught, unless told otherwise.
+       */
+      this._noticeRow?.(`⚠ That reply came from another chat (${thread.id}), not this session's (${previous.id}) · it continues there · /chat ${previous.id} goes back`);
     }
   }
 
