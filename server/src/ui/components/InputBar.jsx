@@ -6,6 +6,7 @@ import { FOCUS_INPUT, modeColor } from '../constants.js';
 import { applyPaste, nextPasteId } from '../paste.js';
 import { recognizeDrop } from '../file-drop.js';
 import { oneLine, taskProgress } from '../format.js';
+import { formatTokens } from '../token-count.js';
 import { hasClipboardImage } from '../clipboard-image.js';
 import { T } from '../theme.js';
 import { keyCell } from '../keys-view.js';
@@ -59,7 +60,7 @@ export function InputBar({
   slashSelected,
   keysGrid = null,
   status,
-  syncTokenEstimate,
+  spinnerTokens,
   liveTally = '',
   terminalOpen,
   pastes,
@@ -152,7 +153,7 @@ export function InputBar({
             <RunningLine tick={animTick} text={isToolRunningRef.current ? status : thinkingText} />
             <Text dimColor>
               {' ('}{elapsed}s
-              {syncTokenEstimate > 0 ? ` · ↑ ${syncTokenEstimate >= 1000 ? `${(syncTokenEstimate / 1000).toFixed(1)}k` : syncTokenEstimate} tokens` : ''}
+              {spinnerTokens > 0 ? ` · ↑ ${formatTokens(spinnerTokens)} tokens` : ''}
               {liveTally ? ` · ${liveTally}` : ''}
               {' · esc to stop)'}
             </Text>

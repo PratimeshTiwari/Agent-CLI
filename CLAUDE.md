@@ -1804,6 +1804,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
   one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
   and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
+- **The spinner's token count climbs (v7.10, `ui/token-count.js`).** Asked for: Claude Code's
+  count rises, ours jumped. It counts the thread plus the reply being streamed (the tab sends it
+  every 2 s; `streamRef` in `use-agent-callbacks.js`, a ref, never state), and that counts only
+  until the loop adds the finished reply (`base`), so nothing is counted twice. The drawn number
+  closes 8% of the gap per 80 ms spinner tick, the tick App already draws, so it costs no
+  frames; a fall (`/compact`, `/new`) is drawn at once. Pty (`FAKE_STREAM_MS=2000`): 2.9k →
+  6.3k over a 9 s reply, 0 clears at 13 and 24 rows.
 - **The status bar is laid out in `ui/status-bar.js` (v6.13, Option A of
   `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
   coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest
