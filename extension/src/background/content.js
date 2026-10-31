@@ -401,6 +401,12 @@ export const isSubagentTab = (tabId) => subagentTabs.has(tabId);
  * user closes by hand must not stay remembered, or the next turn tries to send
  * into a tab that no longer exists and reports the site as unreachable.
  */
+/** Is this a batch session's tab, held across its turns (1.58.0)? */
+export function isSessionTab(tabId) {
+  for (const id of sessionTabs.values()) if (id === tabId) return true;
+  return false;
+}
+
 export function forgetTab(tabId) {
   stopCompletionTicks(tabId);
   subagentTabs.delete(tabId);
@@ -1138,6 +1144,9 @@ export async function injectPromptIntoModel(payload) {
         // Short, as asked: by now it has reloaded the tab and reopened the chat
         // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
         message: `Communication with the ${targetModel} tab failed · check the browser`,
+        // Whose prompt it was (1.58.0): a subagent's failure is that request's,
+        // and must not end the user's turn in another tab.
+        ...(payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}),
       },
     };
     lastTabFailure = null;

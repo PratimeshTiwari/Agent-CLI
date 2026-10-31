@@ -10,6 +10,7 @@ import { searchFiles } from './tools/search-files.js';
 import { grepSearch } from './tools/grep-search.js';
 import { findSymbol, findReferences } from './tools/find-symbol.js';
 import { queryLog } from './tools/query-log.js';
+import { jiraIssue } from './tools/jira-issue.js';
 import { readFile } from './tools/read-file.js';
 import { editFile } from './tools/edit-file.js';
 import { createFile } from './tools/create-file.js';
@@ -104,6 +105,32 @@ const TOOL_DEFINITIONS = [
       format: { type: 'string', description: 'json | ndjson | csv | tsv | text, when detection is wrong', required: false },
     },
     handler: queryLog,
+  },
+  {
+    // v8.1: offered by prompt versions with `jira` (v4), and only once a site
+    // is set up. Writes ask every time: core/external-approval.js.
+    name: 'jira_issue',
+    description: 'Read, search, create, update, comment on, move and attach files to Jira issues, on the '
+      + 'site the user signed in to. Text is Markdown both ways. Every write is shown to the user and sent only '
+      + 'if they approve it.',
+    parameters: {
+      action: { type: 'string', description: 'get | search | create | update | comment | transition | attach', required: true },
+      key: { type: 'string', description: 'Issue key, e.g. PROJ-123 (get, update, comment, transition, attach)', required: false },
+      jql: { type: 'string', description: 'JQL for search', required: false },
+      limit: { type: 'number', description: 'search: issues to list (default 20, max 50)', required: false },
+      project: { type: 'string', description: 'create: project key', required: false },
+      type: { type: 'string', description: 'create: issue type name (Story, Bug, Task, …)', required: false },
+      summary: { type: 'string', description: 'create/update: the title', required: false },
+      description: { type: 'string', description: 'create/update: Markdown; on update it replaces the whole description', required: false },
+      labels: { type: 'string|array', description: 'create/update: labels; on update they replace the existing ones', required: false },
+      priority: { type: 'string', description: 'create/update: priority name', required: false },
+      parent: { type: 'string', description: 'create/update: parent or epic key', required: false },
+      assignee: { type: 'string', description: 'create/update: "me", "none", a name or an email', required: false },
+      body: { type: 'string', description: 'comment: Markdown', required: false },
+      to: { type: 'string', description: 'transition: the status to move to', required: false },
+      files: { type: 'string|array', description: 'attach: local file paths (under 10 MB each)', required: false },
+    },
+    handler: jiraIssue,
   },
   {
     name: 'edit_file',

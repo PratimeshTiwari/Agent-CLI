@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer } from '../../src/bridge/websocket-server.js';
 import { resolveEffort } from '../../src/core/effort.js';
+import { _setExpectedExtensionVersion } from '../../src/core/extension-version.js';
 
 /** A loop that records what it was asked to do, and nothing else. */
 function fakeLoop(extra = {}) {
@@ -194,4 +195,65 @@ test('an empty report does not erase what was known', async () => {
   // Treating that as "no tabs" would flap the status on every eviction.
   assert.deepEqual(bridge.clients.get('c1').reportedModels, ['gemini'],
     'an empty report overwrote a known-good one');
+});
+
+// v8.1: "this should be a clickable link". A chrome:// link opens nothing from
+// a terminal, so a build that can reload itself is asked to, between turns.
+test('an older build since 1.58.0 is asked to reload once, and never mid-turn', async () => {
+  _setExpectedExtensionVersion('1.59.0');
+  try {
+    const identify = async (bridge, version) => {
+      const sent = [];
+      bridge.clients.set('c1', { type: 'unknown', ws: { readyState: 1, send: (m) => sent.push(JSON.parse(m)) } });
+      bridge._send = (ws, m) => sent.push(m);
+      await bridge._handleMessage('c1', { id: 'm1', type: 'identify', payload: { clientType: 'extension', version } });
+      return sent.map((m) => (m.type === 'status' ? `status:${m.payload.message}` : m.type));
+    };
+    const notes = [];
+    const loop = fakeLoop({ _notify: (m) => notes.push(m) });
+    const bridge = new WebSocketServer({ port: 0, agentLoop: loop });
+
+    assert.ok((await identify(bridge, '1.58.0')).includes('reload_extension'));
+    assert.deepEqual(notes, ['↻ Extension updated · 1.58.0 → 1.59.0']);
+    // The same build back again: the reload did not take, so say how to do it.
+    const again = await identify(bridge, '1.58.0');
+    assert.ok(!again.includes('reload_extension'));
+    assert.ok(again.some((m) => /reload at chrome:\/\/extensions/.test(m)));
+
+    const busy = new WebSocketServer({ port: 0, agentLoop: fakeLoop({ isProcessing: true, _notify() {} }) });
+    assert.ok(!(await identify(busy, '1.58.0')).includes('reload_extension'), 'a reload mid-turn orphans the tab');
+
+    const old = new WebSocketServer({ port: 0, agentLoop: fakeLoop({ _notify() {} }) });
+    assert.ok(!(await identify(old, '1.57.0')).includes('reload_extension'), '1.57.0 has no handler');
+  } finally {
+    _setExpectedExtensionVersion(undefined);
+  }
+});
+
+// v8.1: a delegated read lost its tab and the user's turn, in another tab,
+// ended with "Communication with the Gemini tab failed".
+test("a subagent's tab failing settles that request, and leaves the user's turn running", async () => {
+  const settled = [];
+  const loop = fakeLoop({
+    isProcessing: true,
+    noteUndelivered() { this.calls.push(['noteUndelivered']); },
+    resolveSubagent(id, outcome) { settled.push([id, outcome]); return true; },
+  });
+  await deliver(loop, { type: 'error', payload: { op: 'tab_unreachable', isSubagent: true, requestId: 'r1', detail: 'No tab with id: 5.' } });
+  assert.deepEqual(settled, [['r1', { success: false, error: 'No tab with id: 5.' }]]);
+  assert.equal(loop.isProcessing, true);
+  assert.deepEqual(loop.calls, [], 'not aborted, not carried as undelivered');
+
+  // Control: the main lane's own failure still ends the turn.
+  const main = fakeLoop({ isProcessing: true, noteUndelivered() { this.calls.push(['noteUndelivered']); }, resolveSubagent() {} });
+  await deliver(main, { type: 'error', payload: { op: 'tab_unreachable', detail: 'x' } });
+  assert.equal(main.isProcessing, false);
+  assert.ok(main.calls.some(([c]) => c === 'abortExtensionWork'));
+});
+
+test('a session tab outlives its turn: the worker asks its own map, not the reply', () => {
+  const src = readFileSync(new URL('../../../extension/src/background/main.js', import.meta.url), 'utf8');
+  assert.match(src, /if \(!isSessionTab\(sender\.tab\.id\)\) \{\s*\n\s*forgetTab\(sender\.tab\.id\);\s*\n\s*chrome\.tabs\.remove/);
+  const content = readFileSync(new URL('../../../extension/src/background/content.js', import.meta.url), 'utf8');
+  assert.match(content, /\.\.\.\(payload\.isSubagent \? \{ isSubagent: true, requestId: payload\.requestId \} : \{\}\)/);
 });

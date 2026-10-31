@@ -1129,3 +1129,100 @@ Two traps, both of which produced confident wrong numbers first:
   is `steps`). The shape never changed, the epoch never bumped, and it measured a clean 0
   clears *while doing nothing at all* — a fix that looks perfect because it is inert. Only the
   reply still being missing caught it.
+
+## Standing decisions rescued from `HANDOFF.md`
+
+Moved here from CLAUDE.md on 2026-11-01, when that file passed 150k characters. Still in force.
+
+
+That file was a baton — "delete this once the work below is done" — and its work
+is done or obsolete: three of its eight open items were GitHub-agent work deleted
+in `e375aed`, `/update` has now run against a real merge, `ask_subagent` is
+verified (`4b520b9`), and `/logs rates` has its data. What it also held, and
+nothing else did, is these. They are decisions, so they belong here.
+
+- **No reply envelope** — asking the model to wrap replies in JSON. Argued from
+  measurement, and the price is the case against it: the browser tab stops being
+  readable to the person watching it, which is a *supported surface*;
+  `gemini_response_stream` can no longer render live, because JSON cannot be
+  drawn until it closes and parses; every reply becomes as fragile as
+  `_cleanJsonString` already is, since prose is exactly what escaping gets
+  wrong; and it is more text typed into a browser every turn, against a prompt
+  strategy that exists to avoid exactly that. The three drift detectors look
+  like candidates and are not — a provider error is Gemini's own error page
+  rather than model output, and a model confused enough to deny its own tools
+  will not emit a correct marker saying so. **If it comes back**, the thing
+  worth doing instead is a short output-contract line asking for the constructs
+  the renderer handles best.
+- **The jitter's second half is not happening** — ~20% of the live frame spent
+  on the seam that brought the scroll glitches back twice.
+- **Terminal failures are opt-in per terminal**, chosen over an age filter.
+- **The emoji sweep is not happening.** ~100 glyphs across 16 files were changed
+  and then reverted; the only real complaint was the tick on a dark background,
+  which is now `✔`. Change a glyph when someone names *that glyph* — `✅` → `✓`
+  on the compaction row was right, and re-running the sweep is not.
+
+And two traps that were only written down there:
+
+- **A test can pin the bug.** A list-indent fix failed two tests that asserted
+  the broken two-space indent. A test written from observed output describes
+  what the code *does*, which is not what it *should* do — and it will defend
+  the bug.
+- **Do not write a derived number into a document here.** Commit counts and test
+  counts both drifted within a day. Print the command instead.
+
+## Measured and discarded
+
+Moved here from CLAUDE.md on 2026-11-01. Kept so they are not re-tried.
+
+
+- **The extension's "address theory" was wrong.** The reconnect, not the address, was the
+  whole connectivity problem. With the shipped bundle refusing every handshake: attempts at
+  4.7s, 20.7s, 50.7s, 80.7s — steady state **exactly 30.0s**, the `chrome.alarms` clamp
+  floor. Headless Chrome reclaims service workers harder than a real browser, so that is a
+  lower bound rather than a verdict.
+- **The anti-throttling audio hack never worked, and not for the reason three documents
+  recorded.** They said the `<audio>` element was created and never appended — true, and not
+  the bug, because a detached `<audio>` plays fine in Chrome. The real reason is in its own
+  catch block: autoplay policy blocks playback without a user gesture, and the fallback bound
+  `click`/`keydown` with `{ once: true }`, which a **backgrounded** tab never receives. So it
+  played in tabs that did not need it and stayed silent in the ones it existed for. Deleted;
+  the Tab Wakeup Protocol is the mechanism that works.
+- **The batch loop's flat re-serialisation was diagnosed as an oversight and was not.** Every
+  batch turn opened a fresh tab closed when the turn ended, so turn 2 had never seen turn 1 —
+  there was no thread to opt into. Measured at **81% resent** over ten turns (156,140
+  characters where 28,943 were new) before the tab was held for the life of the task.
+
+## Why one reviewer and not a multi-agent pipeline
+
+Moved here from CLAUDE.md on 2026-11-01.
+
+**Why this shape and not a multi-agent pipeline.** The current reading of the literature is
+that extra agents earn their place when they contribute *intelligence rather than actions* and
+writes stay single-threaded — [Cognition's "Don't Build Multi-Agents"](https://cognition.com/blog/dont-build-multi-agents)
+reports coordination breakdowns as ~37% of multi-agent production failures, and its core
+objection is that summaries lose the implicit decisions behind them. One reviewer with no write
+access is that shape; a planner → tech-planner → reviewer chain handing each other summaries is
+precisely the failure mode.
+
+## Saying what would prove you wrong (`pro-hypothesis.md`)
+
+Moved here from CLAUDE.md on 2026-11-01.
+
+**Saying what would prove you wrong (`pro-hypothesis.md`).** Proposed as a "hypothesis
+engine": a falsifiable hypothesis before every search, with `<invalidation_criteria>` and a
+1–100 `<confidence_score>`. Measuring the prompts first narrowed it a long way. `standard`
+already asks for *"what you expect the next call to show"*, which is most of a hypothesis —
+what no rung asked was **what would disprove it**, or what to do when the answer is not clear.
+Those two are the whole gap, and they cost **714 characters** rather than a taxonomy rewrite.
+
+Scoped to `standard` and `deep`, because it costs **output** tokens and output is generation
+time: `brief` promises "straight to work", and the flash rungs are written for a model that
+follows short prompts and ignores long ones. Verified the way the last prompt move was —
+**6 of the 10 effort × topology shapes come out byte-identical**, and the four that change do
+so by exactly +714. The first attempt was +1 character on `brief` too, from a newline left
+outside the conditional.
+
+**The numeric confidence score was declined.** A model asked for a number produces one, and a
+fabricated `87` reads as evidence. The instruction is behavioural instead — if you would not
+bet on it, ask — which is the part that changes what the agent *does*.

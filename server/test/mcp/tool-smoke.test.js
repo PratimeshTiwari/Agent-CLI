@@ -27,13 +27,20 @@ import { join } from 'node:path';
 import { MCPServer } from '../../src/mcp/mcp-server.js';
 import { TaskManager } from '../../src/core/task-manager.js';
 import { DiffEngine } from '../../src/core/diff-engine.js';
+import { startFakeJira, useFakeJira } from '../atlassian/fake-jira.js';
 
 let ws;
 let server;
 let taskManager;
 let ctx;
+let jira;
+let restoreJira;
 
-before(() => {
+before(async () => {
+  // jira_issue's happy path is a read from a fake Jira; nothing here writes to one.
+  jira = await startFakeJira({ kind: 'cloud' });
+  restoreJira = useFakeJira(jira);
+
   ws = mkdtempSync(join(tmpdir(), 'smoke-'));
   mkdirSync(join(ws, '.agent'), { recursive: true });
   mkdirSync(join(ws, 'src'), { recursive: true });
@@ -49,7 +56,9 @@ before(() => {
   ctx = { workspace: ws, taskManager, editor: null };
 });
 
-after(() => {
+after(async () => {
+  restoreJira?.();
+  await jira?.close();
   try { taskManager?.killAll?.(); } catch { /* best effort */ }
   rmSync(ws, { recursive: true, force: true });
 });
@@ -71,6 +80,7 @@ const HAPPY_PATH = {
   find_symbol: { name: 'hello' },
   find_references: { name: 'hello' },
   query_log: { path: 'app.ndjson', where: ['level=error'] },
+  jira_issue: { action: 'get', key: 'PROJ-12' },
   run_command: { command: 'echo ok' },
   run_background: { command: 'sh -c "sleep 5"' },
   manage_task: { action: 'list' },

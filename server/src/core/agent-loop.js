@@ -159,7 +159,7 @@ function oneLineError(result) {
   return line.slice(0, 160);
 }
 import * as paths from './paths.js';
-import { threadFromUrl } from './chat-thread.js';
+import { threadFromUrl, threadFromInput } from './chat-thread.js';
 import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
@@ -168,7 +168,7 @@ import { tabUnreachableMessage } from '../bridge/tab-failure.js';
 import { runDelegatedRead, shouldDelegateRead } from './delegated-read.js';
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from './subagent-session.js';
-import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb } from './tool-catalog.js';
+import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS } from './tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung } from './effort.js';
 import { planModelSwitch, browserModelPin, rungForModel } from './model-match.js';
 import { archiveTurns } from './session-recall.js';
@@ -182,6 +182,7 @@ import { MemoryManager } from '../context/memory-manager.js';
 import { ExtensionLock, mainLane, subLane } from '../bridge/extension-lock.js';
 import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from './tool-policy.js';
+import { runExternalTool } from './external-approval.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from './diff-approval.js';
 import { createOutputTail } from './output-tail.js';
@@ -1743,7 +1744,13 @@ export class AgentLoop {
 
   answerCommandApproval(action, command) {
     if (this.pendingCommandResolve) {
-      if (action === 'allow_always') {
+      if (this._pendingExternal) {
+        // An external write (v8.1) is never remembered either way: "always"
+        // from a panel that offers it counts as this once, and nothing is
+        // added to the allow or block list.
+        this.pendingCommandResolve({ approved: ['allow_once', 'allow_always', 'accept', 'send'].includes(action) });
+        this._pendingExternal = false;
+      } else if (action === 'allow_always') {
         this.commandRules.allow.push(command);
         this._saveConfig();
         this.pendingCommandResolve({ approved: true });
@@ -3006,6 +3013,27 @@ export class AgentLoop {
    *
    * @returns {{ok: boolean, message: string, turns?: object[]}}
    */
+  /**
+   * Continue in a chat the person names (`/chat`, v8.1). Asked for after a
+   * failed send: "provide gemini chat id in case wrong chat is selected, so
+   * gemini can continue from the correct chat". The tab goes there and this
+   * session records it, so the next message — and the next `--continue` —
+   * lands in that conversation. Nothing is re-taught: that chat is the one
+   * that holds the work, and the tool names ride every turn anyway.
+   */
+  openChat(input) {
+    const thread = threadFromInput(input);
+    if (!thread) return { ok: false, message: 'Not a Gemini chat · paste its link (gemini.google.com/app/…) or the id after /app/' };
+    if (this.isProcessing) return { ok: false, message: 'A turn is running · `/chat` after it ends' };
+    if (this.chatThread?.id === thread.id) return { ok: true, message: `Already in chat ${thread.id}` };
+    const sent = this._toExtension('open_thread', { thread });
+    if (sent === false) return { ok: false, message: 'The browser is not connected · `/chat` again once it is' };
+    this.chatThread = thread;
+    this.sessionStore?.setThread?.(thread);
+    if (this.promptBuilder) this.promptBuilder.pendingRecap = null;
+    return { ok: true, message: `↪ Chat ${thread.id} · the tab is going there; your next message continues in it` };
+  }
+
   resumeSessionById(id) {
     const store = this.sessionStore;
     const record = (store?.listSessions?.() || []).find((r) => r.id === id);
@@ -3422,6 +3450,10 @@ export class AgentLoop {
             outcome: 'rejected', reason: result?.error, risk: risk.level,
           });
         }
+      } else if (EXTERNAL_TOOLS.has(call.name)) {
+        // Jira (v8.1): a write is shown and sent only on the person's yes, in
+        // every mode — core/external-approval.js.
+        result = await runExternalTool(this, call, { editor: this.editor, taskManager: this.taskManager });
       } else if (LOOP_TOOLS.has(call.name)) {
         // The three the loop answers itself — `core/loop-tools.js`. Which three
         // is the catalog's `dispatch: 'loop'`, not a list repeated here.
@@ -3874,8 +3906,35 @@ export class AgentLoop {
   }
 
   _cleanJsonString(str) {
-    // LLMs often emit raw newlines inside JSON string literals which breaks JSON.parse
-    return str.replace(/"(.*?)"/gs, (match) => match.replace(/\n/g, '\\n'));
+    // LLMs often emit raw newlines inside JSON string literals, which breaks
+    // JSON.parse. A scan rather than a `"(.*?)"` regex (v8.1): the regex paired
+    // quotes without knowing `\"`, so one escaped quote in a long document put
+    // every newline after it outside a "string" and left it raw — reported as
+    // "Bad control character … at position 10264" on a 10k-character edit.
+    let out = '';
+    let inString = false;
+    let escaped = false;
+    for (const ch of str) {
+      if (!inString) {
+        if (ch === '"') inString = true;
+        out += ch;
+      } else if (escaped) {
+        escaped = false;
+        out += ch;
+      } else if (ch === '\\') {
+        escaped = true;
+        out += ch;
+      } else if (ch === '"') {
+        inString = false;
+        out += ch;
+      } else if (ch < ' ') {
+        out += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : ch === '\t' ? '\\t'
+          : `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      } else {
+        out += ch;
+      }
+    }
+    return out;
   }
 
   /**

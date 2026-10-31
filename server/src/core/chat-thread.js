@@ -46,6 +46,20 @@ export function threadFromUrl(url) {
 }
 
 /**
+ * A chat named by the person (`/chat`, v8.1): a Gemini chat link, with or
+ * without a `/u/<n>` account, or the bare id from one.
+ *
+ * @returns {{model: 'gemini', id: string} | null}
+ */
+export function threadFromInput(text) {
+  const t = String(text || '').trim().replace(/^<|>$/g, '');
+  const url = t.match(/^(?:https?:\/\/)?gemini\.google\.com\/(?:u\/\d+\/)?app\/([A-Za-z0-9_-]+)/);
+  if (url) return { model: 'gemini', id: url[1] };
+  if (/^[0-9a-f]{12,}$/i.test(t)) return { model: 'gemini', id: t };
+  return null;
+}
+
+/**
  * Would the model remember this session, if we sent to that tab now?
  *
  * Both halves have to be known. An unknown thread on either side is "we cannot

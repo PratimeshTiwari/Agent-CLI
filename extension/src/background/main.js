@@ -1,7 +1,7 @@
 import { connectWebSocket, isSocketOpen, ensureWatchdogAlarm } from './socket.js';
 import { sendToServer } from './messaging.js';
 import { getState } from './state.js';
-import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, endSession, stopCompletionTicks } from './content.js';
+import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, endSession, stopCompletionTicks, isSessionTab } from './content.js';
 import { handleCommand } from './floating.js';
 
 // Keyboard shortcuts from the manifest's `commands` — the global one included.
@@ -70,7 +70,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // A tab held for a *batch session* outlives the turn: the whole
             // point is that the next turn finds the thread still there. It is
             // closed by an explicit end_session when the task is over.
-            if (!payload.sessionId) {
+            // Asked of the worker's own map (1.58.0): the reply never carried
+            // `sessionId`, so every session tab was closed after its first
+            // turn and the second typed into a tab that no longer existed.
+            if (!isSessionTab(sender.tab.id)) {
               forgetTab(sender.tab.id);
               chrome.tabs.remove(sender.tab.id)
                 .catch(err => console.warn('Failed to auto-close subagent tab:', err));

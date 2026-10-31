@@ -2,7 +2,7 @@
   "name": "cli-agent-companion",
   "displayName": "Agent CLI Companion",
   "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"

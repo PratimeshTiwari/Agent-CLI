@@ -80,7 +80,10 @@ not do that on purpose, it is clutter.
 
 ```
 ~/.agent/
-├── settings.json          yours, not the project's: theme, name, prompt version, startup
+├── settings.json          yours, not the project's: theme, name, prompt version, startup,
+│                          and the Jira site (never its token)
+├── atlassian-token.json   the Jira token, readable only by you — only where there is no
+│                          macOS Keychain; `agent atlassian logout` deletes it
 ├── AGENT.md               instructions for every project (optional; you write it)
 ├── recent-workspaces.json what /set-workspace offers
 ├── workspaces/<name>-<hash>/   the second copy of each project's conversations

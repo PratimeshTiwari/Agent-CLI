@@ -306,6 +306,10 @@
     } catch {
     }
   }
+  function isSessionTab(tabId) {
+    for (const id of sessionTabs.values()) if (id === tabId) return true;
+    return false;
+  }
   function forgetTab(tabId) {
     stopCompletionTicks(tabId);
     subagentTabs.delete(tabId);
@@ -670,7 +674,10 @@
           detail: lastTabFailure?.message,
           // Short, as asked: by now it has reloaded the tab and reopened the chat
           // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
-          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`
+          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`,
+          // Whose prompt it was (1.58.0): a subagent's failure is that request's,
+          // and must not end the user's turn in another tab.
+          ...payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}
         }
       };
       lastTabFailure = null;
@@ -965,6 +972,13 @@
         break;
       case "heartbeat_ack":
         break;
+      // 1.58.0: an older build than the agent's checkout reloads itself from
+      // disk when the agent asks, between turns. `chrome://extensions` cannot be
+      // opened from a terminal link (macOS has no handler for chrome://), so the
+      // reload the update notice used to ask for is done here instead.
+      case "reload_extension":
+        chrome.runtime.reload();
+        break;
       default:
         broadcastToSidePanel(message);
     }
@@ -1001,7 +1015,7 @@
             }
             if (finished && payload.isSubagent) {
               if (payload.complete) payload.subagentUrl = sender.tab.url;
-              if (!payload.sessionId) {
+              if (!isSessionTab(sender.tab.id)) {
                 forgetTab(sender.tab.id);
                 chrome.tabs.remove(sender.tab.id).catch((err) => console.warn("Failed to auto-close subagent tab:", err));
               }

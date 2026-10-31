@@ -446,6 +446,13 @@ async function handleServerMessage(message) {
       break;
     case 'heartbeat_ack':
       break;
+    // 1.58.0: an older build than the agent's checkout reloads itself from
+    // disk when the agent asks, between turns. `chrome://extensions` cannot be
+    // opened from a terminal link (macOS has no handler for chrome://), so the
+    // reload the update notice used to ask for is done here instead.
+    case 'reload_extension':
+      chrome.runtime.reload();
+      break;
     default:
       broadcastToSidePanel(message);
   }
