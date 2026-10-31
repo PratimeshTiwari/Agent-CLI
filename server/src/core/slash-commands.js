@@ -467,6 +467,8 @@ export async function handleSlashCommand(loop, command, args) {
       loop.conversationHistory = [];
       loop.promptBuilder.resetPromptState();
       loop.contextChars = 0;
+      // A message the tab never sent belongs to the chat being left (v7.10).
+      loop._undelivered = null;
       // The last chat's warm-up says nothing about this one (v7.9): the screen
       // shows "Ready" until the first message, and that is now this chat's.
       loop.warmState = null;

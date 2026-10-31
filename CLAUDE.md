@@ -209,6 +209,14 @@ entry before changing the mechanism it describes.
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.
+- **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
+  Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
+  again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`
+  (raised only when the prompt was not submitted) in a turn with no reply at all
+  (`_turnAnswered`), the message is kept and sent in front of the next one, marked as never
+  received; the record keeps what was typed, a `↻` row says so, and `/new` drops it. If the lost
+  prompt was turn 0 (`<system_state`), the builder had already marked it sent, so it is reset and the
+  next message teaches the chat. Pty (`FAKE_FAIL_SENDS=1`): 0 clears at 13 and 24 rows.
 - **Tool amnesia is a thread change.** `_recordThread` calls `resetPromptState()` when the thread
   id changes from a previous one. `looksLikeCapabilityDenial` judges the *subject* (tooling, not
   code); `denial-corpus.test.js` holds both directions.

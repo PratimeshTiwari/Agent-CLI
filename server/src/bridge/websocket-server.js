@@ -928,6 +928,10 @@ export class WebSocketServer {
          */
         if (payload?.level === 'notice') break;
 
+        // A prompt the tab never sent is carried into the next message (v7.10).
+        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab') {
+          this.agentLoop.noteUndelivered?.();
+        }
         // The turn is dead, so hand the bridge lock back — otherwise every
         // later prompt queues behind a request that will never be answered.
         this.agentLoop.isProcessing = false;
