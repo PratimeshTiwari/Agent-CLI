@@ -18,7 +18,7 @@ export const KEY_HINTS = [
   ['ctrl+e', 'expand steps'],
   ['ctrl+o', 'task list'],
   ['ctrl+v', 'paste image'],
-  ['ctrl+j', 'newline'],
+  ['shift+enter', 'newline'],
   ['ctrl+u', 'clear input'],
   ['ctrl+b', 'Gemini tab'],
   ['ctrl+x ctrl+s', 'steer'],

@@ -2,7 +2,7 @@
   "name": "cli-agent-companion",
   "displayName": "Agent CLI Companion",
   "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
-  "version": "1.8.7",
+  "version": "1.8.8",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"
@@ -91,6 +91,14 @@
         "command": "agentCli.focusChat",
         "key": "ctrl+alt+j",
         "mac": "cmd+alt+j"
+      },
+      {
+        "key": "shift+enter",
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+          "text": "\u001b\r"
+        },
+        "when": "terminalFocus"
       }
     ],
     "menus": {

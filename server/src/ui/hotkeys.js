@@ -31,6 +31,7 @@ export const HOTKEYS = {
   '\x16': 'paste-image',  // ctrl+v — attach an image from the clipboard
   '\x15': 'clear-input',  // ctrl+u — wipe the prompt, as readline has always done
   '\x17': 'delete-word',  // ctrl+w — delete the word behind the cursor
+  '\x0e': 'newline',      // ctrl+n — a newline in every terminal (v7.9; ctrl+j still works)
   '\x19': 'copy-code',    // ctrl+y — retired for /copy code; still taken so no stray "y"
   // ctrl+o — the task list. Was ctrl+g, which Chrome takes system-wide on macOS
   // for its own Gemini panel: pressing it in the terminal opened Chrome instead.

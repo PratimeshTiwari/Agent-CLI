@@ -1896,6 +1896,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
   hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
   saying where the thing went.
+- **The prompt's rows are drawn rows (v7.9, `ui/prompt-rows.js`).** ↑/↓ move by the rows Ink
+  draws, wraps included, and only past the first or last row reach input history; the draft is
+  kept (`draftRef`) and ↓ past the newest prompt gives it back, where it used to clear the box.
+  `promptExtraRows` and the field's window count the same rows, so a long wrapped prompt is
+  charged what it draws. `❯ ` sits in a `flexShrink={0}` box, the v6.12 rule: beside a wrapped
+  prompt Yoga squeezed it to one column. **Newlines:** shift+enter (kitty, or Esc+Enter, which
+  companion 1.8.8 binds shift+enter to in the editor's terminal), `ctrl+n` (a hotkey) and `ctrl+j`.
+  `newlineRef` is gone: every newline set it and only an Enter cleared it, so the first Enter after
+  any newline was eaten. Pty at 13 and 24 × 60: a four-line message sent by Enter, the draft back,
+  `XX` typed one wrapped row up in the right column, 0 clears.
 - **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
   bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
   forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps

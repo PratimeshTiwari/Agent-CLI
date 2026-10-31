@@ -35,6 +35,7 @@ import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../core/docto
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
 import { progressText } from '../core/compaction.js';
+import { visualRows } from './prompt-rows.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
@@ -360,7 +361,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [paletteSuppressed, setPaletteSuppressed] = useState(false);
   // Set by the key bindings when Enter carried a modifier, read by InputBar's
   // deferred submit. A ref because the two run in the same event dispatch.
-  const newlineRef = useRef(false);
 
   const { stdout } = useStdout();
 
@@ -616,9 +616,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // is never scrolled, and never so much that the transcript disappears behind
   // the thing you are typing into.
   const promptMaxRows = Math.max(1, Math.floor(terminalHeight / 3));
+  // Drawn rows, not line breaks (v7.9): a long line wraps, and was charged
+  // one row while Ink drew several. `❯ ` takes two columns.
+  const promptWidth = Math.max(1, terminalWidth - 2);
   const promptExtraRows = Math.max(
     0,
-    Math.min(input.split('\n').length, promptMaxRows) - 1,
+    Math.min(visualRows(input, promptWidth).length, promptMaxRows) - 1,
   );
 
   // A terminal too short for the furniture drops its spacing rather than
@@ -1410,6 +1413,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setPastes([]);
     },
     'delete-word': () => setInput((value) => value.replace(/\s*\S+\s*$/, '')),
+    // At the caret, like ctrl+j and shift+enter (v7.9). A chord, because
+    // ctrl+n is not a line feed: the field would type its "n".
+    newline: () => cursorRef.current?.apply?.((value, offset) => ({
+      value: `${value.slice(0, offset)}\n${value.slice(offset)}`, offset: offset + 1,
+    })),
 
     'copy-code': () => retiredKey('ctrl+y', '/copy code'),
   }, !diffRequest && !activeMenu);
@@ -1427,7 +1435,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
     historyIdx,
     inputHistory,
     isProcessing,
-    newlineRef,
     setHistoryIdx,
     setInput,
     setInputAtEnd,
@@ -1745,11 +1752,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
             addPaste={addPaste}
             pastes={pastes}
             mode={mode}
-            newlineRef={newlineRef}
             setInput={setInput}
             setInputAtEnd={setInputAtEnd}
             cursorRef={cursorRef}
             promptMaxRows={promptMaxRows}
+            promptWidth={promptWidth}
             animTick={animTick}
             setSlashIdx={setSlashIdx}
             slashMatches={slashMatches}

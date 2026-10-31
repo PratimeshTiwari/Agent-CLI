@@ -92,14 +92,14 @@ Then two things no installer can do for you:
 **Optional: the VS Code companion** (VS Code, Cursor, Antigravity, Windsurf). It gives the
 agent your open file, cursor and Problems panel, adds a chat panel to the sidebar
 (`cmd+alt+j`), and **Attach to Agent CLI** on the explorer's right-click menu. Extensions panel →
-`…` → **Install from VSIX…** → `vscode-companion/cli-agent-companion-1.8.7.vsix`.
+`…` → **Install from VSIX…** → `vscode-companion/cli-agent-companion-1.8.8.vsix`.
 
 From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigravity`,
 `windsurf`; if it is not found, run **Shell Command: Install '…' command in PATH** from the
 editor's command palette):
 
 ```bash
-<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.7.vsix
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.8.vsix
 ```
 
 `<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
@@ -107,20 +107,20 @@ knows. This works for any install:
 
 ```bash
 AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
-code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.7.vsix
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.8.vsix
 ```
 
 Three common setups:
 
 ```bash
 # setup.sh's default location, VS Code
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.7.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.8.vsix
 
 # a checkout from before the rename (setup.sh keeps it), Cursor
-cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.7.vsix
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
 
 # a custom AGENT_INSTALL_DIR, Antigravity
-antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.7.vsix
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
 ```
 
 Then reload the window (**Developer: Reload Window**). Installing over an older version
@@ -156,12 +156,14 @@ agent
 | `esc` | stop the run |
 | `ctrl+c` twice | quit (prints how to resume) |
 | `?` | every key, on one screen |
+| `↑` `↓` | move between the prompt's rows; past the first or last, earlier prompts (what you were typing comes back) |
 | `↑` | with an empty prompt, take back a queued message |
 | `ctrl+x` `ctrl+s` | steer the last queued message into the running turn |
 | `ctrl+e` | expand or collapse every step |
 | `ctrl+o` | show or hide the task list |
 | `ctrl+b` | bring the Gemini tab to the front |
-| `ctrl+j` | newline without sending |
+| `shift+enter` | newline without sending, in terminals that report it (iTerm2, Ghostty, Kitty, WezTerm) and in VS Code, Cursor and Antigravity with the companion 1.8.8 |
+| `ctrl+n` | newline in any terminal (`ctrl+j` too) |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
 ### Commands worth knowing
