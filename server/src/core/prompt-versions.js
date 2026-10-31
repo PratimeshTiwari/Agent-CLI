@@ -86,6 +86,34 @@ export const PROMPT_VERSIONS = {
       lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
     },
   },
+  /*
+   * v4 (v8.1): v3, plus `jira_issue` — once a Jira site is set up with `agent
+   * atlassian login`. A new tool is part of the prompt, and v1–v3 are what the
+   * numbers so far were measured on, so it is a version of its own. Without a
+   * site the prompt is v3's byte for byte (`PromptBuilder._toolFlags`).
+   */
+  v4: {
+    id: 'v4',
+    summary: 'v3, plus Jira: read, search, create, update, comment, move and attach, each write approved by you',
+    hint: 'v3 + Jira',
+    refreshEvery: 20,
+    dir: 'v2',
+    flags: {
+      trustEditResult: true,
+      gateReview: true,
+      walkthroughWithTask: true,
+      tickWithNextCall: true,
+      oneCopy: true,
+      answerDirectly: true,
+      symbolLanguages: true,
+      subagentEffortWords: true,
+      largeFileDigest: true,
+      logQuery: true,
+      projectCommands: true,
+      lookFirst: true,
+      jira: true,                // jira_issue is offered once a site is set up (v8.1)
+    },
+  },
 };
 
 /**
@@ -106,6 +134,7 @@ export const FLAG_NOTES = {
   logQuery: 'query_log reads log files and Grafana/Datadog exports',
   projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
   lookFirst: 'A question about the project is answered from files opened this turn',
+  jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
 };
 
 /** What a version changes from v1, one line per switch that is on. */
@@ -115,6 +144,23 @@ export function versionChanges(id) {
 }
 
 export const PROMPT_VERSION_IDS = Object.keys(PROMPT_VERSIONS);
+
+/**
+ * What a version adds to the one before it (v8.1). The cumulative list grew
+ * to thirteen lines by v4, so the menu cut it to "… +6 more" and v4's one new
+ * switch — Jira — was among the hidden ones.
+ *
+ * @returns {{from: string|null, lines: string[]}}
+ */
+export function versionAdds(id) {
+  const v = resolvePromptVersion(id);
+  const prev = PROMPT_VERSIONS[PROMPT_VERSION_IDS[PROMPT_VERSION_IDS.indexOf(v.id) - 1]];
+  if (!prev) return { from: null, lines: [] };
+  const lines = Object.entries(v.flags || {})
+    .filter(([flag, on]) => on && !prev.flags?.[flag])
+    .map(([flag]) => FLAG_NOTES[flag] || flag);
+  return { from: prev.id, lines };
+}
 export const DEFAULT_PROMPT_VERSION = 'v1';
 
 export function isPromptVersion(id) {

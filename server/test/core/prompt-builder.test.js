@@ -594,12 +594,17 @@ describe('PromptBuilder — a dispatchable tool the prompt never mentions is unr
     const missing = registered.filter((name) => !gated.has(name) && !prompt.includes(name));
     assert.deepEqual(missing, [], `dispatchable but never mentioned: ${missing.join(', ')}`);
 
-    const latest = new PromptBuilder(ws, ws);
-    latest.promptVersion = 'v2';
-    const v2 = build(latest, { modelConfig: { effort: 'standard', main: 'gemini' } });
+    // Every newer version, with Jira set up (v8.1: jira_issue is offered only then).
+    const { PROMPT_VERSION_IDS } = await import('../../src/core/prompt-versions.js');
+    const later = PROMPT_VERSION_IDS.filter((id) => id !== 'v1').map((id) => {
+      const pb2 = new PromptBuilder(ws, ws);
+      pb2.promptVersion = id;
+      pb2.jiraAvailable = true;
+      return build(pb2, { modelConfig: { effort: 'standard', main: 'gemini' } });
+    });
     for (const name of gated) {
       assert.ok(registered.includes(name), `${name} is gated and not registered`);
-      assert.ok(v2.includes(`## ${name}`), `${name} is offered by no prompt version`);
+      assert.ok(later.some((p) => p.includes(`## ${name}`)), `${name} is offered by no prompt version`);
       assert.ok(!prompt.includes(`## ${name}`), `${name} reached the frozen v1 prompt`);
     }
   });

@@ -14,7 +14,8 @@
  * two pure functions over the catalog's own `mutates` and `shell` flags, so a
  * tool that writes says so once beside its description and the gates follow.
  */
-import { MUTATING_TOOLS, SHELL_TOOLS, DETACHED_TOOLS } from './tool-catalog.js';
+import { MUTATING_TOOLS, SHELL_TOOLS, DETACHED_TOOLS, EXTERNAL_TOOLS } from './tool-catalog.js';
+import { isJiraWrite } from '../mcp/tools/jira-issue.js';
 import { isAgentArtifact } from './artifact-guard.js';
 import { asksForEdits, isProjectMarkdown } from './modes.js';
 
@@ -40,6 +41,16 @@ export function isBlockedOutright(call, risk) {
  */
 export function requiresApproval(call, { mode, risk, workspace } = {}) {
   const name = call?.name;
+
+  /*
+   * First, before the mode, the risk or any exemption (v8.1). A write to Jira
+   * is seen by other people at once and `/undo` cannot take it back, so it asks
+   * in every mode, auto included. Owner, 2026-10-31: "make sure all write/modify
+   * changes ask for my permission as a mandatory step". A source assertion in
+   * external-approval.test.js keeps this the first check: moving it below the
+   * mode branch reads as tidying and would let auto mode post unasked.
+   */
+  if (EXTERNAL_TOOLS.has(name)) return isExternalWrite(call);
 
   if (!asksForEdits(mode)) {
     // Auto mode asks only about what the classifier is unsure of. `safe` runs
@@ -94,5 +105,12 @@ export function requiresApproval(call, { mode, risk, workspace } = {}) {
    */
   if (SHELL_TOOLS.has(name) && !DETACHED_TOOLS.has(name) && risk?.level === 'safe') return false;
 
+  return true;
+}
+
+/** A call to an external tool that writes. An unknown action counts as a write: fail closed. */
+export function isExternalWrite(call) {
+  if (!EXTERNAL_TOOLS.has(call?.name)) return false;
+  if (call.name === 'jira_issue') return isJiraWrite(call.args?.action);
   return true;
 }

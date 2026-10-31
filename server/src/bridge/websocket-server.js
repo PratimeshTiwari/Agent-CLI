@@ -26,8 +26,8 @@ import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../cor
 import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
 import { logError, logNotice } from '../core/error-log.js';
-import { extensionVersionNotice, shortcutNotice } from '../core/extension-version.js';
-import { tabUnreachableMessage } from './tab-failure.js';
+import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/extension-version.js';
+import { tabUnreachableMessage, chatUnreachableMessage } from './tab-failure.js';
 import { tabLink } from '../core/compaction.js';
 
 /**
@@ -145,6 +145,7 @@ export function tokenFromUrl(url) {
 export const WORKER_ONLY_TYPES = new Set([
   'inject_prompt', 'new_chat', 'open_thread', 'end_session', 'focus_tab',
   'discover_models', 'switch_model', 'heartbeat_ack', 'stop_generation',
+  'reload_extension',
 ]);
 
 export class WebSocketServer {
@@ -439,7 +440,25 @@ export class WebSocketServer {
             detail: 'Set it at chrome://extensions/shortcuts and choose Global.',
           });
         }
-        const stale = extensionVersionNotice(client.extensionVersion);
+        /*
+         * v8.1: a build that can reload itself is asked to, once per version
+         * and only between turns — a reload mid-turn orphans the tab's
+         * script. Owner: the notice "should be a clickable link", and a
+         * chrome:// link opens nothing from a terminal on macOS.
+         */
+        const reload = selfReloadNotice(client.extensionVersion);
+        const reloading = !!reload && !this.agentLoop?.isProcessing && this._reloadAsked !== reload.to;
+        if (reloading) {
+          this._reloadAsked = reload.to;
+          this._send(client.ws, { id: randomUUID(), type: 'reload_extension', payload: {}, timestamp: Date.now() });
+          this.agentLoop?._notify?.(reload.message);
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'bridge', op: 'extension_reload', message: 'Asked the extension to reload itself', detail: reload.message,
+          });
+        }
+        // Asked once; if the same build comes back, the reload did not take
+        // (a copy loaded from elsewhere), and the manual line is the answer.
+        const stale = reloading ? null : extensionVersionNotice(client.extensionVersion);
         if (stale) {
           this.broadcast('extension', {
             id: randomUUID(),
@@ -885,6 +904,20 @@ export class WebSocketServer {
           break;
         }
 
+        /*
+         * A subagent's tab failing is that request failing (v8.1, extension
+         * 1.58.0 says whose prompt it was). Reported with a screenshot: a
+         * delegated read of CLAUDE.md lost its tab, and the user's turn, in a
+         * different tab that was fine, ended with "Communication with the
+         * Gemini tab failed" and its message marked as never sent.
+         */
+        if (payload?.isSubagent && payload?.requestId) {
+          this.agentLoop.resolveSubagent?.(payload.requestId, {
+            success: false, error: payload.detail || payload.message || 'The subagent tab could not be reached.',
+          });
+          break;
+        }
+
         /**
          * Reading the picker is not a turn, so failing to read it is not a dead
          * turn — and until now it was one.
@@ -931,10 +964,13 @@ export class WebSocketServer {
         if (payload?.level === 'notice') break;
 
         // A prompt the tab never sent is carried into the next message (v7.10).
-        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab') {
+        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab' || payload?.op === 'chat_unreachable') {
           this.agentLoop.noteUndelivered?.();
         }
         // Said in the terminal's own words, with what was already tried (v7.10).
+        if (payload?.op === 'chat_unreachable') {
+          message.payload = { ...payload, message: chatUnreachableMessage(payload.wanted) };
+        }
         if (payload?.op === 'tab_unreachable') {
           message.payload = {
             ...payload,

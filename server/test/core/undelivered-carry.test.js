@@ -102,5 +102,7 @@ test('carryUndelivered leaves a message alone when nothing was lost', () => {
 
 test('the bridge notes it only for a prompt the tab never sent', () => {
   const src = readFileSync(new URL('../../src/bridge/websocket-server.js', import.meta.url), 'utf8');
-  assert.match(src, /op === 'tab_unreachable' \|\| payload\?\.op === 'no_tab'\) \{\s*this\.agentLoop\.noteUndelivered/);
+  // chat_unreachable (v8.1): the tab could not return to the session's chat,
+  // so nothing was typed — the same "never sent".
+  assert.match(src, /op === 'tab_unreachable' \|\| payload\?\.op === 'no_tab' \|\| payload\?\.op === 'chat_unreachable'\) \{\s*this\.agentLoop\.noteUndelivered/);
 });

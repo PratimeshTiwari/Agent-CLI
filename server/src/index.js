@@ -40,6 +40,13 @@ if (process.argv[2] === 'doctor' || process.argv.includes('--doctor')) {
   process.exit(await runDoctorCli(process.argv.slice(2)));
 }
 
+// `agent atlassian login | logout | status` (v8.1): in a shell of its own so a
+// token is typed with echo off, never into the agent's prompt and history.
+if (process.argv[2] === 'atlassian') {
+  const { runAtlassianCli } = await import('./atlassian/cli.js');
+  process.exit(await runAtlassianCli(process.argv.slice(3)));
+}
+
 if (!existsSync(tsxPath)) {
   console.error("✗ 'tsx' not found. Please run 'npm install' in the workspace root or server directory.\n");
   // Whatever else that install is missing, said now rather than one crash at a time.

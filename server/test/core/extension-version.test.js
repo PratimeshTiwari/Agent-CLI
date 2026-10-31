@@ -12,12 +12,12 @@
  * fires when it has no information is one people learn to ignore, which costs
  * more than the staleness it exists to catch.
  */
-import { test, describe } from 'node:test';
+import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { extensionVersionNotice, expectedExtensionVersion } from '../../src/core/extension-version.js';
+import { extensionVersionNotice, expectedExtensionVersion, selfReloadNotice, SELF_RELOAD_SINCE } from '../../src/core/extension-version.js';
 
 describe('expectedExtensionVersion', () => {
   /*
@@ -94,4 +94,23 @@ test('an extension newer than the agent asks for a restart, not an "update" to a
   assert.equal(compareVersions('1.54', '1.54.0'), 0);
   assert.match(extensionVersionNotice('1.55.0', '1.54.0'), /^⚠ Agent restart needed · extension 1\.55\.0, this agent expects 1\.54\.0/);
   assert.match(extensionVersionNotice('1.42.0', '1.54.0'), /Extension update · 1\.42\.0 → 1\.54\.0/, 'control: older still says update');
+});
+
+describe('selfReloadNotice (v8.1)', () => {
+  it('an older build that has the handler is reloaded from here', () => {
+    assert.deepEqual(selfReloadNotice('1.58.0', '1.59.0'), { to: '1.59.0', message: '↻ Extension updated · 1.58.0 → 1.59.0' });
+  });
+  it('a build before the handler, a current one, a newer one or no version: no', () => {
+    assert.equal(selfReloadNotice('1.57.0', '1.59.0'), null, 'it would ignore the message');
+    assert.equal(selfReloadNotice('1.59.0', '1.59.0'), null);
+    assert.equal(selfReloadNotice('1.60.0', '1.59.0'), null, 'the agent is the stale one');
+    assert.equal(selfReloadNotice(null, '1.59.0'), null);
+    assert.equal(selfReloadNotice('1.58.0', null), null);
+  });
+  it('the build that brought the handler is the one the constant names', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, '../../../extension/src/background/socket.js'), 'utf8');
+    assert.match(src, /case 'reload_extension':\s*\n\s*chrome\.runtime\.reload\(\);/);
+    assert.equal(SELF_RELOAD_SINCE, '1.58.0');
+  });
 });

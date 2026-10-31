@@ -46,6 +46,27 @@ export function promptPanelPlan({ room, versions, changes }) {
   return { stats, changes: shown };
 }
 
+/**
+ * The page → opens: everything one version changes from v1, scrolled by ↑↓
+ * in what `rows` leaves (v8.1: at 24 rows it still ended "… +6 more").
+ * A row is given to each marker only when there is something past it.
+ *
+ * @returns {{lines: string[], offset: number, max: number}} `offset` clamped to `max`
+ */
+export function changesPage({ changes, rows, offset = 0 }) {
+  const n = Math.max(1, rows);
+  if (changes.length <= n) return { lines: changes, offset: 0, max: 0 };
+  // Past the top marker and before the bottom one; the last page needs no
+  // bottom marker, so it holds one more.
+  const lastStart = changes.length - (n - 1);
+  const at = Math.max(0, Math.min(offset, lastStart));
+  const head = at > 0 ? [`… ${at} above`] : [];
+  const room = n - head.length;
+  const end = at + room >= changes.length ? changes.length : at + room - 1;
+  const tail = end < changes.length ? [`… +${changes.length - end} more`] : [];
+  return { lines: [...head, ...changes.slice(at, end), ...tail], offset: at, max: lastStart };
+}
+
 /** The usage line beside a bar. */
 export function roundsLabel(row) {
   if (!row.turns) return 'not used yet';

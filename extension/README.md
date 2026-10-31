@@ -9,7 +9,7 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
                       ◀──────  (reply text)   ◀──  (scraped DOM)   ◀──
 ```
 
-- Current version: **1.57.0**. The CLI checks it: the extension reports the version Chrome actually
+- Current version: **1.58.0**. The CLI checks it: the extension reports the version Chrome actually
   loaded (`getManifest()`), and a stale build gets one row at connect time and a line in
   `/settings → Status → Extension build`. An extension older than 1.26.0 reports nothing, and the
   CLI says that too.

@@ -513,6 +513,10 @@ export function subjectOf(toolName, args, max = 44) {
     case 'grep_search':
       raw = pick('pattern', 'patterns', 'query');
       break;
+    case 'jira_issue':
+      // `comment PROJ-12`, `search project = X`: the action and what it is on.
+      raw = [pick('action'), pick('key', 'project', 'jql')].filter(Boolean).join(' ');
+      break;
     case 'search_files':
       raw = pick('query', 'pattern', 'name');
       break;
@@ -656,6 +660,14 @@ export function summarizeResult(toolName, result) {
         if (out) return oneLine(out.split('\n')[0]);
         break;
       }
+      case 'jira_issue':
+        // v8.1: the first line is the answer (`Created PROJ-45 · …`); a hand-off
+        // says whose step it is now.
+        if (typeof r === 'string') {
+          if (/^HANDED OFF/.test(r)) return '✋ yours to do · Jira did not allow it';
+          return oneLine(r.split('\n')[0]);
+        }
+        break;
       case 'edit_file':
       case 'create_file': {
         /*
@@ -1334,11 +1346,14 @@ export function lastReply(history = []) {
 export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } = {}) {
   const RULE = 1;
   const TITLE = 1;
-  const OPTIONS = 4;
+  // An external write (v8.1) offers Send and Don't send: no "always" either way.
+  const external = payload.kind === 'external';
+  const OPTIONS = external ? 2 : 4;
   const inner = Math.max(10, width - 2);                       // the panel's one-column indent
   const all = [];
-  String(payload.command ?? '').split('\n').forEach((line, i) => {
-    let rest = (i === 0 ? 'Command: ' : '  ') + line;
+  const source = external ? (payload.lines || String(payload.command ?? '').split('\n')) : String(payload.command ?? '').split('\n');
+  source.forEach((line, i) => {
+    let rest = (external ? '' : i === 0 ? 'Command: ' : '  ') + line;
     while (rest.length > inner) { all.push(rest.slice(0, inner)); rest = `  ${rest.slice(inner)}`; }
     all.push(rest);
   });
@@ -1349,7 +1364,8 @@ export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } 
   // heights it is the row the old borderless fallback did not spend.
   const ruled = room >= RULE;
   room -= ruled ? RULE : 0;
-  const cwd = room >= 1 && Boolean(payload.cwd);
+  // An external write names its site on the title row, not on a row of its own.
+  const cwd = !external && room >= 1 && Boolean(payload.cwd);
   room -= cwd ? 1 : 0;
   const reason = room >= 1 && Boolean(payload.riskReason);
   room -= reason ? 1 : 0;

@@ -18,6 +18,30 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.58.0 — 2026-10-31
+
+**A Jira write is a Send / Don't send card in the side panel** (agent v8.1). The approval for
+`jira_issue` arrives as a `request_command_approval` with `kind: 'external'`; the panel shows its
+title and the change, and offers no "always". The server treats an "always" from an older panel as
+this once, and stores no rule for it.
+
+**It reloads itself when the agent's checkout is newer.** The worker answers `reload_extension`
+with `chrome.runtime.reload()`, and the agent sends it once per version, between turns, to a build
+since 1.58.0 that reports an older version than its manifest. A `chrome://extensions` link in the
+terminal could not do this: nothing on macOS opens `chrome://`. Builds before 1.58.0 still need the
+one manual reload.
+
+**A subagent session keeps its tab, and its failure stays its own.** The worker kept a session's
+tab only when the reply carried `sessionId`, which the page never sends, so every session tab was
+closed after its first turn: a large-file digest's second turn typed into a tab that was gone. It
+now asks its own session map. And `tab_unreachable` says `isSubagent` and `requestId`, so the agent
+fails that subagent request instead of ending the user's turn in another tab.
+
+**A prompt goes into this session's chat or nowhere.** Before typing a main-lane prompt the worker
+compares the tab's chat with the server's `threadUrl` and, if they differ, moves the tab there
+(keeping its `/u/<n>` account) and checks it arrived. If the chat will not load (deleted, another
+account) it sends `chat_unreachable` and types nothing.
+
 ### 1.57.0 — 2026-10-31
 
 **A prompt the server resends after a silent reply goes into a fresh tab** (`freshTab`). Reported

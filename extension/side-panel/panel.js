@@ -1203,7 +1203,19 @@ function appendCommandApproval(payload) {
 
   const div = document.createElement('div');
   div.className = 'message message-approval';
-  div.innerHTML = `
+  // A write to Jira (v8.1): Send or Don't send, never "always" — the owner
+  // asked for every one to be asked about. The server would treat "always" as
+  // once anyway; the panel just does not offer it.
+  const external = payload?.kind === 'external';
+  div.innerHTML = external ? `
+    <div class="approval-head">${escapeHtml(payload.title || 'Send this?')}</div>
+    <pre class="approval-command">${escapeHtml(command)}</pre>
+    ${cwd ? `<div class="approval-cwd">${escapeHtml(cwd)}</div>` : ''}
+    ${riskReason ? `<div class="approval-reason">${escapeHtml(riskReason)}</div>` : ''}
+    <div class="approval-actions">
+      <button data-action="send">Send</button>
+      <button data-action="reject_once">Don't send</button>
+    </div>` : `
     <div class="approval-head">Run this command? <span class="approval-risk risk-${escapeHtml(riskLevel)}">${escapeHtml(riskLevel)}</span></div>
     <pre class="approval-command">${escapeHtml(command)}</pre>
     ${cwd ? `<div class="approval-cwd">in ${escapeHtml(cwd)}</div>` : ''}

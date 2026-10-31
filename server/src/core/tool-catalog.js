@@ -35,7 +35,7 @@
  * terminal and the side panel cannot name the same call two ways.
  *
  * @typedef {{name: string, dispatch: 'mcp'|'loop', verb: string, when?: 'subagents', flag?: string, mutates?: boolean,
- *   shell?: boolean, detached?: boolean, lead?: string, flash: string|Function,
+ *   shell?: boolean, detached?: boolean, external?: boolean, lead?: string, flash: string|Function,
  *   pro: string|Function}} ToolDoc
  */
 
@@ -204,6 +204,46 @@ Parameters:
   - fields (string[], optional): fields to show on each record; \`["*"]\` for all of them
   - limit (number, optional): records to list, default 20, max 100; \`offset\` pages on
   - format (string, optional): json | ndjson | csv | tsv | text, only if detection got it wrong
+
+`,
+  },
+  {
+    // v8.1: offered by prompt versions with `jira` (v4), and only when a site is
+    // set up (`PromptBuilder` turns the flag off otherwise). Every write is
+    // shown to the person and sent only on their yes, in every mode:
+    // core/external-approval.js.
+    name: 'jira_issue',
+    dispatch: 'mcp',
+    verb: 'Jira',
+    flag: 'jira',
+    external: true,
+    flash: ` — Jira issues on the user's site. Args: action (get | search | create | update | comment | transition | attach), key (PROJ-123), jql + limit? (search), project + type + summary (create), description (Markdown; replaces it on update), labels?, priority?, parent?, assignee? ("me" | "none" | name | email), body (comment, Markdown), to (transition: a status name), files (attach: local paths). Every write asks the user first; if they reject it, do not retry. If Jira refuses something you cannot fix, or the result says HANDED OFF, tell the user in one line what to do by hand; never say it was done.
+`,
+    pro: `
+Work with **Jira issues** on the site the user signed in to (Cloud or Server/Data Center). Text is
+Markdown both ways: headings, lists, code blocks, tables, links. Reach for it when the user names
+an issue key, asks what is in a ticket or sprint, or asks you to file, update or comment on work.
+
+Every write — create, update, comment, transition, attach — is shown to the user exactly as it
+will be sent, and only sent if they approve it, in every mode. So do not ask for permission in
+prose first; make the call, and the approval is the question. If they reject it, nothing was
+sent: do not retry it, ask what to change. When Jira refuses something you cannot fix, or the
+result begins HANDED OFF, tell the user in one line what to do by hand and where; never say it
+happened.
+Parameters:
+  - action (string, required): get | search | create | update | comment | transition | attach
+  - key (string): the issue, e.g. PROJ-123 (get, update, comment, transition, attach)
+  - jql (string): for search, e.g. \`project = PROJ AND status = "In Progress"\`; limit (number,
+    default 20, max 50)
+  - project, type, summary (string): required for create (project key, issue type name, title)
+  - description (string): Markdown. On update it **replaces** the whole description, so get the
+    issue first and send the full new text
+  - labels (string[]): on update they replace the existing labels
+  - priority, parent (string): a priority name; a parent or epic key
+  - assignee (string): "me", "none", or a person's name or email
+  - body (string): the comment, Markdown
+  - to (string): transition — the status to move to; on a miss the result lists the ones open
+  - files (string[]): attach — local paths, under 10 MB each
 
 `,
   },
@@ -475,6 +515,15 @@ export const SHELL_TOOLS = new Set(
  */
 export const DETACHED_TOOLS = new Set(
   TOOL_CATALOG.filter((t) => t.detached).map((t) => t.name),
+);
+
+/**
+ * Tools whose writes leave this machine: Jira today (v8.1). A write asks in
+ * every mode, allow rules do not apply, and subagents cannot call them —
+ * core/external-approval.js and core/tool-policy.js.
+ */
+export const EXTERNAL_TOOLS = new Set(
+  TOOL_CATALOG.filter((t) => t.external).map((t) => t.name),
 );
 
 /**

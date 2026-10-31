@@ -1,6 +1,6 @@
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
 import { ws } from './socket.js';
-import { chatPath, isFreshChat, freshChatUrl } from './chat-url.js';
+import { chatPath, isFreshChat, freshChatUrl, chatToReturnTo } from './chat-url.js';
 
 // One model. `MODEL_URLS` and `MODEL_SCRIPTS` stay keyed rather than collapsing
 // to constants: every lookup below is already written against a model name, and
@@ -401,6 +401,12 @@ export const isSubagentTab = (tabId) => subagentTabs.has(tabId);
  * user closes by hand must not stay remembered, or the next turn tries to send
  * into a tab that no longer exists and reports the site as unreachable.
  */
+/** Is this a batch session's tab, held across its turns (1.58.0)? */
+export function isSessionTab(tabId) {
+  for (const id of sessionTabs.values()) if (id === tabId) return true;
+  return false;
+}
+
 export function forgetTab(tabId) {
   stopCompletionTicks(tabId);
   subagentTabs.delete(tabId);
@@ -1117,6 +1123,22 @@ export async function injectPromptIntoModel(payload) {
       if (fresh) tabs = [fresh];
     }
 
+    // On this session's chat, or nothing is typed (1.58.0).
+    const placed = await ensureOnChat(tabs[0], payload.threadUrl);
+    if (!placed.ok) {
+      const errorMsg = {
+        type: 'error',
+        payload: {
+          op: 'chat_unreachable', stage: 'navigate', targetModel,
+          wanted: placed.wanted, landed: placed.landed,
+          message: 'Could not get back to this session\'s chat',
+        },
+      };
+      broadcastToSidePanel(errorMsg);
+      sendToServer(errorMsg);
+      return;
+    }
+
     // Simplified (1.56.0, owner: "why add complexity"): send once; if that
     // fails, the same chat in a fresh tab, once. Then the error.
     success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
@@ -1138,11 +1160,51 @@ export async function injectPromptIntoModel(payload) {
         // Short, as asked: by now it has reloaded the tab and reopened the chat
         // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
         message: `Communication with the ${targetModel} tab failed · check the browser`,
+        // Whose prompt it was (1.58.0): a subagent's failure is that request's,
+        // and must not end the user's turn in another tab.
+        ...(payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}),
       },
     };
     lastTabFailure = null;
     broadcastToSidePanel(errorMsg);
     sendToServer(errorMsg);
+  }
+}
+
+/**
+ * Put the main tab back on this session's chat before a prompt is typed
+ * (1.58.0). Silent when it works — a notice in the log says it moved — and
+ * `{ok: false}` when the chat would not load there (deleted, another account),
+ * so the caller sends nothing rather than answer in the wrong conversation.
+ */
+export async function ensureOnChat(tab, threadUrl) {
+  let current;
+  try {
+    current = await chrome.tabs.get(tab.id);
+  } catch {
+    return { ok: true }; // gone: the send fails and says so on its own
+  }
+  const target = chatToReturnTo(current.url, threadUrl);
+  if (!target) return { ok: true };
+  const wanted = chatPath(target)?.thread;
+  try {
+    await chrome.tabs.update(tab.id, { url: target });
+    await waitForTabLoad(tab.id, 10000);
+    await waitForBridge(tab.id, 15000);
+    const after = await chrome.tabs.get(tab.id);
+    const landed = chatPath(after.url || '')?.thread || null;
+    if (landed !== wanted) return { ok: false, wanted, landed };
+    sendToServer({
+      type: 'error',
+      payload: {
+        op: 'chat_restored', level: 'notice', targetModel: 'gemini',
+        message: 'The tab was on another chat; moved it back before sending',
+        detail: `${chatPath(current.url || '')?.thread || 'a new chat'} → ${wanted}`,
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, wanted, landed: chatPath(current.url || '')?.thread || null, error: err?.message };
   }
 }
 

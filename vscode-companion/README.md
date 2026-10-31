@@ -50,7 +50,7 @@ From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigr
 editor's command palette):
 
 ```bash
-<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.8.vsix
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 `<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
@@ -58,20 +58,20 @@ knows. This works for any install:
 
 ```bash
 AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
-code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.8.vsix
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 Three common setups:
 
 ```bash
 # setup.sh's default location, VS Code
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.8.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.9.vsix
 
 # a checkout from before the rename (setup.sh keeps it), Cursor
-cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
 
 # a custom AGENT_INSTALL_DIR, Antigravity
-antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 Then reload the window (**Developer: Reload Window**). Installing over an older version
@@ -92,6 +92,11 @@ is how someone installs the wrong one.
 `server/`. Changing `AGENT_DIR` in `server/src/core/paths.js` means changing it here too.
 
 ## Version history
+
+### 1.8.9 — 2026-11-01
+
+**The chat panel carries extension 1.58.0's side panel:** a Jira write arrives as a Send / Don't
+send card, with no "always".
 
 ### 1.8.8 — 2026-10-31
 

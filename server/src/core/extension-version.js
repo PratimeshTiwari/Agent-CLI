@@ -49,6 +49,11 @@ export function expectedExtensionVersion() {
   return cached;
 }
 
+/** Tests only: what the checkout's manifest says (undefined reads it again). */
+export function _setExpectedExtensionVersion(v) {
+  cached = v;
+}
+
 /**
  * What to say about the version the extension just reported, or null.
  *
@@ -84,6 +89,26 @@ export function extensionVersionNotice(reported, expected = expectedExtensionVer
   }
 
   return updateLine(reported, expected);
+}
+
+/** The first build that answers `reload_extension` (`chrome.runtime.reload()`). */
+export const SELF_RELOAD_SINCE = '1.58.0';
+
+/**
+ * When the extension can be reloaded from here, the line to say so; else null.
+ *
+ * v8.1, owner: the update notice "should be a clickable link". It cannot be:
+ * nothing on macOS opens a `chrome://` URL, so a terminal link to
+ * chrome://extensions does nothing. A build since 1.58.0 reloads itself
+ * instead, and the manual line is left to the builds before it.
+ *
+ * @returns {{to: string, message: string}|null}
+ */
+export function selfReloadNotice(reported, expected = expectedExtensionVersion()) {
+  if (!reported || !expected) return null;
+  if (compareVersions(reported, expected) >= 0) return null;
+  if (compareVersions(reported, SELF_RELOAD_SINCE) < 0) return null;
+  return { to: expected, message: `↻ Extension updated · ${reported} → ${expected}` };
 }
 
 /** -1, 0 or 1 for dotted numeric versions; a non-numeric part counts as 0. */

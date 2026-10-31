@@ -25,8 +25,8 @@ import { skillsDir, agentDir } from '../../core/paths.js';
 import { skillSearchPath, listSkills } from '../../core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../core/slash-commands.js';
-import { versionChanges } from '../../core/prompt-versions.js';
-import { promptPanelPlan, roundsBar, roundsLabel } from '../prompt-view.js';
+import { versionChanges, versionAdds } from '../../core/prompt-versions.js';
+import { promptPanelPlan, changesPage, roundsBar, roundsLabel } from '../prompt-view.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../core/user-settings.js';
 import {
@@ -155,6 +155,7 @@ export function Menus({
    * was closed before npm finished.
    */
   const doctorOpen = React.useRef(false);
+  const promptPage = React.useRef({ offset: 0, max: 0 }); // `/prompt`'s → page, as drawn
   doctorOpen.current = activeMenu?.type === 'doctor';
   const updateDoctor = React.useCallback((fn) => {
     setActiveMenu((cur) => (cur?.type === 'doctor' ? fn(cur) : cur));
@@ -302,6 +303,22 @@ export function Menus({
       }
     }
 
+    // `/prompt`: → lists everything the highlighted version changes from v1,
+    // ← (or esc, below) goes back to what it adds to the one before it.
+    if (activeMenu?.type === 'prompt' && (key.leftArrow || key.rightArrow)) {
+      if (!!activeMenu.all !== key.rightArrow) setActiveMenu({ ...activeMenu, all: key.rightArrow, scroll: 0 });
+      return;
+    }
+    if (activeMenu?.type === 'prompt' && activeMenu.all && (key.upArrow || key.downArrow)) {
+      // The ref, not the menu state: a held key delivers several presses
+      // before the next render, and each would read the same stale offset.
+      // Clamped, so ↓ past the end is not undone by as many ↑.
+      const page = promptPage.current;
+      page.offset = Math.max(0, Math.min(page.max, page.offset + (key.upArrow ? -1 : 1)));
+      setActiveMenu((m) => ({ ...m, scroll: page.offset }));
+      return;
+    }
+
     // `/doctor`'s tabs: tab, shift+tab or ←/→, on the list only.
     if (activeMenu?.type === 'doctor' && (activeMenu.view || 'home') === 'home'
       && (key.tab || key.leftArrow || key.rightArrow)) {
@@ -311,6 +328,10 @@ export function Menus({
     }
 
     if (!key.escape) return;
+    if (activeMenu?.type === 'prompt' && activeMenu.all) {
+      setActiveMenu({ ...activeMenu, all: false });
+      return;
+    }
     // `/logs` (v5.35): from a flow list back to the picker.
     if (activeMenu?.type === 'logs' && activeMenu.view === 'failures') {
       setActiveMenu({ ...activeMenu, view: 'home' });
@@ -452,7 +473,46 @@ export function Menus({
           );
         })()}
 
-        {activeMenu?.type === 'command_approval' && (() => {
+        {activeMenu?.type === 'command_approval' && activeMenu.payload?.kind === 'external' && (() => {
+          /*
+            A write to Jira (v8.1). Send or Don't send, nothing else: no
+            "always", because the owner asked for every write to be asked about,
+            and a remembered yes is a write nobody looked at. Rows are decided
+            by `approvalLayout`, as for a command.
+          */
+          const p = activeMenu.payload;
+          return (
+            <Panel tight ruled={approval?.ruled !== false} tone="attention" width={W}
+              title={p.title || 'Send this?'}
+              status={`${p.cwd ? String(p.cwd).replace(/^https?:\/\//, '') : ''}${approval?.hidden > 0
+                ? ` · ${approval.hidden} more line${approval.hidden === 1 ? '' : 's'} not shown`
+                : ''}`}>
+              {(approval?.command ?? p.lines ?? []).map((line, i) => (
+                <Text key={i} wrap="truncate">{' '}{i === 0 ? <Text bold>{line}</Text> : line}</Text>
+              ))}
+              {approval?.reason !== false && <Text wrap="truncate" dimColor> {p.riskReason}</Text>}
+              {approval?.padded !== false && <Text> </Text>}
+              {/* The cursor starts on Don't send: an Enter typed ahead, meant for
+                  the prompt, must not post to Jira. Sending is ↑ then enter. */}
+              <Choices
+                limit={2}
+                initialIndex={1}
+                items={[
+                  { label: 'Send', value: 'send' },
+                  { label: "Don't send", value: 'reject' },
+                ]}
+                onSelect={(item) => {
+                  setActiveMenu(null);
+                  agentLoop.answerCommandApproval(item.value, null);
+                  setHistory(prev => [...prev, { role: 'system', content: `[System: ${item.value === 'send' ? 'You sent it' : 'You did not send it'}]` }]);
+                  setFocus(FOCUS_INPUT);
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'command_approval' && activeMenu.payload?.kind !== 'external' && (() => {
           /*
             Every row here is decided by `approvalLayout` (format.js) and drawn
             truncated, so the panel is exactly the height App charged for it. A
@@ -911,7 +971,30 @@ export function Menus({
           const current = rows.find((r) => r.current) || rows[0];
           const at = rows.find((r) => r.id === activeMenu.at) || current;
           const { sub, tight, room } = fit('A switch reaches the chat with your next message.');
-          const changes = versionChanges(at.id);
+          // What it adds to the version before it (v8.1: v4's one new line was
+          // behind "… +6 more"). → opens a page of everything it changes from
+          // v1, which hides the list and scrolls with ↑↓.
+          const adds = versionAdds(at.id);
+          const everything = versionChanges(at.id);
+          const back = activeMenu.returnTo ? 'back' : 'cancel';
+          if (activeMenu.all) {
+            const page = changesPage({ changes: everything, rows: room - 1, offset: activeMenu.scroll || 0 });
+            promptPage.current = { offset: page.offset, max: page.max };
+            return (
+              <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
+                keys={`${everything.length > room - 1 ? '↑↓ scroll · ' : ''}← or esc back`}>
+                <Text wrap="truncate">{'   '}<Text bold>{everything.length ? `Everything ${at.id} changes from v1` : `${at.id} is the baseline`}</Text></Text>
+                {page.lines.map((line) => (
+                  line.startsWith('… ')
+                    ? <Text key={line} dimColor wrap="truncate">{'     '}{line}</Text>
+                    : <Text key={line} wrap="truncate">{'   '}<Text color={T.accent}>▸ </Text>{line}</Text>
+                ))}
+              </Panel>
+            );
+          }
+          const changes = adds.lines;
+          const heading = changes.length ? `What ${at.id} adds to ${adds.from}` : `${at.id} is the baseline`;
+          const canExpand = everything.length > adds.lines.length;
           const plan = promptPanelPlan({
             room: room - rows.length, versions: rows.length,
             changes: changes.length ? changes : [at.summary],
@@ -921,11 +1004,11 @@ export function Menus({
           const barW = Math.max(6, Math.min(24, W - idW - 40));
           return (
             <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
-              keys={`↑↓ move · 1–${rows.length} or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
+              keys={`↑↓ move · 1–${rows.length} or enter choose · ${canExpand ? '→ all changes · ' : ''}esc ${back}`}>
               <Choices
                 numbered
                 limit={rows.length}
-                initialIndex={Math.max(0, rows.indexOf(current))}
+                initialIndex={Math.max(0, rows.indexOf(at))}
                 items={rows.map((r) => ({
                   label: r.id, detail: r.hint, value: r.id, current: r.current,
                 }))}
@@ -954,7 +1037,7 @@ export function Menus({
               {plan.changes.length ? (
                 <>
                   <Text> </Text>
-                  <Text wrap="truncate">{'   '}<Text bold>{changes.length ? `What ${at.id} changes` : `${at.id} is the baseline`}</Text></Text>
+                  <Text wrap="truncate">{'   '}<Text bold>{heading}</Text></Text>
                   {plan.changes.map((line) => (
                     line.startsWith('… +')
                       ? <Text key={line} dimColor wrap="truncate">{'     '}{line}</Text>

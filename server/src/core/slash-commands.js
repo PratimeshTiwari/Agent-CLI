@@ -26,6 +26,8 @@ import { planModelSwitch, browserModelPin, pickModelFor } from './model-match.js
 import { MISMATCH_POLICIES, mismatchPolicy } from './model-fallback.js';
 import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVersion } from './prompt-versions.js';
 import { summariseToolUsage } from './tool-usage.js';
+import { atlassianSite, atlassianCredentials } from '../atlassian/config.js';
+import { createJiraClient } from '../atlassian/jira-client.js';
 
 /**
  * How long a name the banner can take.
@@ -61,7 +63,7 @@ export const MAX_AGENT_NAME = 20;
 export const AGENT_COMMANDS = new Set([
   'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
-  'workspace', 'startup', 'prompt',
+  'workspace', 'startup', 'prompt', 'jira', 'chat',
 ]);
 
 /**
@@ -122,7 +124,7 @@ export function promptVersionReport(loop) {
  * A set beside the commands rather than a literal at the call site, for the
  * same reason `MUTATING_TOOLS` is: the literal is what drifts.
  */
-export const SLOW_COMMANDS = new Set(['compact']);
+export const SLOW_COMMANDS = new Set(['compact', 'jira']);
 
 /**
  * Whether *this invocation* is worth a spinner.
@@ -170,7 +172,7 @@ export const COMMAND_OPTIONS = {
   subagents: [['', 'say whether they are on'], ['on', 'parallel tabs for research and review'], ['off', 'one tab only'],
     ['large-files <subagent|direct>', 'who reads a large file']],
   context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
-  new: [], restart: [], exit: [],
+  new: [], restart: [], exit: [], jira: [],
 };
 
 /** Words a command also takes that its list does not advertise. */
@@ -347,6 +349,41 @@ export async function handleSlashCommand(loop, command, args) {
      * The prompt version (v5.32): v1 is frozen, a newer one is opt-in, and every
      * reply records which it answered so the two can be compared. Per person.
      */
+    /*
+     * Is Jira set up, and does the model know? (v8.1) Signing in happens in a
+     * shell (`agent atlassian login`), so the token is never typed into the
+     * prompt. This checks the sign-in against the site and, on a version that
+     * offers Jira, re-sends the tool list so a chat that started before the
+     * sign-in learns of it — the definitions only, not a whole turn-0 prompt.
+     */
+    case 'jira': {
+      const cfg = atlassianSite();
+      if (!cfg) return { message: 'Jira · not set up · run `agent atlassian login` in a terminal, then `/jira`' };
+      const host = cfg.site.replace(/^https?:\/\//, '');
+      const creds = atlassianCredentials();
+      if (creds.error) return { message: `✗ Jira · ${host} · ${creds.error}` };
+      let who;
+      try {
+        const me = await createJiraClient(creds).myself();
+        who = me?.displayName || me?.name || 'you';
+      } catch (err) {
+        return { message: `✗ Jira · ${host} · ${err.message}` };
+      }
+      const kind = cfg.kind === 'cloud' ? 'Cloud' : 'Server/DC';
+      const offered = Boolean(PROMPT_VERSIONS[loop.promptVersion]?.flags?.jira);
+      if (!offered) return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · \`/prompt v4\` offers it to the model` };
+      loop.promptBuilder.requestToolRedeclaration?.();
+      return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · the model is told with your next message; every write asks you` };
+    }
+
+    case 'chat': {
+      if (!args?.length) {
+        const t = loop.chatThread;
+        return { message: t?.id ? `Chat ${t.id} · \`/chat <link or id>\` continues in another` : 'No chat yet · `/chat <link or id>` continues in one' };
+      }
+      return { message: loop.openChat(args.join(' ')).message };
+    }
+
     case 'prompt': {
       const asked = String(args?.[0] || '').toLowerCase();
       if (!asked) return { message: promptVersionReport(loop) };

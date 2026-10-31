@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roundsBar, promptPanelPlan, roundsLabel } from '../../src/ui/prompt-view.js';
-import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges } from '../../src/core/prompt-versions.js';
+import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges, versionAdds } from '../../src/core/prompt-versions.js';
 
 test('a bar fills to the median and traces to the p90, scaled to the largest p90', () => {
   assert.deepEqual(roundsBar({ median: 1, p90: 3, max: 3, width: 12 }), { fill: 4, tail: 8 });
@@ -39,4 +39,24 @@ test('every switch a version turns on has a line to say what it changes', () => 
   }
   assert.deepEqual(versionChanges('v1'), [], 'v1 is the baseline');
   assert.equal(versionChanges('v2').length, Object.keys(PROMPT_VERSIONS.v2.flags).length);
+});
+
+test('each version is described by what it adds to the one before (v8.1)', () => {
+  // v4's only new line, Jira, used to sit behind "… +6 more".
+  assert.deepEqual(versionAdds('v1'), { from: null, lines: [] });
+  assert.equal(versionAdds('v2').from, 'v1');
+  assert.deepEqual(versionAdds('v2').lines, versionChanges('v2'));
+  assert.deepEqual(versionAdds('v3'), { from: 'v2', lines: [FLAG_NOTES.lookFirst] });
+  assert.deepEqual(versionAdds('v4'), { from: 'v3', lines: [FLAG_NOTES.jira] });
+});
+
+test('the → page scrolls, and says what is above and below', async () => {
+  const { changesPage } = await import('../../src/ui/prompt-view.js');
+  const c = Array.from({ length: 13 }, (_, i) => `c${i}`);
+  assert.deepEqual(changesPage({ changes: c, rows: 20 }), { lines: c, offset: 0, max: 0 });
+  assert.deepEqual(changesPage({ changes: c, rows: 5 }).lines, ['c0', 'c1', 'c2', 'c3', '… +9 more']);
+  assert.deepEqual(changesPage({ changes: c, rows: 5, offset: 3 }).lines, ['… 3 above', 'c3', 'c4', 'c5', '… +7 more']);
+  const last = changesPage({ changes: c, rows: 5, offset: 99 });
+  assert.deepEqual(last, { lines: ['… 9 above', 'c9', 'c10', 'c11', 'c12'], offset: 9, max: 9 }, 'clamped; the end shows');
+  for (let o = 0; o <= 9; o++) assert.equal(changesPage({ changes: c, rows: 5, offset: o }).lines.length, 5, `offset ${o}`);
 });

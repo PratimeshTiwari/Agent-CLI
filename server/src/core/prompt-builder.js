@@ -23,6 +23,7 @@ import { skillCatalogue } from './skills.js';
 import { detectProjectCommands, describeCommands } from './project-commands.js';
 import { resolveEffort } from './effort.js';
 import { renderToolDefinitions } from './tool-catalog.js';
+import { atlassianSite } from '../atlassian/config.js';
 import { prompt } from './prompt-loader.js';
 import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
 import { parseMemory, readMemoryEnabled } from '../context/memory-manager.js';
@@ -1246,7 +1247,19 @@ ${firstCheck}
    */
   _buildToolDefinitions(subagents = true, modelConfig = {}) {
     const tier = resolveEffort(modelConfig.effort).tier;
-    return renderToolDefinitions(tier, subagents, modelConfig, resolvePromptVersion(this.promptVersion).flags);
+    return renderToolDefinitions(tier, subagents, modelConfig, this._toolFlags());
+  }
+
+  /**
+   * The version's flags, with `jira` off until a site is set up (v8.1): a tool
+   * the model is told about and cannot use costs a turn. `jiraAvailable` is
+   * set by the tests; otherwise the settings are read.
+   */
+  _toolFlags() {
+    const flags = resolvePromptVersion(this.promptVersion).flags || {};
+    if (!flags.jira) return flags;
+    const ready = this.jiraAvailable ?? Boolean(atlassianSite());
+    return ready ? flags : { ...flags, jira: false };
   }
 
   /**
@@ -1315,7 +1328,8 @@ ${firstCheck}
    * The names are fixed for a given toggle state, so this is computed once.
    */
   _buildToolAnchor(subagents = true, modelConfig = {}) {
-    const key = String(Boolean(subagents));
+    // The version and Jira's availability change the list too (v8.1).
+    const key = `${Boolean(subagents)}|${this.promptVersion}|${Boolean(this._toolFlags().jira)}`;
     if (this._anchorCache?.key === key) return this._anchorCache.value;
 
     const defs = this._buildToolDefinitions(subagents, modelConfig);

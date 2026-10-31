@@ -113,6 +113,13 @@
     const at = chatPath(url);
     return `https://gemini.google.com${at?.account || ""}/app`;
   }
+  function chatToReturnTo(tabUrl, threadUrl) {
+    const want = chatPath(threadUrl || "");
+    if (!want?.thread) return null;
+    const at = chatPath(tabUrl || "");
+    if (at?.thread === want.thread) return null;
+    return `https://gemini.google.com${want.account || at?.account || ""}/app/${want.thread}`;
+  }
 
   // src/background/content.js
   var MODEL_URLS = {
@@ -305,6 +312,10 @@
       await chrome.tabs.remove(tabId);
     } catch {
     }
+  }
+  function isSessionTab(tabId) {
+    for (const id of sessionTabs.values()) if (id === tabId) return true;
+    return false;
   }
   function forgetTab(tabId) {
     stopCompletionTicks(tabId);
@@ -653,6 +664,23 @@
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
         if (fresh) tabs = [fresh];
       }
+      const placed = await ensureOnChat(tabs[0], payload.threadUrl);
+      if (!placed.ok) {
+        const errorMsg = {
+          type: "error",
+          payload: {
+            op: "chat_unreachable",
+            stage: "navigate",
+            targetModel,
+            wanted: placed.wanted,
+            landed: placed.landed,
+            message: "Could not get back to this session's chat"
+          }
+        };
+        broadcastToSidePanel(errorMsg);
+        sendToServer(errorMsg);
+        return;
+      }
       success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
       if (!success && targetModel === "gemini") {
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
@@ -670,12 +698,47 @@
           detail: lastTabFailure?.message,
           // Short, as asked: by now it has reloaded the tab and reopened the chat
           // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
-          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`
+          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`,
+          // Whose prompt it was (1.58.0): a subagent's failure is that request's,
+          // and must not end the user's turn in another tab.
+          ...payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}
         }
       };
       lastTabFailure = null;
       broadcastToSidePanel(errorMsg);
       sendToServer(errorMsg);
+    }
+  }
+  async function ensureOnChat(tab, threadUrl) {
+    let current;
+    try {
+      current = await chrome.tabs.get(tab.id);
+    } catch {
+      return { ok: true };
+    }
+    const target = chatToReturnTo(current.url, threadUrl);
+    if (!target) return { ok: true };
+    const wanted = chatPath(target)?.thread;
+    try {
+      await chrome.tabs.update(tab.id, { url: target });
+      await waitForTabLoad(tab.id, 1e4);
+      await waitForBridge(tab.id, 15e3);
+      const after = await chrome.tabs.get(tab.id);
+      const landed = chatPath(after.url || "")?.thread || null;
+      if (landed !== wanted) return { ok: false, wanted, landed };
+      sendToServer({
+        type: "error",
+        payload: {
+          op: "chat_restored",
+          level: "notice",
+          targetModel: "gemini",
+          message: "The tab was on another chat; moved it back before sending",
+          detail: `${chatPath(current.url || "")?.thread || "a new chat"} \u2192 ${wanted}`
+        }
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, wanted, landed: chatPath(current.url || "")?.thread || null, error: err?.message };
     }
   }
   async function focusModelTab(targetModel = "gemini") {
@@ -965,6 +1028,13 @@
         break;
       case "heartbeat_ack":
         break;
+      // 1.58.0: an older build than the agent's checkout reloads itself from
+      // disk when the agent asks, between turns. `chrome://extensions` cannot be
+      // opened from a terminal link (macOS has no handler for chrome://), so the
+      // reload the update notice used to ask for is done here instead.
+      case "reload_extension":
+        chrome.runtime.reload();
+        break;
       default:
         broadcastToSidePanel(message);
     }
@@ -1001,7 +1071,7 @@
             }
             if (finished && payload.isSubagent) {
               if (payload.complete) payload.subagentUrl = sender.tab.url;
-              if (!payload.sessionId) {
+              if (!isSessionTab(sender.tab.id)) {
                 forgetTab(sender.tab.id);
                 chrome.tabs.remove(sender.tab.id).catch((err) => console.warn("Failed to auto-close subagent tab:", err));
               }

@@ -393,23 +393,8 @@ repo: **25,445 characters against 9,991, a 61% cut.** `requestToolRedeclaration(
 condensed reminder plus the full definitions and nothing else. It outranks the periodic
 refresh, because that tier sends tool *names* and names are what just failed.
 
-**Saying what would prove you wrong (`pro-hypothesis.md`).** Proposed as a "hypothesis
-engine": a falsifiable hypothesis before every search, with `<invalidation_criteria>` and a
-1–100 `<confidence_score>`. Measuring the prompts first narrowed it a long way. `standard`
-already asks for *"what you expect the next call to show"*, which is most of a hypothesis —
-what no rung asked was **what would disprove it**, or what to do when the answer is not clear.
-Those two are the whole gap, and they cost **714 characters** rather than a taxonomy rewrite.
-
-Scoped to `standard` and `deep`, because it costs **output** tokens and output is generation
-time: `brief` promises "straight to work", and the flash rungs are written for a model that
-follows short prompts and ignores long ones. Verified the way the last prompt move was —
-**6 of the 10 effort × topology shapes come out byte-identical**, and the four that change do
-so by exactly +714. The first attempt was +1 character on `brief` too, from a newline left
-outside the conditional.
-
-**The numeric confidence score was declined.** A model asked for a number produces one, and a
-fabricated `87` reads as evidence. The instruction is behavioural instead — if you would not
-bet on it, ask — which is the part that changes what the agent *does*.
+**`pro-hypothesis.md`** asks `standard`/`deep` what would disprove the expectation (+714
+characters; a numeric confidence score was declined): [`docs/history.md`](docs/history.md#saying-what-would-prove-you-wrong-pro-hypothesismd).
 
 **And the rungs were not as thin as they looked — then they were revisited and there is one.**
 An earlier note here claimed the three pro rungs "differ only by `isBrief`". Measured:
@@ -430,13 +415,8 @@ naming `ask_reviewer` in a prompt that does not define it instructs a call to a 
 has never been given — the drift `toolCatalogDrift` exists to catch. Verified: 9 of the 10
 effort × topology shapes byte-identical, `deep/duo` +111 characters.
 
-**Why this shape and not a multi-agent pipeline.** The current reading of the literature is
-that extra agents earn their place when they contribute *intelligence rather than actions* and
-writes stay single-threaded — [Cognition's "Don't Build Multi-Agents"](https://cognition.com/blog/dont-build-multi-agents)
-reports coordination breakdowns as ~37% of multi-agent production failures, and its core
-objection is that summaries lose the implicit decisions behind them. One reviewer with no write
-access is that shape; a planner → tech-planner → reviewer chain handing each other summaries is
-precisely the failure mode.
+**Why one reviewer and not a pipeline** (extra agents should add intelligence, not writes): see
+[`docs/history.md`](docs/history.md#why-one-reviewer-and-not-a-multi-agent-pipeline).
 
 It is also the only fan-out that is *real* here. `extension-lock` gives each **tab** a lane —
 `main:<model>` for the conversation you are looking at, `sub:<requestId>` for a subagent turn in
@@ -673,6 +653,36 @@ command: //help", on `main` too. `ui/ink-probe-hold.js` holds keys until the win
 passes the probe's reply through. The palette also lost the spinner's two rows during a turn (4
 clears at 13 rows on `/`). Settings rows for Theme and Workspace now open with `returnTo`, so esc
 steps back to settings. Pty: 0 clears at 13 and 24 on every path.
+
+**Jira (v8.1, `jira_issue`, prompt v4).** Owner: every write asks, as a mandatory step. Reads (`get`,
+`search`) answer in Markdown; every other action, an unknown one included, is a write. Three locks,
+each tested with a negative control: `requiresApproval`'s **first** statement returns
+`isExternalWrite` for an `EXTERNAL_TOOLS` call, before mode or risk (a source assertion pins its
+place); `runExternalTool` (`core/external-approval.js`) plans the write against the live issue,
+shows it as a Send / Don't send box that starts on Don't send, stores no rule for "always", and logs
+the outcome as `risk: 'external'`; and the handler refuses without a one-use token from
+`approval-token.js`, so the registry alone cannot write. Subagents are refused the tool. A 403 is
+`HANDED OFF — not done`, never retried. Cloud is `/rest/api/3` with ADF, Server/DC `/rest/api/2`
+with wiki markup (`atlassian/adf.js`, `wiki.js`); what a write would lose (panels, mentions) is
+named in the box. The token is only in the Keychain or `~/.agent/atlassian-token.json` (0600), set
+by `agent atlassian login` (run by the bin before `tsx`); never in a prompt, log or settings file.
+v4 offers it only once a site is set up (else v3 byte for byte); `/jira` checks the sign-in. Pty
+on the fake Jira: Don't send sends nothing, Send one request, 0 clears. No real Jira run yet.
+
+**A subagent's tab failure is the subagent's (v8.1, extension 1.58.0).** Reported with
+screenshots: digests of CLAUDE.md and CHANGELOG.md failed and the user's turn ended with the
+failed-send line. The worker kept a session tab only when the reply carried `sessionId`, which the
+page never sends, so each session tab closed after turn 1 (`isSessionTab` asks the worker's map
+now); and `tab_unreachable` ended the main turn whoever sent the prompt (it carries `isSubagent`
+and `requestId` now, and settles that request only). **The tab is put back on the session's chat
+before every main prompt** (`ensureOnChat`, `chatToReturnTo`; owner: "the agent should check
+whether it is continuing on the same chat"): `threadUrl` names it, the tab's account is kept. If it
+will not load there nothing is typed: `chat_unreachable`, one warning naming `/chat <link or id>`
+(`openChat`) and `/new`, and the message is carried. A reply from another chat says so too.
+`_cleanJsonString` is a scan now: its regex did not know `\"`, so a long edit's newlines after
+the first escaped quote stayed raw ("Bad control character", a lost round). An extension
+since 1.58.0 that is older than the checkout is asked to reload itself (`reload_extension`), once
+per version and only between turns: no app on macOS opens a `chrome://` link.
 
 `find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
 search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
@@ -1387,64 +1397,16 @@ Standing constraints on this project. These are choices, not limitations to rout
   which is the identity of the project. The framing that preserves the thesis: the browser
   bridge stays the default, an API backend is opt-in for people who already have a key.
 
-### Standing decisions rescued from `HANDOFF.md`, 2026-09-20
+### Standing decisions from `HANDOFF.md`
 
-That file was a baton — "delete this once the work below is done" — and its work
-is done or obsolete: three of its eight open items were GitHub-agent work deleted
-in `e375aed`, `/update` has now run against a real merge, `ask_subagent` is
-verified (`4b520b9`), and `/logs rates` has its data. What it also held, and
-nothing else did, is these. They are decisions, so they belong here.
-
-- **No reply envelope** — asking the model to wrap replies in JSON. Argued from
-  measurement, and the price is the case against it: the browser tab stops being
-  readable to the person watching it, which is a *supported surface*;
-  `gemini_response_stream` can no longer render live, because JSON cannot be
-  drawn until it closes and parses; every reply becomes as fragile as
-  `_cleanJsonString` already is, since prose is exactly what escaping gets
-  wrong; and it is more text typed into a browser every turn, against a prompt
-  strategy that exists to avoid exactly that. The three drift detectors look
-  like candidates and are not — a provider error is Gemini's own error page
-  rather than model output, and a model confused enough to deny its own tools
-  will not emit a correct marker saying so. **If it comes back**, the thing
-  worth doing instead is a short output-contract line asking for the constructs
-  the renderer handles best.
-- **The jitter's second half is not happening** — ~20% of the live frame spent
-  on the seam that brought the scroll glitches back twice.
-- **Terminal failures are opt-in per terminal**, chosen over an age filter.
-- **The emoji sweep is not happening.** ~100 glyphs across 16 files were changed
-  and then reverted; the only real complaint was the tick on a dark background,
-  which is now `✔`. Change a glyph when someone names *that glyph* — `✅` → `✓`
-  on the compaction row was right, and re-running the sweep is not.
-
-And two traps that were only written down there:
-
-- **A test can pin the bug.** A list-indent fix failed two tests that asserted
-  the broken two-space indent. A test written from observed output describes
-  what the code *does*, which is not what it *should* do — and it will defend
-  the bug.
-- **Do not write a derived number into a document here.** Commit counts and test
-  counts both drifted within a day. Print the command instead.
+No reply envelope; the jitter's second half and the emoji sweep are not happening; terminal
+failures are opt-in per terminal; a test can pin the bug; never write a derived number into a
+document here. The reasoning is in [`docs/history.md`](docs/history.md#standing-decisions-rescued-from-handoffmd).
 
 ### Measured and discarded
 
-Kept so they are not re-tried.
-
-- **The extension's "address theory" was wrong.** The reconnect, not the address, was the
-  whole connectivity problem. With the shipped bundle refusing every handshake: attempts at
-  4.7s, 20.7s, 50.7s, 80.7s — steady state **exactly 30.0s**, the `chrome.alarms` clamp
-  floor. Headless Chrome reclaims service workers harder than a real browser, so that is a
-  lower bound rather than a verdict.
-- **The anti-throttling audio hack never worked, and not for the reason three documents
-  recorded.** They said the `<audio>` element was created and never appended — true, and not
-  the bug, because a detached `<audio>` plays fine in Chrome. The real reason is in its own
-  catch block: autoplay policy blocks playback without a user gesture, and the fallback bound
-  `click`/`keydown` with `{ once: true }`, which a **backgrounded** tab never receives. So it
-  played in tabs that did not need it and stayed silent in the ones it existed for. Deleted;
-  the Tab Wakeup Protocol is the mechanism that works.
-- **The batch loop's flat re-serialisation was diagnosed as an oversight and was not.** Every
-  batch turn opened a fresh tab closed when the turn ended, so turn 2 had never seen turn 1 —
-  there was no thread to opt into. Measured at **81% resent** over ten turns (156,140
-  characters where 28,943 were new) before the tab was held for the life of the task.
+The reconnect address theory, the audio hack, the batch re-serialisation "fix": measured and
+dropped, in [`docs/history.md`](docs/history.md#measured-and-discarded).
 
 ## History
 

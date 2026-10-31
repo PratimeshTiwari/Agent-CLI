@@ -40,7 +40,7 @@ const GLOBALS = new Set([
   'require', 'module', 'exports', '__dirname', '__filename', 'globalThis', 'process',
   'console', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate',
   'queueMicrotask', 'structuredClone', 'fetch', 'Buffer', 'Uint8Array', 'URL', 'URLSearchParams',
-  'TextEncoder', 'TextDecoder', 'AbortController', 'Promise', 'JSON', 'Math', 'Object',
+  'TextEncoder', 'TextDecoder', 'AbortController', 'FormData', 'Blob', 'Promise', 'JSON', 'Math', 'Object',
   'Array', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Date', 'RegExp', 'Map',
   'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect', 'Error', 'TypeError', 'RangeError',
   'SyntaxError', 'EvalError', 'ReferenceError', 'AggregateError', 'Intl', 'WebSocket',
