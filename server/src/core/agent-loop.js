@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
-import { looksLikeMultipleDrafts, looksLikeCodeQuestion } from './drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCodeQuestion, looksLikeEmptyPromise } from './drift-detector.js';
 import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
 import { logError, logNotice } from './error-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
@@ -608,6 +608,7 @@ export class AgentLoop {
       // One tool-amnesia retry per user turn; see handleGeminiResponse.
       this._deniedToolsOnce = false;
       this._steppedDownThisTurn = false;
+      this._promiseNudged = false;
       /**
        * What this turn has actually done, for the model to read back.
        *
@@ -821,6 +822,9 @@ export class AgentLoop {
       this._notify('⏸ Held a conclusion that arrived with its own tool calls — re-asking after the results.');
     }
 
+    // v3: "let me check X." with no call would end the turn on the promise.
+    const keepPromise = toolCalls.length === 0 && !premature && this._promisedAndStopped(cleanContent);
+
     // Show the response text (without tool call blocks) in the side panel
     if (cleanContent.trim() && !premature) {
       /**
@@ -867,7 +871,7 @@ export class AgentLoop {
       this.callbacks.sendToPanel({
         id: randomUUID(),
         type: 'agent_response',
-        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 },
+        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 || keepPromise },
         timestamp: Date.now(),
       });
       this._sendTaskList();
@@ -876,9 +880,47 @@ export class AgentLoop {
     // Execute tool calls
     if (toolCalls.length > 0) {
       await this._executeToolCalls(toolCalls);
+    } else if (keepPromise) {
+      this._askToKeepPromise(cleanContent);
     } else {
       this._finishTurn(cleanContent, { isFirstReply, premature });
     }
+  }
+
+  /**
+   * The reply said it would look and made no call (prompt v3, `lookFirst`).
+   *
+   * The loop goes on only when a reply carries a tool call, so "Let me check
+   * the symbol index." with nothing after it *is* the answer: the turn ends on
+   * a promise and the question is never answered. Seen on Flash-Lite, the rung
+   * v3's rule is for. Asked once per turn, because a second promise is a model
+   * that will not call, and asking again only spends rounds.
+   *
+   * Gated on the version so `/prompt` can compare v2 and v3 on what they do,
+   * not only on what they say.
+   */
+  _promisedAndStopped(text) {
+    if (this._promiseNudged || !this.promptBuilder._flag?.('lookFirst')) return false;
+    if (hasHandoverBlock(text)) return false;                  // next steps, not a promise
+    return looksLikeEmptyPromise(text);
+  }
+
+  _askToKeepPromise(text) {
+    this._promiseNudged = true;
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'empty_promise',
+      message: 'The reply said it would look and made no tool call; asked once to make it',
+      detail: String(text || '').trim().slice(-300),
+      meta: { effort: this.modelConfig?.effort || null, promptVersion: this.promptVersion },
+    });
+    // The row is the record on screen; a system turn as well drew it twice.
+    this._noticeRow('↻ It said it would look and made no call · asked it to make the call');
+    const anchor = this.promptBuilder._buildToolAnchor(this.subagentsEnabled, this._promptConfig());
+    this._sendToGemini([
+      'You said you would look, but your reply had no tool call, so nothing ran.',
+      'Make that call now, in a ```json block, and answer from what it returns.',
+      anchor,
+    ].filter(Boolean).join('\n'), this.callbacks);
   }
 
   /** A main-lane reply that arrived after its turn ended. Logged, released, dropped. */
@@ -1389,6 +1431,7 @@ export class AgentLoop {
     this.currentObjective = `Fix the failure in background task ${hit.taskId}`;
     this._deniedToolsOnce = false;
     this._steppedDownThisTurn = false;
+    this._promiseNudged = false;
     this._resentUnsubmittedOnce = false;
     this._failedRounds = 0;
 

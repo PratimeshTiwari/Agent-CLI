@@ -275,6 +275,19 @@ mismatch bullet on medium too, but medium gets the terse tool list, which does n
 characters (low / medium / high): the size is not the point, round trips are. Judge it by
 `/prompt` after some days on v2, not by this paragraph.
 
+**v3 is v2 plus "look before answering" (v7.9, `lookFirst`).** Reported: asked "how is the
+symbol matching done in this node server" on Flash-Lite, the agent answered from `AGENT.md`'s map
+with nothing opened. Two halves. The prompt: rule 9 of the terse list on low, a bullet under
+Source Code on medium (`LOOK_FIRST_RULE` in `prompt-builder.js`; +240 / +273 characters on turn 0);
+high is v2 byte for byte, since Pro plans first. The loop: a reply with no tool call whose last two
+sentences promise to look (`looksLikeEmptyPromise`, offers and questions excluded) is asked once
+per turn to make the call (`_askToKeepPromise`: 3 lines and the tool names; an `empty_promise`
+notice and a `↻` row). The loop half is gated on the version too, so `/prompt` compares what v2
+and v3 do. Replayed over the 99 stored replies that ended a turn: 0 hits, against 11 among
+replies a tool call followed. `looksLikeCodeQuestion` also learnt "this server" and
+`snake_case`/`camelCase` names, so `turn0_no_tools` counts the reported case. Pty: the promise,
+the ask, the call, the answer, 0 clears at 13 and 24 rows.
+
 **Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
 labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old
 "High = the last model" rule it took High, Medium landed on Pro, and Flash became unreachable.

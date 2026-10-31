@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeQuotaReached, looksLikeCodeQuestion } from '../../src/core/drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCapabilityDenial, looksLikeProviderError, looksLikeQuotaReached, looksLikeCodeQuestion, looksLikeEmptyPromise } from '../../src/core/drift-detector.js';
 
 describe('looksLikeMultipleDrafts', () => {
   test('catches a reply offering two drafts', () => {
@@ -263,5 +263,36 @@ describe('looksLikeQuotaReached — a usage limit, not an answer and not a glitc
 
   test('a plain provider error is not a quota', () => {
     assert.equal(looksLikeQuotaReached('Sorry, something went wrong. Please try your request again.'), false);
+  });
+});
+
+describe('looksLikeEmptyPromise (v7.9)', () => {
+  test('a reply that ends on a promise to look is one', () => {
+    for (const text of [
+      'Let me check the symbol index.',
+      "I'll look at how find_symbol is implemented in this server.",
+      'Good question. To answer it properly I need to read context/symbol-index.js. Let me open it.',
+      "I'm going to search the codebase for the matcher.",
+      'Sure — let me take a look at the agent loop first.',
+      'I will now inspect `prompt-builder.js` to see where the rule is added.',
+    ]) assert.equal(looksLikeEmptyPromise(text), true, text);
+  });
+
+  test('an offer, a question, a kept promise or plain prose is not', () => {
+    for (const text of [
+      "If you'd like, I can check the tests too.",
+      'Would you like me to look at the parser next?',
+      'Let me know if you want me to dig into the watcher.',
+      'Shall I read the rest of the file?',
+      'Let me check the parser: it splits on commas, then trims each field and drops empties. That is why the trailing comma is ignored.',
+      'The symbol index is built lazily and cached by mtime.',
+      'I checked the parser and it splits on commas.',
+      'Should I search for other callers?',
+      '',
+    ]) assert.equal(looksLikeEmptyPromise(text), false, text);
+  });
+
+  test('a long reply is an answer, not a promise', () => {
+    assert.equal(looksLikeEmptyPromise('x '.repeat(2100) + 'Let me check the tests.'), false);
   });
 });

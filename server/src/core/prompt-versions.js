@@ -54,6 +54,38 @@ export const PROMPT_VERSIONS = {
       projectCommands: true,     // turn 0 says how this project tests, lints and builds (v7.4)
     },
   },
+  /*
+   * v3 (v7.9): v2, plus "look before answering" on the low and medium rungs.
+   * Reported: "how is symbol matching done in this node server" was answered on
+   * Flash-Lite from AGENT.md's map and general knowledge, with nothing opened,
+   * and "let's examine the relevant files" then ended the turn with no call.
+   * Every terse rule was about editing; none said what to do with a question.
+   * A version of its own, because looking costs round trips by design, and in
+   * v2 it would read as the dedup getting worse (owner, 2026-10-31).
+   * v2's prompt files: a `v3` folder would lose them (`dir` falls back to the
+   * base file, not to v2's).
+   */
+  v3: {
+    id: 'v3',
+    summary: 'v2, plus: a question about the project is answered from files opened this turn',
+    hint: 'v2 + look first',
+    refreshEvery: 20,
+    dir: 'v2',
+    flags: {
+      trustEditResult: true,
+      gateReview: true,
+      walkthroughWithTask: true,
+      tickWithNextCall: true,
+      oneCopy: true,
+      answerDirectly: true,
+      symbolLanguages: true,
+      subagentEffortWords: true,
+      largeFileDigest: true,
+      logQuery: true,
+      projectCommands: true,
+      lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
+    },
+  },
 };
 
 /**
@@ -73,6 +105,7 @@ export const FLAG_NOTES = {
   largeFileDigest: 'read_file says a large file comes back as a subagent\'s digest',
   logQuery: 'query_log reads log files and Grafana/Datadog exports',
   projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
+  lookFirst: 'A question about the project is answered from files opened this turn',
 };
 
 /** What a version changes from v1, one line per switch that is on. */
