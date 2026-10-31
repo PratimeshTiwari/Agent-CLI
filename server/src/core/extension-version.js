@@ -73,7 +73,28 @@ export function extensionVersionNotice(reported, expected = expectedExtensionVer
 
   if (String(reported) === String(expected)) return null;
 
+  /*
+   * Newer than this agent (v7.9): the checkout was updated and Chrome reloaded
+   * while this process kept running, so it still expects the old number.
+   * Reported as `Extension update · 1.55.0 → 1.54.0`, an "update" to a lower
+   * version. The agent is what is stale, and a restart is the fix.
+   */
+  if (compareVersions(reported, expected) > 0) {
+    return `⚠ Agent restart needed · extension ${reported}, this agent expects ${expected} · /restart`;
+  }
+
   return updateLine(reported, expected);
+}
+
+/** -1, 0 or 1 for dotted numeric versions; a non-numeric part counts as 0. */
+export function compareVersions(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
 }
 
 /*

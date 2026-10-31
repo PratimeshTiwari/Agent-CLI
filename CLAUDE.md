@@ -1830,7 +1830,15 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   sat under the transcript with the prompt's blank row between them and the box, so they read as
   the end of the last reply. The blank row moves above them when either shows and nothing sits
   between (no spinner, menu, diff or shell). One row moved, none added. The `/effort mismatch` echo
-  is the chooser's own words now, not `/effort`.
+  is the chooser's own words now, not `/effort`. **The mismatch row is two lines** (owner's layout,
+  `ui/mismatch-row.js`): `⚠ Model mismatch · browser 3.8 Flash ≠ agent 3.1 Pro · ask`, then what the
+  next message does `· ctrl+b shows the tab · /settings → Browser differs`. Line 2 is charged and
+  drawn from 16 rows (`mismatchRows`). The footer keeps `⚠ 3.8 Flash · model mismatch` at every
+  height (`modelDiffers`; the row is hidden below 13 rows but the mark was too, until now), the words
+  shedding before the model's number. The Effort slider adds `⚠ model mismatch · browser …` beside
+  the marked stop's model (`tabDiffers`), where it said `✔ current` alone. The warm-up row is just
+  `✔ Ready` ("too verbose"). An extension *newer* than the running agent says `Agent restart needed`
+  instead of `Extension update · 1.55.0 → 1.54.0` (`compareVersions`). Pty: 0 clears at 13, 16, 24.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input

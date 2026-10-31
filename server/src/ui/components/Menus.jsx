@@ -11,7 +11,7 @@ import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
 import { panelRoom, wrapLines, cutStart } from '../panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../settings-view.js';
-import { sliderLayout, stopModel } from '../effort-slider.js';
+import { sliderLayout, stopModel, tabDiffers } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../logs-view.js';
@@ -596,6 +596,8 @@ export function Menus({
           const stops = EFFORT_LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
           const model = stops[at];
           const tick = marked.id === current ? '  ✔ current' : '';
+          const differs = tabDiffers(model, agentLoop.modelOptions);
+          const warn = differs ? `  ⚠ model mismatch · browser ${differs}` : '';
           const { tight } = fit('', 5);
           // A blank row each side of the model line (owner, 2026-10-26: "fix
           // spacing between effort, model name and description, just a bit"),
@@ -629,8 +631,9 @@ export function Menus({
               </Text>
               {airy ? <Text> </Text> : null}
               <Text wrap="truncate" dimColor={!model.available}>
-                {lead(model.text + tick)}{model.text}
+                {lead(model.text + tick + warn)}{model.text}
                 {tick ? <Text color={T.success}>{tick}</Text> : null}
+                {warn ? <Text color={T.attention}>{warn}</Text> : null}
               </Text>
               {airy ? <Text> </Text> : null}
               <Text dimColor wrap="truncate">{lead(marked.blurb)}{marked.blurb}</Text>

@@ -27,7 +27,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v7.6 | 2026-10-31 | `v7.6/code-outline-on-partial-reads` | [#137](https://github.com/PratimeshTiwari/Agent-CLI/pull/137) | A partial read of code ends with the definitions it did not show |
 | v7.7 | 2026-10-31 | `v7.7/doctor-revert-checked-for-real` | [#138](https://github.com/PratimeshTiwari/Agent-CLI/pull/138) | The `/doctor` revert guard, driven end to end; it says why before npm runs |
 | v7.8 | 2026-10-31 | `v7.8/attach-files-from-the-editor` | [#139](https://github.com/PratimeshTiwari/Agent-CLI/pull/139) | Right-click → Attach to Agent CLI puts files at the prompt as tags (companion 1.8.7) |
-| v7.9 | 2026-10-31 | `v7.9/fresh-chat-and-tab-row` | [#140](https://github.com/PratimeshTiwari/Agent-CLI/pull/140) | A fresh session starts in a new chat; `/settings` names the Gemini tab; Browser differs is a chooser; warnings hug the input (extension 1.55.0) |
+| v7.9 | 2026-10-31 | `v7.9/fresh-chat-and-tab-row` | [#140](https://github.com/PratimeshTiwari/Agent-CLI/pull/140) | A fresh session starts in a new chat; `/settings` names the Gemini tab; Browser differs is a chooser; the mismatch warning is two plain lines, also in the footer and the Effort menu (extension 1.55.0) |
 
 ### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 

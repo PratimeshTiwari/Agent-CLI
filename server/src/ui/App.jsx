@@ -14,6 +14,7 @@ import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspac
 import { actionHead } from './action-row.js';
 import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
 import { statusBarLayout, STATUS_RIGHT_GUTTER } from './status-bar.js';
+import { mismatchNext, mismatchRows, MISMATCH_KEYS } from './mismatch-row.js';
 import { keysLayout } from './keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
@@ -673,13 +674,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const sentRung = resolveEffort(agentLoop._promptEffort?.() ?? effortRung.id);
   // Not during a step-down either (v5.28): the tab is lower on purpose, and
   // the status bar's `↓` says so for the rest of the session.
-  const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight || agentLoop.effortFallback)
+  const modelDiffers = (agentLoop._switchInFlight || agentLoop.effortFallback)
     ? null
     : modelMismatch(
     effortRung.id,
     agentLoop.modelOptions || [],
     browserModelPin(agentLoop.modelConfig, effortRung.id),
   );
+  // The row above the input is shed on a short terminal; the footer's `⚠`
+  // is not (v7.9), so a mismatch is never silent at any height.
+  const mismatch = isCompactHeight(terminalHeight) ? null : modelDiffers;
   /*
    * What the browser's picker says is selected, or null when it has never been
    * read. `modelOptions` is not cleared by a failed ask, so this can be a
@@ -708,7 +712,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const noticeHugsInput = Boolean(warmNote || mismatch) && !isProcessing
     && !diffRequest && !terminalOpen && !activeMenu && !compact;
 
-  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0)
+  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + mismatchRows(mismatch, terminalHeight)
     + (warmNote ? 1 : 0) + (healthNote ? 1 : 0);
 
   /**
@@ -1512,7 +1516,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     tasks: isProcessing && tasksDone ? tasksDone : null,
     version: agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION ? agentLoop.promptVersion : null,
     model: browserModelLabel,
-    modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : mismatch ? '⚠' : null) : null,
+    modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : modelDiffers ? '⚠' : null) : null,
     effort: resolveEffort(agentLoop.modelConfig?.effort).id,
     pct: syncTokenEstimate > 0 ? tokenPct : null,
     meter: contextMeter(tokenPct),
@@ -1701,7 +1705,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
           <Box flexDirection="column" marginTop={noticeHugsInput ? 1 : 0}>
           {warmNote === 'ready' && (
             <Text dimColor wrap="truncate">
-              <Text color={T.success}>{'✔ '}</Text>{'Ready — the setup prompt is in this chat; your first message goes alone'}
+              {/* Just the word (v7.9): the sentence after it was "too verbose". */}
+              <Text color={T.success}>{'✔ '}</Text>{'Ready'}
             </Text>
           )}
           {warmNote === 'failed' && (
@@ -1710,20 +1715,27 @@ export function App({ agentLoop, wsServer, closing = false }) {
             </Text>
           )}
           {mismatch && (
-            <Text color={T.attention} wrap="truncate">
-              {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
-              {/* What the next message will do about it (v5.28): ask, switch, or follow. */}
-              {agentLoop.mismatchToAsk?.() ? (<>
-                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>{' · your next message asks first'}
-              </>) : mismatchPolicy(agentLoop.modelConfig) === 'switch' ? (<>
-                {' · the next message switches it to '}<Text bold>{mismatch.wanted}</Text>
-              </>) : sentRung.id !== effortRung.id ? (<>
-                {' — sending the '}<Text bold>{sentRung.name}</Text>{` prompt (effort ${effortRung.name})`}
-              </>) : (<>
-                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
-              </>)}
-              <Text dimColor>{'  ·  ctrl+b shows the tab'}</Text>
-            </Text>
+            <>
+              {/* Line 1, the facts (v7.9): the two names lead, so a narrow
+                  terminal cuts the policy word, not them. */}
+              <Text color={T.attention} wrap="truncate">
+                {'⚠ Model mismatch · browser '}<Text bold>{mismatch.current}</Text>
+                {' ≠ agent '}<Text bold>{mismatch.wanted}</Text>
+                <Text dimColor>{` · ${mismatchPolicy(agentLoop.modelConfig)}`}</Text>
+              </Text>
+              {/* Line 2, what the next message does and where to change it. */}
+              {mismatchRows(mismatch, terminalHeight) === 2 && (
+                <Text dimColor wrap="truncate">
+                  {'  '}{mismatchNext({
+                    current: mismatch.current,
+                    wanted: mismatch.wanted,
+                    policy: mismatchPolicy(agentLoop.modelConfig),
+                    asks: Boolean(agentLoop.mismatchToAsk?.()),
+                    sentPrompt: sentRung.id !== effortRung.id ? sentRung.name : null,
+                  })}{` · ${MISMATCH_KEYS}`}
+                </Text>
+              )}
+            </>
           )}
           </Box>
 

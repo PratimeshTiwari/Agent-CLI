@@ -38,6 +38,19 @@ export function stopModel(rung, models = [], modelConfig = {}) {
 }
 
 /**
+ * The tab's model when it is not the one this stop maps to, else null (v7.9).
+ *
+ * The slider said `3.1 Pro ✔ current` while the tab ran 3.8 Flash, which reads
+ * as "all is well". Unread picker, a mode selected, or an unavailable stop: null.
+ */
+export function tabDiffers(stop, models = []) {
+  if (!stop?.available) return null;
+  const tab = (models || []).find((m) => m && m.selected && !m.isMode)?.label;
+  if (!tab) return null;
+  return tab.trim().toLowerCase() === String(stop.text).trim().toLowerCase() ? null : tab;
+}
+
+/**
  * @param {{levels: Array<{id: string, name: string}>, at: number, width: number}} view
  *        `width` is the terminal's; the slider takes at most 56 columns of it
  * @returns {{indent: number, span: number, ends: string, bar: {before: string, marker: string, after: string},
