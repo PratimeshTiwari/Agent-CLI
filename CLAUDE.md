@@ -1346,8 +1346,10 @@ them, and do not squash their history away.
   **v7 opens with `v7.0/docs-refresh-and-screenshots`** (2026-10-30): v6 closed at v6.25 (#130),
   and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
   branch is named for what it does, never for the file it touches. **v8 opens with
-  `v8.0/table-row-styles`** (2026-10-31, after v7.10 #141), owner: "push and merge uptil 7.10
-  and lets start v8".
+  `v8.0/silent-retry-and-cleaner-rows`** (2026-10-31, after v7.10 #141), owner: "push and merge
+  uptil 7.10 and lets start v8". **v8.1 is Jira and Confluence**
+  (`.agent/artifacts/plans/2026-10-31-atlassian-tools.md`): built here, tested on the work laptop,
+  and every write asks, in every mode.
   `/update` runs git in `server/`, and status names paths from the repo root — any path
   handed back to git there needs `:(top)` (#102).
 - Open a PR into `main`. That is the only way work reaches `main`.
