@@ -112,6 +112,49 @@ test('spending it', async (t) => {
   });
 });
 
+/*
+ * Reported: `/compact` said the browser did not start a new conversation.
+ * Extension 1.55.0 acks only once the page has loaded (up to ~13 s) and this
+ * waited 5. A second ask settles it either way: a tab already on a new chat
+ * acks at once, and one that refused gets another go.
+ */
+test('a new chat is asked for twice before it is a failure (v7.9)', async (t) => {
+  function scripted(answers) {
+    const { l, events } = fake({ ack: false });
+    l._toExtension = (type) => {
+      events.push(type);
+      const a = answers.shift();
+      if (a !== undefined && a !== 'silent') setImmediate(() => l.handleChatStarted({ ok: a }));
+      return true;
+    };
+    return { l, events };
+  }
+
+  await t.test('refused, then done', async () => {
+    const { l, events } = scripted([false, true]);
+    assert.equal(await l.startNewChat({ timeoutMs: 1000 }), true);
+    assert.deepEqual(events, ['new_chat', 'new_chat']);
+  });
+
+  await t.test('no answer in time, then done', async () => {
+    const { l, events } = scripted(['silent', true]);
+    assert.equal(await l.startNewChat({ timeoutMs: 50 }), true);
+    assert.deepEqual(events, ['new_chat', 'new_chat']);
+  });
+
+  await t.test('control: refused twice is false, and there is no third ask', async () => {
+    const { l, events } = scripted([false, false, true]);
+    assert.equal(await l.startNewChat({ timeoutMs: 1000 }), false);
+    assert.deepEqual(events, ['new_chat', 'new_chat']);
+  });
+
+  await t.test('the default wait covers the extension\'s load and bridge waits', () => {
+    const src = fs.readFileSync(join(HERE, '../../src/core/agent-loop.js'), 'utf8');
+    const ms = Number(src.match(/startNewChat\(\{ timeoutMs = ([\d_]+) \}/)[1].replace(/_/g, ''));
+    assert.ok(ms >= 13_000, `${ms} ms is shorter than a tab load (8 s) plus the bridge (5 s)`);
+  });
+});
+
 test('the warm-up opens the new chat before the setup prompt', async () => {
   const { l, events } = fake();
   Object.assign(l, {

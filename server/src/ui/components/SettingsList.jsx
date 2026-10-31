@@ -4,6 +4,9 @@ import { T } from '../theme.js';
 import { listWindow, settingTone } from '../panel.js';
 import { controlParts, controlWidth, rowHint, stepValue, isFilterText, ROLE_COLOUR } from '../settings-view.js';
 
+
+const OSC8_CLOSE = '\x1b]8;;\x1b\\';
+const osc8Open = (url) => `\x1b]8;;${url}\x1b\\`;
 /**
  * The `/settings` list: label, value, and the selected row's hint beside it.
  * The rules are in `ui/settings-view.js`; this draws them and takes the keys.
@@ -78,10 +81,14 @@ export function SettingsList({
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>
             <Text color={row.staged ? T.attention : sel ? T.accent : undefined} bold={sel}>{String(row.label).padEnd(labelWidth)}</Text>
             {'  '}
+            {/* An OSC 8 link around the value (v7.9): cmd+click opens it. Zero
+                width, so the column and the truncation are unchanged. */}
+            {row.link ? osc8Open(row.link) : null}
             {parts.map((p, i) => (
               <Text key={i} color={warn ? T.attention : ROLE_COLOUR[p.role] ? T[ROLE_COLOUR[p.role]] : undefined}
-                dimColor={p.role === 'dim'}>{p.text}</Text>
+                underline={Boolean(row.link)} dimColor={p.role === 'dim'}>{p.text}</Text>
             ))}
+            {row.link ? OSC8_CLOSE : null}
             {hint ? <Text dimColor>{' '.repeat(Math.max(0, valueWidth - drawn) + 3)}{hint}</Text> : null}
           </Text>
         );

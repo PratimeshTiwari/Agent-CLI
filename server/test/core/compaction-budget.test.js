@@ -95,11 +95,11 @@ test('what it does do', async (t) => {
     assert.match(r.message, /condensed locally/);
   });
 
-  await t.test('the wait is shown as a progress bar, stage by stage', async () => {
+  await t.test('the wait is one spinner line; the stages ride along undrawn (v7.9)', async () => {
     const { loop, seen } = stubLoop(rows(12, 400));
     await compactHistory(loop);
     assert.deepEqual(seen.statuses.map((p) => p.progress?.step), [1, 2, 3]);
-    assert.match(seen.statuses[0].message, /Compacting ▰▱▱ summarising in this chat/);
+    for (const s of seen.statuses) assert.equal(s.message, 'Compacting conversation…');
   });
 });
 

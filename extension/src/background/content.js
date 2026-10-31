@@ -96,6 +96,7 @@ async function mainTabInfo(targetModel) {
     id: tab.id,
     windowId: tab.windowId,
     thread: chatPath(tab.url || '')?.thread || null,
+    url: tab.url || '',
     title: tab.title || '',
     active: Boolean(tab.active),
   };

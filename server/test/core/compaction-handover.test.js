@@ -99,12 +99,14 @@ describe('compaction hands the thread over', () => {
     const out = await l._compactHistory();
 
     assert.equal(l.contextChars, 250000, 'the tab still holds every one of those characters');
-    assert.match(out.message, /did not start a new conversation/);
-    assert.match(out.message, /open a new chat in the Gemini tab yourself/,
+    assert.match(out.message, /The tab stayed on this chat/);
+    assert.match(out.message, /Open a new chat in it yourself/,
       'it has to ask for the one thing only the person can do');
+    // A link the terminal opens, so "the Gemini tab" is not a hunt (v7.9).
+    assert.match(out.message, /https:\/\/gemini\.google\.com\/app/);
     // `/new` clears `conversationHistory`, which is where the summary just
     // landed. Recommending it would destroy the work this command did.
-    assert.match(out.message, /Not `\/new`/, 'the obvious wrong fix must be named as wrong');
+    assert.match(out.message, /not `\/new`/, 'the obvious wrong fix must be named as wrong');
     rmSync(ws, { recursive: true, force: true });
   });
 

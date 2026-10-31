@@ -278,7 +278,10 @@ export function describeSettings(agentLoop) {
       group: 'Status',
       label: 'Gemini tab',
       value: describeBrowserTab(agentLoop?.browserTab, agentLoop?.subagentTabIds),
-      hint: agentLoop?.browserTab ? 'ctrl+b brings it to the front' : 'as the extension reports it',
+      // cmd+click opens the chat (v7.9). It opens it, it does not find the tab:
+      // a link cannot address one, which is what ctrl+b is for.
+      link: browserTabUrl(agentLoop?.browserTab),
+      hint: agentLoop?.browserTab ? 'cmd+click opens the chat · ctrl+b the tab' : 'as the extension reports it',
     },
     {
       group: 'Status',
@@ -475,6 +478,13 @@ export function describeBrowserTab(tab, subagentTabIds = []) {
   const subs = (subagentTabIds || []).length;
   if (subs) parts.push(`${subs} subagent tab${subs === 1 ? '' : 's'}`);
   return parts.join(' · ');
+}
+
+/** The tab's chat as a URL, or null before the extension has said (v7.9). */
+export function browserTabUrl(tab) {
+  if (!tab) return null;
+  if (tab.url) return tab.url;
+  return tab.thread ? `https://gemini.google.com/app/${tab.thread}` : null;
 }
 
 function safe(fn, fallback) {

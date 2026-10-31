@@ -356,7 +356,10 @@ function renderBlock(lang, code) {
  */
 let renderWidth = 80;
 
-const ANSI = /\x1b\[[0-9;]*m/g;
+// Colour, and OSC 8 links (v7.9): marked-terminal wraps a URL in one, and its
+// bytes were counted as columns, so a link wrapped mid-URL with room to spare.
+const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g;
+const ESCAPE_AT = /^(?:\x1b\[[0-9;]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\))/;
 export const visibleWidth = (s) => String(s).replace(ANSI, '').length;
 
 /**
@@ -379,7 +382,7 @@ export function wrapAnsi(text, width) {
 
   for (let i = 0; i < text.length; i += 1) {
     if (text[i] === '\x1b') {
-      const m = /^\x1b\[[0-9;]*m/.exec(text.slice(i));
+      const m = ESCAPE_AT.exec(text.slice(i));
       if (m) { line += m[0]; i += m[0].length - 1; continue; }
     }
     const ch = text[i];
@@ -846,7 +849,7 @@ function indexAtColumn(s, cols) {
   let i = 0;
   while (i < s.length && col < cols) {
     if (s[i] === '\x1b') {
-      const m = /^\x1b\[[0-9;]*m/.exec(s.slice(i));
+      const m = ESCAPE_AT.exec(s.slice(i));
       if (m) { i += m[0].length; continue; }
     }
     i += 1;
@@ -855,7 +858,7 @@ function indexAtColumn(s, cols) {
   // Take any escapes that sit on the boundary, so a colour opened right after
   // a bullet stays with the text it colours.
   while (s[i] === '\x1b') {
-    const m = /^\x1b\[[0-9;]*m/.exec(s.slice(i));
+    const m = ESCAPE_AT.exec(s.slice(i));
     if (!m) break;
     i += m[0].length;
   }

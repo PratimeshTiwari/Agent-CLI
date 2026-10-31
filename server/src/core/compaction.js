@@ -20,6 +20,7 @@
 import { randomUUID } from 'crypto';
 import { archiveTurns } from './session-recall.js';
 import { logNotice } from './error-log.js';
+import { browserTabUrl } from './settings.js';
 
 /**
  * How long to wait for the thread's summary before condensing locally.
@@ -143,10 +144,19 @@ export function recentMessages(turns, { perTurn = 1500, total = 6000 } = {}) {
 
 const STAGES = ['summarising in this chat', 'opening a fresh chat', 'handing over'];
 
-/** One row in the live frame: `Compacting ▰▰▱ opening a fresh chat`. */
-export function progressText(step) {
-  const n = STAGES.length;
-  return `🗜 Compacting ${'▰'.repeat(step)}${'▱'.repeat(n - step)} ${STAGES[step - 1]}…`;
+/**
+ * The spinner's words while it runs: `✻ Compacting conversation… (15s · esc to stop)`.
+ * The stages are still sent as `progress`, but not drawn (v7.9, owner: "have
+ * this simple compacting conversation animation instead of that").
+ */
+export function progressText() {
+  return 'Compacting conversation…';
+}
+
+/** The tab the main chat is in, as a link a terminal can open (v7.9). */
+export function tabLink(loop) {
+  return browserTabUrl(loop.browserTab)
+    || (loop.previousThread?.id ? `https://gemini.google.com/app/${loop.previousThread.id}` : 'https://gemini.google.com/app');
 }
 
 function progress(loop, step) {
@@ -187,15 +197,12 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
     // on turn 0 and stays large. Both are true; they answer different
     // questions, so the message now says which is which instead of leaving
     // the reader to guess.
+    // One line (v7.9, "this is too verbose"). Both numbers stay, because side
+    // by side they once read as a contradiction: this one is only what
+    // `/compact` would summarise; the context is everything typed into the tab.
     return {
-      message: `Nothing worth compacting yet — the older turns eligible for compaction `
-        + `(everything before the last ${KEEP_EXCHANGES} exchanges) are only ${pendingChars.toLocaleString()} characters, `
-        + `below the ${MIN_COMPACT_CHARS.toLocaleString()}-character threshold where a browser `
-        + `round trip pays for itself.\n\n`
-        + `_That's not the number in the status bar. This one is just the turns \`/compact\` `
-        + `would summarise; context is ~${loop.contextTokens.toLocaleString()} tokens — `
-        + `everything ever typed into the tab, including the system prompt — `
-        + `and auto-compaction runs off that one, past 80% of the rung's budget._`,
+      message: `Nothing worth compacting yet · ${pendingChars.toLocaleString()} characters before the last `
+        + `${KEEP_EXCHANGES} exchanges · context ~${loop.contextTokens.toLocaleString()} tokens`,
     };
   }
 
@@ -292,23 +299,19 @@ export async function compactHistory(loop, focus, { auto = false } = {}) {
     const how = fromThread
       ? 'summarised by this chat'
       : `condensed locally (the chat ${asked.timedOut ? 'did not answer in time' : 'gave no usable summary'})`;
-    const where = handedOver
-      ? 'The tab has moved to a fresh conversation; the summary goes into it with your next message, '
-        + 'and the full history stays searchable on disk.'
-      : '⚠️ **The browser did not start a new conversation**, so the tab is still on the old one.\n\n'
-        + '**Please open a new chat in the Gemini tab yourself** (the ✚ / *New chat* button). '
-        + 'The next message will pick it up automatically.\n\n'
-        + '_Not `/new` — that clears the conversation here, and this summary with it._';
+    const done = `✓ Compacted ${compactedTurns} turn${compactedTurns === 1 ? '' : 's'}, ${how}`;
 
     return {
       handedOver,
       turns: compactedTurns,
       summary,
       message: handedOver
-        ? `✓ Compacted ${compactedTurns} turn${compactedTurns === 1 ? '' : 's'}, ${how}; `
-          + 'continuing in a fresh chat, with the full history still searchable.'
-        : `✓ Compacted ${compactedTurns} turn${compactedTurns === 1 ? '' : 's'}, ${how}. `
-          + `Kept the last ${countTurns(toKeep)} as they were.\n\n${where}`,
+        ? `${done}; continuing in a fresh chat, with the full history still searchable.`
+        // Asked twice already (`startNewChat`). Short, with the tab as a link
+        // the terminal opens (v7.9), and the wrong fix named: `/new` clears
+        // `conversationHistory`, where the summary just landed.
+        : `${done}.\n\n⚠ The tab stayed on this chat. Open a new chat in it yourself (ctrl+b shows it); `
+          + `not \`/new\`, which clears the summary.\n\n${tabLink(loop)}`,
     };
   } finally {
     loop.isCompacting = false;

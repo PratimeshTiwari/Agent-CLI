@@ -2153,7 +2153,7 @@ export class AgentLoop {
    *
    * @returns {Promise<boolean>} whether a tab was told to start one
    */
-  startNewChat({ timeoutMs = 5000 } = {}) {
+  startNewChat({ timeoutMs = 15_000 } = {}) {
     /*
      * Never under a prompt in flight. Compaction used to call this while the
      * turn beside it was mid-round, so the tab moved to an empty chat and the
@@ -2227,15 +2227,36 @@ export class AgentLoop {
         if (this._pendingNewChat?.done === done) this._pendingNewChat = null;
         resolve(ok);
       };
-      // Deliberately NOT unref'd. This timer is the only thing that settles the
-      // promise when the browser never answers, so letting the process treat it
-      // as optional means the wait never ends — the hang the ack exists to
-      // remove, reintroduced by the ack. Caught by the test below.
-      const timer = setTimeout(() => done(false), timeoutMs);
-      this._pendingNewChat = { done };
-      // Nothing connected: nothing will answer, so do not wait the budget out.
-      this._newChatUndelivered = this._toExtension('new_chat') === false;
-      if (this._newChatUndelivered) done(false);
+      /*
+       * Asked twice before it is a failure (v7.9). Reported: `/compact` said
+       * the browser did not start a new conversation, and nothing tried again.
+       * Since extension 1.55.0 the ack waits for the page to load and the bridge
+       * to answer — up to 13 s — and this waited 5, so a slow load was a
+       * failure here and a new chat in the tab. The second ask settles that: a
+       * tab already on a new chat acks at once, and one that refused gets
+       * another go.
+       */
+      let attempts = 0;
+      let timer = null;
+      const ask = () => {
+        attempts += 1;
+        clearTimeout(timer);
+        // Deliberately NOT unref'd. This timer is the only thing that settles the
+        // promise when the browser never answers, so letting the process treat it
+        // as optional means the wait never ends — the hang the ack exists to
+        // remove, reintroduced by the ack. Caught by the test below.
+        timer = setTimeout(() => answer(false), timeoutMs);
+        // Nothing connected: nothing will answer, so do not wait the budget out.
+        this._newChatUndelivered = this._toExtension('new_chat') === false;
+        if (this._newChatUndelivered) done(false);
+      };
+      const answer = (ok) => {
+        if (settled) return;
+        if (ok || attempts >= 2) done(ok);
+        else ask();
+      };
+      this._pendingNewChat = { done, answer };
+      ask();
     });
   }
 
@@ -2262,7 +2283,7 @@ export class AgentLoop {
 
   /** The extension answering `new_chat`. An unmatched ack is ignored, not thrown. */
   handleChatStarted(payload) {
-    this._pendingNewChat?.done(Boolean(payload?.ok));
+    this._pendingNewChat?.answer(Boolean(payload?.ok));
   }
 
   /**

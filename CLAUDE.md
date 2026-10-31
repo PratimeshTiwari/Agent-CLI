@@ -1040,9 +1040,21 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
   `/logs speed` shows first token and reply time by fill band (under 25%, 25–50%, 50–80%, over
   80%). Before this, none of those rows said how full the thread was, so 24k / 48k / 96k could
   not be checked. Change a budget only when a band says to.
-- A three-stage progress row (`Compacting ▰▰▱ opening a fresh chat…`, esc cancels with nothing
-  changed); the status bar says `N% to auto-compact` within 20 points; every compaction writes a
-  `compaction` notice with which path ran.
+- One spinner row, `✻ Compacting conversation… (15s · esc to stop)` under the `❯ /compact` row
+  (v7.9; the stages still ride in `progress`, undrawn), esc cancels with nothing changed; the status
+  bar says `N% to auto-compact` within 20 points; every compaction writes a `compaction` notice with
+  which path ran. **Typed `/compact` never showed its progress**: between turns `loop.callbacks` are
+  the background ones, which go to the side panel, so the row read "Thinking…"; App sets the words
+  itself now.
+- **A new chat is asked for twice (v7.9, `startNewChat`).** Reported: `/compact` said the browser did
+  not start a new conversation. Extension 1.55.0 acks only after the load and the bridge (up to
+  13 s) and the server waited 5, so a slow load failed here and succeeded in the tab, with the
+  summary never handed over. 15 s per ask, and a timeout or `ok: false` asks once more; a tab
+  already on a new chat acks at once. The failure message is two lines and the chat's URL, on a
+  line of its own. `visibleWidth`/`wrapAnsi` count OSC 8 links as zero columns: marked-terminal
+  wraps a URL in one, and the bytes broke it after 44 characters. Pty (`FAKE_NEWCHAT=true,false,true`,
+  `FAKE_SUMMARY_MS`): handed over on the second ask, and the both-refused path, at 13 and 24 rows;
+  the one `ESC[2J` is `/compact`'s repaint, on `main` too.
 
 **Compaction keeps what it promises (v6.15, plan Phase 6).** The fresh chat gets the summary plus
 the last **3 exchanges** (`splitForCompaction`: from the third-last user message, however many rows
@@ -1825,7 +1837,8 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   13×90, 24×100 and 24×60.
   **Status → Gemini tab (v7.9)** names the tab the main lane types into and its chat
   (`tab 1873 · chat 17d6…`), from `tab_status`'s `mainTab`, which extension 1.55.0 sends on connect,
-  on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so).
+  on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so). The value
+  is an OSC 8 link to the chat (`browserTabUrl`, `link` on a settings row): cmd+click opens it.
 - **A model mismatch is the footer's `⚠ 3.8 Flash` and nothing else (v7.9).** The row above the
   input went through two redesigns in one afternoon and was then cut (owner: "just show ⚠ 3 Flash,
   that's it nothing else"): the next message asks anyway, and the ask says both names. The footer's

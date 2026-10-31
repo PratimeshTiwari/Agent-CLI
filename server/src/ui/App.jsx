@@ -34,6 +34,7 @@ import { checkInstalled, startupWarning } from '../core/doctor.js';
 import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../core/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
+import { progressText } from '../core/compaction.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
@@ -1116,8 +1117,19 @@ export function App({ agentLoop, wsServer, closing = false }) {
       if (raises) {
         slowCommands.current += 1;
         setIsProcessing(true);
-        setStatus('Thinking...');
         setActiveToolCalls([]);
+        /*
+         * `/compact` says what it is doing (v7.9). Its own progress statuses
+         * never reached this screen: between turns the loop's callbacks are the
+         * background ones, which go to the side panel, so the row read
+         * "Thinking…" for the whole compaction.
+         */
+        if (slashWord.toLowerCase() === 'compact') {
+          isToolRunningRef.current = true;
+          setStatus(progressText());
+        } else {
+          setStatus('Thinking...');
+        }
       }
       /*
        * Two local commands can overlap (v5.30): `/doctor` is still asking npm

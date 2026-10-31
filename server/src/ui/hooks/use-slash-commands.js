@@ -1327,6 +1327,10 @@ export async function handleSlashCommand(query, {
       // sat spinning with nothing on screen — which is exactly how a `/compact`
       // on a fresh session presented itself.
       try {
+        // `/compact` takes a round trip or two: its row goes up now, with the
+        // spinner under it, rather than appearing only with the answer (v7.9).
+        // The rebuild below writes it again, at the same place, on the repaint.
+        if (command === 'compact') setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }]);
         const result = await agentLoop.handleSlashCommand(command, args);
 
         if (command === 'clear' || command === 'undo' || command === 'compact') {
