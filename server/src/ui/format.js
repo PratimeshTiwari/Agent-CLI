@@ -387,14 +387,15 @@ export function wrapAnsi(text, width) {
     }
     const ch = text[i];
     if (ch === '\n') { out.push(line); line = ''; col = 0; lastSpace = -1; continue; }
-    if (ch === ' ') lastSpace = line.length;
     // A break can land just before a space — the hard-cut path especially —
     // and a continuation line that opens with one is off by a column against
     // every other row in the cell.
     if (ch === ' ' && col === 0) continue;
-    line += ch;
-    col += 1;
+    // Broken when a character would *overflow* the row, not when the row is
+    // full (v7.10): `3.1 Flash-Lite` in a 14-column cell wrapped to two lines
+    // although it fits exactly, in every table, a column short every time.
     if (col >= w) {
+      if (ch === ' ') { out.push(line); line = ''; col = 0; lastSpace = -1; continue; }
       // Break at the last space if there was one, so words stay whole.
       if (lastSpace > 0) {
         out.push(line.slice(0, lastSpace));
@@ -407,6 +408,9 @@ export function wrapAnsi(text, width) {
       }
       lastSpace = -1;
     }
+    if (ch === ' ') lastSpace = line.length;
+    line += ch;
+    col += 1;
   }
   if (line.length > 0 || out.length === 0) out.push(line);
   return out;

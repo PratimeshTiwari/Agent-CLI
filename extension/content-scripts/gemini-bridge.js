@@ -153,6 +153,8 @@ const SELECTORS = {
 
 // ── State ────────────────────────────────────────────────────────────
 let isInjecting = false;
+// Why the last injectPrompt returned false, for the worker's error (1.56.0).
+let lastInjectError = null;
 
 /**
  * A picker read that arrived while a prompt was going in.
@@ -649,6 +651,7 @@ function getResponseCount() {
 async function injectPrompt(text) {
   if (isInjecting) {
     console.warn('[Gemini Bridge] Already injecting a prompt');
+    lastInjectError = 'the tab was still typing the previous prompt';
     return false;
   }
 
@@ -901,6 +904,7 @@ async function injectPrompt(text) {
     return true;
   } catch (err) {
     console.error('[Gemini Bridge] Injection failed:', err);
+    lastInjectError = err?.message || null;
     return false;
   } finally {
     isInjecting = false;
@@ -2754,8 +2758,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         receivedAt: Date.now(),
         gap: payload.gap,
       };
+      lastInjectError = null;
       injectPrompt(payload.prompt).then(success => {
-        sendResponse({ success });
+        // The reason travels with a failure: the worker used to say only
+        // "Content script reported failure" (1.56.0).
+        sendResponse(success ? { success } : { success, error: lastInjectError || undefined });
       }).catch(err => {
         console.error('[Gemini Bridge] injectPrompt threw:', err);
         sendResponse({ success: false, error: err.message });

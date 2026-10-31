@@ -438,6 +438,16 @@
     } catch {
     }
   }
+  async function sendOnce(tabId, message) {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, message);
+      if (response && response.success === false) throw new Error(response.error || "Content script reported failure");
+      return true;
+    } catch (err) {
+      lastTabFailure = { stage: "send", message: err.message };
+      return false;
+    }
+  }
   async function sendWithRepairs(tabId, message, targetModel) {
     const scriptPath = MODEL_SCRIPTS[targetModel];
     const attempt2 = async () => {
@@ -459,7 +469,7 @@
       {
         stage: "reload",
         before: async () => {
-          await chrome.tabs.reload(tabId);
+          await chrome.tabs.reload(tabId, { bypassCache: true });
           await waitForBridge(tabId, 15e3);
         }
       }
@@ -496,7 +506,7 @@
     }
     return false;
   }
-  async function trySendToTab(tab, message, targetModel) {
+  async function trySendToTab(tab, message, targetModel, { repairs = true } = {}) {
     await prepareTabForTurn(tab.id);
     let originalActiveTabId = null;
     try {
@@ -510,7 +520,7 @@
     } catch (e) {
       console.warn("Failed to execute Tab Wakeup:", e);
     }
-    const success = await sendWithRepairs(tab.id, message, targetModel);
+    const success = repairs ? await sendWithRepairs(tab.id, message, targetModel) : await sendOnce(tab.id, message);
     if (success) {
       startCompletionTicks(tab.id);
       await restoreFocusFrom(tab.id);
@@ -523,7 +533,7 @@
     const existing = await pickMainTab(targetModel);
     if (existing) return existing;
     console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
-    const openUrl = targetModel === "gemini" ? chatPath(opts?.url || "")?.thread ? opts.url : "https://gemini.google.com/app" : targetUrl.replace("/*", "");
+    const openUrl = targetModel === "gemini" ? chatPath(opts?.url || "")?.thread ? opts.url : freshChatUrl(opts?.url || "") : targetUrl.replace("/*", "");
     const newTab = await chrome.tabs.create({ url: openUrl, active: true });
     await new Promise((resolve) => {
       let resolved = false;
@@ -553,6 +563,21 @@
     chrome.tabs.sendMessage(newTab.id, { type: "discover_models" }).catch(() => {
     });
     return newTab;
+  }
+  async function reopenInFreshTab(old, targetModel, threadUrl) {
+    const url = chatPath(old?.url || "")?.thread ? old.url : chatPath(threadUrl || "")?.thread ? threadUrl : isFreshChat(old?.url || "") ? freshChatUrl(old.url) : null;
+    if (!old || !url) return null;
+    mainTabs.delete(targetModel);
+    await releaseOwnedTab(old.id);
+    const fresh = await ensureModelTab(targetModel, { url }).catch(() => null);
+    if (!fresh || fresh.id === old.id) {
+      mainTabs.set(targetModel, old.id);
+      await claimOwnedTab(old.id);
+      return null;
+    }
+    chrome.tabs.remove(old.id).catch(() => {
+    });
+    return fresh;
   }
   async function injectPromptIntoModel(payload) {
     const targetModel = payload.targetModel || "gemini";
@@ -624,7 +649,11 @@
         sendToServer(errorMsg);
         return;
       }
-      success = await trySendToTab(tabs[0], message, targetModel);
+      success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
+      if (!success && targetModel === "gemini") {
+        const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+        if (fresh) success = await trySendToTab(fresh, message, targetModel, { repairs: false });
+      }
     }
     if (!success) {
       const errorMsg = {
@@ -635,7 +664,9 @@
           targetModel,
           url: targetUrl,
           detail: lastTabFailure?.message,
-          message: `Failed to communicate with ${targetModel} tab after multiple retries${lastTabFailure?.message ? ` \u2014 ${lastTabFailure.message}` : ""}. Hard-refresh the tab (Cmd+Shift+R) and try again.`
+          // Short, as asked: by now it has reloaded the tab and reopened the chat
+          // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
+          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`
         }
       };
       lastTabFailure = null;

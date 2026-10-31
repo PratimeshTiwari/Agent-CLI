@@ -123,3 +123,11 @@ describe('the rendered table', () => {
     assert.strictEqual(renderMarkdown(md, 72), at72, 'a repeat must still hit the cache');
   });
 });
+
+describe('wrapAnsi at an exact fit (v7.10)', () => {
+  it('a cell exactly as wide as its column is one line', () => {
+  assert.deepEqual(wrapAnsi('3.1 Flash-Lite', 14), ['3.1 Flash-Lite']);
+  assert.deepEqual(wrapAnsi('abc defg', 7), ['abc', 'defg'], 'one more column still wraps');
+  assert.deepEqual(wrapAnsi('\x1b[1mbold text\x1b[0m', 9).length, 1, 'escapes cost nothing');
+  });
+});

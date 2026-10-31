@@ -13,6 +13,7 @@ import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImage
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
 import { actionHead } from './action-row.js';
 import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
+import { easeCount, streamTokens } from './token-count.js';
 import { statusBarLayout, STATUS_RIGHT_GUTTER } from './status-bar.js';
 import { keysLayout } from './keys-view.js';
 import { modeColor } from './constants.js';
@@ -408,6 +409,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * still writes nothing at all, which is the bar `ui/constants.js` sets.
    */
   const [animTick, setAnimTick] = useState(0);
+  // The spinner's token count (v7.10, ui/token-count.js): the reply being
+  // streamed, and the number drawn, which climbs one tick at a time.
+  const streamRef = useRef(null);
+  const shownTokensRef = useRef(undefined);
+  const tokenTickRef = useRef(-1);
   useEffect(() => {
     if (!isProcessing) return undefined;
     const id = setInterval(() => setAnimTick((n) => n + 1), 80);
@@ -1250,6 +1256,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setStatus,
       setWalkthroughReady,
       setSteered,
+      streamRef,
       wsServer,
     });
 
@@ -1489,6 +1496,15 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // definitions, every tool result fed back, not just the turns we kept a copy
   // of. Summing conversationHistory reported a fraction of the real number.
   const syncTokenEstimate = agentLoop.contextTokens ?? 0;
+  // Advanced once per spinner tick, never per render, so a busy screen does
+  // not climb faster than an idle one. Idle, it is simply the number.
+  const tokenTarget = syncTokenEstimate + streamTokens(streamRef.current, agentLoop.contextChars);
+  if (!isProcessing) shownTokensRef.current = tokenTarget;
+  else if (tokenTickRef.current !== animTick) {
+    tokenTickRef.current = animTick;
+    shownTokensRef.current = easeCount(shownTokensRef.current, tokenTarget);
+  }
+  const spinnerTokens = shownTokensRef.current ?? tokenTarget;
   // The rung's real budget, not a constant. This was hardcoded to 50000 while
   // `/context` and the settings page both reported the actual one — three
   // places, two answers, and the bar was the one people watch.
@@ -1764,7 +1780,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             keysGrid={keysGrid}
             slashSelected={slashSelected}
             status={status}
-            syncTokenEstimate={syncTokenEstimate}
+            spinnerTokens={spinnerTokens}
             liveTally={liveTally}
             terminalOpen={terminalOpen}
             thinkingText={thinkingText}

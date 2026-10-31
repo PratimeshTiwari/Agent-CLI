@@ -27,6 +27,8 @@ import { canPickFolder, pickFolder } from '../core/folder-picker.js';
 import { planResume } from '../core/chat-thread.js';
 import { logError, logNotice } from '../core/error-log.js';
 import { extensionVersionNotice, shortcutNotice } from '../core/extension-version.js';
+import { tabUnreachableMessage } from './tab-failure.js';
+import { tabLink } from '../core/compaction.js';
 
 /**
  * Loopback only. Not `localhost`, which resolves through the hosts file and has
@@ -928,6 +930,17 @@ export class WebSocketServer {
          */
         if (payload?.level === 'notice') break;
 
+        // A prompt the tab never sent is carried into the next message (v7.10).
+        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab') {
+          this.agentLoop.noteUndelivered?.();
+        }
+        // Said in the terminal's own words, with what was already tried (v7.10).
+        if (payload?.op === 'tab_unreachable') {
+          message.payload = {
+            ...payload,
+            message: tabUnreachableMessage(tabLink(this.agentLoop)),
+          };
+        }
         // The turn is dead, so hand the bridge lock back — otherwise every
         // later prompt queues behind a request that will never be answered.
         this.agentLoop.isProcessing = false;

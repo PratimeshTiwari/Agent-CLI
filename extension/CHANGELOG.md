@@ -18,6 +18,23 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.56.0 — 2026-10-31
+
+**A failed send says why, and the repair reload is a hard one.** When the page could not type or
+submit a prompt, `injectPrompt` logged the reason to the tab's console and answered only
+`{success: false}`, so the terminal read "Content script reported failure". The reason now travels
+with the answer, e.g. `[send_button] Send button never became active`. The third repair (reload
+and send again) reloads with `bypassCache`, which is what the old message told people to do by
+hand with Cmd+Shift+R, in a browser they might not have had in front of them.
+
+**The main lane's repair is the same chat in a fresh tab** (`sendOnce`, `reopenInFreshTab`). Asked
+for: "if the communication fails, just open a new tab with the same chat id … why add complexity".
+The user's prompt is sent once; if that fails, the conversation's own `/app/<id>` (the tab's URL,
+else the server's `threadUrl`; a tab on a new chat reopens on a new chat) opens in a new tab, the
+prompt goes there, and the old tab is closed once the new one is up. A fresh page also loads a fresh
+content script, which is what the re-inject step was for. Subagent tabs keep send, re-inject,
+reload. The failure then reads `Communication with the gemini tab failed · check the browser`.
+
 ### 1.55.0 — 2026-10-31
 
 **A new chat waits until it has loaded.** The content script set `location.href` and answered at

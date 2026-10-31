@@ -54,6 +54,7 @@ export function buildAgentCallbacks({
   setStatus,
   setWalkthroughReady,
   setSteered,
+  streamRef,
   wsServer,
 }) {
   /*
@@ -198,6 +199,10 @@ export function buildAgentCallbacks({
         setActiveToolCalls([]);
         isToolRunningRef.current = false;
       } else if (msg.type === 'response_stream') {
+        // A ref, never state: it is read on the spinner's own tick (v7.10).
+        if (streamRef && typeof msg.payload?.content === 'string') {
+          streamRef.current = { chars: msg.payload.content.length, base: agentLoop.contextChars };
+        }
         // Intentionally do NOT update status here to prevent UI tearing and scroll glitches
         // caused by re-rendering the entire history component 50+ times per second.
         // This also allows the 'Thinking...' messages to continue cycling during generation!

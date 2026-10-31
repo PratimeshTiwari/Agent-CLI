@@ -746,6 +746,22 @@ async function prepareTabForTurn(tabId) {
  * answer to a question the model never saw — the same trap `session_lost`
  * exists to refuse. Losing the turn is better than answering the wrong one.
  */
+/**
+ * One send, no repairs (1.56.0): the main lane's first try. Its one repair is
+ * the same chat in a fresh tab (`reopenInFreshTab`), which also loads a fresh
+ * content script, the thing the re-inject step existed for.
+ */
+export async function sendOnce(tabId, message) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, message);
+    if (response && response.success === false) throw new Error(response.error || 'Content script reported failure');
+    return true;
+  } catch (err) {
+    lastTabFailure = { stage: 'send', message: err.message };
+    return false;
+  }
+}
+
 export async function sendWithRepairs(tabId, message, targetModel) {
   const scriptPath = MODEL_SCRIPTS[targetModel];
 
@@ -772,7 +788,8 @@ export async function sendWithRepairs(tabId, message, targetModel) {
     {
       stage: 'reload',
       before: async () => {
-        await chrome.tabs.reload(tabId);
+        // Hard, as the old advice told people to do by hand (1.56.0).
+        await chrome.tabs.reload(tabId, { bypassCache: true });
         await waitForBridge(tabId, 15000);
       },
     },
@@ -832,7 +849,7 @@ async function selectModelInTab(tabId, label, budgetMs) {
   return false;
 }
 
-async function trySendToTab(tab, message, targetModel) {
+async function trySendToTab(tab, message, targetModel, { repairs = true } = {}) {
   await prepareTabForTurn(tab.id);
 
   let originalActiveTabId = null;
@@ -860,7 +877,9 @@ async function trySendToTab(tab, message, targetModel) {
     console.warn('Failed to execute Tab Wakeup:', e);
   }
 
-  const success = await sendWithRepairs(tab.id, message, targetModel);
+  const success = repairs
+    ? await sendWithRepairs(tab.id, message, targetModel)
+    : await sendOnce(tab.id, message);
 
   if (success) {
     // The turn is live in that tab now, so take over its clock.
@@ -886,7 +905,8 @@ export async function ensureModelTab(targetModel = 'gemini', opts) {
   // asked for, when it is a Gemini chat URL, else a new chat.
   console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
   const openUrl = targetModel === 'gemini'
-    ? (chatPath(opts?.url || '')?.thread ? opts.url : 'https://gemini.google.com/app')
+    // A new chat keeps the account (`/u/<n>`) of the URL it was given.
+    ? (chatPath(opts?.url || '')?.thread ? opts.url : freshChatUrl(opts?.url || ''))
     : targetUrl.replace('/*', '');
 
   const newTab = await chrome.tabs.create({ url: openUrl, active: true });
@@ -952,6 +972,40 @@ export async function ensureModelTab(targetModel = 'gemini', opts) {
   });
 
   return newTab;
+}
+
+/**
+ * The fourth repair (1.56.0): the same conversation in a fresh tab.
+ *
+ * Asked for: "can't you just open a new gemini tab with the same chat id?
+ * instead of reloading". `sendWithRepairs` stops at a reload of the same tab,
+ * and refuses a *new chat* for a reason that still holds: a blank conversation
+ * answers a question it never saw. A new tab on `/app/<id>` is not that. It
+ * is the same thread, in a page with nothing left over from the old one.
+ *
+ * Only with a thread to go back to (the tab's own URL, else the server's
+ * `threadUrl`). The fresh tab is opened before the old one is closed, and if it
+ * cannot be opened the old one is kept as the lane's tab. A failed send means
+ * the prompt is still in the old composer (`confirmSend`), so sending it again
+ * here cannot ask twice.
+ */
+export async function reopenInFreshTab(old, targetModel, threadUrl) {
+  // The chat's own id, else the server's; a tab on a new chat with neither has
+  // no conversation yet, so a new chat in the fresh tab is the same thing.
+  const url = chatPath(old?.url || '')?.thread ? old.url
+    : chatPath(threadUrl || '')?.thread ? threadUrl
+      : isFreshChat(old?.url || '') ? freshChatUrl(old.url) : null;
+  if (!old || !url) return null;
+  mainTabs.delete(targetModel);
+  await releaseOwnedTab(old.id);
+  const fresh = await ensureModelTab(targetModel, { url }).catch(() => null);
+  if (!fresh || fresh.id === old.id) {
+    mainTabs.set(targetModel, old.id);
+    await claimOwnedTab(old.id);
+    return null;
+  }
+  chrome.tabs.remove(old.id).catch(() => { /* already gone */ });
+  return fresh;
 }
 
 export async function injectPromptIntoModel(payload) {
@@ -1055,7 +1109,13 @@ export async function injectPromptIntoModel(payload) {
     // addressing tabs by URL pattern. With a lane that owns its tab there is
     // nothing to fall back to, and a loop over a one-element array reads as if
     // there were.
-    success = await trySendToTab(tabs[0], message, targetModel);
+    // Simplified (1.56.0, owner: "why add complexity"): send once; if that
+    // fails, the same chat in a fresh tab, once. Then the error.
+    success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
+    if (!success && targetModel === 'gemini') {
+      const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+      if (fresh) success = await trySendToTab(fresh, message, targetModel, { repairs: false });
+    }
   }
 
   if (!success) {
@@ -1067,9 +1127,9 @@ export async function injectPromptIntoModel(payload) {
         targetModel,
         url: targetUrl,
         detail: lastTabFailure?.message,
-        message: `Failed to communicate with ${targetModel} tab after multiple retries`
-          + `${lastTabFailure?.message ? ` — ${lastTabFailure.message}` : ''}`
-          + '. Hard-refresh the tab (Cmd+Shift+R) and try again.',
+        // Short, as asked: by now it has reloaded the tab and reopened the chat
+        // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
+        message: `Communication with the ${targetModel} tab failed · check the browser`,
       },
     };
     lastTabFailure = null;

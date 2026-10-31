@@ -264,6 +264,18 @@ You have access to a local MCP tool server. You MUST use tools to explore the co
 5. You can spawn multiple subagents at once by making multiple tool calls.
 6. When done, output ONLY the final plan. Do not include any tool call blocks in the final turn.`;
 
+/**
+ * The next message with the ones the tab never sent in front of it (v7.10).
+ * Marked as such, so "try again" reads as about them.
+ */
+export function carryUndelivered(undelivered, message) {
+  const texts = undelivered?.texts || [];
+  if (!texts.length) return message;
+  const lost = texts.map((t) => `"""\n${t}\n"""`).join('\n');
+  return `[My previous message${texts.length > 1 ? 's' : ''} never reached you: the browser tab failed to send `
+    + `${texts.length > 1 ? 'them' : 'it'}. Here ${texts.length > 1 ? 'they are' : 'it is'}:]\n${lost}\n\n${message}`;
+}
+
 export class AgentLoop {
   /**
    * Busy, as a property that says when it stops being true.
@@ -639,9 +651,14 @@ export class AgentLoop {
       this._providerRetries = 0;
       this._cancelScheduledRetry();
 
+      // A message the tab never sent rides in front of this one (v7.10).
+      this._turnAnswered = false;
+      const carried = carryUndelivered(this._undelivered, content);
+      if (carried !== content) this._noticeRow('↻ Sending your last message too · it never reached Gemini');
+
       // Build the full prompt
       const prompt = this.promptBuilder.buildPrompt({
-        userMessage: content,
+        userMessage: carried,
         mode: this.mode,
         subagents: this.subagentsEnabled,
         modelConfig: this._promptConfig(),
@@ -735,6 +752,9 @@ export class AgentLoop {
     // Request complete
     this.contextChars += (content || '').length;
     this._releaseExtension();
+    // The chat answered, so whatever was carried has been seen (v7.10).
+    this._undelivered = null;
+    this._turnAnswered = true;
 
     // (Auto-compaction is now handled silently via background subagents, so the old isCompacting logic is removed from here)
 
@@ -2752,6 +2772,34 @@ export class AgentLoop {
    * stop, an exception while building the prompt. The queued prompts belong to
    * that dead turn, so replaying them would be wrong.
    */
+  /**
+   * The tab failed to send this turn's prompt (v7.10, `tab_unreachable` /
+   * `no_tab`).
+   *
+   * Reported with a screenshot: "is there advantage of this tool over
+   * connecting gemini web to github?" failed to send, the next message was
+   * "try again", and Gemini, which had never seen the question, answered the
+   * one before it. The extension raises these only when the prompt was not
+   * submitted, so the message is kept and sent in front of the next one.
+   *
+   * Only when the turn had no reply at all, tool calls included: any reply
+   * means the chat saw the question. Several failures in a row keep every
+   * message, oldest first.
+   */
+  noteUndelivered() {
+    const text = String(this.currentObjective || '').trim();
+    if (!text || this._turnAnswered) return;
+    const texts = this._undelivered?.texts || [];
+    if (texts[texts.length - 1] !== text) texts.push(text);
+    this._undelivered = { texts };
+    // The lost prompt was the one that teaches the chat (turn 0: system prompt
+    // and tool definitions). The builder marked it sent when it built it, so
+    // the next message would go out short into a chat that never saw it.
+    if (String(this._lastMainPrompt || '').includes('<system_state')) {
+      this.promptBuilder.resetPromptState?.();
+    }
+  }
+
   abortExtensionWork() {
     this._cancelScheduledRetry();
     this._settleSwitchWaiters({ ok: false, cancelled: true });

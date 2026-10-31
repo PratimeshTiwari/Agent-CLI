@@ -204,11 +204,24 @@ entry before changing the mechanism it describes.
 - **Typing:** an unclaimed synthetic paste goes straight to the `insertText` fallback; only a
   claimed paste or an image waits. The send-button fallback vetoes `Expand input to Fullscreen`.
 - **Repairs:** `prepareTabForTurn` (no discarding, reload a discarded tab); `sendWithRepairs` —
-  send, re-inject, reload, and **never a fresh tab** (a new conversation answers a question it
-  never saw). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
+  send, re-inject, reload, and **never a fresh tab on a new chat** (a new conversation answers a
+  question it never saw). Since 1.56.0 the reload bypasses the cache, a failed inject carries the
+  page's reason (`lastInjectError`, in `/logs extension`), and **the main lane no longer re-injects
+  or reloads**: one send (`sendOnce`), then the **same** `/app/<id>` in a fresh tab
+  (`reopenInFreshTab`: the tab's URL, else `threadUrl`; the old tab is closed only once the new one
+  is up, and kept if it cannot open), then the error. Subagents keep `sendWithRepairs`. The terminal then says one line
+  and the chat's link (`bridge/tab-failure.js`; owner: "too verbose, keep it simple"). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.
+- **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
+  Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
+  again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`
+  (raised only when the prompt was not submitted) in a turn with no reply at all
+  (`_turnAnswered`), the message is kept and sent in front of the next one, marked as never
+  received; the record keeps what was typed, a `↻` row says so, and `/new` drops it. If the lost
+  prompt was turn 0 (`<system_state`), the builder had already marked it sent, so it is reset and the
+  next message teaches the chat. Pty (`FAKE_FAIL_SENDS=1`): 0 clears at 13 and 24 rows.
 - **Tool amnesia is a thread change.** `_recordThread` calls `resetPromptState()` when the thread
   id changes from a previous one. `looksLikeCapabilityDenial` judges the *subject* (tooling, not
   code); `denial-corpus.test.js` holds both directions.
@@ -1804,6 +1817,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
   one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
   and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
+- **The spinner's token count climbs (v7.10, `ui/token-count.js`).** Asked for: Claude Code's
+  count rises, ours jumped. It counts the thread plus the reply being streamed (the tab sends it
+  every 2 s; `streamRef` in `use-agent-callbacks.js`, a ref, never state), and that counts only
+  until the loop adds the finished reply (`base`), so nothing is counted twice. The drawn number
+  closes 8% of the gap per 80 ms spinner tick, the tick App already draws, so it costs no
+  frames; a fall (`/compact`, `/new`) is drawn at once. Pty (`FAKE_STREAM_MS=2000`): 2.9k →
+  6.3k over a 9 s reply, 0 clears at 13 and 24 rows.
 - **The status bar is laid out in `ui/status-bar.js` (v6.13, Option A of
   `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
   coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest

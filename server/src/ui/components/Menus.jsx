@@ -537,13 +537,9 @@ export function Menus({
                   const pending = activeMenu.payload;
                   setActiveMenu(null);
                   setFocus(FOCUS_INPUT);
+                  // Cancel says nothing (v7.10, owner: "there is no need"): the
+                  // menu closing is the answer, as esc's always was.
                   if (item.value === 'yes') pending.onConfirm?.();
-                  else {
-                    setHistory((prev) => [...prev, {
-                      role: 'assistant', isLocal: true, timestamp: Date.now(),
-                      content: `Cancelled — nothing was changed.`,
-                    }]);
-                  }
                 }}
               />
             </Panel>
