@@ -955,6 +955,37 @@ export async function ensureModelTab(targetModel = 'gemini', opts) {
   return newTab;
 }
 
+/**
+ * The fourth repair (1.56.0): the same conversation in a fresh tab.
+ *
+ * Asked for: "can't you just open a new gemini tab with the same chat id?
+ * instead of reloading". `sendWithRepairs` stops at a reload of the same tab,
+ * and refuses a *new chat* for a reason that still holds: a blank conversation
+ * answers a question it never saw. A new tab on `/app/<id>` is not that. It
+ * is the same thread, in a page with nothing left over from the old one.
+ *
+ * Only with a thread to go back to (the tab's own URL, else the server's
+ * `threadUrl`). The fresh tab is opened before the old one is closed, and if it
+ * cannot be opened the old one is kept as the lane's tab. A failed send means
+ * the prompt is still in the old composer (`confirmSend`), so sending it again
+ * here cannot ask twice.
+ */
+export async function reopenInFreshTab(old, targetModel, threadUrl) {
+  const url = chatPath(old?.url || '')?.thread ? old.url
+    : (chatPath(threadUrl || '')?.thread ? threadUrl : null);
+  if (!old || !url) return null;
+  mainTabs.delete(targetModel);
+  await releaseOwnedTab(old.id);
+  const fresh = await ensureModelTab(targetModel, { url }).catch(() => null);
+  if (!fresh || fresh.id === old.id) {
+    mainTabs.set(targetModel, old.id);
+    await claimOwnedTab(old.id);
+    return null;
+  }
+  chrome.tabs.remove(old.id).catch(() => { /* already gone */ });
+  return fresh;
+}
+
 export async function injectPromptIntoModel(payload) {
   const targetModel = payload.targetModel || 'gemini';
   const targetUrl = MODEL_URLS[targetModel];
@@ -1057,6 +1088,10 @@ export async function injectPromptIntoModel(payload) {
     // nothing to fall back to, and a loop over a one-element array reads as if
     // there were.
     success = await trySendToTab(tabs[0], message, targetModel);
+    if (!success && targetModel === 'gemini') {
+      const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+      if (fresh) success = await trySendToTab(fresh, message, targetModel);
+    }
   }
 
   if (!success) {
@@ -1068,11 +1103,9 @@ export async function injectPromptIntoModel(payload) {
         targetModel,
         url: targetUrl,
         detail: lastTabFailure?.message,
-        // Says what was already tried; the terminal rewrites it with its own
-        // keys (server bridge/tab-failure.js).
-        message: `Could not send to the ${targetModel} tab, even after reloading it`
-          + `${lastTabFailure?.message ? ` (${lastTabFailure.message})` : ''}`
-          + '. Check the tab shows a chat you can type in, then send again.',
+        // Short, as asked: by now it has reloaded the tab and reopened the chat
+        // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
+        message: `Communication with the ${targetModel} tab failed · check the browser`,
       },
     };
     lastTabFailure = null;

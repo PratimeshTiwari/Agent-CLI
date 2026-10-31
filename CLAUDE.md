@@ -204,10 +204,12 @@ entry before changing the mechanism it describes.
 - **Typing:** an unclaimed synthetic paste goes straight to the `insertText` fallback; only a
   claimed paste or an image waits. The send-button fallback vetoes `Expand input to Fullscreen`.
 - **Repairs:** `prepareTabForTurn` (no discarding, reload a discarded tab); `sendWithRepairs` —
-  send, re-inject, reload, and **never a fresh tab** (a new conversation answers a question it
-  never saw). Since 1.56.0 the reload bypasses the cache and a failed inject carries the page's
-  reason (`lastInjectError`); the terminal words `tab_unreachable` itself (`bridge/tab-failure.js`):
-  what was tried, the reason, ctrl+b, and that the message is kept. The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
+  send, re-inject, reload, and **never a fresh tab on a new chat** (a new conversation answers a
+  question it never saw). Since 1.56.0 the reload bypasses the cache, a failed inject carries the
+  page's reason (`lastInjectError`, in `/logs extension`), and a fourth repair reopens the **same**
+  `/app/<id>` in a fresh tab (`reopenInFreshTab`: the tab's URL, else `threadUrl`; the old tab is
+  closed only once the new one is up, and kept if it cannot open). The terminal then says one line
+  and the chat's link (`bridge/tab-failure.js`; owner: "too verbose, keep it simple"). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.

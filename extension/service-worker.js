@@ -554,6 +554,21 @@
     });
     return newTab;
   }
+  async function reopenInFreshTab(old, targetModel, threadUrl) {
+    const url = chatPath(old?.url || "")?.thread ? old.url : chatPath(threadUrl || "")?.thread ? threadUrl : null;
+    if (!old || !url) return null;
+    mainTabs.delete(targetModel);
+    await releaseOwnedTab(old.id);
+    const fresh = await ensureModelTab(targetModel, { url }).catch(() => null);
+    if (!fresh || fresh.id === old.id) {
+      mainTabs.set(targetModel, old.id);
+      await claimOwnedTab(old.id);
+      return null;
+    }
+    chrome.tabs.remove(old.id).catch(() => {
+    });
+    return fresh;
+  }
   async function injectPromptIntoModel(payload) {
     const targetModel = payload.targetModel || "gemini";
     const targetUrl = MODEL_URLS[targetModel];
@@ -625,6 +640,10 @@
         return;
       }
       success = await trySendToTab(tabs[0], message, targetModel);
+      if (!success && targetModel === "gemini") {
+        const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+        if (fresh) success = await trySendToTab(fresh, message, targetModel);
+      }
     }
     if (!success) {
       const errorMsg = {
@@ -635,9 +654,9 @@
           targetModel,
           url: targetUrl,
           detail: lastTabFailure?.message,
-          // Says what was already tried; the terminal rewrites it with its own
-          // keys (server bridge/tab-failure.js).
-          message: `Could not send to the ${targetModel} tab, even after reloading it${lastTabFailure?.message ? ` (${lastTabFailure.message})` : ""}. Check the tab shows a chat you can type in, then send again.`
+          // Short, as asked: by now it has reloaded the tab and reopened the chat
+          // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
+          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`
         }
       };
       lastTabFailure = null;

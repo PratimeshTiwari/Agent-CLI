@@ -12,7 +12,8 @@
  * opens a fresh tab**: a reload returns to the same `/app/<id>` and Gemini
  * still has the thread, while a new tab is a new conversation, and an
  * incremental prompt sent into one gets a confident answer to a question the
- * model never saw.
+ * model never saw. (Since 1.56.0 a fresh tab on the *same* `/app/<id>` is a
+ * fourth repair, one level up: `reopen-fresh-tab.test.js`.)
  */
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';

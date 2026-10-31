@@ -28,6 +28,7 @@ import { planResume } from '../core/chat-thread.js';
 import { logError, logNotice } from '../core/error-log.js';
 import { extensionVersionNotice, shortcutNotice } from '../core/extension-version.js';
 import { tabUnreachableMessage } from './tab-failure.js';
+import { tabLink } from '../core/compaction.js';
 
 /**
  * Loopback only. Not `localhost`, which resolves through the hosts file and has
@@ -937,7 +938,7 @@ export class WebSocketServer {
         if (payload?.op === 'tab_unreachable') {
           message.payload = {
             ...payload,
-            message: tabUnreachableMessage(payload, { kept: Boolean(this.agentLoop._undelivered) }),
+            message: tabUnreachableMessage(tabLink(this.agentLoop)),
           };
         }
         // The turn is dead, so hand the bridge lock back — otherwise every

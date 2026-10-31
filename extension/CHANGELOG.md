@@ -25,8 +25,14 @@ submit a prompt, `injectPrompt` logged the reason to the tab's console and answe
 `{success: false}`, so the terminal read "Content script reported failure". The reason now travels
 with the answer, e.g. `[send_button] Send button never became active`. The third repair (reload
 and send again) reloads with `bypassCache`, which is what the old message told people to do by
-hand with Cmd+Shift+R, in a browser they might not have had in front of them. The message says
-the tab was already reloaded.
+hand with Cmd+Shift+R, in a browser they might not have had in front of them.
+
+**A fourth repair: the same chat in a fresh tab** (`reopenInFreshTab`). Asked for: "can't you just
+open a new gemini tab with the same chat id? instead of reloading". After send, re-inject and
+reload fail, the conversation's own `/app/<id>` (the tab's URL, else the server's `threadUrl`) opens
+in a new tab, the prompt goes there, and the old tab is closed once the new one is up. Never a new
+chat, which is still refused. The failure then reads `Communication with the gemini tab failed ·
+check the browser`.
 
 ### 1.55.0 — 2026-10-31
 
