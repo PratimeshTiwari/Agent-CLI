@@ -1109,6 +1109,14 @@ export async function injectPromptIntoModel(payload) {
     // addressing tabs by URL pattern. With a lane that owns its tab there is
     // nothing to fall back to, and a loop over a one-element array reads as if
     // there were.
+    // A resend after a reply that never came (server `freshTab`, 1.57.0): the
+    // stuck tab is replaced first, which also ends its silent generation, so
+    // no late answer to the first send can arrive.
+    if (payload.freshTab && targetModel === 'gemini') {
+      const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+      if (fresh) tabs = [fresh];
+    }
+
     // Simplified (1.56.0, owner: "why add complexity"): send once; if that
     // fails, the same chat in a fresh tab, once. Then the error.
     success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });

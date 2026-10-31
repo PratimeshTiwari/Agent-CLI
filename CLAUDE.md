@@ -214,6 +214,16 @@ entry before changing the mechanism it describes.
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.
+- **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
+  `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
+  tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not
+  hold that prompt. The tab's watchdog counts the dots as busy and waits 5 minutes, and a turn that
+  saw generation is never resent, so it simply died. Now the server arms a clock on every main
+  `_sendToGemini`; the first streamed text (or a reply, or esc) stops it. On expiry the same
+  prompt goes again, verbatim, with `freshTab`: the extension reopens the chat on its own
+  `/app/<id>` and closes the stuck tab first, which ends the silent generation so it cannot answer
+  late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
+  over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
 - **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
   Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
   again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`

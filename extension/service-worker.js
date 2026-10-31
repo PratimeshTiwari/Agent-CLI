@@ -649,6 +649,10 @@
         sendToServer(errorMsg);
         return;
       }
+      if (payload.freshTab && targetModel === "gemini") {
+        const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
+        if (fresh) tabs = [fresh];
+      }
       success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
       if (!success && targetModel === "gemini") {
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);

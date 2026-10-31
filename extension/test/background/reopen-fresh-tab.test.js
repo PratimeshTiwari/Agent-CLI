@@ -73,3 +73,12 @@ test('if the fresh tab cannot open, the old one is kept', async () => {
   const { isOwnedTab } = await import('../../src/background/content.js');
   assert.equal(await isOwnedTab(7), true, 'still the lane\'s tab');
 });
+
+test('a server resend flagged freshTab replaces the tab before the send (1.57.0)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../src/background/content.js', import.meta.url), 'utf8');
+  const at = src.indexOf('if (payload.freshTab && targetModel === \'gemini\')');
+  const send = src.indexOf('success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });');
+  assert.ok(at > 0 && send > at, 'the reopen comes before the first send');
+  assert.match(src.slice(at, send), /reopenInFreshTab\(tabs\[0\], targetModel, payload\.threadUrl\)/);
+});

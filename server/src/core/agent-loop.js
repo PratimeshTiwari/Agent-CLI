@@ -163,7 +163,8 @@ import { threadFromUrl } from './chat-thread.js';
 import { logToolUsage } from './tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from './edit-diagnostics.js';
-import { compactHistory, countTurns } from './compaction.js';
+import { compactHistory, countTurns, tabLink } from './compaction.js';
+import { tabUnreachableMessage } from '../bridge/tab-failure.js';
 import { runDelegatedRead, shouldDelegateRead } from './delegated-read.js';
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from './subagent-session.js';
@@ -192,6 +193,15 @@ import { describeMismatch, ensureRung, describeFailedSwitch, lowerRung, mismatch
 // Backstop for a prompt the extension never answers. Longer than the content
 // script's own 5-minute cap so its `timedOut` report wins whenever it is alive.
 const EXTENSION_RESPONSE_TIMEOUT = 7 * 60 * 1000;
+
+/**
+ * No reply text this long after a prompt went out, and it is sent again, once,
+ * in a fresh tab (v8.0). Reported with screenshots: Gemini took the prompt,
+ * showed its thinking dots and never wrote a word; the tab's own watchdog
+ * counts those dots as busy and waits five minutes, then the turn ended
+ * unanswered. A field (`silentReplyMs`) so tests can shorten it.
+ */
+export const SILENT_REPLY_MS = 2 * 60 * 1000;
 
 /**
  * Evidence that an unparseable block was *meant* to be a tool call.
@@ -475,6 +485,8 @@ export class AgentLoop {
     this._switchWaiters = [];
     this.pendingGeminiResponse = null;
     this.newChatTimeoutMs = NEW_CHAT_TIMEOUT_MS;
+    this.silentReplyMs = SILENT_REPLY_MS;
+    this._silentTimer = null;
     this.callbacks = null;
     this.isProcessing = false;
     // One in-flight prompt per model, not one for the whole bridge — see
@@ -621,6 +633,7 @@ export class AgentLoop {
       this._deniedToolsOnce = false;
       this._steppedDownThisTurn = false;
       this._promiseNudged = false;
+      this._silentRetried = false;
       /**
        * What this turn has actually done, for the model to read back.
        *
@@ -745,11 +758,14 @@ export class AgentLoop {
     }
 
     if (!complete) {
+      // Text is arriving: Gemini is answering, however long it takes now.
+      if (!payload.timedOut && String(content || '').trim()) this._clearSilentWatch();
       this._onIncompleteReply(payload);
       return;
     }
 
     // Request complete
+    this._clearSilentWatch();
     this.contextChars += (content || '').length;
     this._releaseExtension();
     // The chat answered, so whatever was carried has been seen (v7.10).
@@ -1452,6 +1468,7 @@ export class AgentLoop {
     this._deniedToolsOnce = false;
     this._steppedDownThisTurn = false;
     this._promiseNudged = false;
+    this._silentRetried = false;
     this._resentUnsubmittedOnce = false;
     this._failedRounds = 0;
 
@@ -2800,7 +2817,65 @@ export class AgentLoop {
     }
   }
 
+  /** Start (or restart) the two-minute wait for the first reply text (v8.0). */
+  _armSilentWatch() {
+    this._clearSilentWatch();
+    this._silentTimer = setTimeout(() => this._onSilentReply(), this.silentReplyMs);
+    this._silentTimer.unref?.();
+  }
+
+  _clearSilentWatch() {
+    if (this._silentTimer) clearTimeout(this._silentTimer);
+    this._silentTimer = null;
+  }
+
+  /**
+   * Two minutes and not a word (v8.0, `SILENT_REPLY_MS`).
+   *
+   * The first time, the same prompt goes again, verbatim, flagged `freshTab`:
+   * the extension reopens the chat on its own `/app/<id>` and closes the stuck
+   * tab, which ends the silent generation, so the first send cannot answer
+   * late. Verbatim, because a rebuild has side effects (`_lastMainPrompt`).
+   * The second time, the turn ends with the one line a failed send shows.
+   */
+  _onSilentReply() {
+    this._silentTimer = null;
+    if (!this.isProcessing || !this.pendingGeminiResponse || !this._lastMainPrompt) return;
+    if (!this._silentRetried) {
+      this._silentRetried = true;
+      logNotice(this.workspace, {
+        flow: 'agent', op: 'silent_reply',
+        message: 'No reply text two minutes after the prompt; sent it again in a fresh tab',
+        meta: { ...this.contextFill },
+      });
+      this._noticeRow('↻ No response from Gemini in 2 min · retrying in a fresh tab');
+      this._releaseExtension();
+      this.pendingGeminiResponse = true;
+      this._enqueueExtensionRequest({
+        prompt: this._lastMainPrompt,
+        expectResponse: true,
+        targetModel: this.modelConfig.main || 'gemini',
+        freshTab: true,
+      });
+      this._armSilentWatch();
+      return;
+    }
+    logError(this.workspace, {
+      flow: 'agent', op: 'silent_reply',
+      message: 'No reply text after the retry either; the turn was ended',
+    });
+    this.isProcessing = false;
+    this.abortExtensionWork();
+    this.callbacks?.sendToPanel?.({
+      id: randomUUID(),
+      type: 'error',
+      payload: { message: tabUnreachableMessage(tabLink(this)) },
+      timestamp: Date.now(),
+    });
+  }
+
   abortExtensionWork() {
+    this._clearSilentWatch();
     this._cancelScheduledRetry();
     this._settleSwitchWaiters({ ok: false, cancelled: true });
     if (this._warming) this._warmCancelled = true;
@@ -3165,6 +3240,7 @@ export class AgentLoop {
      * are the bytes to send again.
      */
     this._lastMainPrompt = prompt;
+    this._armSilentWatch();
 
     // Reply → this send, split into the person's share (approvals, questions)
     // and ours. Only for a send that follows a reply; the first of a turn has
