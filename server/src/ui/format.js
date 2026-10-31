@@ -206,9 +206,11 @@ marked.use({
       ));
       const widths = fitColumns(natural, renderWidth);
 
-      const rule = (l, mid, r) => DIM + l + widths.map((w) => '─'.repeat(w + 2)).join(mid) + r + RESET;
+      const rule = (l, mid, r, ch = '─') => DIM + l + widths.map((w) => ch.repeat(w + 2)).join(mid) + r + RESET;
+      const bar = `${DIM}│${RESET}`;
+      const cellLines = (cells) => cells.map((c, i) => wrapAnsi(c ?? '', widths[i]));
       const line = (cells) => {
-        const wrapped = cells.map((c, i) => wrapAnsi(c ?? '', widths[i]));
+        const wrapped = cellLines(cells);
         const height = Math.max(1, ...wrapped.map((w) => w.length));
         const out = [];
         for (let i = 0; i < height; i += 1) {
@@ -216,17 +218,27 @@ marked.use({
             const text = w[i] ?? '';
             return ` ${text}${' '.repeat(Math.max(0, widths[c] - visibleWidth(text)))} `;
           });
-          out.push(`${DIM}│${RESET}${parts.join(`${DIM}│${RESET}`)}${DIM}│${RESET}`);
+          out.push(`${bar}${parts.join(bar)}${bar}`);
         }
         return out.join('\n');
       };
+      /*
+       * Rows are told apart only when one of them wraps (v8.0, option C of
+       * .agent/artifacts/plans/2026-10-31-table-rows.md, owner's pick): with
+       * wrapped cells nothing showed where one row ended and the next began;
+       * a table of one-line rows reads fine as it is and stays so. A dotted
+       * rule between rows, and a double one under the header so it still
+       * stands apart from them.
+       */
+      const wraps = rows.some((r) => cellLines(r).some((w) => w.length > 1));
+      const body = rows.flatMap((r, i) => (wraps && i > 0 ? [rule('├', '┼', '┤', '┄'), line(r)] : [line(r)]));
 
       return [
         '',
         rule('┌', '┬', '┐'),
         line(header.map((h) => `${BOLD}${h}${RESET}`)),
-        rule('├', '┼', '┤'),
-        ...rows.map((r) => line(r)),
+        wraps ? rule('╞', '╪', '╡', '═') : rule('├', '┼', '┤'),
+        ...body,
         rule('└', '┴', '┘'),
         '',
         '',

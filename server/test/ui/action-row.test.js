@@ -73,3 +73,17 @@ test('expanded command output is capped with Claude Code\'s marker', () => {
   assert.deepEqual(commandOutputLines(shell(0, '')), ['(no output)']);
   assert.deepEqual(commandOutputLines({ totalLines: 3 }), [], 'not a shell result');
 });
+
+test('a call the schema refused says which argument, in a few words (v8.0)', async () => {
+  const { validateArgs } = await import('../../src/mcp/validate-args.js');
+  const { actionOutcome } = await import('../../src/ui/action-row.js');
+  const spec = { query: { type: 'string', required: true }, maxResults: { type: 'number' } };
+  const missing = validateArgs('grep_search', spec, { pattern: 'x' });
+  assert.equal(actionOutcome({ toolName: 'grep_search', success: false, result: { success: false, error: missing.message } }),
+    'wrong arguments · query missing');
+  assert.equal(actionOutcome({ toolName: 'grep_search', success: false, result: missing.message }),
+    'wrong arguments · query missing', 'as a bare string too');
+  const wrongType = validateArgs('grep_search', spec, { query: 'x', maxResults: 'lots' });
+  assert.match(actionOutcome({ toolName: 'grep_search', success: false, result: wrongType.message }),
+    /^wrong arguments · maxResults got "lots"$/);
+});

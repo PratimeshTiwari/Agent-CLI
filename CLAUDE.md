@@ -214,6 +214,16 @@ entry before changing the mechanism it describes.
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.
+- **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
+  `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
+  tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not
+  hold that prompt. The tab's watchdog counts the dots as busy and waits 5 minutes, and a turn that
+  saw generation is never resent, so it simply died. Now the server arms a clock on every main
+  `_sendToGemini`; the first streamed text (or a reply, or esc) stops it. On expiry the same
+  prompt goes again, verbatim, with `freshTab`: the extension reopens the chat on its own
+  `/app/<id>`, then closes the stuck tab, which ends the silent generation so it cannot answer
+  late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
+  over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
 - **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
   Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
   again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`
@@ -1335,7 +1345,11 @@ them, and do not squash their history away.
   small UI asks first, then `.agent/artifacts/plans/2026-10-28-plan-by-effort.md` in order.
   **v7 opens with `v7.0/docs-refresh-and-screenshots`** (2026-10-30): v6 closed at v6.25 (#130),
   and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
-  branch is named for what it does, never for the file it touches.
+  branch is named for what it does, never for the file it touches. **v8 opens with
+  `v8.0/silent-retry-and-cleaner-rows`** (2026-10-31, after v7.10 #141), owner: "push and merge
+  uptil 7.10 and lets start v8". **v8.1 is Jira and Confluence**
+  (`.agent/artifacts/plans/2026-10-31-atlassian-tools.md`): built here, tested on the work laptop,
+  and every write asks, in every mode.
   `/update` runs git in `server/`, and status names paths from the repo root — any path
   handed back to git there needs `:(top)` (#102).
 - Open a PR into `main`. That is the only way work reaches `main`.
@@ -1833,6 +1847,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   (`shed` in `statusBarLayout`), tested at 30–120 columns; App only maps roles to colours. Pty:
   0 clears at 10, 13, 24 rows × 60, 90 columns.
 
+- **Table rows are told apart only when one wraps (v8.0, `table()` in `format.js`).** Option C of
+  `.agent/artifacts/plans/2026-10-31-table-rows.md`, chosen from screenshots of a demo chat
+  (`table-rows.png` / `table-open.png` there): a dim `┄` rule between rows and `╞═╡` under the
+  header once any body row wraps; a table of one-line rows is unchanged. Making the doc found
+  `wrapAnsi` breaking at a full row rather than an overflowing one, so a cell that fit its column
+  exactly wrapped (v7.10). Pty: a reply with both kinds of table, 0 clears at 13 and 24 rows.
+- **A call the schema refused reads `wrong arguments · query missing` (v8.0,
+  `badArgumentsOutcome` in `action-row.js`).** The row showed the first line of the model's
+  message, `grep_search was called with arguments that do not match its…`, cut before it said
+  what was wrong. The model still gets the whole message.
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80

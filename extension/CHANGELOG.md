@@ -18,6 +18,15 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.57.0 — 2026-10-31
+
+**A prompt the server resends after a silent reply goes into a fresh tab** (`freshTab`). Reported
+with screenshots: Gemini took a tool-results prompt, showed its thinking dots, and wrote nothing;
+after a reload the chat did not hold that prompt at all. When the server hears no reply text for two
+minutes it resends the prompt once with `freshTab`, and the extension reopens the chat on its own
+`/app/<id>` and closes the stuck tab before sending. Closing it ends the silent generation, so no
+late answer to the first send can arrive.
+
 ### 1.56.0 — 2026-10-31
 
 **A failed send says why, and the repair reload is a hard one.** When the page could not type or

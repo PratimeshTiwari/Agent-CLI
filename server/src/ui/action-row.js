@@ -84,7 +84,33 @@ export function actionOutcome(act) {
     const how = r.timedOut ? 'timed out' : `exit ${r.exitCode}`;
     return took ? `${how} · ${took}` : how;
   }
+  if (state === 'failed') {
+    const bad = badArgumentsOutcome(typeof r === 'string' ? r : r?.error);
+    if (bad) return bad;
+  }
   return summarizeResult(act.toolName, r);
+}
+
+/**
+ * A call the schema refused, in a few words (v8.0).
+ *
+ * The row showed the first line of what the model is told, `grep_search was
+ * called with arguments that do not match its…`, which names the tool the row
+ * already names and is cut before it says what was wrong. Reported with a
+ * screenshot: "make it cleaner". The model still gets the whole message.
+ * `wrong arguments · query missing`, `wrong arguments · isRegex got "yes"`.
+ */
+export function badArgumentsOutcome(text) {
+  const lines = String(text || '').split('\n');
+  if (!/was called with arguments that do not match its schema/.test(lines[0] || '')) return '';
+  const problems = lines.slice(1)
+    .filter((l) => /^ {2}`/.test(l))
+    .map((l) => {
+      const m = /^ {2}`([^`]+)` \([^)]*\) (.*)$/.exec(l);
+      if (!m) return l.trim();
+      return /is required but was not given/.test(m[2]) ? `${m[1]} missing` : `${m[1]} ${m[2]}`;
+    });
+  return problems.length ? `wrong arguments · ${problems.join(', ')}` : 'wrong arguments';
 }
 
 /**

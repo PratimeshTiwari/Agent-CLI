@@ -131,3 +131,19 @@ describe('wrapAnsi at an exact fit (v7.10)', () => {
   assert.deepEqual(wrapAnsi('\x1b[1mbold text\x1b[0m', 9).length, 1, 'escapes cost nothing');
   });
 });
+
+describe('rows are told apart only when one wraps (v8.0, option C)', () => {
+  const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+  it('a table of one-line rows has no rule between them', () => {
+    const out = strip(renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |', 60));
+    assert.doesNotMatch(out, /┄|═/);
+    assert.match(out, /├/);
+  });
+  it('a wrapped row puts a dotted rule between rows and a double one under the header', () => {
+    const long = 'word '.repeat(30).trim();
+    const out = strip(renderMarkdown(`| a | b |\n|---|---|\n| 1 | ${long} |\n| 3 | 4 |\n| 5 | 6 |`, 60));
+    assert.equal((out.match(/^├┄/gm) || []).length, 2, 'one between each pair of rows');
+    assert.equal((out.match(/^╞═/gm) || []).length, 1);
+    for (const l of out.split('\n')) assert.ok(visibleWidth(l) <= 60, l);
+  });
+});
