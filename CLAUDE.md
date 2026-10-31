@@ -221,7 +221,7 @@ entry before changing the mechanism it describes.
   saw generation is never resent, so it simply died. Now the server arms a clock on every main
   `_sendToGemini`; the first streamed text (or a reply, or esc) stops it. On expiry the same
   prompt goes again, verbatim, with `freshTab`: the extension reopens the chat on its own
-  `/app/<id>` and closes the stuck tab first, which ends the silent generation so it cannot answer
+  `/app/<id>`, then closes the stuck tab, which ends the silent generation so it cannot answer
   late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
   over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
 - **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
