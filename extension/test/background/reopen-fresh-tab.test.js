@@ -54,9 +54,15 @@ test("the server's threadUrl when the tab has none", async () => {
   assert.equal(log[0], 'create https://gemini.google.com/app/def');
 });
 
-test('no conversation to go back to: no tab is opened', async () => {
+test('a tab on a new chat, with no id anywhere, reopens on a new chat', async () => {
   const log = stubChrome();
-  assert.equal(await reopenInFreshTab({ id: 7, url: 'https://gemini.google.com/app' }, 'gemini'), null);
+  await reopenInFreshTab({ id: 7, url: 'https://gemini.google.com/u/1/app' }, 'gemini');
+  assert.equal(log[0], 'create https://gemini.google.com/u/1/app');
+});
+
+test('a tab that is not on a chat at all: no tab is opened', async () => {
+  const log = stubChrome();
+  assert.equal(await reopenInFreshTab({ id: 7, url: 'https://gemini.google.com/settings' }, 'gemini'), null);
   assert.deepEqual(log, []);
 });
 

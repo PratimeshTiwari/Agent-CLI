@@ -27,12 +27,13 @@ with the answer, e.g. `[send_button] Send button never became active`. The third
 and send again) reloads with `bypassCache`, which is what the old message told people to do by
 hand with Cmd+Shift+R, in a browser they might not have had in front of them.
 
-**A fourth repair: the same chat in a fresh tab** (`reopenInFreshTab`). Asked for: "can't you just
-open a new gemini tab with the same chat id? instead of reloading". After send, re-inject and
-reload fail, the conversation's own `/app/<id>` (the tab's URL, else the server's `threadUrl`) opens
-in a new tab, the prompt goes there, and the old tab is closed once the new one is up. Never a new
-chat, which is still refused. The failure then reads `Communication with the gemini tab failed ·
-check the browser`.
+**The main lane's repair is the same chat in a fresh tab** (`sendOnce`, `reopenInFreshTab`). Asked
+for: "if the communication fails, just open a new tab with the same chat id … why add complexity".
+The user's prompt is sent once; if that fails, the conversation's own `/app/<id>` (the tab's URL,
+else the server's `threadUrl`; a tab on a new chat reopens on a new chat) opens in a new tab, the
+prompt goes there, and the old tab is closed once the new one is up. A fresh page also loads a fresh
+content script, which is what the re-inject step was for. Subagent tabs keep send, re-inject,
+reload. The failure then reads `Communication with the gemini tab failed · check the browser`.
 
 ### 1.55.0 — 2026-10-31
 
