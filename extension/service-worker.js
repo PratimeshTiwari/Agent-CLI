@@ -91,6 +91,29 @@
     }
   }
 
+  // src/background/chat-url.js
+  var CHAT_PATH = /^(\/u\/\d+)?\/app(?:\/([^/?#]+))?\/?$/;
+  function chatPath(url) {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+    if (parsed.hostname !== "gemini.google.com") return null;
+    const m = CHAT_PATH.exec(parsed.pathname);
+    if (!m) return null;
+    return { account: m[1] || "", thread: m[2] || null };
+  }
+  function isFreshChat(url) {
+    const at = chatPath(url);
+    return Boolean(at && !at.thread);
+  }
+  function freshChatUrl(url) {
+    const at = chatPath(url);
+    return `https://gemini.google.com${at?.account || ""}/app`;
+  }
+
   // src/background/content.js
   var MODEL_URLS = {
     "gemini": "https://gemini.google.com/*"
@@ -129,7 +152,43 @@
     }
     sendToServer({
       type: "tab_status",
-      payload: { connectedModels }
+      payload: { connectedModels, mainTab: await mainTabInfo("gemini"), subagentTabIds: [...subagentTabs] }
+    });
+  }
+  async function mainTabInfo(targetModel) {
+    let tab = null;
+    const remembered = mainTabs.get(targetModel);
+    if (remembered !== void 0) tab = await chrome.tabs.get(remembered).catch(() => null);
+    if (!tab) {
+      try {
+        const owned = await ownedTabIds();
+        const tabs = await chrome.tabs.query({ url: MODEL_URLS[targetModel] });
+        tab = tabs.filter((t) => owned.has(t.id) && !subagentTabs.has(t.id)).pop() || null;
+      } catch {
+        tab = null;
+      }
+    }
+    if (!tab) return null;
+    return {
+      id: tab.id,
+      windowId: tab.windowId,
+      thread: chatPath(tab.url || "")?.thread || null,
+      title: tab.title || "",
+      active: Boolean(tab.active)
+    };
+  }
+  function waitForTabLoad(tabId, budgetMs) {
+    return new Promise((resolve) => {
+      const done = setTimeout(finish, budgetMs);
+      function finish() {
+        clearTimeout(done);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+      function listener(id, info) {
+        if (id === tabId && info.status === "complete") finish();
+      }
+      chrome.tabs.onUpdated.addListener(listener);
     });
   }
   var lastTabFailure = null;
@@ -607,18 +666,7 @@
       const tab = existing ? await chrome.tabs.update(existing.id, { url, active: true }) : await chrome.tabs.create({ url, active: true });
       mainTabs.set(model, tab.id);
       await claimOwnedTab(tab.id);
-      await new Promise((resolve) => {
-        const done = setTimeout(finish, 8e3);
-        function finish() {
-          clearTimeout(done);
-          chrome.tabs.onUpdated.removeListener(listener);
-          resolve();
-        }
-        function listener(tabId, info) {
-          if (tabId === tab.id && info.status === "complete") finish();
-        }
-        chrome.tabs.onUpdated.addListener(listener);
-      });
+      await waitForTabLoad(tab.id, 8e3);
       return true;
     } catch (err) {
       console.warn("[Agent CLI] Could not open that conversation:", err?.message);
@@ -650,11 +698,16 @@
     if (!targetUrl) return false;
     const tab = await pickMainTab(targetModel) || await ensureModelTab(targetModel);
     if (!tab) return false;
+    if (isFreshChat(tab.url || "")) return true;
     try {
-      await chrome.tabs.sendMessage(tab.id, { type: "new_chat", payload });
+      const loaded = waitForTabLoad(tab.id, 8e3);
+      await chrome.tabs.update(tab.id, { url: freshChatUrl(tab.url || "") });
+      await loaded;
+      await waitForBridge(tab.id, 5e3);
+      broadcastTabStatus();
       return true;
     } catch (err) {
-      console.warn(`[Agent CLI] Failed to send new_chat to ${targetModel} tab ${tab.id}:`, err);
+      console.warn(`[Agent CLI] Failed to start a new chat in ${targetModel} tab ${tab.id}:`, err);
       return false;
     }
   }

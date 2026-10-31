@@ -311,6 +311,20 @@ chat that never saw it. The UI learns of it through `onWarm`, not a status messa
 connects before App has attached its callbacks. Pty: prompt 0 is the setup, a message typed
 meanwhile queues and goes as the short turn, and 0 clears at 13 and 24 rows.
 
+**A fresh session starts in a new chat (v7.9, `_freshChatOwed`, extension 1.55.0).** Reported with a
+screenshot: a warm start's setup went in under the previous session's last reply. The extension
+types into the tab it owns, and nothing moved that tab off the last conversation, so a cold start's
+first message went there too. A launch without `--continue`/`--resume` (or one that recaps, or
+finds no history) owes a new chat; `_startFreshChatIfOwed` spends it through `startNewChat` before
+the warm-up's prompt and before the first message (after compaction, before the model switch).
+`startNewChat` answers `false` at once when nothing is connected, and the debt stays for the next
+prompt. The extension skips the navigation when the tab is already on `/app`, keeps a `/u/<n>`
+account prefix (`background/chat-url.js`), and **waits for the load** before acking: the content
+script used to set `location.href` and ack at once, which `/new` never noticed, but a warm-up
+sends the moment the ack lands. The "Ready" row shows until the first *user* message, not while the
+transcript is empty, or `/new`'s own row hid it. Pty: `new_chat` before prompt 0 and before the
+warm-up after `/new`; the one `ESC[2J` is `/new`'s reset.
+
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local
@@ -1804,10 +1818,19 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
   sees every change. ←/→ are spatial and never wrap. The hint is on the selected row and drops below
   70 columns. The filter stays on top, underlined; printable keys go to it, and **tabs are on tab
-  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Startup and
-  Command rules (`OPENS_CHOOSER`). Values are plain except a switch's active state and a read-only
+  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Browser
+  differs (v7.9: the bare `ask · follow · switch` ladder was "confusing even for me"), Startup and
+  Command rules (`OPENS_CHOOSER`); bare `/effort mismatch` opens the same chooser. Values are plain except a switch's active state and a read-only
   `attention`; `Choices` no longer recolours the selected row's detail in any menu. Pty: 0 clears at
   13×90, 24×100 and 24×60.
+  **Status → Gemini tab (v7.9)** names the tab the main lane types into and its chat
+  (`tab 1873 · chat 17d6…`), from `tab_status`'s `mainTab`, which extension 1.55.0 sends on connect,
+  on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so).
+- **The warning slot hugs the input (v7.9, `noticeHugsInput`).** The warm-up and browser-differs rows
+  sat under the transcript with the prompt's blank row between them and the box, so they read as
+  the end of the last reply. The blank row moves above them when either shows and nothing sits
+  between (no spinner, menu, diff or shell). One row moved, none added. The `/effort mismatch` echo
+  is the chooser's own words now, not `/effort`.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input

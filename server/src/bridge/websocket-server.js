@@ -942,6 +942,13 @@ export class WebSocketServer {
             client.reportedModels = payload.connectedModels;
           }
         }
+        // Which tab the main lane types into (extension 1.55.0), for
+        // `/settings` → Gemini tab. An older build sends no `mainTab` key,
+        // which leaves the field unset rather than claiming "no tab".
+        if (this.agentLoop && payload && 'mainTab' in payload) {
+          this.agentLoop.browserTab = payload.mainTab || null;
+          this.agentLoop.subagentTabIds = Array.isArray(payload.subagentTabIds) ? payload.subagentTabIds : [];
+        }
         break;
 
       default:

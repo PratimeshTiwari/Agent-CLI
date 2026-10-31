@@ -431,6 +431,15 @@ export class AgentLoop {
     this.chatThread = this._resumeOnConnect
       ? (this.sessionStore.getThread?.() || null)
       : null;
+    /*
+     * A fresh session owes the browser a new chat (v7.9). The extension types
+     * into the tab it owns, and that tab is still on the last session's
+     * conversation: nothing ever moved it. Reported with a screenshot, a warm
+     * start's setup prompt sent under the previous chat's last reply. A cold
+     * start's first message went there too, less visibly. Spent by
+     * `_startFreshChatIfOwed` before the first prompt, and by `startNewChat`.
+     */
+    this._freshChatOwed = !this._resumeOnConnect;
     // Warm start (v5.27): `~/.agent/settings.json`, per person. Read once; the
     // first extension to identify spends it (`warmUpOnConnect`).
     this.startupMode = startupMode();
@@ -537,6 +546,9 @@ export class AgentLoop {
       // esc during the summary: the stop covers the message too.
       if (!this.isProcessing) return;
     }
+    // A fresh session's first message goes to a new chat, not the last one's.
+    await this._startFreshChatIfOwed();
+    if (!this.isProcessing) return;
     /*
      * The tab onto the effort's model before anything is typed (v5.28): the
      * user chose "switch" when asked (`options.switchTo`), or `/effort
@@ -2114,6 +2126,7 @@ export class AgentLoop {
      * by keeping the old thread and saying so.
      */
     if (this.extensionLock?.isBusy?.(mainLane(this.mainModel))) return Promise.resolve(false);
+    this._freshChatOwed = false;
     const previous = this.chatThread;
     this.chatThread = null;
     // A new chat is a new decision about compacting it (v7.5).
@@ -2184,7 +2197,30 @@ export class AgentLoop {
       // remove, reintroduced by the ack. Caught by the test below.
       const timer = setTimeout(() => done(false), timeoutMs);
       this._pendingNewChat = { done };
-      this._toExtension('new_chat');
+      // Nothing connected: nothing will answer, so do not wait the budget out.
+      this._newChatUndelivered = this._toExtension('new_chat') === false;
+      if (this._newChatUndelivered) done(false);
+    });
+  }
+
+  /**
+   * The new chat a fresh session owes (v7.9), before its first prompt: the
+   * warm-up, or the first message. Once. A failure is a notice, never a
+   * stopped turn: the prompt still goes, into whatever the tab holds, as before.
+   * Nothing connected yet keeps it owed for the next prompt.
+   */
+  async _startFreshChatIfOwed() {
+    if (!this._freshChatOwed || this.chatThread?.id) return;
+    const ok = await this.startNewChat();
+    if (ok) return;
+    if (this._newChatUndelivered) {
+      // `_toExtension` has already logged that nothing is connected.
+      this._freshChatOwed = true;
+      return;
+    }
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'fresh_chat',
+      message: 'Could not open a new chat for this session; the first prompt goes to the tab as it is',
     });
   }
 
@@ -2784,13 +2820,18 @@ export class AgentLoop {
 
     // Nothing to resume into. Saying "resumed" about an empty transcript would
     // point the tab at an old conversation for no reason.
-    if (!this.conversationHistory?.length) return null;
+    if (!this.conversationHistory?.length) {
+      this._freshChatOwed = true;
+      return null;
+    }
 
     if (this.chatThread?.id) {
       this._toExtension('open_thread', { thread: this.chatThread });
       return 'thread';
     }
 
+    // A recap is written for a chat that has not seen this conversation.
+    this._freshChatOwed = true;
     if (this.promptBuilder) this.promptBuilder.pendingRecap = this.conversationHistory;
     return 'recap';
   }
@@ -2839,6 +2880,7 @@ export class AgentLoop {
       while (!(this.modelOptions || []).length && Date.now() < until && !this._warmCancelled) {
         await new Promise((r) => setTimeout(r, 100));
       }
+      if (!this._warmCancelled) await this._startFreshChatIfOwed();
       if (this._warmCancelled) {
         outcome = 'cancelled';
       } else {

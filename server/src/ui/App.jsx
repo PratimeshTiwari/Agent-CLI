@@ -694,8 +694,19 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * How the warm-up went (v5.27), until the first message is sent. Read off the
    * loop: the idle edge that ends a warm-up re-renders this.
    */
-  const warmNote = history.length === 0 && !isProcessing
+  // "Until the first message", not "while the transcript is empty": after
+  // `/new` it holds the local "New chat" row, and the warm-up that follows was
+  // answered with nothing on screen to say so (v7.9).
+  const warmNote = !history.some((t) => t.role === 'user' && !t.isLocal) && !isProcessing
     && (agentLoop.warmState === 'ready' || agentLoop.warmState === 'failed') ? agentLoop.warmState : null;
+  /*
+   * The slot's rows hug the input box (v7.9): the prompt's blank row moves
+   * above them, so they read as about the next message rather than as the end
+   * of the last reply. Only while the prompt is up and no spinner sits between;
+   * otherwise the margin stays where it was. One row moved, none added.
+   */
+  const noticeHugsInput = Boolean(warmNote || mismatch) && !isProcessing
+    && !diffRequest && !terminalOpen && !activeMenu && !compact;
 
   const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0)
     + (warmNote ? 1 : 0) + (healthNote ? 1 : 0);
@@ -1687,6 +1698,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             Still one truncated row charged through `noticeRows`, so the frame
             budget is unchanged; the part to keep is on the left.
           */}
+          <Box flexDirection="column" marginTop={noticeHugsInput ? 1 : 0}>
           {warmNote === 'ready' && (
             <Text dimColor wrap="truncate">
               <Text color={T.success}>{'✔ '}</Text>{'Ready — the setup prompt is in this chat; your first message goes alone'}
@@ -1713,8 +1725,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
               <Text dimColor>{'  ·  ctrl+b shows the tab'}</Text>
             </Text>
           )}
+          </Box>
 
           <InputBar
+            hugTop={noticeHugsInput}
             queued={queued}
             steered={steered}
             filedSession={agentLoop.filedSession}

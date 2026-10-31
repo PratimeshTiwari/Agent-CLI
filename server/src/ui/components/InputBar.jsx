@@ -23,6 +23,7 @@ import { keyCell } from '../keys-view.js';
  * the prompt is visible, so there is no state in which typing goes nowhere.
  */
 export function InputBar({
+  hugTop = false,
   queued = [],
   activeMenu,
   addPaste,
@@ -178,7 +179,8 @@ export function InputBar({
         the other is how the frame outgrows the viewport.
       */}
       {promptVisible && (
-        <Box flexDirection="column" marginTop={compact ? 0 : 1}>
+        // `hugTop`: App drew this blank row above its notices instead (v7.9).
+        <Box flexDirection="column" marginTop={compact || hugTop ? 0 : 1}>
           {/*
             What happened to the last conversation.
 

@@ -550,6 +550,14 @@ export async function handleSlashCommand(query, {
       return;
     }
 
+    // Bare `/effort mismatch` is the same kind of chooser (v7.9, "rather give
+    // a menu like other explaining what each does"); with a word it still sets.
+    if (command === 'effort' && args.length === 1 && args[0]?.toLowerCase() === 'mismatch') {
+      setActiveMenu({ type: 'mismatch-policy' });
+      setIsProcessing(false);
+      return;
+    }
+
     // Bare `/prompt` is a menu (v6.10, asked with a screenshot of the old text
     // table wrapping); `/prompt v2` still just sets.
     if (command === 'prompt' && args.length === 0) {
