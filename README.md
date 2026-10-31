@@ -123,6 +123,13 @@ cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1
 antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
 ```
 
+Antigravity IDE's command is `antigravity-ide`, and it is usually not on `PATH`; the full path works:
+
+```bash
+"/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide" \
+  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+```
+
 Then reload the window (**Developer: Reload Window**). Installing over an older version
 replaces it.
 
@@ -163,7 +170,7 @@ agent
 | `ctrl+o` | show or hide the task list |
 | `ctrl+b` | bring the Gemini tab to the front |
 | `shift+enter` | newline without sending, in terminals that report it (iTerm2, Ghostty, Kitty, WezTerm) and in VS Code, Cursor and Antigravity with the companion 1.8.8 |
-| `ctrl+n` | newline in any terminal (`ctrl+j` too) |
+| `ctrl+n` | newline in any terminal |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
 ### Commands worth knowing

@@ -15,7 +15,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentLoop } from '../../src/core/agent-loop.js';
+import { AgentLoop, NEW_CHAT_TIMEOUT_MS } from '../../src/core/agent-loop.js';
 import { SessionStore } from '../../src/storage/session-store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -149,8 +149,9 @@ test('a new chat is asked for twice before it is a failure (v7.9)', async (t) =>
   });
 
   await t.test('the default wait covers the extension\'s load and bridge waits', () => {
-    const src = fs.readFileSync(join(HERE, '../../src/core/agent-loop.js'), 'utf8');
-    const ms = Number(src.match(/startNewChat\(\{ timeoutMs = ([\d_]+) \}/)[1].replace(/_/g, ''));
+    const ms = NEW_CHAT_TIMEOUT_MS;
+    assert.ok(new AgentLoop({ workspace: mkdtempSync(join(tmpdir(), 'fresh-chat-')), mcpServer: {},
+      promptBuilder: {}, diffEngine: {}, riskClassifier: {} }).newChatTimeoutMs === ms);
     assert.ok(ms >= 13_000, `${ms} ms is shorter than a tab load (8 s) plus the bridge (5 s)`);
   });
 });

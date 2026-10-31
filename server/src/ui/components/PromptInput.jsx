@@ -31,14 +31,13 @@ import { visualRows, rowOf, moveVertical } from '../prompt-rows.js';
  *
  * Newlines are `shift+enter` where the terminal reports it (the kitty keyboard
  * protocol, or Esc+Enter, which the VS Code companion binds shift+enter to),
- * and `ctrl+n` (a hotkey) or `ctrl+j` (a literal line feed) in any terminal.
+ * and `ctrl+n` (a hotkey) in any terminal. ctrl+j is not one (v7.9).
  * Enter on its own always submits.
  */
 export function PromptInput({
   value,
   onChange,
   onSubmit,
-  onNewline,
   focus = true,
   placeholder = '',
   cursorRef,
@@ -141,10 +140,9 @@ export function PromptInput({
     if (key.rightArrow) { setCaret(Math.min(value.length, offset + 1)); return; }
 
     if (key.return) {
-      // Shift+Enter, or Esc+Enter arriving as meta, means a newline. The parent
-      // owns the distinction because it also has to stop `onSubmit` firing.
+      // Shift+Enter, or Esc+Enter arriving as meta, means a newline, decided
+      // here and only here: `onSubmit` never sees it.
       if (key.shift || key.meta) {
-        onNewline?.();
         edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
         return;
       }
@@ -160,23 +158,12 @@ export function PromptInput({
       return;
     }
 
-    if (key.ctrl || key.escape) {
-      // ctrl+j is a line feed and is the newline that works in every terminal.
-      if (input === '\n') {
-        onNewline?.();
-        edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
-      }
-      return;                                   // every other chord is handled upstream
-    }
+    if (key.ctrl || key.escape) return;         // chords are handled upstream
 
     if (!input) return;
-    // A bare line feed can also arrive without the ctrl flag depending on the
-    // terminal, and it means the same thing.
-    if (input === '\n') {
-      onNewline?.();
-      edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
-      return;
-    }
+    // A bare line feed is ctrl+j, which is no longer a newline (v7.9: shift+enter
+    // and ctrl+n are). Ignored rather than typed.
+    if (input === '\n') return;
     edit(value.slice(0, offset) + input + value.slice(offset), offset + input.length);
   }, { isActive: focus });
 

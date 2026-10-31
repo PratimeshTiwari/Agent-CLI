@@ -1902,7 +1902,8 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `promptExtraRows` and the field's window count the same rows, so a long wrapped prompt is
   charged what it draws. `❯ ` sits in a `flexShrink={0}` box, the v6.12 rule: beside a wrapped
   prompt Yoga squeezed it to one column. **Newlines:** shift+enter (kitty, or Esc+Enter, which
-  companion 1.8.8 binds shift+enter to in the editor's terminal), `ctrl+n` (a hotkey) and `ctrl+j`.
+  companion 1.8.8 binds shift+enter to in the editor's terminal) and `ctrl+n` (a hotkey); ctrl+j
+  is ignored (owner: not needed).
   `newlineRef` is gone: every newline set it and only an Enter cleared it, so the first Enter after
   any newline was eaten. Pty at 13 and 24 × 60: a four-line message sent by Enter, the draft back,
   `XX` typed one wrapped row up in the right column, 0 clears.

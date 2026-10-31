@@ -1413,7 +1413,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setPastes([]);
     },
     'delete-word': () => setInput((value) => value.replace(/\s*\S+\s*$/, '')),
-    // At the caret, like ctrl+j and shift+enter (v7.9). A chord, because
+    // At the caret, like shift+enter (v7.9). A chord, because
     // ctrl+n is not a line feed: the field would type its "n".
     newline: () => cursorRef.current?.apply?.((value, offset) => ({
       value: `${value.slice(0, offset)}\n${value.slice(offset)}`, offset: offset + 1,

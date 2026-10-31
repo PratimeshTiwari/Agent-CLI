@@ -27,6 +27,8 @@ function loop() {
   const enqueued = [];
   l._enqueueExtensionRequest = (p) => enqueued.push(p);
   l._releaseExtension = () => {};
+  // A browser that never answers a new chat: not what these test (v7.9).
+  l.newChatTimeoutMs = 20;
   l.callbacks = { sendToPanel() {}, injectPrompt() {} };
   l.sessionStore = { appendTurn() {}, saveHistory() {} };
   l.isProcessing = true;

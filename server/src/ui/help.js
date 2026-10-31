@@ -40,7 +40,7 @@ export const KEY_ROWS = [
   ['ctrl+u', 'clear the input'],
   ['ctrl+w', 'delete the last word'],
   ['shift+enter', 'newline, without sending'],
-  ['ctrl+n', 'newline in any terminal (ctrl+j too)'],
+  ['ctrl+n', 'newline in any terminal'],
   ['ctrl+x ctrl+s', 'steer the last queued message into the running turn'],
   ['ctrl+c ×2', 'quit — prints how to resume'],
 ];

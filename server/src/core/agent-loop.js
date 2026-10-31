@@ -57,6 +57,12 @@ const MAX_ROUNDS_PER_TURN = 30;
  * per turn forever, for a value that almost never moves.
  */
 const MODEL_POLL_INTERVAL_MS = 60000;
+/**
+ * How long one ask for a new chat waits (v7.9). Extension 1.55.0 answers once
+ * the page has loaded (up to 8 s) and the bridge is up (up to 5 s); asked twice.
+ * An instance field, so a test with a browser that never answers can be short.
+ */
+export const NEW_CHAT_TIMEOUT_MS = 15_000;
 
 /**
  * How long `discover_models` may go unanswered before it is written down.
@@ -456,6 +462,7 @@ export class AgentLoop {
     this._mismatchAcks = new Set();
     this._switchWaiters = [];
     this.pendingGeminiResponse = null;
+    this.newChatTimeoutMs = NEW_CHAT_TIMEOUT_MS;
     this.callbacks = null;
     this.isProcessing = false;
     // One in-flight prompt per model, not one for the whole bridge — see
@@ -2153,7 +2160,7 @@ export class AgentLoop {
    *
    * @returns {Promise<boolean>} whether a tab was told to start one
    */
-  startNewChat({ timeoutMs = 15_000 } = {}) {
+  startNewChat({ timeoutMs = this.newChatTimeoutMs ?? NEW_CHAT_TIMEOUT_MS } = {}) {
     /*
      * Never under a prompt in flight. Compaction used to call this while the
      * turn beside it was mid-round, so the tab moved to an empty chat and the
