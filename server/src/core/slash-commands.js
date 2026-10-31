@@ -467,6 +467,9 @@ export async function handleSlashCommand(loop, command, args) {
       loop.conversationHistory = [];
       loop.promptBuilder.resetPromptState();
       loop.contextChars = 0;
+      // The last chat's warm-up says nothing about this one (v7.9): the screen
+      // shows "Ready" until the first message, and that is now this chat's.
+      loop.warmState = null;
       // A fresh browser thread too, or the model keeps the old conversation's
       // memory while everything else has moved on. `startNewChat` clears
       // `chatThread` itself and keeps the outgoing id as `previousThread` —

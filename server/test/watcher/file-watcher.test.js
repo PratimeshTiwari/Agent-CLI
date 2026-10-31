@@ -145,3 +145,12 @@ test('a watcher that cannot start leaves the session running', async () => {
   assert.equal(w.watcher, null);
   w.stop();
 });
+
+test('an editor\'s atomic-save temp file is not a change (v7.9)', async () => {
+  const { isIgnored } = await import('../../src/watcher/file-watcher.js');
+  assert.equal(isIgnored('server/src/ui/mismatch-row.js.tmp.49691.0c7a4b70e972'), true);
+  assert.equal(isIgnored('notes.md~'), true);
+  assert.equal(isIgnored('src/App.jsx___jb_tmp___'), true);
+  assert.equal(isIgnored('server/src/ui/mismatch-row.js'), false, 'control: the file itself');
+  assert.equal(isIgnored('src/tmp.js'), false, 'control: a name with tmp in it');
+});

@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
-import { looksLikeMultipleDrafts, looksLikeCodeQuestion } from './drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCodeQuestion, looksLikeEmptyPromise } from './drift-detector.js';
 import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
 import { logError, logNotice } from './error-log.js';
 import { describeInstructionSources } from './instruction-sources.js';
@@ -57,6 +57,12 @@ const MAX_ROUNDS_PER_TURN = 30;
  * per turn forever, for a value that almost never moves.
  */
 const MODEL_POLL_INTERVAL_MS = 60000;
+/**
+ * How long one ask for a new chat waits (v7.9). Extension 1.55.0 answers once
+ * the page has loaded (up to 8 s) and the bridge is up (up to 5 s); asked twice.
+ * An instance field, so a test with a browser that never answers can be short.
+ */
+export const NEW_CHAT_TIMEOUT_MS = 15_000;
 
 /**
  * How long `discover_models` may go unanswered before it is written down.
@@ -431,6 +437,15 @@ export class AgentLoop {
     this.chatThread = this._resumeOnConnect
       ? (this.sessionStore.getThread?.() || null)
       : null;
+    /*
+     * A fresh session owes the browser a new chat (v7.9). The extension types
+     * into the tab it owns, and that tab is still on the last session's
+     * conversation: nothing ever moved it. Reported with a screenshot, a warm
+     * start's setup prompt sent under the previous chat's last reply. A cold
+     * start's first message went there too, less visibly. Spent by
+     * `_startFreshChatIfOwed` before the first prompt, and by `startNewChat`.
+     */
+    this._freshChatOwed = !this._resumeOnConnect;
     // Warm start (v5.27): `~/.agent/settings.json`, per person. Read once; the
     // first extension to identify spends it (`warmUpOnConnect`).
     this.startupMode = startupMode();
@@ -447,6 +462,7 @@ export class AgentLoop {
     this._mismatchAcks = new Set();
     this._switchWaiters = [];
     this.pendingGeminiResponse = null;
+    this.newChatTimeoutMs = NEW_CHAT_TIMEOUT_MS;
     this.callbacks = null;
     this.isProcessing = false;
     // One in-flight prompt per model, not one for the whole bridge — see
@@ -537,6 +553,9 @@ export class AgentLoop {
       // esc during the summary: the stop covers the message too.
       if (!this.isProcessing) return;
     }
+    // A fresh session's first message goes to a new chat, not the last one's.
+    await this._startFreshChatIfOwed();
+    if (!this.isProcessing) return;
     /*
      * The tab onto the effort's model before anything is typed (v5.28): the
      * user chose "switch" when asked (`options.switchTo`), or `/effort
@@ -589,6 +608,7 @@ export class AgentLoop {
       // One tool-amnesia retry per user turn; see handleGeminiResponse.
       this._deniedToolsOnce = false;
       this._steppedDownThisTurn = false;
+      this._promiseNudged = false;
       /**
        * What this turn has actually done, for the model to read back.
        *
@@ -802,6 +822,9 @@ export class AgentLoop {
       this._notify('⏸ Held a conclusion that arrived with its own tool calls — re-asking after the results.');
     }
 
+    // v3: "let me check X." with no call would end the turn on the promise.
+    const keepPromise = toolCalls.length === 0 && !premature && this._promisedAndStopped(cleanContent);
+
     // Show the response text (without tool call blocks) in the side panel
     if (cleanContent.trim() && !premature) {
       /**
@@ -848,7 +871,7 @@ export class AgentLoop {
       this.callbacks.sendToPanel({
         id: randomUUID(),
         type: 'agent_response',
-        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 },
+        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 || keepPromise },
         timestamp: Date.now(),
       });
       this._sendTaskList();
@@ -857,9 +880,47 @@ export class AgentLoop {
     // Execute tool calls
     if (toolCalls.length > 0) {
       await this._executeToolCalls(toolCalls);
+    } else if (keepPromise) {
+      this._askToKeepPromise(cleanContent);
     } else {
       this._finishTurn(cleanContent, { isFirstReply, premature });
     }
+  }
+
+  /**
+   * The reply said it would look and made no call (prompt v3, `lookFirst`).
+   *
+   * The loop goes on only when a reply carries a tool call, so "Let me check
+   * the symbol index." with nothing after it *is* the answer: the turn ends on
+   * a promise and the question is never answered. Seen on Flash-Lite, the rung
+   * v3's rule is for. Asked once per turn, because a second promise is a model
+   * that will not call, and asking again only spends rounds.
+   *
+   * Gated on the version so `/prompt` can compare v2 and v3 on what they do,
+   * not only on what they say.
+   */
+  _promisedAndStopped(text) {
+    if (this._promiseNudged || !this.promptBuilder._flag?.('lookFirst')) return false;
+    if (hasHandoverBlock(text)) return false;                  // next steps, not a promise
+    return looksLikeEmptyPromise(text);
+  }
+
+  _askToKeepPromise(text) {
+    this._promiseNudged = true;
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'empty_promise',
+      message: 'The reply said it would look and made no tool call; asked once to make it',
+      detail: String(text || '').trim().slice(-300),
+      meta: { effort: this.modelConfig?.effort || null, promptVersion: this.promptVersion },
+    });
+    // The row is the record on screen; a system turn as well drew it twice.
+    this._noticeRow('↻ It said it would look and made no call · asked it to make the call');
+    const anchor = this.promptBuilder._buildToolAnchor(this.subagentsEnabled, this._promptConfig());
+    this._sendToGemini([
+      'You said you would look, but your reply had no tool call, so nothing ran.',
+      'Make that call now, in a ```json block, and answer from what it returns.',
+      anchor,
+    ].filter(Boolean).join('\n'), this.callbacks);
   }
 
   /** A main-lane reply that arrived after its turn ended. Logged, released, dropped. */
@@ -1370,6 +1431,7 @@ export class AgentLoop {
     this.currentObjective = `Fix the failure in background task ${hit.taskId}`;
     this._deniedToolsOnce = false;
     this._steppedDownThisTurn = false;
+    this._promiseNudged = false;
     this._resentUnsubmittedOnce = false;
     this._failedRounds = 0;
 
@@ -1924,6 +1986,7 @@ export class AgentLoop {
     clearTimeout(this._modelOptionsWatchdog);
     this._modelOptionsWatchdog = null;
     this.modelOptions = models;
+    this._emitModels();
     // A fresh reading ends the suppression whether it agrees or not: from here
     // a disagreement is standing rather than in flight, and worth the row.
     this._switchInFlight = null;
@@ -1991,6 +2054,41 @@ export class AgentLoop {
 
     const plan = planModelSwitch(wanted, models, browserModelPin(this.modelConfig, wanted));
     if (plan.action === 'switch') this.switchModelTo(plan.model.label);
+  }
+
+  /**
+   * A model picked by hand in the tab (v7.9, extension 1.55.0): the picker's
+   * label, not the list. Marked in the list we have when it names one entry:
+   * exactly, or as its last word (`Flash` is `3.8 Flash`, not `3.1 Flash-Lite`).
+   * Otherwise the list is asked for again, which opens the menu once.
+   */
+  noteSelectedModel(label) {
+    const want = String(label || '').trim().toLowerCase();
+    if (!want) return;
+    const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
+    const name = (m) => m.label.trim().toLowerCase();
+    const exact = options.filter((m) => name(m) === want);
+    const tail = options.filter((m) => name(m).endsWith(` ${want}`));
+    const hit = exact.length === 1 ? exact[0] : tail.length === 1 ? tail[0] : null;
+    if (!hit) {
+      this.requestModelOptions?.(false);
+      return;
+    }
+    if (hit.selected) return;
+    this.modelOptions = this.modelOptions.map((m) => (m?.isMode ? m : { ...m, selected: m === hit }));
+    this._emitModels();
+  }
+
+  /** Told when the model list or its selection changes, so an idle screen redraws. */
+  onModels(fn) {
+    (this._modelListeners ||= new Set()).add(fn);
+    return () => this._modelListeners.delete(fn);
+  }
+
+  _emitModels() {
+    for (const fn of this._modelListeners || []) {
+      try { fn(this.modelOptions); } catch { /* a listener must not stop the update */ }
+    }
   }
 
   /**
@@ -2105,7 +2203,7 @@ export class AgentLoop {
    *
    * @returns {Promise<boolean>} whether a tab was told to start one
    */
-  startNewChat({ timeoutMs = 5000 } = {}) {
+  startNewChat({ timeoutMs = this.newChatTimeoutMs ?? NEW_CHAT_TIMEOUT_MS } = {}) {
     /*
      * Never under a prompt in flight. Compaction used to call this while the
      * turn beside it was mid-round, so the tab moved to an empty chat and the
@@ -2114,6 +2212,7 @@ export class AgentLoop {
      * by keeping the old thread and saying so.
      */
     if (this.extensionLock?.isBusy?.(mainLane(this.mainModel))) return Promise.resolve(false);
+    this._freshChatOwed = false;
     const previous = this.chatThread;
     this.chatThread = null;
     // A new chat is a new decision about compacting it (v7.5).
@@ -2178,19 +2277,63 @@ export class AgentLoop {
         if (this._pendingNewChat?.done === done) this._pendingNewChat = null;
         resolve(ok);
       };
-      // Deliberately NOT unref'd. This timer is the only thing that settles the
-      // promise when the browser never answers, so letting the process treat it
-      // as optional means the wait never ends — the hang the ack exists to
-      // remove, reintroduced by the ack. Caught by the test below.
-      const timer = setTimeout(() => done(false), timeoutMs);
-      this._pendingNewChat = { done };
-      this._toExtension('new_chat');
+      /*
+       * Asked twice before it is a failure (v7.9). Reported: `/compact` said
+       * the browser did not start a new conversation, and nothing tried again.
+       * Since extension 1.55.0 the ack waits for the page to load and the bridge
+       * to answer — up to 13 s — and this waited 5, so a slow load was a
+       * failure here and a new chat in the tab. The second ask settles that: a
+       * tab already on a new chat acks at once, and one that refused gets
+       * another go.
+       */
+      let attempts = 0;
+      let timer = null;
+      const ask = () => {
+        attempts += 1;
+        clearTimeout(timer);
+        // Deliberately NOT unref'd. This timer is the only thing that settles the
+        // promise when the browser never answers, so letting the process treat it
+        // as optional means the wait never ends — the hang the ack exists to
+        // remove, reintroduced by the ack. Caught by the test below.
+        timer = setTimeout(() => answer(false), timeoutMs);
+        // Nothing connected: nothing will answer, so do not wait the budget out.
+        this._newChatUndelivered = this._toExtension('new_chat') === false;
+        if (this._newChatUndelivered) done(false);
+      };
+      const answer = (ok) => {
+        if (settled) return;
+        if (ok || attempts >= 2) done(ok);
+        else ask();
+      };
+      this._pendingNewChat = { done, answer };
+      ask();
+    });
+  }
+
+  /**
+   * The new chat a fresh session owes (v7.9), before its first prompt: the
+   * warm-up, or the first message. Once. A failure is a notice, never a
+   * stopped turn: the prompt still goes, into whatever the tab holds, as before.
+   * Nothing connected yet keeps it owed for the next prompt.
+   */
+  async _startFreshChatIfOwed() {
+    if (!this._freshChatOwed || this.chatThread?.id) return;
+    const ok = await this.startNewChat();
+    if (ok) return;
+    if (this._newChatUndelivered) {
+      // `_toExtension` has already logged that nothing is connected.
+      this._freshChatOwed = true;
+      return;
+    }
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'fresh_chat',
+      message: 'Could not open a new chat for this session; the first prompt goes to the tab as it is',
     });
   }
 
   /** The extension answering `new_chat`. An unmatched ack is ignored, not thrown. */
   handleChatStarted(payload) {
-    this._pendingNewChat?.done(Boolean(payload?.ok));
+    this._pendingNewChat?.answer(Boolean(payload?.ok));
   }
 
   /**
@@ -2569,7 +2712,25 @@ export class AgentLoop {
   }
 
   _enqueueExtensionRequest(payload) {
-    this.extensionLock.enqueue(payload);
+    /*
+     * The conversation a main-lane prompt belongs to (v7.9). Reported: after
+     * the extension was reloaded it no longer knew its own tab (Chrome clears
+     * session storage on a reload), opened a blank `/app`, and typed a short
+     * turn into a chat that had never seen the task — the reply was a generic
+     * essay. A tab the extension has to open goes to this conversation instead.
+     */
+    const url = payload.isSubagent ? null : this._threadUrl();
+    this.extensionLock.enqueue(url ? { ...payload, threadUrl: url } : payload);
+  }
+
+  /** This session's Gemini conversation as a URL, or null for a new chat. */
+  _threadUrl() {
+    const id = this.chatThread?.id;
+    if (!id) return null;
+    const seen = this.browserTab?.url;
+    // The tab's own URL when it is this chat: it carries the `/u/<n>` account.
+    if (seen && this.browserTab?.thread === id) return seen;
+    return `https://gemini.google.com/app/${id}`;
   }
 
   /**
@@ -2784,13 +2945,18 @@ export class AgentLoop {
 
     // Nothing to resume into. Saying "resumed" about an empty transcript would
     // point the tab at an old conversation for no reason.
-    if (!this.conversationHistory?.length) return null;
+    if (!this.conversationHistory?.length) {
+      this._freshChatOwed = true;
+      return null;
+    }
 
     if (this.chatThread?.id) {
       this._toExtension('open_thread', { thread: this.chatThread });
       return 'thread';
     }
 
+    // A recap is written for a chat that has not seen this conversation.
+    this._freshChatOwed = true;
     if (this.promptBuilder) this.promptBuilder.pendingRecap = this.conversationHistory;
     return 'recap';
   }
@@ -2839,6 +3005,7 @@ export class AgentLoop {
       while (!(this.modelOptions || []).length && Date.now() < until && !this._warmCancelled) {
         await new Promise((r) => setTimeout(r, 100));
       }
+      if (!this._warmCancelled) await this._startFreshChatIfOwed();
       if (this._warmCancelled) {
         outcome = 'cancelled';
       } else {

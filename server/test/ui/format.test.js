@@ -347,3 +347,14 @@ test('inline maths: symbols are drawn, anything else stays TeX (v7.1)', () => {
   assert.match(plain('Run `echo $HOME$`.'), /echo \$HOME\$/);
   assert.equal(texToText('\\unknowncmd'), null);
 });
+
+test('a link costs no columns when a reply is wrapped (v7.9)', async () => {
+  const { fitLines, visibleWidth } = await import('../../src/ui/format.js');
+  const url = 'https://gemini.google.com/u/1/app/17d6b14b8a5d1ff2';
+  const link = `\x1b]8;;${url}\x1b\\${url}\x1b]8;;\x1b\\`;
+  assert.equal(visibleWidth(link), url.length);
+  // Reported as the URL broken after 44 characters on a 100-column screen.
+  assert.equal(fitLines(link, 98), link);
+  // Control: a URL wider than the screen still wraps.
+  assert.ok(fitLines(link, 30).includes('\n'));
+});

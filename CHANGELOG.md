@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#139](https://github.com/PratimeshTiwari/Agent-CLI/pull/139)
+### v7 — 2026-10-30 … · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#140](https://github.com/PratimeshTiwari/Agent-CLI/pull/140)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v7.6 | 2026-10-31 | `v7.6/code-outline-on-partial-reads` | [#137](https://github.com/PratimeshTiwari/Agent-CLI/pull/137) | A partial read of code ends with the definitions it did not show |
 | v7.7 | 2026-10-31 | `v7.7/doctor-revert-checked-for-real` | [#138](https://github.com/PratimeshTiwari/Agent-CLI/pull/138) | The `/doctor` revert guard, driven end to end; it says why before npm runs |
 | v7.8 | 2026-10-31 | `v7.8/attach-files-from-the-editor` | [#139](https://github.com/PratimeshTiwari/Agent-CLI/pull/139) | Right-click → Attach to Agent CLI puts files at the prompt as tags (companion 1.8.7) |
+| v7.9 | 2026-10-31 | `v7.9/fresh-chat-and-tab-row` | [#140](https://github.com/PratimeshTiwari/Agent-CLI/pull/140) | A fresh session starts in a new chat; `/settings` names the Gemini tab; Browser differs is a chooser; a model mismatch is the footer's `⚠`, seen as soon as the tab changes, and asks match the agent or the browser; a new chat is asked for twice, and `/compact` shows its row and a spinner; a reopened tab returns to its conversation; ↑/↓ move by drawn row and keep the draft, shift+enter and ctrl+n are newlines (companion 1.8.8); `docs/agent-folder.md`, and a test that wrote into `.agent/`; prompt v3 (v2 + look before answering on low and medium, and one ask when a reply promises to look and makes no call) (extension 1.55.0) |
 
 ### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useInput } from 'ink';
 import { FOCUS_INPUT, FOCUS_TERMINAL } from '../constants.js';
 
@@ -37,7 +38,6 @@ export function useKeyBindings({
   inputHistory,
   input,
   isProcessing,
-  newlineRef,
   queued = [],
   setQueued,
   setFocus,
@@ -52,6 +52,7 @@ export function useKeyBindings({
   slashOpen,
   slashSelected,
 }) {
+  const draftRef = useRef('');
   useInput((char, key) => {
     // Deliberately inert while a modal owns the screen: diffs and menus are
     // answered through their own SelectInput, so a stray keystroke can never
@@ -63,11 +64,9 @@ export function useKeyBindings({
     // report the modifier under the kitty keyboard protocol, which Ink
     // negotiates in cli-ui; Esc+Enter (\x1b\r) is the fallback terminals are
     // commonly configured to send, and reaches us as meta+return.
-    if (key.return && (key.shift || key.meta)) {
-      newlineRef.current = true;
-      setInput((value) => `${value}\n`);
-      return;
-    }
+    // PromptInput inserts it at the caret; this only keeps the key from
+    // reaching anything below (v7.9 — it also appended a second one at the end).
+    if (key.return && (key.shift || key.meta)) return;
 
     // Shift+Tab cycles plan <-> auto. Checked before the plain Tab handler,
     // which would otherwise swallow it.
@@ -167,6 +166,9 @@ export function useKeyBindings({
       }
 
       if (inputHistory.length > 0) {
+        // What was being typed is kept, and down past the newest prompt gives
+        // it back (v7.9). It was replaced, and down cleared the box.
+        if (historyIdx === -1) draftRef.current = input;
         const nextIdx = historyIdx === -1 ? inputHistory.length - 1 : Math.max(0, historyIdx - 1);
         setHistoryIdx(nextIdx);
         setInputAtEnd(inputHistory[nextIdx]);
@@ -190,7 +192,8 @@ export function useKeyBindings({
         const nextIdx = historyIdx + 1;
         if (nextIdx >= inputHistory.length) {
           setHistoryIdx(-1);
-          setInput('');
+          setInputAtEnd(draftRef.current);
+          draftRef.current = '';
           setPaletteSuppressed(false);
         } else {
           setHistoryIdx(nextIdx);

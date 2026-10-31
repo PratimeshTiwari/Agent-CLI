@@ -86,3 +86,12 @@ describe('shortcutNotice — the global shortcut nobody bound', async () => {
     assert.equal(shortcutNotice(null), null, 'could not read it is not the same as unbound');
   });
 });
+
+test('an extension newer than the agent asks for a restart, not an "update" to a lower version (v7.9)', async () => {
+  const { extensionVersionNotice, compareVersions } = await import('../../src/core/extension-version.js');
+  assert.equal(compareVersions('1.55.0', '1.54.0'), 1);
+  assert.equal(compareVersions('1.9.0', '1.10.0'), -1, 'numeric, not string, order');
+  assert.equal(compareVersions('1.54', '1.54.0'), 0);
+  assert.match(extensionVersionNotice('1.55.0', '1.54.0'), /^⚠ Agent restart needed · extension 1\.55\.0, this agent expects 1\.54\.0/);
+  assert.match(extensionVersionNotice('1.42.0', '1.54.0'), /Extension update · 1\.42\.0 → 1\.54\.0/, 'control: older still says update');
+});

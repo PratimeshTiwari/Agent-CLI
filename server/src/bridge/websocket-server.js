@@ -586,6 +586,11 @@ export class WebSocketServer {
         this.agentLoop.noteModelOptions(payload?.models, payload?.switchedTo, payload?.requested);
         break;
 
+      case 'model_selected':
+        // Picked by hand in the tab (extension 1.55.0): just the name.
+        this.agentLoop.noteSelectedModel?.(payload?.label);
+        break;
+
       /**
        * The side panel answering something the turn is blocked on.
        *
@@ -941,6 +946,13 @@ export class WebSocketServer {
           if (!client.reportedModels || client.reportedModels.join() !== payload.connectedModels.join()) {
             client.reportedModels = payload.connectedModels;
           }
+        }
+        // Which tab the main lane types into (extension 1.55.0), for
+        // `/settings` → Gemini tab. An older build sends no `mainTab` key,
+        // which leaves the field unset rather than claiming "no tab".
+        if (this.agentLoop && payload && 'mainTab' in payload) {
+          this.agentLoop.browserTab = payload.mainTab || null;
+          this.agentLoop.subagentTabIds = Array.isArray(payload.subagentTabIds) ? payload.subagentTabIds : [];
         }
         break;
 

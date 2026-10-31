@@ -113,6 +113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
        * to the worker, and nothing was checking.
        */
       case 'model_options':
+      case 'model_selected': // a model picked by hand in the tab (1.55.0)
       case 'error':
         sendToServer({ type, payload });
         sendResponse({ success: true });

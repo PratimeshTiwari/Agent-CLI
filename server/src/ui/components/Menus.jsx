@@ -11,13 +11,14 @@ import { oneLine } from '../format.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
 import { panelRoom, wrapLines, cutStart } from '../panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../settings-view.js';
-import { sliderLayout, stopModel } from '../effort-slider.js';
+import { sliderLayout, stopModel, tabDiffers } from '../effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../logs-view.js';
 import { canPickFolder, pickFolder } from '../../core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../core/effort.js';
+import { mismatchPolicy } from '../../core/model-fallback.js';
 import { describeSettings, filterSettings, stagedChanges, changedLines, SETTING_GROUPS } from '../../core/settings.js';
 import { listWorkspaceCandidates } from '../../core/workspaces.js';
 import { skillsDir, agentDir } from '../../core/paths.js';
@@ -53,7 +54,7 @@ import {
  * each choice there needs its cost said beside it (Effort, Startup), or the
  * value is a list (Command rules). ←/→ still change them in place.
  */
-const OPENS_CHOOSER = new Set(['/effort', '/startup', '/allowlist']);
+const OPENS_CHOOSER = new Set(['/effort', '/effort mismatch', '/startup', '/allowlist']);
 
 /** A session's own timestamp, formatted, or '' when it has none. */
 function stampOf(session) {
@@ -117,10 +118,12 @@ export function Menus({
     // the row does (v6.1) — found by the command the row would run for it.
     if (menu?.returnTo?.type === 'settings') {
       const wanted = `/${[command, ...args].join(' ')}`;
-      const row = describeSettings(agentLoop).find((r) => r.restore && r.restore(args[0]) === wanted);
+      // The value is the last word: `/startup warm`, `/effort mismatch ask`.
+      const value = args[args.length - 1];
+      const row = describeSettings(agentLoop).find((r) => r.restore && r.restore(value) === wanted);
       if (row) {
         const { [row.label]: _old, ...rest } = menu.returnTo.pending || {};
-        const pending = String(args[0]) === String(row.value) ? rest : { ...rest, [row.label]: args[0] };
+        const pending = String(value) === String(row.value) ? rest : { ...rest, [row.label]: value };
         setActiveMenu({ ...menu.returnTo, pending });
         return;
       }
@@ -138,7 +141,8 @@ export function Menus({
       // `⚙ effort High → Low` appeared with nothing above saying where it came
       // from (reported: "i changed effort but effort did not show up").
       setHistory((prev) => [...prev,
-        { role: 'user', content: `/${command}`, isLocal: true },
+        // As typed: the chooser's own words, not the value picked in it.
+        { role: 'user', content: `/${[command, ...args.slice(0, -1)].join(' ')}`, isLocal: true },
         { role: 'assistant', content: result.message, isLocal: true }]);
     }
   }, [agentLoop, setActiveMenu, setFocus, setHistory]);
@@ -592,6 +596,8 @@ export function Menus({
           const stops = EFFORT_LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
           const model = stops[at];
           const tick = marked.id === current ? '  ✔ current' : '';
+          const differs = tabDiffers(model, agentLoop.modelOptions);
+          const warn = differs ? `  ⚠ browser ${differs}` : '';
           const { tight } = fit('', 5);
           // A blank row each side of the model line (owner, 2026-10-26: "fix
           // spacing between effort, model name and description, just a bit"),
@@ -625,8 +631,9 @@ export function Menus({
               </Text>
               {airy ? <Text> </Text> : null}
               <Text wrap="truncate" dimColor={!model.available}>
-                {lead(model.text + tick)}{model.text}
+                {lead(model.text + tick + warn)}{model.text}
                 {tick ? <Text color={T.success}>{tick}</Text> : null}
+                {warn ? <Text color={T.attention}>{warn}</Text> : null}
               </Text>
               {airy ? <Text> </Text> : null}
               <Text dimColor wrap="truncate">{lead(marked.blurb)}{marked.blurb}</Text>
@@ -808,21 +815,25 @@ export function Menus({
           const setting = resolveEffort(ask.setting);
           const browserRung = ask.browserRung ? resolveEffort(ask.browserRung) : null;
           const { sub, tight, room } = fit(
-            `Effort is ${setting.name} (${ask.wanted}); the browser tab is on ${ask.current}.`,
+            `Browser ${ask.current} ≠ agent ${ask.wanted} (effort ${setting.name}).`,
           );
+          /*
+           * Two answers (v7.9): one side moves to the other. There were three,
+           * and "Send on 3.8 Flash" (this once, effort unchanged) sat between
+           * the two real choices; asked "what is this third option, is it
+           * needed?". Matching the browser sets the effort to the rung that
+           * maps to the tab's model; with no such rung (a model no rung answers
+           * to) it can only mean sending on it, not asked again.
+           */
+          const matchBrowser = browserRung && browserRung.id !== setting.id
+            ? { detail: `set effort to ${browserRung.name} (${ask.current}), then send`, value: 'set' }
+            : { detail: `send on ${ask.current} · not asked again for this`, value: 'follow' };
           const items = [
-            { label: `Switch the browser to ${ask.wanted}`, detail: 'then send · steps down if it will not switch', value: 'switch' },
-            {
-              label: `Send on ${ask.current}`,
-              detail: `with ${(browserRung || setting).name}'s prompt · not asked again for this`,
-              value: 'follow',
-            },
-            ...(browserRung && browserRung.id !== setting.id
-              ? [{ label: `Set effort to ${browserRung.name}`, detail: 'matches the browser from now on', value: 'set' }]
-              : []),
+            { label: 'Match the agent', detail: `switch the tab to ${ask.wanted}, then send`, value: 'switch' },
+            { label: 'Match the browser', ...matchBrowser },
           ];
           return (
-            <Panel width={W} title="Effort and browser differ" tone="attention" sub={sub} tight={tight}
+            <Panel width={W} title="Model mismatch" tone="attention" sub={sub} tight={tight}
               keys="enter choose · esc cancel — your message goes back in the box">
               <Choices
                 numbered
@@ -860,6 +871,34 @@ export function Menus({
                   { label: 'Warm', detail: 'when Chrome connects · one extra message', value: 'warm', current: warm },
                 ]}
                 onSelect={(item) => applyAndReturn(activeMenu, 'startup', [item.value])}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'mismatch-policy' && (() => {
+          /*
+           * "Browser differs" as a chooser (v7.9). It was a ←/→ ladder of three
+           * bare words, `ask · follow · switch`, and the owner found it
+           * "confusing even for me": the words name a reaction without saying
+           * to what. The sub-line says the situation; each row, what happens.
+           */
+          const policy = mismatchPolicy(agentLoop.modelConfig);
+          const order = ['ask', 'follow', 'switch'];
+          const { sub, tight, room } = fit('What a message does when the tab is on another model.');
+          return (
+            <Panel width={W} title="When the browser differs" status={policy} statusTone="accent" sub={sub} tight={tight}
+              keys={`↑↓ move · 1–3 or enter choose · esc ${activeMenu.returnTo ? 'back' : 'cancel'}`}>
+              <Choices
+                numbered
+                limit={room}
+                initialIndex={Math.max(0, order.indexOf(policy))}
+                items={[
+                  { label: 'Ask', detail: 'stop first: match the agent or match the browser', value: 'ask', current: policy === 'ask' },
+                  { label: 'Follow', detail: "send on the tab's model and never ask", value: 'follow', current: policy === 'follow' },
+                  { label: 'Switch', detail: "move the tab to the effort's model before sending", value: 'switch', current: policy === 'switch' },
+                ]}
+                onSelect={(item) => applyAndReturn(activeMenu, 'effort', ['mismatch', item.value])}
               />
             </Panel>
           );
@@ -1102,6 +1141,10 @@ export function Menus({
                     }
                     if (picked.run === '/startup') {
                       setActiveMenu({ type: 'startup', returnTo: back });
+                      return;
+                    }
+                    if (picked.run === '/effort mismatch') {
+                      setActiveMenu({ type: 'mismatch-policy', returnTo: back });
                       return;
                     }
                     if (picked.run === '/allowlist') {

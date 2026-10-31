@@ -18,6 +18,20 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.55.0 — 2026-10-31
+
+**A new chat waits until it has loaded.** The content script set `location.href` and answered at
+once, so the server heard "started" while the old conversation was still the page. With the
+server's fresh-session new chat (v7.9), a warm start sends straight after that answer. The worker
+now navigates the tab itself, keeps the `/u/<n>` account, waits for the load and for the bridge,
+and skips the whole thing when the tab is already a new chat. **`tab_status` says which tab the
+main lane uses** (`mainTab`: id, window, chat id, title) and lists subagent tabs, for `/settings` →
+Gemini tab. **A model picked by hand in the tab reaches the CLI in about 1.5 s**: the bridge
+watches the picker's label (no menu opened) and sends `model_selected`. It used to be noticed only
+at the end of the next turn. **A tab reopened for the main lane goes back to its conversation**:
+`inject_prompt` carries `threadUrl`, and `ensureModelTab` opens it rather than a blank chat, which
+had never seen the task the next prompt assumed (after a reload, which forgets the owned tab).
+
 ### 1.54.0 — 2026-10-30
 
 **Each trace says how the prompt was typed** (#104): `typed` (`pasted`, `pasted_late` or

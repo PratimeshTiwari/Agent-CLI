@@ -325,10 +325,48 @@ const CODE_QUESTION = [
    * quietly answering "no".
    */
   /\b(ui|cli|api|watcher|bridge|extension|agent|subagent|loop|prompt|tool|tier|effort|hook|endpoint|schema|config|session|transcript|side ?panel|content script|service worker|daemon|middleware|migration)\b/i,
+  /*
+   * "In this node server", and a name written the way code writes it (v7.9).
+   *
+   * Missed: "can you check how the symbol matching is done in this node
+   * server" — answered on Flash-Lite from AGENT.md's map with nothing opened,
+   * the founding failure exactly, and no row. *This* plus the kind of thing it
+   * is points at the one in front of us; `find_symbol` and `buildPrompt` are
+   * nobody's prose.
+   */
+  /\bth(is|e) (\w+ )?(server|project|app|cli|codebase|extension|backend|frontend|service|script|tool|code)\b/i,
+  /\b[a-z][a-z0-9]*_[a-z0-9_]+\b|\b[a-z]+[A-Z][A-Za-z0-9]+\b/,
+  /\bhow (is|are) [^?.!]{1,40}\b(done|implemented|handled|matched|computed|built|parsed|stored|wired)\b/i,
 ];
 
 export function looksLikeCodeQuestion(text) {
   const t = String(text || '').trim();
   if (t.length < 8) return false;
   return CODE_QUESTION.some((re) => re.test(t));
+}
+
+/**
+ * A reply that says it will look and makes no call (v7.9, prompt v3's
+ * `lookFirst`).
+ *
+ * Seen on Flash-Lite: "Let me check the symbol index." and nothing after it,
+ * which ends the turn — the loop only goes on when there is a tool call, so the
+ * promise is the answer. It is judged on the **end** of the reply, where an
+ * unkept promise sits; "Let me check the parser:" followed by what it found is
+ * a reply that kept it.
+ *
+ * Not a promise: an offer ("if you'd like, I can check…", "would you like me
+ * to…", "let me know"), a question, or the next steps of a handover.
+ */
+const PROMISE = /\b(?:let me|let's|i'?ll|i will|i'm going to|i am going to|i need to|i'll now|now i'll)\s+(?:now\s+|first\s+|quickly\s+|go and\s+|go\s+)?(?:check|look|read|open|search|inspect|examine|grep|find|investigate|explore|dig|scan|trace|pull up|take a look|have a look|review the (?:code|file|source))\b/i;
+const OFFER = /\b(?:if you(?:'d| would)? (?:like|want)|would you like|do you want|shall i|should i|let me know|if needed|if that helps|happy to)\b/i;
+
+export function looksLikeEmptyPromise(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 4000) return false;
+  // The last two sentences: a promise earlier in the reply was followed by
+  // something, and that something is what to judge.
+  const sentences = t.split(/(?<=[.!?:])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  const tail = sentences.slice(-2);
+  return tail.some((s) => PROMISE.test(s) && !OFFER.test(s) && !s.endsWith('?'));
 }

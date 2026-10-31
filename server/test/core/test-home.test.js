@@ -41,3 +41,20 @@ test('no test deletes the home override instead of restoring it', () => {
   }
   assert.deepEqual(offenders, [], 'restore the saved value; deleting it points later tests at the real ~/.agent');
 });
+
+/*
+ * The same leak one level down (v7.9): a stub loop with `workspace:
+ * process.cwd()` writes into *this checkout's* `.agent/` — the suite runs in
+ * `server/`, so the walk up found the repo's `.agent/` and filed everything
+ * under a `server` scope. Compaction's tests grew a 4 MB archive there.
+ */
+test('no test hands the agent this checkout as its workspace', () => {
+  const bare = ['workspace:', 'process.cwd()'].join(' ');
+  const offenders = [];
+  for (const rel of readdirSync(TEST_ROOT, { recursive: true })) {
+    if (!String(rel).endsWith('.js')) continue;
+    const lines = readFileSync(join(TEST_ROOT, rel), 'utf8').split('\n');
+    lines.forEach((line, i) => { if (line.includes(bare)) offenders.push(`${rel}:${i + 1}`); });
+  }
+  assert.deepEqual(offenders, [], 'use a mkdtempSync workspace');
+});

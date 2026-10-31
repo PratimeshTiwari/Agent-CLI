@@ -34,6 +34,8 @@ import { checkInstalled, startupWarning } from '../core/doctor.js';
 import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../core/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../core/slash-commands.js';
+import { progressText } from '../core/compaction.js';
+import { visualRows } from './prompt-rows.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
@@ -359,7 +361,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [paletteSuppressed, setPaletteSuppressed] = useState(false);
   // Set by the key bindings when Enter carried a modifier, read by InputBar's
   // deferred submit. A ref because the two run in the same event dispatch.
-  const newlineRef = useRef(false);
 
   const { stdout } = useStdout();
 
@@ -615,9 +616,12 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // is never scrolled, and never so much that the transcript disappears behind
   // the thing you are typing into.
   const promptMaxRows = Math.max(1, Math.floor(terminalHeight / 3));
+  // Drawn rows, not line breaks (v7.9): a long line wraps, and was charged
+  // one row while Ink drew several. `❯ ` takes two columns.
+  const promptWidth = Math.max(1, terminalWidth - 2);
   const promptExtraRows = Math.max(
     0,
-    Math.min(input.split('\n').length, promptMaxRows) - 1,
+    Math.min(visualRows(input, promptWidth).length, promptMaxRows) - 1,
   );
 
   // A terminal too short for the furniture drops its spacing rather than
@@ -673,7 +677,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const sentRung = resolveEffort(agentLoop._promptEffort?.() ?? effortRung.id);
   // Not during a step-down either (v5.28): the tab is lower on purpose, and
   // the status bar's `↓` says so for the rest of the session.
-  const mismatch = (isCompactHeight(terminalHeight) || agentLoop._switchInFlight || agentLoop.effortFallback)
+  const modelDiffers = (agentLoop._switchInFlight || agentLoop.effortFallback)
     ? null
     : modelMismatch(
     effortRung.id,
@@ -694,10 +698,21 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * How the warm-up went (v5.27), until the first message is sent. Read off the
    * loop: the idle edge that ends a warm-up re-renders this.
    */
-  const warmNote = history.length === 0 && !isProcessing
+  // "Until the first message", not "while the transcript is empty": after
+  // `/new` it holds the local "New chat" row, and the warm-up that follows was
+  // answered with nothing on screen to say so (v7.9).
+  const warmNote = !history.some((t) => t.role === 'user' && !t.isLocal) && !isProcessing
     && (agentLoop.warmState === 'ready' || agentLoop.warmState === 'failed') ? agentLoop.warmState : null;
+  /*
+   * The slot's rows hug the input box (v7.9): the prompt's blank row moves
+   * above them, so they read as about the next message rather than as the end
+   * of the last reply. Only while the prompt is up and no spinner sits between;
+   * otherwise the margin stays where it was. One row moved, none added.
+   */
+  const noticeHugsInput = Boolean(warmNote) && !isProcessing
+    && !diffRequest && !terminalOpen && !activeMenu && !compact;
 
-  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0) + (mismatch ? 1 : 0)
+  const noticeRows = (update.available ? 1 : 0) + (pendingReload ? 1 : 0)
     + (warmNote ? 1 : 0) + (healthNote ? 1 : 0);
 
   /**
@@ -1105,8 +1120,19 @@ export function App({ agentLoop, wsServer, closing = false }) {
       if (raises) {
         slowCommands.current += 1;
         setIsProcessing(true);
-        setStatus('Thinking...');
         setActiveToolCalls([]);
+        /*
+         * `/compact` says what it is doing (v7.9). Its own progress statuses
+         * never reached this screen: between turns the loop's callbacks are the
+         * background ones, which go to the side panel, so the row read
+         * "Thinking…" for the whole compaction.
+         */
+        if (slashWord.toLowerCase() === 'compact') {
+          isToolRunningRef.current = true;
+          setStatus(progressText());
+        } else {
+          setStatus('Thinking...');
+        }
       }
       /*
        * Two local commands can overlap (v5.30): `/doctor` is still asking npm
@@ -1247,6 +1273,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * loop's busy → idle edge, wherever it is written from. The busy flag comes
    * down with it — the turn is over, and a spinner must not outlive it.
    */
+  // The tab's model changed (v7.9): redraw, so the footer's ⚠ comes and goes
+  // when you switch by hand, not at the end of the next turn.
+  useEffect(() => agentLoop.onModels?.(() => setIdleTick((n) => n + 1)), [agentLoop]);
+
   useEffect(() => agentLoop.onIdle?.(() => {
     setIsProcessing(false);
     setIdleTick((n) => n + 1);
@@ -1383,6 +1413,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
       setPastes([]);
     },
     'delete-word': () => setInput((value) => value.replace(/\s*\S+\s*$/, '')),
+    // At the caret, like shift+enter (v7.9). A chord, because
+    // ctrl+n is not a line feed: the field would type its "n".
+    newline: () => cursorRef.current?.apply?.((value, offset) => ({
+      value: `${value.slice(0, offset)}\n${value.slice(offset)}`, offset: offset + 1,
+    })),
 
     'copy-code': () => retiredKey('ctrl+y', '/copy code'),
   }, !diffRequest && !activeMenu);
@@ -1400,7 +1435,6 @@ export function App({ agentLoop, wsServer, closing = false }) {
     historyIdx,
     inputHistory,
     isProcessing,
-    newlineRef,
     setHistoryIdx,
     setInput,
     setInputAtEnd,
@@ -1501,7 +1535,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     tasks: isProcessing && tasksDone ? tasksDone : null,
     version: agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION ? agentLoop.promptVersion : null,
     model: browserModelLabel,
-    modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : mismatch ? '⚠' : null) : null,
+    modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : modelDiffers ? '⚠' : null) : null,
     effort: resolveEffort(agentLoop.modelConfig?.effort).id,
     pct: syncTokenEstimate > 0 ? tokenPct : null,
     meter: contextMeter(tokenPct),
@@ -1675,21 +1709,16 @@ export function App({ agentLoop, wsServer, closing = false }) {
           />
 
           {/*
-            The model the prompt is written for, against the one the tab is on.
-            Both names, because "wrong model" without saying which is a warning
-            you cannot act on — and `ctrl+b` is the key that shows the tab, so
-            the row carries the fix rather than only the complaint.
-
-            Directly above the input, in a slot of its own (2026-10-26). It used
-            to sit at the top of the live frame, above the in-flight turn, so it
-            appeared over a turn's rows mid-turn and moved with them — reported
-            as "looks odd". Here it stays put while the turn above it grows.
-            Still one truncated row charged through `noticeRows`, so the frame
-            budget is unchanged; the part to keep is on the left.
+            The slot above the input: the warm-up's answer. The model-mismatch
+            row lived here too until v7.9, when the owner cut it to the footer's
+            `⚠ 3 Flash` and nothing else ("keep it simple and minimal"): the
+            next message asks anyway, and the ask says both names.
           */}
+          <Box flexDirection="column" marginTop={noticeHugsInput ? 1 : 0}>
           {warmNote === 'ready' && (
             <Text dimColor wrap="truncate">
-              <Text color={T.success}>{'✔ '}</Text>{'Ready — the setup prompt is in this chat; your first message goes alone'}
+              {/* Just the word (v7.9): the sentence after it was "too verbose". */}
+              <Text color={T.success}>{'✔ '}</Text>{'Ready'}
             </Text>
           )}
           {warmNote === 'failed' && (
@@ -1697,24 +1726,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
               {'· Warm-up did not finish — your first message carries the setup, as on a cold start'}
             </Text>
           )}
-          {mismatch && (
-            <Text color={T.attention} wrap="truncate">
-              {'⚠ tab is on '}<Text bold>{mismatch.current}</Text>
-              {/* What the next message will do about it (v5.28): ask, switch, or follow. */}
-              {agentLoop.mismatchToAsk?.() ? (<>
-                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>{' · your next message asks first'}
-              </>) : mismatchPolicy(agentLoop.modelConfig) === 'switch' ? (<>
-                {' · the next message switches it to '}<Text bold>{mismatch.wanted}</Text>
-              </>) : sentRung.id !== effortRung.id ? (<>
-                {' — sending the '}<Text bold>{sentRung.name}</Text>{` prompt (effort ${effortRung.name})`}
-              </>) : (<>
-                {` · effort ${effortRung.name} wants `}<Text bold>{mismatch.wanted}</Text>
-              </>)}
-              <Text dimColor>{'  ·  ctrl+b shows the tab'}</Text>
-            </Text>
-          )}
+          </Box>
 
           <InputBar
+            hugTop={noticeHugsInput}
             queued={queued}
             steered={steered}
             filedSession={agentLoop.filedSession}
@@ -1737,11 +1752,11 @@ export function App({ agentLoop, wsServer, closing = false }) {
             addPaste={addPaste}
             pastes={pastes}
             mode={mode}
-            newlineRef={newlineRef}
             setInput={setInput}
             setInputAtEnd={setInputAtEnd}
             cursorRef={cursorRef}
             promptMaxRows={promptMaxRows}
+            promptWidth={promptWidth}
             animTick={animTick}
             setSlashIdx={setSlashIdx}
             slashMatches={slashMatches}

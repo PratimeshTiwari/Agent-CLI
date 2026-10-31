@@ -17,7 +17,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { compactHistory } from '../../src/core/compaction.js';
 
 const rows = (n, len) => Array.from({ length: n }, (_, i) => ({
@@ -29,7 +31,10 @@ function stubLoop(history, answer = { ok: false, timedOut: true }) {
   const seen = { askOpts: null, prompt: null, calls: 0, statuses: [], newChat: 0 };
   const loop = {
     conversationHistory: history,
-    workspace: process.cwd(),
+    // Never the repo: compaction archives the turns and logs a notice, and
+    // with `process.cwd()` that was `.agent/server/` in this checkout — a
+    // 4 MB archive grown by every `npm test` since 2026-09-21.
+    workspace: mkdtempSync(join(tmpdir(), 'compact-budget-')),
     contextTokens: 1234,
     sessionStore: { saveHistory() {}, appendTurn() {} },
     promptBuilder: { resetPromptState() {} },
@@ -95,11 +100,11 @@ test('what it does do', async (t) => {
     assert.match(r.message, /condensed locally/);
   });
 
-  await t.test('the wait is shown as a progress bar, stage by stage', async () => {
+  await t.test('the wait is one spinner line; the stages ride along undrawn (v7.9)', async () => {
     const { loop, seen } = stubLoop(rows(12, 400));
     await compactHistory(loop);
     assert.deepEqual(seen.statuses.map((p) => p.progress?.step), [1, 2, 3]);
-    assert.match(seen.statuses[0].message, /Compacting ▰▱▱ summarising in this chat/);
+    for (const s of seen.statuses) assert.equal(s.message, 'Compacting conversation…');
   });
 });
 

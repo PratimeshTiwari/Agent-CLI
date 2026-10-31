@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { backspaceAt } from '../image-attach.js';
+import { visualRows, rowOf, moveVertical } from '../prompt-rows.js';
 
 /**
  * The prompt field. Replaces `ink-text-input`, which could not do two things
@@ -28,19 +29,21 @@ import { backspaceAt } from '../image-attach.js';
  * keypress was spent. Ink has no way to stop a handler running, so the rule is
  * that exactly one place answers a given key.
  *
- * Newlines are `ctrl+j` (a literal line feed, which every terminal sends and no
- * protocol negotiation can take away) and `shift+enter` where the terminal
- * speaks the kitty keyboard protocol. Enter on its own always submits.
+ * Newlines are `shift+enter` where the terminal reports it (the kitty keyboard
+ * protocol, or Esc+Enter, which the VS Code companion binds shift+enter to),
+ * and `ctrl+n` (a hotkey) in any terminal. ctrl+j is not one (v7.9).
+ * Enter on its own always submits.
  */
 export function PromptInput({
   value,
   onChange,
   onSubmit,
-  onNewline,
   focus = true,
   placeholder = '',
   cursorRef,
   maxRows = 0,
+  // Columns the text has (v7.9): rows are counted as drawn, wraps included.
+  width = 0,
 }) {
   /**
    * What the field holds *now*: text and caret, ahead of the render.
@@ -98,29 +101,13 @@ export function PromptInput({
     onChange(next);
   };
 
-  /** Line and column for an offset, so up/down can keep the column. */
-  const locate = (text, at) => {
-    const before = text.slice(0, at);
-    const lines = before.split('\n');
-    return { line: lines.length - 1, column: lines[lines.length - 1].length };
-  };
-
-  /** The offset of the start of each line. */
-  const lineStarts = (text) => {
-    const starts = [0];
-    for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
-    return starts;
-  };
-
+  // Up and down by drawn row (v7.9): a wrapped line is several rows, and
+  // only past the first or last does the key belong to history.
   const moveByLine = (delta) => {
     const { value: text, offset: at } = live.current;
-    const starts = lineStarts(text);
-    const { line, column } = locate(text, at);
-    const target = line + delta;
-    if (target < 0 || target >= starts.length) return false;   // the caller takes it
-    const start = starts[target];
-    const end = target + 1 < starts.length ? starts[target + 1] - 1 : text.length;
-    setCaret(Math.min(start + column, end));
+    const next = moveVertical(text, at, delta, width || Infinity);
+    if (next === null) return false;                           // the caller takes it
+    setCaret(next);
     return true;
   };
 
@@ -153,10 +140,9 @@ export function PromptInput({
     if (key.rightArrow) { setCaret(Math.min(value.length, offset + 1)); return; }
 
     if (key.return) {
-      // Shift+Enter, or Esc+Enter arriving as meta, means a newline. The parent
-      // owns the distinction because it also has to stop `onSubmit` firing.
+      // Shift+Enter, or Esc+Enter arriving as meta, means a newline, decided
+      // here and only here: `onSubmit` never sees it.
       if (key.shift || key.meta) {
-        onNewline?.();
         edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
         return;
       }
@@ -172,23 +158,12 @@ export function PromptInput({
       return;
     }
 
-    if (key.ctrl || key.escape) {
-      // ctrl+j is a line feed and is the newline that works in every terminal.
-      if (input === '\n') {
-        onNewline?.();
-        edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
-      }
-      return;                                   // every other chord is handled upstream
-    }
+    if (key.ctrl || key.escape) return;         // chords are handled upstream
 
     if (!input) return;
-    // A bare line feed can also arrive without the ctrl flag depending on the
-    // terminal, and it means the same thing.
-    if (input === '\n') {
-      onNewline?.();
-      edit(`${value.slice(0, offset)}\n${value.slice(offset)}`, offset + 1);
-      return;
-    }
+    // A bare line feed is ctrl+j, which is no longer a newline (v7.9: shift+enter
+    // and ctrl+n are). Ignored rather than typed.
+    if (input === '\n') return;
     edit(value.slice(0, offset) + input + value.slice(offset), offset + input.length);
   }, { isActive: focus });
 
@@ -213,23 +188,23 @@ export function PromptInput({
    * spent on the "N more" marker when there is anything off-screen, which keeps
    * the drawn height exactly `maxRows` whether it is scrolled or not.
    */
-  const lines = value.split('\n');
+  // Windowed by drawn rows, so a wrapped line costs what it draws (v7.9).
+  const rows = visualRows(value, width || Infinity);
   const at = Math.min(live.current.offset, value.length);
-  const caretLine = locate(value, at).line;
+  const caretRow = rowOf(rows, at);
 
-  let start = 0;
+  let first = 0;
+  let shownRows = rows.length;
   let hidden = 0;
-  let windowLines = lines;
-  if (maxRows > 0 && lines.length > maxRows) {
-    const shown = maxRows - 1;                       // one row is the marker
-    start = Math.min(Math.max(0, caretLine - Math.floor(shown / 2)), lines.length - shown);
-    windowLines = lines.slice(start, start + shown);
-    hidden = lines.length - shown;
+  if (maxRows > 0 && rows.length > maxRows) {
+    shownRows = maxRows - 1;                         // one row is the marker
+    first = Math.min(Math.max(0, caretRow - Math.floor(shownRows / 2)), rows.length - shownRows);
+    hidden = rows.length - shownRows;
   }
 
-  // Where the caret sits inside the window, once the skipped lines are gone.
-  const skipped = lines.slice(0, start).reduce((n, l) => n + l.length + 1, 0);
-  const text = windowLines.join('\n');
+  // Where the caret sits inside the window, once the skipped rows are gone.
+  const skipped = rows[first].start;
+  const text = value.slice(skipped, rows[first + shownRows - 1].end);
   const localAt = Math.max(0, Math.min(at - skipped, text.length));
 
   // The caret is drawn rather than moved: Ink repaints the frame wherever it
@@ -248,7 +223,7 @@ export function PromptInput({
       {body}
       <Text dimColor>
         {`… ${hidden} more line${hidden === 1 ? '' : 's'}`}
-        {start > 0 ? ' (scrolled)' : ''}
+        {first > 0 ? ' (scrolled)' : ''}
       </Text>
     </Box>
   );

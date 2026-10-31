@@ -275,6 +275,19 @@ mismatch bullet on medium too, but medium gets the terse tool list, which does n
 characters (low / medium / high): the size is not the point, round trips are. Judge it by
 `/prompt` after some days on v2, not by this paragraph.
 
+**v3 is v2 plus "look before answering" (v7.9, `lookFirst`).** Reported: asked "how is the
+symbol matching done in this node server" on Flash-Lite, the agent answered from `AGENT.md`'s map
+with nothing opened. Two halves. The prompt: rule 9 of the terse list on low, a bullet under
+Source Code on medium (`LOOK_FIRST_RULE` in `prompt-builder.js`; +240 / +273 characters on turn 0);
+high is v2 byte for byte, since Pro plans first. The loop: a reply with no tool call whose last two
+sentences promise to look (`looksLikeEmptyPromise`, offers and questions excluded) is asked once
+per turn to make the call (`_askToKeepPromise`: 3 lines and the tool names; an `empty_promise`
+notice and a `↻` row). The loop half is gated on the version too, so `/prompt` compares what v2
+and v3 do. Replayed over the 99 stored replies that ended a turn: 0 hits, against 11 among
+replies a tool call followed. `looksLikeCodeQuestion` also learnt "this server" and
+`snake_case`/`camelCase` names, so `turn0_no_tools` counts the reported case. Pty: the promise,
+the ask, the call, the answer, 0 clears at 13 and 24 rows.
+
 **Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
 labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old
 "High = the last model" rule it took High, Medium landed on Pro, and Flash became unreachable.
@@ -310,6 +323,28 @@ the first real reply (`_threadUnsaved`), or `--continue` could pair a filed conv
 chat that never saw it. The UI learns of it through `onWarm`, not a status message: Chrome usually
 connects before App has attached its callbacks. Pty: prompt 0 is the setup, a message typed
 meanwhile queues and goes as the short turn, and 0 clears at 13 and 24 rows.
+
+**A fresh session starts in a new chat (v7.9, `_freshChatOwed`, extension 1.55.0).** Reported with a
+screenshot: a warm start's setup went in under the previous session's last reply. The extension
+types into the tab it owns, and nothing moved that tab off the last conversation, so a cold start's
+first message went there too. A launch without `--continue`/`--resume` (or one that recaps, or
+finds no history) owes a new chat; `_startFreshChatIfOwed` spends it through `startNewChat` before
+the warm-up's prompt and before the first message (after compaction, before the model switch).
+`startNewChat` answers `false` at once when nothing is connected, and the debt stays for the next
+prompt. The extension skips the navigation when the tab is already on `/app`, keeps a `/u/<n>`
+account prefix (`background/chat-url.js`), and **waits for the load** before acking: the content
+script used to set `location.href` and ack at once, which `/new` never noticed, but a warm-up
+sends the moment the ack lands. The "Ready" row shows until the first *user* message, not while the
+transcript is empty, or `/new`'s own row hid it. Pty: `new_chat` before prompt 0 and before the
+warm-up after `/new`; the one `ESC[2J` is `/new`'s reset.
+
+**A reopened tab goes back to the conversation (v7.9, `threadUrl`).** Reported: after the extension
+was reloaded (which clears `chrome.storage.session`, so it no longer knows its own tab),
+`ensureModelTab` opened a blank `/app` and a 508-character short turn went into a chat that had
+never seen the task; the reply was an essay about LLM agents, and `thread_changed` fired only
+after it. `_enqueueExtensionRequest` now adds `threadUrl` to every main-lane prompt (the tab's own
+URL when it is this chat, which keeps `/u/<n>`), and a tab the extension has to open goes there.
+Subagents and a new chat send none. Owned tabs are still the only ones adopted.
 
 The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
@@ -888,6 +923,9 @@ is backed by a local TF-IDF index.
 
 ### Where `.agent/` actually is
 
+The user-facing map of both folders, and what is safe to delete, is
+[`docs/agent-folder.md`](docs/agent-folder.md). Keep it in step with `paths.js`.
+
 `workspace` used to mean two things: where state lives, and what the agent works on. In a
 monorepo those come apart, so `paths.resolveState(workspace)` walks *up* looking for an
 existing `.agent/`, the way git finds `.git`. The first hit is the **root**; the path from it
@@ -1026,9 +1064,21 @@ placeholders, into a cold tab. Now (`core/compaction.js`):
   `/logs speed` shows first token and reply time by fill band (under 25%, 25–50%, 50–80%, over
   80%). Before this, none of those rows said how full the thread was, so 24k / 48k / 96k could
   not be checked. Change a budget only when a band says to.
-- A three-stage progress row (`Compacting ▰▰▱ opening a fresh chat…`, esc cancels with nothing
-  changed); the status bar says `N% to auto-compact` within 20 points; every compaction writes a
-  `compaction` notice with which path ran.
+- One spinner row, `✻ Compacting conversation… (15s · esc to stop)` under the `❯ /compact` row
+  (v7.9; the stages still ride in `progress`, undrawn), esc cancels with nothing changed; the status
+  bar says `N% to auto-compact` within 20 points; every compaction writes a `compaction` notice with
+  which path ran. **Typed `/compact` never showed its progress**: between turns `loop.callbacks` are
+  the background ones, which go to the side panel, so the row read "Thinking…"; App sets the words
+  itself now.
+- **A new chat is asked for twice (v7.9, `startNewChat`).** Reported: `/compact` said the browser did
+  not start a new conversation. Extension 1.55.0 acks only after the load and the bridge (up to
+  13 s) and the server waited 5, so a slow load failed here and succeeded in the tab, with the
+  summary never handed over. 15 s per ask, and a timeout or `ok: false` asks once more; a tab
+  already on a new chat acks at once. The failure message is two lines and the chat's URL, on a
+  line of its own. `visibleWidth`/`wrapAnsi` count OSC 8 links as zero columns: marked-terminal
+  wraps a URL in one, and the bytes broke it after 44 characters. Pty (`FAKE_NEWCHAT=true,false,true`,
+  `FAKE_SUMMARY_MS`): handed over on the second ask, and the both-refused path, at 13 and 24 rows;
+  the one `ESC[2J` is `/compact`'s repaint, on `main` too.
 
 **Compaction keeps what it promises (v6.15, plan Phase 6).** The fresh chat gets the summary plus
 the last **3 exchanges** (`splitForCompaction`: from the third-last user message, however many rows
@@ -1804,10 +1854,32 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
   sees every change. ←/→ are spatial and never wrap. The hint is on the selected row and drops below
   70 columns. The filter stays on top, underlined; printable keys go to it, and **tabs are on tab
-  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Startup and
-  Command rules (`OPENS_CHOOSER`). Values are plain except a switch's active state and a read-only
+  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Browser
+  differs (v7.9: the bare `ask · follow · switch` ladder was "confusing even for me"), Startup and
+  Command rules (`OPENS_CHOOSER`); bare `/effort mismatch` opens the same chooser. Values are plain except a switch's active state and a read-only
   `attention`; `Choices` no longer recolours the selected row's detail in any menu. Pty: 0 clears at
   13×90, 24×100 and 24×60.
+  **Status → Gemini tab (v7.9)** names the tab the main lane types into and its chat
+  (`tab 1873 · chat 17d6…`), from `tab_status`'s `mainTab`, which extension 1.55.0 sends on connect,
+  on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so). The value
+  is an OSC 8 link to the chat (`browserTabUrl`, `link` on a settings row): cmd+click opens it.
+- **A model mismatch is the footer's `⚠ 3.8 Flash` and nothing else (v7.9).** The row above the
+  input went through two redesigns in one afternoon and was then cut (owner: "just show ⚠ 3 Flash,
+  that's it nothing else"): the next message asks anyway, and the ask says both names. The footer's
+  mark now shows at every height (`modelDiffers`; it went with the row below 13). The ask is two
+  answers, **Match the agent** (switch the tab) and **Match the browser** (set the effort to the
+  tab's rung, or send on it when no rung maps); "Send on 3.8 Flash" once was the confusing third.
+  The Effort slider adds `⚠ browser 3.8 Flash` beside the marked stop's model (`tabDiffers`). **A
+  model picked by hand in the tab is seen in ~1.5 s** (extension 1.55.0): the bridge watches the
+  picker's label (`currentModelLabel`, no menu) and sends `model_selected`; `noteSelectedModel`
+  marks the one entry it names, exactly or as its last word (`Flash` is `3.8 Flash`, not
+  `3.1 Flash-Lite`), else asks for the list; `onModels` redraws an idle screen. It was read only at
+  connect, on a new tab and at the end of a turn: "picked up almost a minute later". `Choices` cuts
+  a label past its 28-column cap (`fitLabel`), which had pushed that row's detail a column right.
+  The warm-up row is just `✔ Ready`, and it sits on the input with the blank row above it
+  (`noticeHugsInput`). An extension *newer* than the running agent says `Agent restart needed`
+  instead of `Extension update · 1.55.0 → 1.54.0` (`compareVersions`). The watcher ignores an
+  editor's atomic-save temp files (`x.js.tmp.<pid>.<hex>`, `x~`). Pty: 0 clears at 13, 16 and 24.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
@@ -1837,6 +1909,17 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
   hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
   saying where the thing went.
+- **The prompt's rows are drawn rows (v7.9, `ui/prompt-rows.js`).** ↑/↓ move by the rows Ink
+  draws, wraps included, and only past the first or last row reach input history; the draft is
+  kept (`draftRef`) and ↓ past the newest prompt gives it back, where it used to clear the box.
+  `promptExtraRows` and the field's window count the same rows, so a long wrapped prompt is
+  charged what it draws. `❯ ` sits in a `flexShrink={0}` box, the v6.12 rule: beside a wrapped
+  prompt Yoga squeezed it to one column. **Newlines:** shift+enter (kitty, or Esc+Enter, which
+  companion 1.8.8 binds shift+enter to in the editor's terminal) and `ctrl+n` (a hotkey); ctrl+j
+  is ignored (owner: not needed).
+  `newlineRef` is gone: every newline set it and only an Enter cleared it, so the first Enter after
+  any newline was eaten. Pty at 13 and 24 × 60: a four-line message sent by Enter, the draft back,
+  `XX` typed one wrapped row up in the right column, 0 clears.
 - **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
   bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
   forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps

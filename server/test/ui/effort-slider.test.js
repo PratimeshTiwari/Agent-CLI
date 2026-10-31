@@ -76,3 +76,13 @@ test('the menu draws the stop\'s model, dimmed when unavailable', () => {
   assert.doesNotMatch(block.slice(0, block.indexOf('</Panel>')), /marked\.browser/,
     'the generic family name is back under the bar');
 });
+
+test('tabDiffers: the slider warns when the tab is on another model (v7.9)', async () => {
+  const { tabDiffers } = await import('../../src/ui/effort-slider.js');
+  const models = [{ label: '3.8 Flash', selected: true }, { label: '3.1 Pro' }];
+  assert.equal(tabDiffers({ text: '3.1 Pro', available: true }, models), '3.8 Flash');
+  assert.equal(tabDiffers({ text: '3.8 Flash', available: true }, models), null, 'control: same model');
+  assert.equal(tabDiffers({ text: '3.1 Pro', available: false }, models), null);
+  assert.equal(tabDiffers({ text: '3.1 Pro', available: true }, []), null, 'picker never read');
+  assert.equal(tabDiffers({ text: '3.1 Pro', available: true }, [{ label: 'Deep Research', isMode: true, selected: true }]), null);
+});

@@ -23,6 +23,7 @@ import { keyCell } from '../keys-view.js';
  * the prompt is visible, so there is no state in which typing goes nowhere.
  */
 export function InputBar({
+  hugTop = false,
   queued = [],
   activeMenu,
   addPaste,
@@ -47,10 +48,10 @@ export function InputBar({
   isThinkingStuck,
   isToolRunningRef,
   mode,
-  newlineRef,
   setInput,
   cursorRef,
   promptMaxRows,
+  promptWidth,
   animTick,
   setSlashIdx,
   slashMatches,
@@ -178,7 +179,8 @@ export function InputBar({
         the other is how the frame outgrows the viewport.
       */}
       {promptVisible && (
-        <Box flexDirection="column" marginTop={compact ? 0 : 1}>
+        // `hugTop`: App drew this blank row above its notices instead (v7.9).
+        <Box flexDirection="column" marginTop={compact || hugTop ? 0 : 1}>
           {/*
             What happened to the last conversation.
 
@@ -342,14 +344,18 @@ export function InputBar({
             borderColor={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}
             width="100%"
           >
-            <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}>{'❯ '}</Text>
+            {/* flexShrink 0 (v7.9): beside a wrapped prompt Yoga shrank `❯ ` to
+                one column, and every row was drawn a column off. */}
+            <Box flexShrink={0}>
+              <Text bold color={focus === FOCUS_INPUT ? modeColor(mode) : T.muted}>{'❯ '}</Text>
+            </Box>
             <PromptInput
               focus={focus === FOCUS_INPUT}
               value={input}
               cursorRef={cursorRef}
               maxRows={promptMaxRows}
+              width={promptWidth}
               placeholder="Ask anything, or / for commands"
-              onNewline={() => { newlineRef.current = true; }}
               onChange={(v) => {
                 setInput(v);
                 setSlashIdx(0);
@@ -357,15 +363,11 @@ export function InputBar({
                 setPaletteSuppressed(false);
               }}
               onSubmit={(value) => {
-                // Our own useInput is registered before the key bindings'
-                // (child effects run first), so this fires before they have
-                // seen the keystroke. Defer a tick to find out whether that
-                // Enter was really a Shift+Enter asking for a newline.
+                // Deferred a tick, as it always was. It used to check a flag
+                // that any newline set and only an Enter cleared, so the first
+                // Enter after shift+enter, Esc+Enter or ctrl+j was eaten (v7.9).
+                // The field decides newline against submit on its own.
                 setTimeout(() => {
-                  if (newlineRef.current) {
-                    newlineRef.current = false;
-                    return;
-                  }
                   if (slashOpen) {
                     const picked = `/${slashMatches[slashSelected].name}`;
                     setInput('');

@@ -39,7 +39,8 @@ export const KEY_ROWS = [
   ['backspace', 'on an [Image #n] tag, takes the image off'],
   ['ctrl+u', 'clear the input'],
   ['ctrl+w', 'delete the last word'],
-  ['ctrl+j', 'newline, without sending'],
+  ['shift+enter', 'newline, without sending'],
+  ['ctrl+n', 'newline in any terminal'],
   ['ctrl+x ctrl+s', 'steer the last queued message into the running turn'],
   ['ctrl+c ×2', 'quit — prints how to resume'],
 ];

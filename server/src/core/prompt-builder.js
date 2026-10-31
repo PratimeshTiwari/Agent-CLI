@@ -27,6 +27,20 @@ import { prompt } from './prompt-loader.js';
 import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
 import { parseMemory, readMemoryEnabled } from '../context/memory-manager.js';
 
+/**
+ * Look before answering (v3, `lookFirst`). One rule in two shapes: rule 9 of
+ * the terse list (low), and a bullet under "Source Code" (medium). Pro already
+ * plans first and has the guardrails, so it is not given it.
+ */
+const LOOK_FIRST_RULE = {
+  terse: '9. A question about this project is answered from files you open this turn (find_symbol, '
+    + 'grep_search, read_file), never from the map in AGENT.md or from how projects usually work. '
+    + 'If you say you will look, make the call in the same reply.',
+  bullet: '- **Look before answering.** A question about this project is answered from files you open '
+    + 'this turn (`find_symbol`, `grep_search`, `read_file`), never from the map in `AGENT.md` or from '
+    + 'how projects usually work. If you say you will look, make the call in the same reply.',
+};
+
 // How often to send the condensed reminder, counted in MESSAGES pushed to the tab —
 // not user turns. One user turn can be a dozen tool round-trips, so a turn-based
 // counter drifts by an order of magnitude in tool-heavy work and fires far too
@@ -901,7 +915,10 @@ underspecified, say what you assumed rather than guessing silently.
    * Flash models struggle with long prompts — keep it minimal.
    */
   _buildFlashCoreInstructions() {
-    return this._prompt('core-terse');
+    const core = this._prompt('core-terse');
+    if (!this._flag('lookFirst')) return core;
+    const body = core.trimEnd();
+    return `${body}\n${LOOK_FIRST_RULE.terse}${core.slice(body.length)}`;
   }
 
   /**
@@ -955,7 +972,8 @@ underspecified, say what you assumed rather than guessing silently.
 ## Source Code and Execution${oneCopy && pro ? '' : `
 - ONLY reference code that you have explicitly read using \`read_file\` or \`grep_search\`.
 - Never guess line numbers, function signatures, or variable names.`}
-- When running commands, ensure the \`cwd\` is correct.
+- When running commands, ensure the \`cwd\` is correct.${this._flag('lookFirst') && !pro ? `
+${LOOK_FIRST_RULE.bullet}` : ''}
 
 ## Documentation & Context Maintenance
 - **Project instructions**: \`AGENT.md\` is where a project's standing rules live, walked from the code upward. If the user tells you a convention that should hold for every future turn, offer to add it there — do not keep it only in your own memory.

@@ -18,6 +18,7 @@ said "it is **not** a chat panel"; what changed is in the 1.8.0 entry below.
 | **Diagnostics** | The Problems panel, so `get_diagnostics` can check whether an edit compiled. |
 | **Plan review** | Comment on a plan section by section and approve, request changes, or reject — the shape of a PR review, on `implementation_plan.md`. |
 | **Chat** | The Agent CLI icon in the activity bar. `cmd+alt+j` focuses it. Type `@` to attach a file or your selection; edits open in VS Code's diff view with ✓ / ✕ in the title bar. **Agent CLI: Start Agent** opens one in a terminal if none is running. |
+| **Shift+Enter** | A newline in the agent's prompt from the editor's terminal (it sends Esc+Enter, which the agent reads as a newline; a plain terminal sends Enter for both). |
 
 ## How it talks to the CLI
 
@@ -41,7 +42,40 @@ while a project indexes, and writing on every event makes the file unreadable.
 ## Installing
 
 Extensions panel (`Cmd+Shift+X`) → `...` → **Install from VSIX...** → pick the `.vsix` in
-this folder. Requires VS Code **1.93.0** or newer.
+this folder. Requires VS Code **1.93.0** or newer (or a fork built on it: Cursor, Antigravity,
+Windsurf).
+
+From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigravity`,
+`windsurf`; if it is not found, run **Shell Command: Install '…' command in PATH** from the
+editor's command palette):
+
+```bash
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.8.vsix
+```
+
+`<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
+knows. This works for any install:
+
+```bash
+AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.8.vsix
+```
+
+Three common setups:
+
+```bash
+# setup.sh's default location, VS Code
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.8.vsix
+
+# a checkout from before the rename (setup.sh keeps it), Cursor
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+
+# a custom AGENT_INSTALL_DIR, Antigravity
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+```
+
+Then reload the window (**Developer: Reload Window**). Installing over an older version
+replaces it.
 
 ## Building
 
@@ -58,6 +92,14 @@ is how someone installs the wrong one.
 `server/`. Changing `AGENT_DIR` in `server/src/core/paths.js` means changing it here too.
 
 ## Version history
+
+### 1.8.8 — 2026-10-31
+
+**Shift+Enter is a newline in the terminal.** The editor's terminal sends a plain Enter for
+shift+enter, so the agent cannot tell it apart and sends the message. The companion binds
+shift+enter (when a terminal has focus) to send Esc+Enter, which the agent reads as a newline. It
+applies to every terminal in the editor, as Claude Code's `/terminal-setup` does; a shell such as
+zsh reads Esc+Enter as a newline too.
 
 ### 1.8.7 — 2026-10-31
 

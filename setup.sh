@@ -306,4 +306,7 @@ $(bold "Optional: the VS Code companion")
      Extensions panel → ... → Install from VSIX...
      ${VSIX:-$ROOT/vscode-companion/ (run 'vsce package' there first)}
 
+     or from a terminal (code, cursor, antigravity or windsurf):
+     code --install-extension "${VSIX:-$ROOT/vscode-companion/cli-agent-companion-<version>.vsix}"
+
 EOF

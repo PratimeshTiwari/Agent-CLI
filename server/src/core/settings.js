@@ -274,6 +274,16 @@ export function describeSettings(agentLoop) {
         : 'as the extension reports it',
     },
     {
+      // Which Chrome tab this session types into (v7.9, extension 1.55.0).
+      group: 'Status',
+      label: 'Gemini tab',
+      value: describeBrowserTab(agentLoop?.browserTab, agentLoop?.subagentTabIds),
+      // cmd+click opens the chat (v7.9). It opens it, it does not find the tab:
+      // a link cannot address one, which is what ctrl+b is for.
+      link: browserTabUrl(agentLoop?.browserTab),
+      hint: agentLoop?.browserTab ? 'cmd+click opens the chat · ctrl+b the tab' : 'as the extension reports it',
+    },
+    {
       group: 'Status',
       label: 'State directory',
       value: safe(() => paths.agentDir(agentLoop.workspace), ''),
@@ -453,6 +463,28 @@ export function settingsColumns(rows) {
     vwidth: Math.min(VALUE_MAX, longest((row) =>
       String(row?.value ?? '').replace(/\s+/g, ' ').trim().slice(0, VALUE_MAX))),
   };
+}
+
+/**
+ * The main lane's tab in one line: `tab 1234 · chat 17d6b14b8a5d1ff2`.
+ *
+ * `undefined` is an extension older than 1.55.0, which never says; `null` is
+ * a newer one with no tab yet (the first prompt opens one).
+ */
+export function describeBrowserTab(tab, subagentTabIds = []) {
+  if (tab === undefined) return 'not reported (extension older than 1.55.0)';
+  if (!tab) return 'none yet';
+  const parts = [`tab ${tab.id}`, tab.thread ? `chat ${tab.thread}` : 'new chat'];
+  const subs = (subagentTabIds || []).length;
+  if (subs) parts.push(`${subs} subagent tab${subs === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
+/** The tab's chat as a URL, or null before the extension has said (v7.9). */
+export function browserTabUrl(tab) {
+  if (!tab) return null;
+  if (tab.url) return tab.url;
+  return tab.thread ? `https://gemini.google.com/app/${tab.thread}` : null;
 }
 
 function safe(fn, fallback) {

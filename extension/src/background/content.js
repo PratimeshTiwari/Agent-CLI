@@ -1,5 +1,6 @@
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
 import { ws } from './socket.js';
+import { chatPath, isFreshChat, freshChatUrl } from './chat-url.js';
 
 // One model. `MODEL_URLS` and `MODEL_SCRIPTS` stay keyed rather than collapsing
 // to constants: every lookup below is already written against a model name, and
@@ -66,7 +67,54 @@ export async function broadcastTabStatus() {
 
   sendToServer({
     type: 'tab_status',
-    payload: { connectedModels },
+    payload: { connectedModels, mainTab: await mainTabInfo('gemini'), subagentTabIds: [...subagentTabs] },
+  });
+}
+
+/**
+ * Which tab the main lane types into, for `/settings` → Gemini tab (1.55.0).
+ *
+ * Read-only: the remembered tab, else the newest owned one, the same choice
+ * `pickMainTab` makes without its side effects. A status report must not
+ * change which tab is chosen. `null` when there is none yet.
+ */
+async function mainTabInfo(targetModel) {
+  let tab = null;
+  const remembered = mainTabs.get(targetModel);
+  if (remembered !== undefined) tab = await chrome.tabs.get(remembered).catch(() => null);
+  if (!tab) {
+    try {
+      const owned = await ownedTabIds();
+      const tabs = await chrome.tabs.query({ url: MODEL_URLS[targetModel] });
+      tab = tabs.filter((t) => owned.has(t.id) && !subagentTabs.has(t.id)).pop() || null;
+    } catch {
+      tab = null;
+    }
+  }
+  if (!tab) return null;
+  return {
+    id: tab.id,
+    windowId: tab.windowId,
+    thread: chatPath(tab.url || '')?.thread || null,
+    url: tab.url || '',
+    title: tab.title || '',
+    active: Boolean(tab.active),
+  };
+}
+
+/** Resolves when the tab finishes its next load, or after `budgetMs`. */
+function waitForTabLoad(tabId, budgetMs) {
+  return new Promise((resolve) => {
+    const done = setTimeout(finish, budgetMs);
+    function finish() {
+      clearTimeout(done);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }
+    function listener(id, info) {
+      if (id === tabId && info.status === 'complete') finish();
+    }
+    chrome.tabs.onUpdated.addListener(listener);
   });
 }
 
@@ -826,7 +874,7 @@ async function trySendToTab(tab, message, targetModel) {
   return success;
 }
 
-export async function ensureModelTab(targetModel = 'gemini') {
+export async function ensureModelTab(targetModel = 'gemini', opts) {
   const targetUrl = MODEL_URLS[targetModel];
   if (!targetUrl) return null;
 
@@ -834,10 +882,11 @@ export async function ensureModelTab(targetModel = 'gemini') {
   const existing = await pickMainTab(targetModel);
   if (existing) return existing;
 
-  // No tab found: automatically reopen in a new tab
+  // No tab found: automatically reopen in a new tab — on the conversation
+  // asked for, when it is a Gemini chat URL, else a new chat.
   console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
   const openUrl = targetModel === 'gemini'
-    ? 'https://gemini.google.com/app'
+    ? (chatPath(opts?.url || '')?.thread ? opts.url : 'https://gemini.google.com/app')
     : targetUrl.replace('/*', '');
 
   const newTab = await chrome.tabs.create({ url: openUrl, active: true });
@@ -976,7 +1025,10 @@ export async function injectPromptIntoModel(payload) {
         type: 'status',
         payload: { message: `🌐 Reopening ${targetModel} in a new tab...` }
       });
-      const newTab = await ensureModelTab(targetModel);
+      // Back into this session's conversation when the server named one
+      // (v7.9): a blank chat has never seen the task, and the next prompt is
+      // the short turn that assumes it has.
+      const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl });
       if (newTab) {
         tabs = [newTab];
       }
@@ -1127,18 +1179,7 @@ export async function openThread(thread) {
 
     // The content script has to be in the page before anything is typed into
     // it, and a navigation replaces the one that was there.
-    await new Promise((resolve) => {
-      const done = setTimeout(finish, 8000);
-      function finish() {
-        clearTimeout(done);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-      function listener(tabId, info) {
-        if (tabId === tab.id && info.status === 'complete') finish();
-      }
-      chrome.tabs.onUpdated.addListener(listener);
-    });
+    await waitForTabLoad(tab.id, 8000);
     return true;
   } catch (err) {
     console.warn('[Agent CLI] Could not open that conversation:', err?.message);
@@ -1227,11 +1268,31 @@ export async function triggerNewChatInModel(payload) {
   const tab = (await pickMainTab(targetModel)) || (await ensureModelTab(targetModel));
   if (!tab) return false;
 
+  // Already a new chat (`/app`, no thread id): leaving it for another would
+  // reload the page for nothing. A tab `ensureModelTab` just opened is one.
+  if (isFreshChat(tab.url || '')) return true;
+
+  /*
+   * Navigated from here and **waited for** (1.55.0). It was a message to the
+   * content script, which set `location.href` and answered at once, so the ack
+   * came back while the old page was still loaded. `/new` and `/compact` never
+   * noticed, since a person types the next message seconds later, but a fresh
+   * session's warm start sends the moment the ack arrives, and that prompt could
+   * reach the old page's bridge and go into the conversation being left.
+   *
+   * The listener is attached before the navigation, so a fast load cannot
+   * finish unseen; the bridge is asked only after, so the old page's script
+   * cannot answer the ping. The account (`/u/<n>`) is kept.
+   */
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'new_chat', payload });
+    const loaded = waitForTabLoad(tab.id, 8000);
+    await chrome.tabs.update(tab.id, { url: freshChatUrl(tab.url || '') });
+    await loaded;
+    await waitForBridge(tab.id, 5000);
+    broadcastTabStatus();
     return true;
   } catch (err) {
-    console.warn(`[Agent CLI] Failed to send new_chat to ${targetModel} tab ${tab.id}:`, err);
+    console.warn(`[Agent CLI] Failed to start a new chat in ${targetModel} tab ${tab.id}:`, err);
     return false;
   }
 }
