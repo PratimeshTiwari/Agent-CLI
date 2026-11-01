@@ -87,6 +87,14 @@ bodies off the page.
 - **`.agent/github-reviews/` and `/plans` meant two different things.**
   `migrateGitHubReviews` in `core/migrate.js` renamed the older
   `github-pr-plans/` and refused to clobber; that migration is kept.
+- **Starting GitHub after the WebSocket server fixed a silence** (moved from CLAUDE.md).
+  `poller.start()` emits `auth_rejected`, and its only listener is wired in the
+  `WebSocketServer` constructor — which used to run *after* that call. So the
+  401 message ("GitHub rejected the stored token… clear it with
+  `/github remove-token`") was emitted into an EventEmitter with nobody
+  attached, and an expired token produced no GitHub activity and no reason why.
+  The later `pollNow()` 401 at `github-poller.js:147` always worked; only the
+  startup one was unreachable.
 
 ### ChatGPT removed, 2026-09-19
 

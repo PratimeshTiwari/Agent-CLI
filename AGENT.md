@@ -28,7 +28,7 @@ plus a standalone `vscode-companion/`.
 ```bash
 npm install                          # both workspaces, from the root
 npm run start                        # server, workspace pinned to ../
-npm test                             # server (node --test) + extension
+npm test                             # server, extension and companion
 node --test server/test/core/paths.test.js        # one file
 npm run build --workspace=extension  # rebuild the service worker
 ```
@@ -45,11 +45,14 @@ server/src/
 ├── main.js           # arg parsing, wiring, bootstrap
 ├── core/             # agent-loop, prompt-builder, diff-engine, risk-classifier,
 │                     #   paths, migrate, workspaces, slash-commands, effort
+├── atlassian/        # Jira: client, config, ADF and wiki markup
 ├── bridge/           # the Chrome-extension transport
 ├── context/          # token budget (minifier, context, memory) and code search:
 │                     #   symbol-index (find_symbol / find_references: acorn for JS,
 │                     #   ruby-symbols, pattern-symbols for every other language)
 ├── mcp/              # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
+├── prompts/          # the prompt files; prompts/v2/ overrides them for later versions
+├── storage/  watcher/ # session history; external edits reported into it
 └── ui/               # the terminal front-end (App.jsx, hooks/, components/)
 ```
 
@@ -61,8 +64,9 @@ user's guide, not the design.
 
 Modules are kebab-case; React components keep PascalCase. To add a tool: write
 the handler in `mcp/tools/`, add one entry to `TOOL_DEFINITIONS` in
-`mcp/mcp-server.js` — that schema is what gets rendered into the prompt, so
-**the description is the contract**.
+`mcp/mcp-server.js` and one to `core/tool-catalog.js`. The catalog is what the
+prompt is rendered from, and `toolCatalogDrift()` fails the build if the two
+disagree, so **the description is the contract**.
 
 ## Things that are the way they are on purpose
 
