@@ -12,7 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.FORCE_COLOR = '1';
-const { renderMarkdown, finishInline } = await import('../../src/frontend/format.js');
+const { renderMarkdown, finishInline } = await import('../../src/frontend/transcript/markdown.js');
 
 const GREY = '\x1b[90m';
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');

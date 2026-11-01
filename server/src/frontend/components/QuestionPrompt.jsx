@@ -3,9 +3,9 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { normalizeQuestionSet, FREEFORM_VALUE } from '../../backend/core/question.js';
 import { T } from '../theme.js';
-import { listWindow, wrapLines } from '../panel.js';
+import { listWindow, wrapLines } from '../menus/panel.js';
 import { Panel } from './Panel.jsx';
-import { TYPE_SOMETHING, questionTabs, questionLayout, nextStep, submitSummary, submitLayout } from '../question-view.js';
+import { TYPE_SOMETHING, questionTabs, questionLayout, nextStep, submitSummary, submitLayout } from '../menus/question-view.js';
 
 /**
  * What the agent asks with `ask_question` (v6.4, Claude Code's layout, the
@@ -14,7 +14,7 @@ import { TYPE_SOMETHING, questionTabs, questionLayout, nextStep, submitSummary, 
  * `Type something.` last. Answers are kept per question, so tab and ←/→ move
  * between them freely and the Submit tab shows them all before they go.
  *
- * The arithmetic is `frontend/question-view.js`. Every row truncates: this is drawn
+ * The arithmetic is `frontend/menus/question-view.js`. Every row truncates: this is drawn
  * in the live frame, where a wrapped row is one nobody charged for.
  */
 export function QuestionPrompt({ payload, onAnswer, onCancel, width = 80, rows = 20 }) {

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { questionRows } from '../../src/frontend/format.js';
+import { questionRows } from '../../src/frontend/transcript/tool-rows.js';
 import { AgentLoop } from '../../src/backend/core/agent-loop.js';
 
 describe('questionRows', () => {

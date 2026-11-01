@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { turnEndLine, turnDuration, doneAt } from '../../src/frontend/format.js';
+import { turnEndLine, turnDuration, doneAt } from '../../src/frontend/transcript/status-rows.js';
 
 /*
  * `✻ Worked for 3.5s · 2 rounds · 1 edit · done 1:06 AM` — Claude Code's shape

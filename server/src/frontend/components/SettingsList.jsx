@@ -1,15 +1,15 @@
 import React from 'react';
 import { Text, useInput } from 'ink';
 import { T } from '../theme.js';
-import { listWindow, settingTone } from '../panel.js';
-import { controlParts, controlWidth, rowHint, stepValue, isFilterText, ROLE_COLOUR } from '../settings-view.js';
+import { listWindow, settingTone } from '../menus/panel.js';
+import { controlParts, controlWidth, rowHint, stepValue, isFilterText, ROLE_COLOUR } from '../menus/settings-view.js';
 
 
 const OSC8_CLOSE = '\x1b]8;;\x1b\\';
 const osc8Open = (url) => `\x1b]8;;${url}\x1b\\`;
 /**
  * The `/settings` list: label, value, and the selected row's hint beside it.
- * The rules are in `frontend/settings-view.js`; this draws them and takes the keys.
+ * The rules are in `frontend/menus/settings-view.js`; this draws them and takes the keys.
  *
  * Its own list rather than `Choices`, because a row here is three cells with
  * their own colours and the keys mean more: ←/→ change the value in place,

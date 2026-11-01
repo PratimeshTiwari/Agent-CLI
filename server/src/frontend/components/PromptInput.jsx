@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { backspaceAt } from '../image-attach.js';
-import { visualRows, rowOf, moveVertical } from '../prompt-rows.js';
+import { backspaceAt } from '../input/image-attach.js';
+import { visualRows, rowOf, moveVertical } from '../input/prompt-rows.js';
 
 /**
  * The prompt field. Replaces `ink-text-input`, which could not do two things

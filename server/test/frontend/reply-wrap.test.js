@@ -11,7 +11,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fitLines, renderMarkdown, visibleWidth } from '../../src/frontend/format.js';
+import { fitLines, visibleWidth } from '../../src/frontend/text.js';
+import { renderMarkdown } from '../../src/frontend/transcript/markdown.js';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const words = (n, w = 'word') => Array.from({ length: n }, (_, i) => `${w}${i}`).join(' ');

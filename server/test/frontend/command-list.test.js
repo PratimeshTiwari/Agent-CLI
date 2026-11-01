@@ -17,7 +17,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { renderCommandList } from '../../src/frontend/format.js';
+import { renderCommandList } from '../../src/frontend/transcript/status-rows.js';
 import { SLASH_COMMANDS, COMMAND_GROUPS } from '../../src/frontend/constants.js';
 
 const rendered = () => renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS);
@@ -101,7 +101,7 @@ describe('both callers render the same list', () => {
     // one grouping, used by both, and one text renderer, used here once.
     const calls = src.split('renderCommandList(SLASH_COMMANDS, COMMAND_GROUPS)').length - 1;
     assert.equal(calls, 1, 'a second call site has grown its own renderer again');
-    const format = readFileSync(new URL('../../src/frontend/format.js', import.meta.url), 'utf8');
+    const format = readFileSync(new URL('../../src/frontend/transcript/status-rows.js', import.meta.url), 'utf8');
     assert.match(format, /for \(const row of commandRows\(commands, groups\)\)/);
     assert.doesNotMatch(src, /SLASH_COMMANDS\s*\n?\s*\.map\(/,
       'a hand-rolled list is back beside the shared one');

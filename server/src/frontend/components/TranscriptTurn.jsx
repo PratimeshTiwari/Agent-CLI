@@ -1,13 +1,17 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRows } from './DiffRows.jsx';
-import { rowsFromPatch } from '../diff-preview.js';
-import { renderMarkdown, oneLine, clampForDisplay, blockLines, liveMessageText, fsEventRow, questionRows, workBreakdown, compactionRow, parseErrorRow, turnEndLine } from '../format.js';
-import { foldImages, imageTag, linkImageTags } from '../image-attach.js';
-import { foldFiles, fileLink } from '../file-drop.js';
-import { parseTurnActions, describeArtifactWrite } from '../transcript.js';
+import { rowsFromPatch } from '../transcript/diff-preview.js';
+import { renderMarkdown } from '../transcript/markdown.js';
+import { oneLine, blockLines } from '../text.js';
+import { clampForDisplay, fsEventRow, questionRows, workBreakdown } from '../transcript/tool-rows.js';
+import { liveMessageText } from '../transcript/live-layout.js';
+import { compactionRow, parseErrorRow, turnEndLine } from '../transcript/status-rows.js';
+import { foldImages, imageTag, linkImageTags } from '../input/image-attach.js';
+import { foldFiles, fileLink } from '../input/file-drop.js';
+import { parseTurnActions, describeArtifactWrite } from '../transcript/transcript.js';
 import { T } from '../theme.js';
-import { STATE_TONE, actionState, actionHead, actionOutcome, commandOutputLines } from '../action-row.js';
+import { STATE_TONE, actionState, actionHead, actionOutcome, commandOutputLines } from '../transcript/action-row.js';
 
 /**
  * The user's own message, shortened to fit.
@@ -659,7 +663,7 @@ function ActionRow({ act, verbose, isLive, width = 80, tick = 0 }) {
   }
 
   /*
-   * The plan, in a box, under the path it lives at (`frontend/plan-box.js`).
+   * The plan, in a box, under the path it lives at (`frontend/transcript/plan-box.js`).
    *
    * The box needs an explicit width: inside `<Static>` Yoga sizes a box to its
    * content, which is the Banner trap — and the markdown is rendered to the
@@ -705,7 +709,7 @@ function ActionRow({ act, verbose, isLive, width = 80, tick = 0 }) {
      * `wrap="truncate"` because this is drawn in the live frame and a row
      * that wraps is charged as one and drawn as two.
      *
-     * The wording is `fsEventRow`, in `format.js`, because that is where a
+     * The wording is `fsEventRow`, in `tool-rows.js`, because that is where a
      * test can reach it — the same reason `liveMessageText` lives there.
      */
     return (

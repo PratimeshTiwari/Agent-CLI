@@ -17,7 +17,7 @@ import {
 import { detectFormat, flatten } from '../../../src/backend/mcp/tools/log-records.js';
 import { logReadRedirect, runLogRead } from '../../../src/backend/core/log-read.js';
 import { formatReadResult } from '../../../src/backend/core/result-budget.js';
-import { summarizeResult } from '../../../src/frontend/format.js';
+import { summarizeResult } from '../../../src/frontend/transcript/tool-rows.js';
 
 let ws;
 const T0 = Date.parse('2026-10-29T10:00:00Z');

@@ -7,17 +7,17 @@ import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { Header as BannerHeader, Mark, MARK } from './Banner.jsx';
 import { FRAMES } from './RunningLine.jsx';
 import ThemePreview from './ThemePreview.jsx';
-import { copyToClipboard } from '../clipboard.js';
+import { copyToClipboard } from '../input/clipboard.js';
 import { saveUserSettings } from '../../backend/core/user-settings.js';
 import { MAX_AGENT_NAME } from '../../backend/core/slash-commands.js';
 import {
   STEPS, extensionDir, extensionStatus, onboardingLayout, progressBar, revealColumns, tildify,
-} from '../welcome.js';
+} from '../screen/welcome.js';
 
 /**
  * First-start setup, Claude Code style: full screens before the app, one
  * decision each. The pure half — when to show it, the bar, the layout by
- * height — is `frontend/welcome.js`.
+ * height — is `frontend/screen/welcome.js`.
  *
  * It runs *instead of* App, not on top of it, so there is no transcript
  * underneath to keep consistent, and App mounts afterwards with the theme

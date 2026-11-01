@@ -3,15 +3,15 @@ import path from 'path';
 import os from 'os';
 import * as paths from '../../backend/core/paths.js';
 import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../backend/core/restart.js';
-import { exitWithFarewell } from '../farewell.js';
+import { exitWithFarewell } from '../screen/farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../backend/core/skills.js';
-import { describeDestructive } from '../destructive.js';
+import { describeDestructive } from '../menus/destructive.js';
 import { planReset, applyReset } from '../../backend/core/reset.js';
-import { canCopy, copyToClipboard } from '../clipboard.js';
-import { lastReply, lastCodeBlock } from '../format.js';
+import { canCopy, copyToClipboard } from '../input/clipboard.js';
+import { lastReply, lastCodeBlock } from '../transcript/markdown.js';
 import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../backend/core/error-log.js';
 import { listPlans } from '../../backend/core/plan-archive.js';
-import { planBoxRow } from '../plan-box.js';
+import { planBoxRow } from '../transcript/plan-box.js';
 import { listCommandDays, readCommands } from '../../backend/core/command-log.js';
 import { resolveWorkspaceInput, validateWorkspace } from '../../backend/core/workspaces.js';
 
@@ -47,9 +47,10 @@ export function resolveOpenTarget(workspace, target) {
   return { abs, exists: fs.existsSync(abs) };
 }
 import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
-import { commandHelp } from '../help.js';
+import { commandHelp } from '../menus/help.js';
 import { AGENT_COMMANDS, invalidOption } from '../../backend/core/slash-commands.js';
-import { oneLine, renderCommandList } from '../format.js';
+import { oneLine } from '../text.js';
+import { renderCommandList } from '../transcript/status-rows.js';
 import { planResume } from '../../backend/core/chat-thread.js';
 import { SETTING_GROUPS } from '../../backend/core/settings.js';
 import { canPickFolder, pickFolder } from '../../backend/core/folder-picker.js';
@@ -183,7 +184,7 @@ export async function handleSlashCommand(query, {
     }
 
     /*
-     * A menu with three tabs (`frontend/help.js`), not a block in the transcript: the
+     * A menu with three tabs (`frontend/menus/help.js`), not a block in the transcript: the
      * old one was ~50 rows left in the scrollback on every `/help`. Built from
      * SLASH_COMMANDS and KEY_ROWS, never written out beside them — the
      * hand-kept copy had drifted twice, listing /init-skills and /paste-image
@@ -699,7 +700,7 @@ export async function handleSlashCommand(query, {
     // into a prompt — it is for the person whose computer it is.
     /*
      * `/doctor`: what the agent needs installed, what is, and what is newer.
-     * Since v5.30 a menu (`frontend/doctor-view.js`): ↑↓ over packages, enter for
+     * Since v5.30 a menu (`frontend/menus/doctor-view.js`): ↑↓ over packages, enter for
      * why one is here and to update, or install another version; esc walks
      * back to the list. It opens on what is installed — read from disk, no
      * network — and the registry's answer fills in a second later, so the
@@ -1076,7 +1077,7 @@ export async function handleSlashCommand(query, {
 
       const summary = summarizeErrors(agentLoop.workspace);
       /*
-       * Bare `/logs` is a picker (v5.35, `frontend/logs-view.js`): every question the
+       * Bare `/logs` is a picker (v5.35, `frontend/menus/logs-view.js`): every question the
        * log answers, each row with its answer. It used to open only once
        * something had failed, so "is it slower?" needed the word `extension`.
        */

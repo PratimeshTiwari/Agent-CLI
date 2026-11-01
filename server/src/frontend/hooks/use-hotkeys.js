@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { hotkeys } from '../hotkeys.js';
+import { hotkeys } from '../input/hotkeys.js';
 
 /**
  * Subscribe to the application chords `cli-ui.jsx` pulls off stdin.

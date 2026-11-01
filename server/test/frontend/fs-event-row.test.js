@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fsEventRow } from '../../src/frontend/format.js';
+import { fsEventRow } from '../../src/frontend/transcript/tool-rows.js';
 
 test('the row names the files and leaves the counting to the summary', () => {
   const row = fsEventRow(['a.js', 'b.js', 'c.js']);

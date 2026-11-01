@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Banner } from './Banner.jsx';
 import { T } from '../theme.js';
-import { introFrame, introLength, outroFrame, INTRO_TICK_MS, OUTRO_TICK_MS } from '../intro.js';
+import { introFrame, introLength, outroFrame, INTRO_TICK_MS, OUTRO_TICK_MS } from '../screen/intro.js';
 
 /**
  * The header drawing itself in, as a live frame, before App mounts and commits
- * the same header to <Static> at the same position. See `frontend/intro.js`.
+ * the same header to <Static> at the same position. See `frontend/screen/intro.js`.
  */
 export function Intro({ agentLoop, onDone }) {
   const name = agentLoop?.agentName || 'Agent CLI';

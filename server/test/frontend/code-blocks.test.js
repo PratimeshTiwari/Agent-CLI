@@ -15,7 +15,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { renderMarkdown, extractCodeBlocks } from '../../src/frontend/format.js';
+import { renderMarkdown, extractCodeBlocks } from '../../src/frontend/transcript/markdown.js';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const lines = (md) => strip(renderMarkdown(md)).split('\n');

@@ -4,7 +4,9 @@
 
 import { describe, it, test } from 'node:test';
 import assert from 'node:assert';
-import { oneLine, summarizeResult, subjectOf, clampForDisplay, formatCommandResult, renderMarkdown, extractCodeBlocks } from '../../src/frontend/format.js';
+import { oneLine } from '../../src/frontend/text.js';
+import { summarizeResult, subjectOf, clampForDisplay, formatCommandResult } from '../../src/frontend/transcript/tool-rows.js';
+import { renderMarkdown, extractCodeBlocks } from '../../src/frontend/transcript/markdown.js';
 
 describe('oneLine', () => {
   it('collapses whitespace to a single line', () => {
@@ -330,7 +332,7 @@ test('one tilde is "about", not strikethrough; two still strike (v6.25)', () => 
   assert.doesNotMatch(struck, /~~/);
 });
 
-import { texToText } from '../../src/frontend/format.js';
+import { texToText } from '../../src/frontend/transcript/markdown.js';
 
 test('inline maths: symbols are drawn, anything else stays TeX (v7.1)', () => {
   const plain = (s) => renderMarkdown(s).replace(/\x1b\[[0-9;]*m/g, '').trim();
@@ -349,7 +351,7 @@ test('inline maths: symbols are drawn, anything else stays TeX (v7.1)', () => {
 });
 
 test('a link costs no columns when a reply is wrapped (v7.9)', async () => {
-  const { fitLines, visibleWidth } = await import('../../src/frontend/format.js');
+  const { fitLines, visibleWidth } = await import('../../src/frontend/text.js');
   const url = 'https://gemini.google.com/u/1/app/17d6b14b8a5d1ff2';
   const link = `\x1b]8;;${url}\x1b\\${url}\x1b]8;;\x1b\\`;
   assert.equal(visibleWidth(link), url.length);

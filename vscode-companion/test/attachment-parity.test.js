@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const mine = require('../chat-panel-html.js');
 
 test('marker and body match server/src/ui/chat-queue.js', async () => {
-  const theirs = await import('../../server/src/frontend/chat-queue.js');
+  const theirs = await import('../../server/src/frontend/input/chat-queue.js');
   for (const entry of [
     { file: 'src/app.js', startLine: 12, endLine: 30, text: 'a\nb', language: 'javascript' },
     { file: 'README.md', startLine: 4, endLine: 4, text: 'one line', language: '' },

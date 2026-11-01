@@ -13,7 +13,7 @@ import {
 } from '../../../src/backend/core/delegated-read.js';
 import { readFile } from '../../../src/backend/mcp/tools/read-file.js';
 import { formatReadResult, fitReadResult } from '../../../src/backend/core/result-budget.js';
-import { summarizeResult } from '../../../src/frontend/format.js';
+import { summarizeResult } from '../../../src/frontend/transcript/tool-rows.js';
 
 function workspace() {
   const ws = mkdtempSync(join(tmpdir(), 'dread-'));

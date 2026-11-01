@@ -7,8 +7,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTurnActions } from '../../src/frontend/transcript.js';
-import { compactionRow } from '../../src/frontend/format.js';
+import { parseTurnActions } from '../../src/frontend/transcript/transcript.js';
+import { compactionRow } from '../../src/frontend/transcript/status-rows.js';
 
 const turn = (steps) => ({ id: 't', steps });
 
@@ -53,7 +53,7 @@ test('an unparseable tool call is its prose and one row, not the JSON and a para
 });
 
 test('the parse-error row', async () => {
-  const { parseErrorRow } = await import('../../src/frontend/format.js');
+  const { parseErrorRow } = await import('../../src/frontend/transcript/status-rows.js');
   assert.equal(parseErrorRow(1, 2), '✗ Could not read its tool call — asked it to resend (1/2) · ctrl+e for details');
   assert.equal(parseErrorRow(undefined, undefined, true), '✗ Could not read its tool call — asked it to resend');
 });

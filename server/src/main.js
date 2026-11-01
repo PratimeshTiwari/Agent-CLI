@@ -21,7 +21,7 @@ import { hostEditor } from './backend/core/host-editor.js';
 import { rememberWorkspace } from './backend/core/workspaces.js';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { exitWithFarewell } from './frontend/farewell.js';
+import { exitWithFarewell } from './frontend/screen/farewell.js';
 import { WebSocketServer } from './backend/bridge/websocket-server.js';
 import { MCPServer } from './backend/mcp/mcp-server.js';
 import { AgentLoop } from './backend/core/agent-loop.js';
@@ -34,7 +34,7 @@ import { logError } from './backend/core/error-log.js';
 import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/dep-recovery.js';
 import { RESTART_EXIT_CODE } from './backend/core/restart.js';
 import { loadUserSettings, saveUserSettings } from './backend/core/user-settings.js';
-import { firstRunState } from './frontend/welcome.js';
+import { firstRunState } from './frontend/screen/welcome.js';
 
 /**
  * This file's own directory, at module scope.

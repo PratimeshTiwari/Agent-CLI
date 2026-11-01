@@ -13,7 +13,7 @@ import { readFileSync, mkdtempSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { savePastedImages } from '../../../src/backend/core/panel-images.js';
-import { foldImages } from '../../../src/frontend/image-attach.js';
+import { foldImages } from '../../../src/frontend/input/image-attach.js';
 import { stripImageData } from '../../../src/backend/core/prompt-builder.js';
 
 const panel = readFileSync(new URL('../../../../extension/side-panel/panel.js', import.meta.url), 'utf8');

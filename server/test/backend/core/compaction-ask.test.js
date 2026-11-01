@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { contextText, statusBarLayout } from '../../../src/frontend/status-bar.js';
+import { contextText, statusBarLayout } from '../../../src/frontend/screen/status-bar.js';
 
 /*
  * v7.5. Owner: "before auto-compact, lets give user option, auto-compact now

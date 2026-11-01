@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lastReply, lastCodeBlock } from '../../src/frontend/format.js';
+import { lastReply, lastCodeBlock } from '../../src/frontend/transcript/markdown.js';
 import { handleSlashCommand } from '../../src/frontend/hooks/use-slash-commands.js';
 
 test('the newest agent reply, skipping tool rows, notices and the user', () => {

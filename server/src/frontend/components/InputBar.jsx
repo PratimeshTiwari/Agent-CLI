@@ -3,13 +3,14 @@ import { Box, Text, usePaste } from 'ink';
 import { PromptInput } from './PromptInput.jsx';
 import { RunningLine } from './RunningLine.jsx';
 import { FOCUS_INPUT, modeColor } from '../constants.js';
-import { applyPaste, nextPasteId } from '../paste.js';
-import { recognizeDrop } from '../file-drop.js';
-import { oneLine, taskProgress } from '../format.js';
-import { formatTokens } from '../token-count.js';
-import { hasClipboardImage } from '../clipboard-image.js';
+import { applyPaste, nextPasteId } from '../input/paste.js';
+import { recognizeDrop } from '../input/file-drop.js';
+import { oneLine } from '../text.js';
+import { taskProgress } from '../transcript/status-rows.js';
+import { formatTokens } from '../transcript/token-count.js';
+import { hasClipboardImage } from '../input/clipboard-image.js';
 import { T } from '../theme.js';
-import { keyCell } from '../keys-view.js';
+import { keyCell } from '../menus/keys-view.js';
 
 /** First `n` non-empty lines of an artifact, for the one-glance summary. */
 /**
@@ -125,7 +126,7 @@ export function InputBar({
     }
 
     // A paste that is nothing but existing absolute paths is a drop (v5.33):
-    // each becomes a tag at the caret instead of text (`frontend/file-drop.js`).
+    // each becomes a tag at the caret instead of text (`frontend/input/file-drop.js`).
     const dropped = attachDropped ? recognizeDrop(text) : null;
     if (dropped) {
       attachDropped(dropped);

@@ -3,18 +3,18 @@ import { exec } from 'child_process';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
-import { rowsFromPatch } from '../diff-preview.js';
+import { rowsFromPatch } from '../transcript/diff-preview.js';
 import ThemePreview from './ThemePreview.jsx';
-import { previewSize, PREVIEW_ROWS } from '../theme-preview.js';
+import { previewSize, PREVIEW_ROWS } from '../menus/theme-preview.js';
 import { DiffRows } from './DiffRows.jsx';
-import { oneLine } from '../format.js';
-import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../help.js';
-import { panelRoom, wrapLines, cutStart } from '../panel.js';
-import { filterUnderline, settingsKeys, stepValue } from '../settings-view.js';
-import { sliderLayout, stopModel, tabDiffers } from '../effort-slider.js';
+import { oneLine } from '../text.js';
+import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../menus/help.js';
+import { panelRoom, wrapLines, cutStart } from '../menus/panel.js';
+import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view.js';
+import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
-import { logsHomeItems, failureItems } from '../logs-view.js';
+import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { canPickFolder, pickFolder } from '../../backend/core/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/effort.js';
@@ -26,7 +26,7 @@ import { skillSearchPath, listSkills } from '../../backend/core/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../backend/core/slash-commands.js';
 import { versionChanges, versionAdds } from '../../backend/core/prompt-versions.js';
-import { promptPanelPlan, changesPage, roundsBar, roundsLabel } from '../prompt-view.js';
+import { promptPanelPlan, changesPage, roundsBar, roundsLabel } from '../menus/prompt-view.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../backend/core/user-settings.js';
 import {
@@ -39,7 +39,7 @@ import { snapshotBeforeChange } from '../../backend/core/doctor-guard.js';
 import {
   homeItems, homeCursor, homeStatus, findEntry, HEALTH_TABS, nextHealthTab, tabCounts, packageLines, packageActions, versionItems,
   versionCursor, jobLine, errorLines,
-} from '../doctor-view.js';
+} from '../menus/doctor-view.js';
 
 /**
  * Every modal the agent can raise: questions, command approval, plan review,
@@ -235,7 +235,7 @@ export function Menus({
     if (value.kind === 'error') setActiveMenu({ ...menu, view: 'error', from: menu.view || 'home' });
   }, [setActiveMenu, runDoctorInstall, updateDoctor]);
 
-  // Every menu is a `Panel` (`frontend/panel.js`): what it can afford at this height.
+  // Every menu is a `Panel` (`frontend/menus/panel.js`): what it can afford at this height.
   const W = terminalWidth;
   const fit = (subtitle, extra = 0) => panelRoom({ rows: menuRows, width: W, subtitle, extra });
 
@@ -514,7 +514,7 @@ export function Menus({
 
         {activeMenu?.type === 'command_approval' && activeMenu.payload?.kind !== 'external' && (() => {
           /*
-            Every row here is decided by `approvalLayout` (format.js) and drawn
+            Every row here is decided by `approvalLayout` (live-layout.js) and drawn
             truncated, so the panel is exactly the height App charged for it. A
             row that wraps is a row nobody paid for. No digits: an approval that
             a stray keypress could answer is how things used to run without
@@ -580,7 +580,7 @@ export function Menus({
           the rule out first. Then `/allowlist clear` took seven of them on one
           keypress and reported it in the past tense, and `/clear` is a single
           Enter on the settings screen's Session row. Which of those needs asking
-          is decided in `frontend/destructive.js`, so the typed path and the settings
+          is decided in `frontend/menus/destructive.js`, so the typed path and the settings
           path cannot disagree about it.
         */}
         {activeMenu?.type === 'confirm_destructive' && (() => {
@@ -964,7 +964,7 @@ export function Menus({
           /*
            * A comparison as well as a choice (v6.11, "this looks a bit dull"):
            * rounds per turn as a bar per version, then what the highlighted
-           * one changes from v1. Laid out by `frontend/prompt-view.js`; both blocks
+           * one changes from v1. Laid out by `frontend/menus/prompt-view.js`; both blocks
            * give way on a short terminal, the list never does.
            */
           const rows = promptVersionRows(agentLoop);
@@ -1115,7 +1115,7 @@ export function Menus({
           }
 
           // ── The page ───────────────────────────────────────────────
-          // Option C′ (`frontend/settings-view.js`): the filter on top, underlined;
+          // Option C′ (`frontend/menus/settings-view.js`): the filter on top, underlined;
           // switches and ladders that ←/→ change in place; the hint on the
           // selected row. Tabs drawn as `/help` draws them.
           const stops = Object.fromEntries(EFFORT_LEVELS.map((e) =>
@@ -1375,7 +1375,7 @@ export function Menus({
         })()}
 
         {activeMenu?.type === 'logs' && (() => {
-          // v5.35 (`frontend/logs-view.js`): every question the log answers, each row
+          // v5.35 (`frontend/menus/logs-view.js`): every question the log answers, each row
           // with its answer; enter opens the full one. Failures is a second view
           // so the nine flow names are never typed.
           const m = activeMenu;
@@ -1900,7 +1900,7 @@ export function DiffApproval({
 
   const tone = critical ? T.danger : T.attention;
   return (
-    // The shared menu look (`frontend/panel.js`): a rule in the risk colour where
+    // The shared menu look (`frontend/menus/panel.js`): a rule in the risk colour where
     // the round box was, which also gives the diff the box's four columns.
     <Box flexDirection="column" width="100%" flexShrink={1}>
       <Text color={tone} wrap="truncate">{'─'.repeat(Math.max(1, width))}</Text>

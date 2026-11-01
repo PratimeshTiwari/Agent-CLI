@@ -10,7 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeLoopHistory } from '../../src/frontend/transcript.js';
+import { mergeLoopHistory } from '../../src/frontend/transcript/transcript.js';
 
 function session(turns) {
   const loop = [];

@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeResult, lineDelta } from '../../src/frontend/format.js';
+import { summarizeResult, lineDelta } from '../../src/frontend/transcript/tool-rows.js';
 
 const PATCH = [
   'Index: app/big.rb', '===', '--- app/big.rb\toriginal', '+++ app/big.rb\tmodified',

@@ -5,7 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildAgentCallbacks } from '../../src/frontend/hooks/use-agent-callbacks.js';
-import { runningLayout, elapsedLabel, RUNNING_OUTPUT_LINES } from '../../src/frontend/format.js';
+import { runningLayout, RUNNING_OUTPUT_LINES } from '../../src/frontend/transcript/live-layout.js';
+import { elapsedLabel } from '../../src/frontend/transcript/status-rows.js';
 
 function cli() {
   const state = { calls: [], history: [], broadcast: [] };

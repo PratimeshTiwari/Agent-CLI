@@ -1,10 +1,10 @@
-import { noteActivity } from '../activity.js';
+import { noteActivity } from '../transcript/activity.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import * as paths from '../../backend/core/paths.js';
-import { mergeLoopHistory } from '../transcript.js';
+import { mergeLoopHistory } from '../transcript/transcript.js';
 import { FOCUS_INPUT } from '../constants.js';
 
 /**

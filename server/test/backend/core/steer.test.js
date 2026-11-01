@@ -17,8 +17,8 @@ import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
 import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
 import { DiffEngine } from '../../../src/backend/core/diff-engine.js';
 import { RiskClassifier } from '../../../src/backend/core/risk-classifier.js';
-import { chordGate, extractHotkeys, STEER_WINDOW_MS } from '../../../src/frontend/hotkeys.js';
-import { parseTurnActions } from '../../../src/frontend/transcript.js';
+import { chordGate, extractHotkeys, STEER_WINDOW_MS } from '../../../src/frontend/input/hotkeys.js';
+import { parseTurnActions } from '../../../src/frontend/transcript/transcript.js';
 import { buildAgentCallbacks } from '../../../src/frontend/hooks/use-agent-callbacks.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '../../../src');

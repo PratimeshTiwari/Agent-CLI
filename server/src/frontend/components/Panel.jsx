@@ -1,13 +1,13 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import { T } from '../theme.js';
-import { listWindow } from '../panel.js';
+import { listWindow } from '../menus/panel.js';
 
 /**
  * Every menu's frame, drawn the way `/help` is (`head` replaces the title row
  * where a menu has tabs instead): a rule, the title, a dim line
  * or two saying what it is for, the body, one line of keys. No border and no
- * padding — see `frontend/panel.js` for why, and for the row arithmetic.
+ * padding — see `frontend/menus/panel.js` for why, and for the row arithmetic.
  *
  * `tone` colours the title, and the rule too when it is not an ordinary menu:
  * an approval or a destructive confirmation should not look like a picker.

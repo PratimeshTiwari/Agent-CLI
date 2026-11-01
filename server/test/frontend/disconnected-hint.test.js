@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { disconnectedHint, EXTENSION_PORT } from '../../src/frontend/format.js';
+import { disconnectedHint, EXTENSION_PORT } from '../../src/frontend/transcript/status-rows.js';
 
 test('a different port says so, whatever else is true', () => {
   assert.match(disconnectedHint({ port: 7801, everConnected: true }), /7801.*--port/);
@@ -33,7 +33,7 @@ test('the extension really does dial only this port', async () => {
 });
 
 test('taskProgress counts the checklist, and nothing else', async () => {
-  const { taskProgress } = await import('../../src/frontend/format.js');
+  const { taskProgress } = await import('../../src/frontend/transcript/status-rows.js');
   assert.deepEqual(taskProgress('# Tasks\n- [x] a\n- [ ] b\n  * [X] c\nnot - [x] inline'), { done: 2, total: 3 });
   assert.equal(taskProgress('# Plan\nno boxes'), null);
   assert.equal(taskProgress(null), null);

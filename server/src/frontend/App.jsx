@@ -9,34 +9,36 @@ import { Goodbye } from './components/Intro.jsx';
 import { TranscriptTurn, UserBar, TurnSummary, TurnRow } from './components/TranscriptTurn.jsx';
 import { AgentTerminal } from './components/AgentTerminal.jsx';
 import { InputBar } from './components/InputBar.jsx';
-import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './image-attach.js';
-import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './file-drop.js';
-import { actionHead } from './action-row.js';
-import { approvalLayout, contextMeter, disconnectedHint, elapsedLabel, runningLayout, taskProgress, workBreakdown } from './format.js';
-import { easeCount, streamTokens } from './token-count.js';
-import { statusBarLayout, STATUS_RIGHT_GUTTER } from './status-bar.js';
-import { keysLayout } from './keys-view.js';
+import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './input/image-attach.js';
+import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './input/file-drop.js';
+import { actionHead } from './transcript/action-row.js';
+import { approvalLayout, runningLayout } from './transcript/live-layout.js';
+import { contextMeter, disconnectedHint, elapsedLabel, taskProgress } from './transcript/status-rows.js';
+import { workBreakdown } from './transcript/tool-rows.js';
+import { easeCount, streamTokens } from './transcript/token-count.js';
+import { statusBarLayout, STATUS_RIGHT_GUTTER } from './screen/status-bar.js';
+import { keysLayout } from './menus/keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../backend/core/effort.js';
 import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt-versions.js';
-import { isSilentTooLong, lastActivityAt, noteActivity } from './activity.js';
+import { isSilentTooLong, lastActivityAt, noteActivity } from './transcript/activity.js';
 import { modelMismatch, browserModelPin } from '../backend/core/model-match.js';
 import { mismatchPolicy } from '../backend/core/model-fallback.js';
-import { planBoxRow, findPlanFile, planWorthReviewing } from './plan-box.js';
-import { groupTurns, parseTurnActions } from './transcript.js';
-import { expandPastes, attachedPastes } from './paste.js';
-import { drainChatQueue } from './chat-queue.js';
+import { planBoxRow, findPlanFile, planWorthReviewing } from './transcript/plan-box.js';
+import { groupTurns, parseTurnActions } from './transcript/transcript.js';
+import { expandPastes, attachedPastes } from './input/paste.js';
+import { drainChatQueue } from './input/chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
-import { hotkeys, EXIT_WINDOW_MS, chordGate } from './hotkeys.js';
+import { hotkeys, EXIT_WINDOW_MS, chordGate } from './input/hotkeys.js';
 import { checkForUpdate, updateLine, readPendingReload } from '../backend/core/update.js';
 import { checkInstalled, startupWarning } from '../backend/core/doctor.js';
 import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../backend/core/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
 import { isSlowCommand } from '../backend/core/slash-commands.js';
 import { progressText } from '../backend/core/compaction.js';
-import { visualRows } from './prompt-rows.js';
+import { visualRows } from './input/prompt-rows.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
@@ -766,7 +768,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery)).slice(0, paletteRoom);
   const slashOpen = slashMatches.length > 0;
   const slashSelected = Math.min(slashIdx, Math.max(0, slashMatches.length - 1));
-  // `?` as the whole input shows the keys (v6.18, `frontend/keys-view.js`), in the
+  // `?` as the whole input shows the keys (v6.18, `frontend/menus/keys-view.js`), in the
   // palette's place and out of the palette's room.
   const keysGrid = focus === FOCUS_INPUT && input === '?' && !activeMenu
     ? keysLayout(terminalWidth, paletteRoom) : null;
@@ -880,7 +882,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
       } catch (e) { /* nothing to clear */ }
 
       // The plan itself, in a box under its path, before the menu that asks
-      // about it — and nothing when there is no plan file (`frontend/plan-box.js`).
+      // about it — and nothing when there is no plan file (`frontend/transcript/plan-box.js`).
       const box = planBoxRow(agentLoop.workspace);
       if (box) setHistory((prev) => [...prev, box]);
       setActiveMenu({ type: 'plan_review', path: box?.path || null });
@@ -1533,7 +1535,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
   })();
 
   /*
-   * The bar under the input (v6.13, `frontend/status-bar.js`). `shift+tab to cycle`
+   * The bar under the input (v6.13, `frontend/screen/status-bar.js`). `shift+tab to cycle`
    * is taught at the start of a chat, while idle, and not on every frame after:
    * owner, "show this at the start of chat only". The model is the browser's
    * when the picker has been read, the effort (ours) only while it has not —

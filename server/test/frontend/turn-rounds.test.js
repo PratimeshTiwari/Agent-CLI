@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { workBreakdown } from '../../src/frontend/format.js';
+import { workBreakdown } from '../../src/frontend/transcript/tool-rows.js';
 
 const tool = (toolName, round) => ({ type: 'tool', toolName, msg: { round } });
 

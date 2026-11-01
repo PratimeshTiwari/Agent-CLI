@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { approvalLayout } from '../../src/frontend/format.js';
+import { approvalLayout } from '../../src/frontend/transcript/live-layout.js';
 
 const LONG = 'for i in 1 2 3; do echo LONGROW-$i; sleep 1; done; echo the-quick-brown-fox-jumps-over-the-lazy-dog-and-keeps-going-well-past-eighty-columns';
 const payload = { command: LONG, cwd: '/w/project', riskReason: 'Mutating shell command' };

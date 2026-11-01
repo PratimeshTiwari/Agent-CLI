@@ -17,7 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { liveMessageText } from "../../src/frontend/format.js";
+import { liveMessageText } from "../../src/frontend/transcript/live-layout.js";
 
 const lines = (n) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
 const count = (s) => String(s).split('\n').length;

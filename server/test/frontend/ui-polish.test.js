@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { workBreakdown, shortenPath } from '../../src/frontend/format.js';
+import { workBreakdown } from '../../src/frontend/transcript/tool-rows.js';
+import { shortenPath } from '../../src/frontend/text.js';
 import { handleSlashCommand } from '../../src/backend/core/slash-commands.js';
 import { DiffEngine } from '../../src/backend/core/diff-engine.js';
 
@@ -39,7 +40,7 @@ test('the queued row says how to take a prompt back', () => {
 });
 
 test('the mode is said in the status line, Claude Code style', async () => {
-  const { statusBarLayout } = await import('../../src/frontend/status-bar.js');
+  const { statusBarLayout } = await import('../../src/frontend/screen/status-bar.js');
   const left = (mode) => statusBarLayout({ width: 80, mode }).left.map((x) => x.text).join('');
   assert.equal(left('auto'), '⏵⏵ auto mode');
   assert.equal(left('plan'), '⏸ plan mode');

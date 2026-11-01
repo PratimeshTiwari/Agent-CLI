@@ -12,7 +12,8 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { renderMarkdown, visibleWidth, wrapAnsi, fitColumns } from '../../src/frontend/format.js';
+import { renderMarkdown } from '../../src/frontend/transcript/markdown.js';
+import { visibleWidth, wrapAnsi, fitColumns } from '../../src/frontend/text.js';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 

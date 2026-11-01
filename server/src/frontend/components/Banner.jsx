@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import os from 'os';
 import { themeName } from '../theme.js';
-import { shortenPath } from '../format.js';
+import { shortenPath } from '../text.js';
 
 /**
  * The header: a mark, the agent's name, the byline, where you are, and the one
@@ -52,7 +52,7 @@ export function Mark({ reveal = Infinity }) {
  * shape. The name is plain text: what `/name` changes is a word, not the logo.
  */
 export function Header({ name, where, models, columns = process.stdout.columns || 80, frame = null }) {
-  // `frame` is the intro's position (`frontend/intro.js`); absent, the header is whole.
+  // `frame` is the intro's position (`frontend/screen/intro.js`); absent, the header is whole.
   // A hidden line is a space, not nothing: the header keeps its four rows while
   // it draws in, so the frame never changes height under the animation.
   const shown = (n) => !frame || frame.lines >= n;

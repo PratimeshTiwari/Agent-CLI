@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planReset, applyReset } from '../../../src/backend/core/reset.js';
-import { describeDestructive } from '../../../src/frontend/destructive.js';
+import { describeDestructive } from '../../../src/frontend/menus/destructive.js';
 import { clearPathCache, homeDir, workspaceHomeDir } from '../../../src/backend/core/paths.js';
 
 function populate(stateDir) {

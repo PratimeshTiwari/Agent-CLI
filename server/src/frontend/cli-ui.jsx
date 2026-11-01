@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { render } from 'ink';
 import { PassThrough } from 'node:stream';
-import { extractHotkeys, dispatchInOrder, hotkeys, interruptGate } from './hotkeys.js';
-import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './farewell.js';
-import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR, enterSequence } from './screen-span.js';
+import { extractHotkeys, dispatchInOrder, hotkeys, interruptGate } from './input/hotkeys.js';
+import { registerInk, registerOutro, registerScreen, exitWithFarewell } from './screen/farewell.js';
+import { createScreenSpan, CURSOR_REPORT, ASK_CURSOR, enterSequence } from './screen/screen-span.js';
 import { App } from './App.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
-import { animationAllowed, OUTRO_MS } from './intro.js';
+import { animationAllowed, OUTRO_MS } from './screen/intro.js';
 import { setTheme, startupTheme } from './theme.js';
 import { loadUserSettings } from '../backend/core/user-settings.js';
-import { createProbeHold } from './ink-probe-hold.js';
-import { asBracketedDrop, createDropJoiner } from './file-drop.js';
+import { createProbeHold } from './input/ink-probe-hold.js';
+import { asBracketedDrop, createDropJoiner } from './input/file-drop.js';
 
 /**
  * The stream Ink reads: real stdin, with a trailing Enter delivered separately.

@@ -137,7 +137,7 @@ test('a new chat is refused while the main tab has a prompt in flight', async ()
 
 // ── What the run under the pty found ─────────────────────────────────────────
 
-import { mergeLoopHistory } from '../../../src/frontend/transcript.js';
+import { mergeLoopHistory } from '../../../src/frontend/transcript/transcript.js';
 import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
 import { recentMessages } from '../../../src/backend/core/compaction.js';
 

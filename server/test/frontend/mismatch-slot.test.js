@@ -17,7 +17,7 @@ test('there is no mismatch row above the input any more; the footer says it (v7.
   assert.doesNotMatch(app, /\{mismatch && \(/);
   assert.doesNotMatch(app, /const noticeRows = [^;]*mismatch/);
   assert.match(app, /modelMark: browserModelLabel \? \(agentLoop\.effortFallback \? '↓' : modelDiffers \? '⚠' : null\)/);
-  const { statusBarLayout } = await import('../../src/frontend/status-bar.js');
+  const { statusBarLayout } = await import('../../src/frontend/screen/status-bar.js');
   const text = (l) => l.right.map((f) => f.text).join('');
   assert.equal(text(statusBarLayout({ width: 120, mode: 'plan', model: '3 Flash', modelMark: '⚠' })), '⚠ 3 Flash');
 });

@@ -43,7 +43,7 @@ everything passes**, so a failure is a real regression. No lint script;
 ```
 server/src/
 ├── main.js        # arg parsing, wiring, bootstrap
-├── backend/
+├── backend/       # each of the two has a README.md: what is where, how to debug
 │   ├── core/      # agent-loop, prompt-builder, diff-engine, risk-classifier, paths,
 │   │              #   migrate, workspaces, slash-commands, effort
 │   ├── bridge/    # the Chrome-extension transport
@@ -51,7 +51,8 @@ server/src/
 │   │              #   find_references), ruby-symbols, pattern-symbols
 │   ├── mcp/       # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
 │   └── atlassian/  prompts/  storage/  watcher/
-└── frontend/      # the terminal UI (App.jsx, hooks/, components/); imports backend/
+└── frontend/      # the terminal UI: input/, transcript/, menus/, screen/, components/;
+                   #   imports backend/
 ```
 
 **How it works** — the turn lifecycle, the bridge to the browser, prompt

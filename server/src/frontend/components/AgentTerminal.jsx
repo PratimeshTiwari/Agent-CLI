@@ -71,7 +71,7 @@ export function AgentTerminal({
   return (
     <>
       {terminalOpen && (
-        // The shared menu look (`frontend/panel.js`): a rule in the shell colour, no box.
+        // The shared menu look (`frontend/menus/panel.js`): a rule in the shell colour, no box.
         <Box flexDirection="column" width="100%">
           <Text color={T.shell} wrap="truncate">{'─'.repeat(Math.max(1, process.stdout.columns || 80))}</Text>
           <Text wrap="truncate">{' '}<Text bold color={T.shell}>Shell</Text><Text dimColor>{'  runs in the workspace'}</Text></Text>
