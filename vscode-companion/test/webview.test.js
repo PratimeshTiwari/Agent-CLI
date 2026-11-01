@@ -63,7 +63,7 @@ test('readBridge', async (t) => {
 
 /** Boot the real bridge with a loop that answers every prompt. */
 async function bridge() {
-  const { WebSocketServer } = await import('../../server/src/bridge/websocket-server.js');
+  const { WebSocketServer } = await import('../../server/src/backend/bridge/websocket-server.js');
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-ws-'));
   const received = [];
   const agentLoop = {

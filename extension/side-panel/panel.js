@@ -236,7 +236,7 @@ function setupSurfaces() {
  * Change the workspace from the panel.
  *
  * The same act as `/workspace <path>` in the CLI, and the same code behind it
- * — `core/restart.js` owns validation, the supervisor check and the handover
+ * — `core/install/restart.js` owns validation, the supervisor check and the handover
  * file, so the two front-ends cannot disagree about what a usable workspace is.
  *
  * `prompt()` rather than a file picker: a Chrome extension page cannot open a
@@ -435,7 +435,7 @@ function updateConnectionUI(connected) {
 }
 
 // ── Mode Toggle ─────────────────────────────────────────────────────
-// The CLI's order (server/src/core/modes.js): plan → auto → strict.
+// The CLI's order (server/src/backend/core/policy/modes.js): plan → auto → strict.
 const MODE_ORDER = ['plan', 'auto', 'strict'];
 
 function toggleMode() {
@@ -1094,7 +1094,7 @@ function appendReview(review) {
 /**
  * Render a question the turn is parked on.
  *
- * The payload is **normalised by the server** (`core/question.js`), so a
+ * The payload is **normalised by the server** (`core/turn/question.js`), so a
  * question is always `{header, question, options: [{label, description}]}` and
  * `payload.questions` is always a non-empty array. That is deliberate: these
  * args are parsed out of model prose and nothing in them is guaranteed, and

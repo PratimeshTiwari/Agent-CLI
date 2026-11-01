@@ -38,7 +38,7 @@ Likewise `vscode-companion/*.vsix` is committed and must be repackaged after edi
 
 ```bash
 npm test                                       # -> server: node --test "test/**/*.test.js"
-node --test server/test/core/risk-classifier.test.js   # single file
+node --test server/test/backend/core/commands/risk-classifier.test.js   # single file
 ```
 
 Tests live in `server/test/`, mirroring `server/src/` directory for directory. They used to sit
@@ -52,7 +52,7 @@ WebSocket server and hangs forever. Nothing under `test/` starts anything, so th
 The quoted glob is still what makes the script work under `sh`, which has no globstar.
 
 A test that needs a path into the source tree must compute it relative to `src/`, not to itself
-(`prompt-loader.test.js` reads `../../src/prompts`).
+(`prompt-loader.test.js` reads `../../../../src/backend/prompts`).
 
 **The suite runs against a throwaway home.** `test/setup-home.js` is preloaded by the `test`
 script and points `AGENT_CLI_HOME` at a temp dir. Without it every test that built an
@@ -119,7 +119,7 @@ replaces every occurrence**, and the tail of `findSymbol` was byte-identical to 
 without a count is the same trap with the opposite failure. When editing by script, assert the
 match count before writing.
 
-`test/mcp/tool-smoke.test.js` is the answer that generalises: every registered tool called once
+`test/backend/mcp/tool-smoke.test.js` is the answer that generalises: every registered tool called once
 on its happy path, plus a membership assertion so a tool added later cannot slip past by simply
 not being in the map. It asserts almost nothing about *what* comes back — the per-tool suites
 do that — only that the call the agent makes does not throw. A tool that cannot run at all is
@@ -131,39 +131,41 @@ the failure that costs a whole turn, and the model has been told by the prompt t
 server/src/
 ├── index.js          # bin shim: re-spawns main.js under tsx (sources contain JSX)
 ├── main.js           # arg parsing, migration, component wiring, bootstrap
-├── core/             # agent-loop, prompt-builder, diff-engine, risk-classifier,
-│                     # task-manager, paths, migrate, workspaces
-├── bridge/           # websocket-server (the Chrome-extension transport)
-├── context/          # token budget: code-minifier, symbol-index,
-│                     # context-manager, memory-manager
-├── atlassian/        # Jira: client, config, ADF and wiki markup, `agent atlassian login`
-├── mcp/              # mcp-server.js + tools/
-├── prompts/          # prompt files; prompts/v2/ overrides them for later versions
-├── storage/  watcher/
-└── ui/               # the terminal front-end
+├── backend/          # README.md says where to look and how to debug
+│   ├── core/         # by job: turn/ prompt/ models/ edits/ commands/ policy/
+│   │                 #   subagents/ logs/ install/ workspace/
+│   ├── bridge/       # websocket-server (the Chrome-extension transport)
+│   ├── context/      # token budget: code-minifier, symbol-index, context/memory-manager
+│   ├── atlassian/    # Jira: client, config, ADF and wiki markup, `agent atlassian login`
+│   ├── mcp/          # mcp-server.js + tools/
+│   ├── prompts/      # prompt files; prompts/v2/ overrides them for later versions
+│   └── storage/  watcher/
+└── frontend/         # the terminal UI; README.md says where to look and how to debug
     ├── cli-ui.jsx    # render(): stdin shim, hotkey routing, trailing-Enter split
     ├── App.jsx       # state, effects, layout — everything else is a module
-    ├── hotkeys.js    # ctrl+ chords, pulled off stdin before Ink sees them
-    ├── enter-splitter.js  # peels a trailing \r off a chunk so Enter is a keypress
-    ├── paste.js      # collapses a big paste to a marker; expands it on submit
-    ├── format.js  constants.js  transcript.js     # pure, tested
-    ├── hooks/        # use-key-bindings, use-hotkeys, use-slash-commands,
-    │                 #   use-agent-callbacks
+    ├── text.js  theme.js  constants.js   # width and wrapping, colour roles, shared values
+    ├── input/        # hotkeys, enter-splitter, paste, file-drop, image-attach, clipboard…
+    ├── transcript/   # transcript, markdown, tool-rows, live-layout, status-rows, action-row…
+    ├── menus/        # each menu's logic (rows, sizing, actions); drawn by components/
+    ├── screen/       # status-bar, intro, welcome, farewell, screen-span
+    ├── hooks/        # use-key-bindings, use-hotkeys, use-slash-commands, use-agent-callbacks
     └── components/   # Banner, TranscriptTurn, Menus, InputBar, PromptInput,
                       #   AgentTerminal, QuestionPrompt, SettingsList, Panel
 ```
 
-Modules are kebab-case; React components keep PascalCase (`ui/App.jsx`). Tests live in
-`server/test/`, mirroring this tree — `src/core/paths.js` is tested by `test/core/paths.test.js`.
+Imports go one way: `frontend/` uses `backend/`, never the reverse. `core/turn/x.js` and the like in
+this file are under `backend/`. Modules are kebab-case; React components keep PascalCase
+(`frontend/App.jsx`). Tests live in `server/test/`, mirroring this tree —
+`src/backend/core/workspace/paths.js` is tested by `test/backend/core/workspace/paths.test.js`.
 
 ## Architecture
 
 ### Turn lifecycle
 
-`main.js` wires everything and hands off to `ui/cli-ui.jsx` → `ui/App.jsx`.
+`main.js` wires everything and hands off to `frontend/cli-ui.jsx` → `frontend/App.jsx`.
 
-1. `App.jsx` sends user input to `AgentLoop.handleUserMessage` (`core/agent-loop.js`).
-2. `PromptBuilder.buildPrompt` (`core/prompt-builder.js`) assembles the prompt.
+1. `App.jsx` sends user input to `AgentLoop.handleUserMessage` (`core/turn/agent-loop.js`).
+2. `PromptBuilder.buildPrompt` (`core/prompt/prompt-builder.js`) assembles the prompt.
 3. `AgentLoop._sendToGemini` pushes onto `extensionQueue` and calls `callbacks.injectPrompt`;
    `bridge/websocket-server.js` relays it to the extension. The queue is serialized by
    `isExtensionBusy` — one browser tab, one in-flight prompt.
@@ -236,7 +238,7 @@ entry before changing the mechanism it describes.
 - **Tool amnesia is a thread change.** `_recordThread` calls `resetPromptState()` when the thread
   id changes from a previous one. `looksLikeCapabilityDenial` judges the *subject* (tooling, not
   code); `denial-corpus.test.js` holds both directions.
-- **One recovery table** (`core/reply-recovery.js`): a provider error re-sends the failed prompt
+- **One recovery table** (`core/turn/reply-recovery.js`): a provider error re-sends the failed prompt
   verbatim after 3s then 8s (±20%, cancelled by `abortExtensionWork`); a usage limit is never
   retried on the same model — it steps down (v5.28).
 - **Traces:** five stages per turn; `first_token` is marked when the observer first sees text. Since
@@ -273,12 +275,12 @@ The setting is never rewritten. The thread is re-taught (`resetPromptState`) onl
 own. Each reply records `effort`, `promptEffort` and `model`. The first review of the rungs is
 in `.agent/artifacts/plans/2026-10-26-effort-review.md`.
 
-**The prompt is versioned (v5.32, `core/prompt-versions.js`, `/prompt`).** Asked 2026-10-28: "we
+**The prompt is versioned (v5.32, `core/prompt/prompt-versions.js`, `/prompt`).** Asked 2026-10-28: "we
 don't know exactly if newer will be better or not". Every prompt change had replaced the one
 before, so "better" was argued from prompt sizes. Now **v1 is frozen**: `prompt-v1-golden.test.js`
 hashes 98 shapes (turn 0, short, refresh, redeclare and warm-up for every effort × mode ×
 subagents; handovers; a tool batch; subagent wrappers; compaction) against
-`test/core/fixtures/prompt-v1-golden.json`, so a change that reaches v1 fails the build — put it
+`test/backend/core/fixtures/prompt-v1-golden.json`, so a change that reaches v1 fails the build — put it
 in a newer version. A version is its differences: `dir` overrides prompt files
 (`prompts/<dir>/<name>.md`, else the base file — `prompt(name, dir)`), `flags` for builder switches,
 `refreshEvery` for the reminder cadence. Per person in `~/.agent/settings.json`, default v1; a
@@ -321,10 +323,10 @@ three-model account maps exactly as before (pinned in `model-match.test.js`). `/
 without Argon answers `stays <rung> · Argon is not available on this account` and changes
 nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
 slider's model line names what the marked stop maps to on this account (`stopModel` in
-`ui/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
+`frontend/menus/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
 
 **The browser differing from the effort is asked about, and a failed switch steps down (v5.28,
-`core/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message
+`core/models/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message
 is typed and offers three choices: switch the browser, send on it this time, or set the effort to
 match. It asks once per disagreement (`_mismatchAcks`, keyed on setting and tab) and never mid-turn.
 `/effort mismatch follow` brings back v5.26's silent following, and `switch` always switches,
@@ -374,7 +376,7 @@ The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* 
 names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
 its tools, it forgets them completely — mid-session it answers "I cannot execute local
 commands or access your local file system" with total confidence and the turn is lost. Three
-detectors in `core/drift-detector.js` back that up, each with a different response:
+detectors in `core/turn/drift-detector.js` back that up, each with a different response:
 `looksLikeMultipleDrafts` → bring the refresh forward; `looksLikeCapabilityDenial` → resend the
 full definitions and retry the turn once (`requestToolRedeclaration`, **not**
 `resetPromptState` — see below); `looksLikeProviderError` → Gemini's own error rather
@@ -424,15 +426,16 @@ subagents buy *context isolation* rather than speed, and Cursor
 3's eight parallel agents are bought with **git worktree isolation** — a separate filesystem per
 agent, which this project does not have and would need before parallel *writers* were safe.
 
-**A subagent session holds one tab (`core/subagent-session.js`).** Each round sends only what
+**A subagent session holds one tab (`core/subagents/subagent-session.js`).** Each round sends only what
 that tab has not seen; a fresh tab per round resent **81% of characters** over ten turns. The
-tab closes when the session ends (v8.1 fixed it closing after round 1).
+tab closes when the session ends (v8.1 fixed it closing after round 1). A failure of its tab is
+named as the subagent's in the log, the side panel and the `ask_subagent` row (v8.4, extension 1.58.1).
 
 ### Tools
 
 `mcp/mcp-server.js` holds a flat `TOOL_DEFINITIONS` array (name, description, parameters,
 handler) with handlers in `mcp/tools/`. To add a tool: write the handler, add one entry to that
-array, **and one to `core/tool-catalog.js`** — that is what the prompt is rendered from, and
+array, **and one to `core/prompt/tool-catalog.js`** — that is what the prompt is rendered from, and
 `toolCatalogDrift()` fails the build if the two disagree. The description *is* the contract.
 
 **A name on every turn is not a trigger, and there is now a number for it.** `_buildToolAnchor`
@@ -497,20 +500,20 @@ in the result; a literal `a || b` or a shell pipe is still searched as written.
 
 **A running command shows its last five lines (v5.21), like Claude Code's Bash rows.** `run_command`
 was silent until it exited. `exec` keeps collecting exactly as before — the model's result cannot
-change because the screen watches — and listeners on the child's streams feed `core/output-tail.js`,
+change because the screen watches — and listeners on the child's streams feed `core/commands/output-tail.js`,
 which turns chunks into finished lines (a partial line is shown and replaced; `\r` progress bars
 show only what a terminal would; ANSI and control bytes stripped) and throttles to 4/s, leading and
 trailing edge. The loop sends `tool_output`; the UI keeps it to itself (a side panel that draws
 none of it would otherwise wake the service worker four times a second). The row reads
 `◌ run_command <cmd> · 12s · +340 lines`, the clock starting when the command does rather than
 at `tool_call`, which precedes the approval prompt. **The lines are charged to the live budget in
-`runningLayout`** (`format.js`), after the call rows, so a short terminal drops output before a call
+`runningLayout`** (`live-layout.js`), after the call rows, so a short terminal drops output before a call
 and the turn keeps its two rows. Measured under the pty: 0 clears after approval at 10, 13, 16 and
 24 rows. The run also showed the approval *decision* row repeating the whole command — a system
 row wraps, so a one-line `for` loop drew four rows charged as one — and that row now names only
 the decision. **Not done:** moving a running command to the background (`ctrl+b` is the browser
 key, and it needs `exec`'s process handed to `TaskManager`). **The approval box fits since
-v5.24** (`approvalLayout`, `format.js`): it is drawn where the input was and was charged as the
+v5.24** (`approvalLayout`, `live-layout.js`): it is drawn where the input was and was charged as the
 input's three rows while drawing fifteen with a long command — 15 clears at 16 rows. Every row is
 decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
 reason, directory, then the border, never the command; a cut command says so on the title row. 0
@@ -530,7 +533,7 @@ document is built a section at a time instead of rewriting the whole file each r
 addition-only, so auto mode does not stop on every section). Edit rows read `edit_file doc.md · +3 −0`
 (v5.12 dropped the repeated file name the result first carried).
 
-**A large file is read by a subagent (v6.16, `core/delegated-read.js`, plan Phase 7).** An
+**A large file is read by a subagent (v6.16, `core/subagents/delegated-read.js`, plan Phase 7).** An
 unranged `read_file` of a text file over 1,200 lines or 80 KB, with subagents on and `/settings` →
 Large files on `subagent`, goes to a `research` tab; the main chat gets a digest (outline, quoted
 passages with line numbers, how to get exact text) capped at 6k, headed "read by a subagent; this
@@ -543,7 +546,7 @@ writes a `delegated_read` notice (lines, ms, rounds, outcome). v2 documents `pur
 (`largeFileDigest`), only while delegation is on. Pty: main prompt 850 characters after a
 2,000-line read (43.7k on the fallback, which is page 1); 0 clears at 13 and 24 rows.
 
-**Project commands are detected (v7.4, `core/project-commands.js`).** Asked by the codebase-support
+**Project commands are detected (v7.4, `core/prompt/project-commands.js`).** Asked by the codebase-support
 findings: the model opened `package.json` or `Gemfile` to learn how to run tests, a round trip each,
 and guessed `npm test` in Ruby repos. Root marker files give test, lint and build (`package.json` by
 lockfile, `Gemfile` → rspec / Rails / rubocop, `go.mod`, `pyproject.toml`, Maven, Gradle, Cargo,
@@ -573,7 +576,7 @@ record with dotted keys.
 Measured: 200 MB NDJSON overview 4.0 s; a 248 MB one-line Datadog JSON 5.3 s; RSS under 215 MB.
 It is **v2 only** (`logQuery`). A catalog entry's `flag` keeps it out of the frozen v1 tool list,
 and the reachability guards hold a gated tool to the version that offers it. On v2, an unranged
-`read_file` of a large log (`core/log-read.js`) gets the overview, headed as one. That applies to
+`read_file` of a large log (`core/turn/log-read.js`) gets the overview, headed as one. That applies to
 `.log`, `.jsonl`, `.ndjson`, `.csv`, `.tsv` and `.gz`, and to a `.json` whose head has a time key
 and a message or level key, so `package-lock.json` is not one. It runs before the v6.16 subagent
 digest. Pty: a 1.4 MB one-line export read with `read_file` became a 2,370-character prompt; 0
@@ -592,7 +595,7 @@ else with a NUL in its first 8 KB is **refused**, naming what can be read. Extra
 path, size and mtime. Pty: one turn reading a PDF, a .docx and a .zip — the prompt log holds the
 two as numbered Markdown and the refusal, 0 clears at 13 and 24 rows.
 
-**`/doctor` and `agent doctor` say what is installed (v5.29, `core/doctor.js`).** Asked for for the
+**`/doctor` and `agent doctor` say what is installed (v5.29, `core/install/doctor.js`).** Asked for for the
 work laptop, where an install can miss a package without anything crashing. `dep-recovery.js`
 handles the loud case (a startup import is missing: install once, restart); this is the quiet
 ones — an **optional** package (`unpdf`, imported only when a PDF is read), a wrong version, a
@@ -616,11 +619,11 @@ row — with **Install** at `PACKAGES[name].restore.range` (held to the manifest
 list has **Remove unused** when anything is. A required package no longer repeats "The agent does
 not start" under its tier (`withoutBeyondTier`). **ripgrep:** the work laptop has no Homebrew, and
 every VS Code ships rg for its own search (`@vscode/ripgrep-universal/bin/darwin-<arch>/rg`;
-Cursor's `@vscode/ripgrep/bin/rg`). `core/find-rg.js` looks in `AGENT_RG`, then PATH, then the
+Cursor's `@vscode/ripgrep/bin/rg`). `core/install/find-rg.js` looks in `AGENT_RG`, then PATH, then the
 editors' bundles; `grep_search` and `/doctor` both use it, and the tool row reads `from Visual
 Studio Code`. `doctor.js` may import local modules now, and the built-ins test follows them down.
 
-**`/doctor` is a menu since v5.30 (`ui/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
+**`/doctor` is a menu since v5.30 (`frontend/menus/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
 All · Required · Optional · Other · Tools (tab or ←/→). Enter opens a package: why, versions,
 importers, then actions: install what `package.json` wants, update to latest, choose a version (`npm
 view … versions`), **remove** for the `unused` tier. A missing tool gets its installer (`brew` on
@@ -628,7 +631,7 @@ macOS, `winget` on Windows; Linux only names `sudo apt …`). A failed install s
 **Show the error** opens the installer's output. Esc goes back one view; only the list closes. It
 opens on disk state with no network, and `npm outdated` fills in behind it. A version install keeps
 the range's style (`installArgs`: `^`, `~`, exact). `/doctor report` prints the old table. **A change
-that breaks the next start is undone** (`core/doctor-guard.js`): manifests and lockfile are copied to
+that breaks the next start is undone** (`core/install/doctor-guard.js`): manifests and lockfile are copied to
 `~/.agent/doctor-change.json` first; a start up 8 s confirms; a non-zero exit before that makes
 `index.js` restore, `npm install` and start again, once. The record holds the changing session's pid,
 because that session crashing proves nothing about the change. **Driven end to end in v7.7**, in a
@@ -640,11 +643,11 @@ before the line saying why it was running, so that line is now printed first.
 **Two things at once (v5.30).** Messages typed during a turn or the warm-up queue; local commands
 run beside the turn. Two gaps closed. Overlapping slow commands lowered each other's spinner, and a
 turn's: App counts them (`slowCommands`). And two `npm install`s could write one `node_modules`:
-`core/local-jobs.js` has one `install` slot, which `/doctor fix`, menu installs and `/update pull` take,
+`core/install/local-jobs.js` has one `install` slot, which `/doctor fix`, menu installs and `/update pull` take,
 and a second caller is told who holds it, not queued. **Ink 7.1.1 handles a key typed in its first
 200 ms twice**: kitty auto-detect adds a `data` listener beside Ink's reader and `unshift`s what it
 saw. A warm start at 13 rows (no intro) put the prompt in that window: `/` became `//`, "No such
-command: //help", on `main` too. `ui/ink-probe-hold.js` holds keys until the window has closed and
+command: //help", on `main` too. `frontend/input/ink-probe-hold.js` holds keys until the window has closed and
 passes the probe's reply through. The palette also lost the spinner's two rows during a turn (4
 clears at 13 rows on `/`). Settings rows for Theme and Workspace now open with `returnTo`, so esc
 steps back to settings. Pty: 0 clears at 13 and 24 on every path.
@@ -653,7 +656,7 @@ steps back to settings. Pty: 0 clears at 13 and 24 on every path.
 `search`) answer in Markdown; every other action, an unknown one included, is a write. Three locks,
 each tested with a negative control: `requiresApproval`'s **first** statement returns
 `isExternalWrite` for an `EXTERNAL_TOOLS` call, before mode or risk (a source assertion pins its
-place); `runExternalTool` (`core/external-approval.js`) plans the write against the live issue,
+place); `runExternalTool` (`core/policy/external-approval.js`) plans the write against the live issue,
 shows it as a Send / Don't send box that starts on Don't send, stores no rule for "always", and logs
 the outcome as `risk: 'external'`; and the handler refuses without a one-use token from
 `approval-token.js`, so the registry alone cannot write. Subagents are refused the tool. A 403 is
@@ -763,7 +766,7 @@ backoff and rewrites `errno` codes into LLM-readable instructions.
 
 ### Workspace
 
-`core/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
+`core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
 expansion, relative paths, quotes), `validateWorkspace` (exists / is a directory / readable) and
 `listWorkspaceCandidates` for the `/set-workspace` picker. `AgentLoop.setWorkspace` is the one
 place that rewires the collaborators that hold a copy of the path — `/workspace` and
@@ -774,8 +777,8 @@ project's history.
 ### Approval path
 
 Writes never go straight to disk. `edit_file` / `create_file` produce a `DiffEngine`
-(`core/diff-engine.js`) diff with per-hunk accept/reject, backups, atomic writes, and `undo()`.
-Commands pass through `core/risk-classifier.js`, which decides whether `App.jsx` must prompt;
+(`core/edits/diff-engine.js`) diff with per-hunk accept/reject, backups, atomic writes, and `undo()`.
+Commands pass through `core/commands/risk-classifier.js`, which decides whether `App.jsx` must prompt;
 persistent allow/block rules live in `commandRules`  (`/allowlist`).
 
 **Rails (v6.19).** Anything aimed at production (`RAILS_ENV=` / `RACK_ENV=production`,
@@ -786,7 +789,7 @@ drops or rewrites the database (`db:drop`, `db:reset`, `db:purge`, `db:schema:lo
 reason, where it used to read "Mutating shell command" like `rspec`. Both only for a command that
 runs something: `grep RAILS_ENV=production config` is a search.
 
-**Who may run what is `core/tool-policy.js`, not `_executeToolCalls`.** Two pure functions —
+**Who may run what is `core/policy/tool-policy.js`, not `_executeToolCalls`.** Two pure functions —
 `isBlockedOutright` and `requiresApproval` — over the catalog's own `mutates`, `shell` and
 `detached` flags. It was decided inline, 487 lines deep in dispatch, and that is precisely how
 `run_background` came to skip every gate: the plan-mode branch named the mutating tools
@@ -809,7 +812,7 @@ policy was a branch inside dispatch and took one test to surface once it was a f
 lines; it is 240 now, and the two pieces that left are the two that were doing something other
 than dispatching.
 
-`core/loop-tools.js` holds the three the loop answers itself — `ask_question`,
+`core/turn/loop-tools.js` holds the three the loop answers itself — `ask_question`,
 `ask_subagent`, `manage_memory`. The catalog has said `dispatch: 'loop'` about them since it
 was written, and the chain named them literally with an `else` sending everything else to
 `mcpServer.executeTool`: a fourth loop tool would have gone to a server with no handler and
@@ -822,7 +825,7 @@ derived, it would be comparing the catalog to itself. It went red the moment the
 `agent-loop.js`, and it now reads `loop-tools.js`. **The file it reads must be the file with
 the implementation in it.**
 
-`core/diff-approval.js` holds what happens between building a diff and it being on disk. Three
+`core/edits/diff-approval.js` holds what happens between building a diff and it being on disk. Three
 parties have to be told the same thing about that, and each has been the odd one out: the model
 (told `pending_approval` about a file already written), the screen (a rejected edit drawn in
 green), and the disk (the only one never wrong). Keeping them in one function is the reason it
@@ -836,7 +839,7 @@ goes on reporting "Remembered:" for facts the model will never see. Written by h
 and `loop-tools.test.js` asserts the reset on both paths and its *absence* on a rejected action,
 which would otherwise spend a full turn-0 payload to change nothing.
 
-**Three modes since v5.11 (`core/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24,
+**Three modes since v5.11 (`core/policy/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24,
 because building a document section by section in plan mode asked for every section. `strict` is
 the old plan mode, described below unchanged. `plan` additionally writes Markdown **inside the
 workspace** without asking — decided by location, never by extension alone — except the
@@ -845,7 +848,7 @@ was written to hold. The prompt states the exception in plan and not in strict, 
 disagreeing is the failure recorded below. Tab cycles plan → auto → strict.
 
 **A plan review opens only for a plan still waiting (v6.7, `planWorthReviewing` in
-`ui/plan-box.js`).** "hi" on Flash-Lite in plan mode wrote `task.md`, a one-line plan, ticked it,
+`frontend/transcript/plan-box.js`).** "hi" on Flash-Lite in plan mode wrote `task.md`, a one-line plan, ticked it,
 said hello, and ended on *Plan ready for review* with the editor opened. The review and editor are
 skipped when `task.md` was written after the plan with nothing unticked, or the plan has fewer than
 two steps and under 200 characters. v2's cheap rungs also lose "ALWAYS proactively create a task.md"
@@ -1039,7 +1042,7 @@ notifications.
 
 **`/reset` starts a repo fresh, and moves rather than deletes (v5.6).** Both copies go — the
 repo's `.agent/` and `~/.agent/workspaces/<slug>/`, or the reconcile on the next start brings the
-history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/reset.js`'s
+history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/install/reset.js`'s
 `STATE_ENTRIES` move: a monorepo root holds every sibling's scope folder, and this repo's own
 `.agent/` held a stray `server/` scope, so an unknown entry is listed and left. `skills/` stays
 (a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
@@ -1049,7 +1052,7 @@ because the loop would write the old conversation back.
 against v5.4: prompts drawn, replies never. Under the pty on v5.4, auto-compaction rewrote the
 history at the start of a prompt and every reply after it was answered, saved, and never drawn
 — the screen measures what it has drawn by position, and the front had moved. Same scenario on
-v5.16: every reply drawn. `test/ui/reply-after-compaction.test.js` pins it, with the v5.4
+v5.16: every reply drawn. `test/frontend/reply-after-compaction.test.js` pins it, with the v5.4
 behaviour as its control.
 
 **Compaction never handed anything over, and ran beside the turn (fixed v5.9).** Found under
@@ -1059,7 +1062,7 @@ had the system prompt and the next message and **no summary**. The summary was a
 mechanism that runs exactly when a session is longest. It also fired at the *start* of a turn,
 alongside it, and `startNewChat` had no lane check, so the tab could move to an empty chat
 mid-round. And the summary came from re-pasting every older turn, results replaced by
-placeholders, into a cold tab. Now (`core/compaction.js`):
+placeholders, into a cold tab. Now (`core/turn/compaction.js`):
 
 - **Asked of the current chat** (`_askThread`, a side question on the main lane whose reply is
   consumed whole and never run): 465 characters out, where the paste was the largest prompt in the
@@ -1113,7 +1116,7 @@ and one row in 41%, filled by watcher and tool rows. Watcher rows (`type: 'fs_ev
 turns for any count a person reads (`countTurns`: `/compact`'s guard, "Compacted N turns",
 `/context`, settings, the local summary); storage is unchanged. The agent's own writes are no
 longer announced as edits "made externally by the user": `DiffEngine._writeFileAtomic` notes the
-path and its temp file in `core/own-writes.js` and the watcher drops events for that path within
+path and its temp file in `core/edits/own-writes.js` and the watcher drops events for that path within
 3 s, so a real edit meanwhile still shows. v2's `ask_subagent` says `low | medium | high | max`
 (`subagentEffortWords`); the code already folded both vocabularies. Pty: the fresh chat's first
 prompt held exchanges 4–6 with 8 watcher rows after them; the one `ESC[2J` at compaction is on
@@ -1129,11 +1132,11 @@ existing install rather than fail. It is
 deliberately **not** `~/.gemini`: that belongs to Google's Gemini CLI and Antigravity, which
 really do keep data there.
 
-`core/migrate.js` folds the pre-`.agent` layout (`.gemini/`, `.gemini-agent/`, `~/.gemini-agent/`,
+`core/install/migrate.js` folds the pre-`.agent` layout (`.gemini/`, `.gemini-agent/`, `~/.gemini-agent/`,
 `.agent-github-plans/`, root `setAgentName.json` / `agent.log`) into `.agent/` on startup. It
 runs only when `.agent/` is absent, moves rather than copies, and is a no-op on the second run.
 
-**Those three claims are now assertions** (`test/core/migrate-workspace.test.js`), because the
+**Those three claims are now assertions** (`test/backend/core/migrate-workspace.test.js`), because the
 module moves the user's data — config, instructions, backups, logs — on startup, before
 anything is on screen, and it sat at **46% line coverage** with one narrow rename tested. Same
 combination as `diff-engine.js`, which was 358 lines with no tests and was writing backups
@@ -1162,7 +1165,7 @@ never reads. Found when the pty harness's scratch folder sat under a stray `/pri
 The companion's original channels are files under the state directory, never a socket:
 `editor.json` (active file and cursor), `diagnostics.json` (the Problems panel, debounced 1.5s
 because `onDidChangeDiagnostics` fires continuously while a project indexes),
-`chat-queue.jsonl` (append-only; "Add to Agent Chat" selections, drained by `ui/chat-queue.js`),
+`chat-queue.jsonl` (append-only; "Add to Agent Chat" selections, drained by `frontend/input/chat-queue.js`),
 `plan-review.json` (comments accumulated while reviewing) and `plan-approval.json` (the
 submitted verdict: `accept` | `changes_requested` | `reject`). Files rather than a socket is
 what lets the extension queue work before the CLI is even running.
@@ -1198,10 +1201,10 @@ extension adds the command with nothing bound, and the shortcut silently does no
 the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
-**Exit clears and prints `agent --resume <id>` (v5.4, `ui/farewell.js`; kept the transcript in
+**Exit clears and prints `agent --resume <id>` (v5.4, `frontend/screen/farewell.js`; kept the transcript in
 v5.20–v5.22; since v5.23 it erases back to the shell line that launched it, nothing at all when
 there was no conversation).** Startup asks the cursor row (`ESC[6n`) before the first frame and no
-longer `console.clear()`s; `ui/screen-span.js` follows every byte written (stdout.write is wrapped)
+longer `console.clear()`s; `frontend/screen/screen-span.js` follows every byte written (stdout.write is wrapped)
 and moves that row up on each scroll; exit asks again and rewinds only if the two agree — else (the
 launch line scrolled off, ctrl+e cleared, no answer) it clears screen and scrollback and puts the
 footer at the top. The reports are matched out of stdin before Ink sees them. The pty driver answers
@@ -1236,14 +1239,14 @@ jsdom without `runScripts`, which models the CSP honestly: the old markup fails 
 
 ### Failure logging
 
-**Bare `/logs` is a picker (v5.35, `ui/logs-view.js`)**: Failures · Speed · Tools · Text channel ·
+**Bare `/logs` is a picker (v5.35, `frontend/menus/logs-view.js`)**: Failures · Speed · Tools · Text channel ·
 Notices · Clear, each row carrying its one-line answer, enter opening the typed form's full text.
 It used to open only once something had failed, so "is it slower?" needed the word `extension`.
 Failures is a second view of flows (esc steps back). The old summary is `/logs failures`; `/logs
 speed` is new. Traces now record `promptVersion`, so Speed splits reply time by version as Tools
 splits rounds. Pty: 0 clears at 13 and 24 rows.
 
-`core/error-log.js` writes every failure to `<ws>/.agent/logs/errors.jsonl`, tagged with the
+`core/logs/error-log.js` writes every failure to `<ws>/.agent/logs/errors.jsonl`, tagged with the
 flow it came from (`bridge`, `extension`, `agent`, `tool`, `github`, `task`, `diff`, `context`,
 `ui`). `/logs` reads it back grouped by flow; `/logs <flow>` drills in.
 
@@ -1301,13 +1304,13 @@ reported as a quiet log.
 a copy each, and deleting the level from one left the whole suite green because every test
 reached the other. The storm test could not catch it either: inside the 60s window the tally
 is still a number in memory and never reaches disk, so **a test that never advances the clock
-does not test the collapse.** `test/core/log-levels.test.js` calls `flushPending` for exactly
+does not test the collapse.** `test/backend/core/log-levels.test.js` calls `flushPending` for exactly
 that reason, and every demotion there has a negative control naming the case that must stay
 loud.
 
 ### The command log
 
-`core/command-log.js` appends every `run_command` to `<ws>/.agent/logs/commands/<date>.jsonl`,
+`core/logs/command-log.js` appends every `run_command` to `<ws>/.agent/logs/commands/<date>.jsonl`,
 whether it ran, was blocked by the risk classifier, or was rejected at the approval prompt.
 `/commands` reads it back; the Status tab shows today's count.
 
@@ -1494,14 +1497,14 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   the sources contain JSX, so plain `node src/main.js` fails.
 - `App.jsx` is performance-sensitive: it avoids re-rendering during streaming to prevent
   terminal tearing, and uses raw ANSI (`\x1b[1m`) in places because `marked-terminal` mangles
-  inline markdown inside list items. It was split into `ui/` modules by moving blocks verbatim
+  inline markdown inside list items. It was split into `frontend/` modules by moving blocks verbatim
   behind explicit dependency lists; the `<Static>` element, `staticEpoch` and the streaming
   path stayed in `App.jsx` deliberately, and adding memoization to the transcript rows is how
   the scroll glitches came back the last two times.
 - **Every slash command is driven once by a test, bare and with arguments.**
   `use-slash-commands.js` was 967 lines at **8.69% line coverage** — the lowest
   in the repo, and the surface almost every bug reported from use has come from.
-  `test/ui/slash-command-smoke.test.js` is shallow and total, the same shape as
+  `test/frontend/slash-command-smoke.test.js` is shallow and total, the same shape as
   the tool smoke sweep and for the same reason: the failure worth guarding is
   "this entry point throws", and a command that crashes takes the turn with it.
   It also asserts no listed command answers *"No such command"* about itself —
@@ -1557,7 +1560,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `<Static>` in between, then shrank the live frame, stranding the row above the
   static write where Ink can never repaint it. **Above** the command, because it
   was drawn before the rows it ends up sitting on. `SLOW_COMMANDS`
-  (`core/slash-commands.js`) is the gate. A set beside the commands rather than
+  (`core/turn/slash-commands.js`) is the gate. A set beside the commands rather than
   a literal at the call site, because the literal is what drifts.
 
   **But a set can only answer for a whole command, and `/update` is two
@@ -1599,7 +1602,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `{drop}`, which goes through `attachDropped` like any drop. A menu command cannot be taken by a
   panel's `drop` handler. Missing files are skipped, at most 20. Pty (a `{"write"}` step into
   the queue): tags at the caret, the prompt holds headers and no file text, 0 clears at 13 and 24.
-- **A dropped file is a tag too (v5.33, `ui/file-drop.js`).** A terminal has no drop event: a drop
+- **A dropped file is a tag too (v5.33, `frontend/input/file-drop.js`).** A terminal has no drop event: a drop
   is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
   (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays
   text. Images go through `loadImage` and become `[Image #n]`; anything else is
@@ -1618,7 +1621,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `— read it with read_file`, as the terminal does. Order on send is the terminal's: image blocks,
   file headers, message; `foldFiles` also folds the inline blocks so the text is not drawn twice.
   Not driven in a live browser: a real drag cannot be scripted here; jsdom covers the handler.
-- **An image is a tag in the prompt, Claude Code's way (v5.24, `ui/image-attach.js`).**
+- **An image is a tag in the prompt, Claude Code's way (v5.24, `frontend/input/image-attach.js`).**
   ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
   an image goes with a message only while its tag is in the text, so backspace — which takes a
   tag in one press — is how it comes off. `/image` and `/paste-image` are gone, and so is the
@@ -1639,13 +1642,13 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   handler is a stale closure waiting for a slow frame.**
 
 - **A word a command does not take stops it (v6.24, `COMMAND_OPTIONS` / `invalidOption` in
-  `core/slash-commands.js`).** `/update ayz` ran the update check, and twelve commands answered a
+  `core/turn/slash-commands.js`).** `/update ayz` ran the update check, and twelve commands answered a
   wrong word as if it were absent — `/subagents zzz` printed the status, which reads as a
   confirmation. Checked before dispatch (and before a destructive confirm), it names the word and
   lists every form with what it does. Free-text commands are absent from the table. A live action
   row is spaced like a committed one when `spaceLive` says the budget holds it, so the newest read
   no longer sits tight and then jumps. Pty: 0 clears at 13, 24 and 30 rows.
-- **A setting reply is one line (v5.25, `changed()` in `core/slash-commands.js`).** `⚙ <setting>
+- **A setting reply is one line (v5.25, `changed()` in `core/turn/slash-commands.js`).** `⚙ <setting>
   **from** → **to**`, or `already **x**`, plus at most one `·` clause the status bar does not
   already say — owner's words: "subagent on -> off or already off/on". No emoji and no paragraph:
   the reply sits in the scrollback for the rest of the session. A setting that did not change does
@@ -1659,7 +1662,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   a fresh `activeMenu` object — `commandRules` is shared by reference, so the values were
   already right and React simply had no reason to repaint.
 - **The live frame must never outgrow the viewport.** This is the single most important rule in
-  `ui/`. When Ink's dynamic output is taller than the terminal, `shouldClearTerminalForFrame`
+  `frontend/`. When Ink's dynamic output is taller than the terminal, `shouldClearTerminalForFrame`
   (`ink/build/ink.js`) switches it to writing `ESC[2J ESC[3J` plus a full repaint on *every*
   render. Measured on the pre-fix code, sitting idle with a 12-turn history in a 24-row
   terminal: 108 full clears and 108 scrollback wipes in 15 seconds, 3.85 MB of escape codes.
@@ -1697,7 +1700,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   ~30-row terminal the frame blew past the viewport, and what survived the
   repaint was its top. `liveMessageText` clamps it while live and says
   `… +N more lines`; the committed copy in `<Static>` is untouched, so the rest
-  appears a moment later. It lives in `format.js` rather than beside its only
+  appears a moment later. It lives in `live-layout.js` rather than beside its only
   caller because a test importing a `.jsx` file cannot run under the repo's
   plain `node --test`.
 
@@ -1724,7 +1727,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   **0.53s**, with no behaviour change. For scale, every module
   import in the process is 517ms together, 426ms of it ink+react, and `tsx`
   itself is 120ms — so the two waits were larger than the entire program.
-  `test/core/startup-order.test.js` pins the ordering, because the regression is
+  `test/backend/core/startup-order.test.js` pins the ordering, because the regression is
   invisible in review: one more `await` before `cli.start()` reads as ordinary
   sequencing and costs a second every launch, with no failure to notice.
 
@@ -1738,7 +1741,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   header's text column needs an **explicit width**: inside `<Static>` Yoga sizes it to content and
   `wrap="truncate"` then wraps instead. `/copy` (same release) copies the last reply's markdown.
 
-- **The header draws in on every start, and exit says goodbye (v5.23, `ui/intro.js`,
+- **The header draws in on every start, and exit says goodbye (v5.23, `frontend/screen/intro.js`,
   `components/Intro.jsx`).** `Root` shows `Intro` — the banner with a `frame`: the mark sweeps in,
   the name types out, the dim lines arrive, ~440 ms — then mounts App, whose `<Static>` writes the
   same header at the same position. On exit `farewell.js` awaits the registered outro (capped at
@@ -1748,7 +1751,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   intro, off under `AGENT_CLI_NO_ANIMATION` or `CI`. Pty: 1 `ESC[2J` (the exit's own) at 13, 16, 24.
 
 - **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
-  `ui/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
+  `frontend/screen/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
   (Load-unpacked steps with this checkout's real `extension/` path; spinner → `✔ Connected`).
   `Root` in `cli-ui.jsx` switches — never both mounted — so the banner App commits to `<Static>`
   has the chosen theme and name. "First" is `welcomed` absent from `~/.agent/settings.json` and an
@@ -1763,26 +1766,26 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   line, so the reply's 2-column `● ` was rounded down to 1 and the reply laid out a column wider
   than the terminal. Each wrapped row spilled a character onto a row of its own, Ink counted fewer
   rows than the terminal drew, and a long reply left ~20 blank rows above the prompt. Replies are
-  also wrapped by `fitLines` (`format.js`) now, to the width beside the dot, with bullets hanging
+  also wrapped by `fitLines` (`text.js`) now, to the width beside the dot, with bullets hanging
   at their text column — Ink kept the space it broke at and knew nothing of lists. The harness's
   `snap` is the raw stream with escapes stripped and invents blank rows; use `{"screen": file}`,
   pyte's rendered viewport, for anything about layout.
 
-- **`?` as the whole input shows the keys (v6.18, `ui/keys-view.js`).** A grid of `KEY_HINTS`
+- **`?` as the whole input shows the keys (v6.18, `frontend/menus/keys-view.js`).** A grid of `KEY_HINTS`
   (two or three words each; every key must be one `/help`'s `KEY_ROWS` lists) in the `/` palette's
   place, 1–3 columns by width, filled down then across, charged `paletteRoom` rows like the palette;
   short of rows, the last cell is `/help`. Making it found the palette's own overflow: below 13 rows
   `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
   one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
   and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
-- **The spinner's token count climbs (v7.10, `ui/token-count.js`).** Asked for: Claude Code's
+- **The spinner's token count climbs (v7.10, `frontend/transcript/token-count.js`).** Asked for: Claude Code's
   count rises, ours jumped. It counts the thread plus the reply being streamed (the tab sends it
   every 2 s; `streamRef` in `use-agent-callbacks.js`, a ref, never state), and that counts only
   until the loop adds the finished reply (`base`), so nothing is counted twice. The drawn number
   closes 8% of the gap per 80 ms spinner tick, the tick App already draws, so it costs no
   frames; a fall (`/compact`, `/new`) is drawn at once. Pty (`FAKE_STREAM_MS=2000`): 2.9k →
   6.3k over a 9 s reply, 0 clears at 13 and 24 rows.
-- **The status bar is laid out in `ui/status-bar.js` (v6.13, Option A of
+- **The status bar is laid out in `frontend/screen/status-bar.js` (v6.13, Option A of
   `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
   coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest
   is dim. Bare values (`v2`, `medium`, `14%`), absent at default (prompt v1, context before the
@@ -1791,7 +1794,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   (`shed` in `statusBarLayout`), tested at 30–120 columns; App only maps roles to colours. Pty:
   0 clears at 10, 13, 24 rows × 60, 90 columns.
 
-- **Table rows are told apart only when one wraps (v8.0, `table()` in `format.js`).** Option C of
+- **Table rows are told apart only when one wraps (v8.0, `table()` in `markdown.js`).** Option C of
   `.agent/artifacts/plans/2026-10-31-table-rows.md`, chosen from screenshots of a demo chat
   (`table-rows.png` / `table-open.png` there): a dim `┄` rule between rows and `╞═╡` under the
   header once any body row wraps; a table of one-line rows is unchanged. Making the doc found
@@ -1809,9 +1812,9 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   costs nothing and degrades correctly — at 60 columns the sentence is cut and
   the command is still intact.
 
-- **Colour is a role, never a name (v5.15, `ui/theme.js`).** Components write `T.accent`,
-  `T.attention`, `T.success`… and the palette picks the colour; `test/ui/theme-tokens.test.js`
-  fails on any `color="cyan"` or `'cyan'` in a `ui/` component. About 86 call sites had named
+- **Colour is a role, never a name (v5.15, `frontend/theme.js`).** Components write `T.accent`,
+  `T.attention`, `T.success`… and the palette picks the colour; `test/frontend/theme-tokens.test.js`
+  fails on any `color="cyan"` or `'cyan'` in a `frontend/` component. About 86 call sites had named
   ANSI colours, and cyan alone meant six things. The only palette so far is `terminal`, which
   maps every role back to its old colour — verified under the pty as the same 19 on-screen
   styles and a byte-identical run. `T` is mutated in place, so a module-level table of colours
@@ -1823,9 +1826,9 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   palette but `terminal`/`mono` names the background it was designed for in `PALETTE_INFO`, and
   a test holds every role to WCAG 4.5:1 against it (3:1 for `muted`). `/theme` previews by
   calling `setTheme` on highlight; esc restores `original`; enter saves to
-  `~/.agent/settings.json` (`core/user-settings.js` — per person, not per repo) and reprints the
+  `~/.agent/settings.json` (`core/workspace/user-settings.js` — per person, not per repo) and reprints the
   transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
-- **Every menu is a `Panel` (v5.24, `ui/panel.js`, `components/Panel.jsx`).** Asked for 2026-10-26:
+- **Every menu is a `Panel` (v5.24, `frontend/menus/panel.js`, `components/Panel.jsx`).** Asked for 2026-10-26:
   the boxes "do not follow a common design theme". `/help`'s shape for all of them — a rule, a
   title, at most two dim lines, `Choices` (`❯`, a dim second column, `✔` on the current one,
   `1.`–`9.` where a digit may answer, never on an approval), one line of keys. No borders:
@@ -1836,7 +1839,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
   (`enterSequence`), because a command line scrolled off screen is pinned over the header by
   sticky scroll.
-- **`/settings` is a list of switches (v5.27, Option C′, `ui/settings-view.js`,
+- **`/settings` is a list of switches (v5.27, Option C′, `frontend/menus/settings-view.js`,
   `components/SettingsList.jsx`).** The owner's pick from `.agent/artifacts/plans/2026-10-27-settings-redesign.md`.
   A row with `control` is a switch (`● on  ○ off`) or a ladder (`◂ high ▸`), and ←/→ set it in place
   through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
@@ -1871,7 +1874,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
 - **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
   child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
   creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
-  box's top rule in scrollback. `OSASCRIPT_STDIO` in `ui/clipboard-image.js`. The same release
+  box's top rule in scrollback. `OSASCRIPT_STDIO` in `frontend/input/clipboard-image.js`. The same release
   stopped the meter counting an image's base64 (`promptCharge`: a 650 KB screenshot read `0%
   until auto-compact`).
 - **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
@@ -1897,7 +1900,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
   hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
   saying where the thing went.
-- **The prompt's rows are drawn rows (v7.9, `ui/prompt-rows.js`).** ↑/↓ move by the rows Ink
+- **The prompt's rows are drawn rows (v7.9, `frontend/input/prompt-rows.js`).** ↑/↓ move by the rows Ink
   draws, wraps included, and only past the first or last row reach input history; the draft is
   kept (`draftRef`) and ↓ past the newest prompt gives it back, where it used to clear the box.
   `promptExtraRows` and the field's window count the same rows, so a long wrapped prompt is
@@ -1928,7 +1931,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   TeX annotation, the glyphs), and the walker read all three: `≥80%\ge 80\%≥80%` went into history
   and compaction summaries. `extractTextContent` returns `$tex$` (`$$…$$` for `katex-display`),
   preferring `data-math`, then the annotation, then the glyphs once. The terminal draws a formula
-  of known symbols as text (`texToText` in `format.js`: `≥ 80%`, `π r²`) and leaves anything
+  of known symbols as text (`texToText` in `markdown.js`: `≥ 80%`, `π r²`) and leaves anything
   else as TeX; `$5 to $10` is not maths. Fixtures are KaTeX's standard markup, not a capture of
   Gemini's page, which v7.6 should check.
 - Content-script DOM selectors break when the chat sites change; `extractLatestResponse` must

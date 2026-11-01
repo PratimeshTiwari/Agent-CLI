@@ -243,7 +243,7 @@ every PR's date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md
 
 | Series | Dates | PRs | What it was about |
 | --- | --- | --- | --- |
-| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply resent once in a fresh tab, Jira with every write approved, prompts kept in this session's chat, a tidier repo |
+| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply resent once in a fresh tab, Jira with every write approved, prompts kept in this session's chat, a tidier repo, the server split into backend and frontend |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | Fresh docs and screenshots, faster typing between turns, KaTeX in replies, project commands detected, code outlines on partial reads, a token count that climbs |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply or revert, lean menus, Claude Code-style questions and action rows, a quieter status bar, compaction that keeps recent exchanges, large files read by a subagent, log exports, symbols in 16 languages, drag and drop |
 | **v5** | 2026-10-19 … 2026-10-28 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101) | Clean slate, one recovery policy, the VS Code chat panel, three modes, themes, first-start setup, the effort slider and Argon, documents, `/doctor`, prompt versions |

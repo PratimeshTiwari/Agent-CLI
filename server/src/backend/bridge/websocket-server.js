@@ -1,0 +1,1152 @@
+/**
+ * WebSocket Server
+ *
+ * Handles Chrome Extension connections and routes messages
+ * between the extension (side panel / content script) and the agent loop.
+ *
+ * Message Protocol:
+ * {
+ *   "id": "uuid",
+ *   "type": "user_message | inject_prompt | gemini_response | tool_call | tool_result |
+ *            diff_request | diff_response | status | error | slash_command",
+ *   "payload": { ... },
+ *   "timestamp": 1234567890
+ * }
+ */
+
+import { savePastedImages } from '../core/turn/panel-images.js';
+import { WebSocketServer as WS } from 'ws';
+import { randomUUID, randomBytes, timingSafeEqual } from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import * as paths from '../core/workspace/paths.js';
+import { logTrace } from '../core/logs/trace-log.js';
+import { resolveEffort } from '../core/models/effort.js';
+import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/install/restart.js';
+import { canPickFolder, pickFolder } from '../core/workspace/folder-picker.js';
+import { planResume } from '../core/turn/chat-thread.js';
+import { logError, logNotice } from '../core/logs/error-log.js';
+import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/install/extension-version.js';
+import { tabUnreachableMessage, chatUnreachableMessage, SUBAGENT_TAB_FAILED, subagentTabFailure } from './tab-failure.js';
+import { tabLink } from '../core/turn/compaction.js';
+
+/**
+ * Loopback only. Not `localhost`, which resolves through the hosts file and has
+ * been pointed elsewhere on machines with unusual DNS setups.
+ */
+const LOOPBACK = '127.0.0.1';
+
+/**
+ * How long a prompt held for an absent extension is still worth delivering.
+ *
+ * Tied to `EXTENSION_RESPONSE_TIMEOUT` in `backend/core/turn/agent-loop.js`: that is when
+ * the lane's watchdog gives up on the turn, and a prompt delivered after it
+ * would be typed into Gemini for a turn the loop has already abandoned.
+ */
+const INJECT_BUFFER_TTL_MS = 7 * 60 * 1000;
+
+/** Enough for a stalled lane per model plus a subagent fan-out, not a backlog. */
+const MAX_PENDING_INJECTS = 8;
+
+/**
+ * Who may open a socket here.
+ *
+ * A Chrome extension sends `chrome-extension://<id>`; Firefox sends
+ * `moz-extension://`. A connection with *no* Origin is a non-browser client —
+ * curl, a test, another process — and is allowed, because the browser is the
+ * only thing that can be tricked into connecting on someone else's behalf. A
+ * page on a website sends its own origin and is refused.
+ */
+const EXTENSION_ORIGIN = /^(chrome-extension|moz-extension|safari-web-extension):\/\//i;
+
+/**
+ * Extension errors that are about the *picker*, not about the turn.
+ *
+ * Everything else the extension reports means the prompt in flight is not
+ * coming back, so the lane has to be handed over. These two are asked outside
+ * the lane — `discover_models` at connect and once a turn, `switch_model` from
+ * `/effort` — and failing them costs a stale model list, nothing more.
+ *
+ * Named by op rather than by a `fatal` flag on the payload, because the op is
+ * the one field *every* path already carries: the content script sets it on the
+ * payloads it builds, a thrown error carries it as a `[stage]` prefix that is
+ * lifted back into `op` above, and the worker's own `reportTabFailure` sends the
+ * same op names for the same operations. So both sides land here without a
+ * second field that half of them would forget.
+ */
+const NON_FATAL_EXTENSION_OPS = new Set(['discover_models', 'switch_model', 'focus_tab']);
+
+/**
+ * A VS Code webview — the companion's chat panel (v5.2).
+ *
+ * Browser-enforced like the extension's: a website cannot claim this scheme.
+ * Unlike the extension it is admitted **with the bridge token**, because any
+ * installed VS Code extension can open a webview, and a webview is a far
+ * cheaper thing to get running than a Chrome extension with the bridge's id.
+ */
+const EDITOR_ORIGIN = /^vscode-webview:\/\//i;
+
+export function isAllowedOrigin(origin) {
+  if (!origin) return true;              // not a browser page
+  return EXTENSION_ORIGIN.test(origin) || EDITOR_ORIGIN.test(origin);
+}
+
+/**
+ * May this connection in, given its Origin and the token it presented?
+ *
+ * The Chrome extension is admitted on its Origin alone, as since P0: browsers
+ * cannot forge it, and an extension has no way to read a file on disk to learn
+ * a token. Everything else that `isAllowedOrigin` lets through — a local
+ * process sending no Origin, or a VS Code webview — must present the token
+ * written to `.agent/state/bridge.json`.
+ *
+ * That closes the gap P0 left open ("another process running as the same user
+ * can still connect … needs a shared secret the extension can read, which needs
+ * a setup step"): the secret is one the *companion* can read, and the extension
+ * never needed it. A process that can read the user's files can still read the
+ * token — this stops a stray local client, not a hostile user account.
+ *
+ * @param {{origin?: string, token?: string|null, expected?: string|null}} args
+ */
+export function admitClient({ origin, token = null, expected = null } = {}) {
+  if (!isAllowedOrigin(origin)) return false;
+  if (origin && EXTENSION_ORIGIN.test(origin)) return true;
+  if (!expected) return true; // no token issued (tests, a server not started through start())
+  if (typeof token !== 'string' || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
+
+/** The token a client put on its URL: `ws://127.0.0.1:7777/?token=…`. */
+export function tokenFromUrl(url) {
+  try {
+    return new URL(url || '/', 'ws://127.0.0.1').searchParams.get('token');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Message types the extension's worker handles itself and never shows a panel.
+ *
+ * Everything else sent to the extension is passed straight to the side panel
+ * by the worker's `default:` branch — and is therefore also what an editor
+ * panel needs. Mirrors `handleServerMessage` in
+ * `extension/src/background/socket.js`; `editor-routing.test.js` reads that
+ * switch and fails if the two disagree.
+ *
+ * A denylist, deliberately. An allowlist of panel types would silently starve
+ * the editor of the next request type someone adds, and a front-end that never
+ * receives a *request* deadlocks the turn waiting on it. The cost of the
+ * denylist is the other direction — a new worker-only type reaching an editor
+ * that ignores it — except for `inject_prompt`, which is on this list and
+ * pinned by a test, because a panel that received one would be handed the
+ * user's prompt to type into nothing.
+ */
+export const WORKER_ONLY_TYPES = new Set([
+  'inject_prompt', 'new_chat', 'open_thread', 'end_session', 'focus_tab',
+  'discover_models', 'switch_model', 'heartbeat_ack', 'stop_generation',
+  'reload_extension',
+]);
+
+export class WebSocketServer {
+  constructor({ port, agentLoop }) {
+    this.port = port;
+    this.agentLoop = agentLoop;
+    this.wss = null;
+    this.clients = new Map(); // id -> { ws, type, connectedAt }
+    /**
+     * Prompts that had nowhere to go, waiting for the extension to come back.
+     *
+     * `broadcast` returns whether it reached anyone and every caller ignored
+     * it, so a prompt dispatched while the extension was away was written to
+     * no sockets and dropped on the floor — the loop then sat on a busy lane
+     * until the seven-minute watchdog. That is the other half of "the prompt
+     * only sends when I open Chrome": the extension is evicted, the prompt is
+     * discarded, and the turn is already lost by the time anyone notices.
+     *
+     * Held here rather than in `ExtensionLock` because the lock's job is
+     * ordering turns, and this is about the transport being absent.
+     */
+    this.pendingInjects = [];
+
+    // Always provide background callbacks so headless tasks
+    // can use the extension bridge even when no user message is being processed.
+    this._wireBackgroundCallbacks();
+  }
+
+  _wireBackgroundCallbacks() {
+    const backgroundCallbacks = {
+      sendToPanel: (msg) => this.broadcast('extension', msg),
+      injectPrompt: (msg) => this.sendInjectPrompt(msg),
+      // Background tasks have no one to ask. Reject rather than hang the loop
+      // (the agent now awaits this decision) and rather than write unapproved edits.
+      requestDiffApproval: (diff) =>
+        this.agentLoop.handleDiffResponse(randomUUID(), { diffId: diff?.diffId, action: 'reject' }),
+    };
+    this.agentLoop.setBackgroundCallbacks(backgroundCallbacks);
+    /*
+     * The panels learn a turn is over from the loop, whoever started it.
+     *
+     * They knew only from `agent_response`, which a stopped or failed turn
+     * never sends — and once a terminal prompt is drawn in the panel
+     * (`user_turn`), its thinking row would outlive an esc in the terminal.
+     */
+    this.agentLoop.onIdle?.(() => this.broadcast('extension', {
+      id: randomUUID(), type: 'turn_idle', payload: {}, timestamp: Date.now(),
+    }));
+  }
+
+  /**
+   * Start listening — on the loopback interface only, for the extension only.
+   *
+   * `new WS({ port })` binds to `::`, every interface. Verified, not assumed.
+   * That put a socket on the office LAN, the café wifi and the hotel network
+   * which accepts `user_message` and runs shell commands on this machine, with
+   * no authentication of any kind. Two things close that, both free:
+   *
+   *  - `host: '127.0.0.1'` — nothing off this machine can reach it at all.
+   *  - an Origin check — a *web page* in the user's own browser can open
+   *    `ws://127.0.0.1:7777` and would arrive over loopback like anything else.
+   *    Browsers cannot forge `Origin`, and the extension's is
+   *    `chrome-extension://<id>`, so requiring that shuts the page out.
+   *
+   * What remains: another process running as the same user on this machine can
+   * still connect. That needs a shared secret the extension can read, which
+   * needs a setup step — noted in CLAUDE.md → What's next rather than guessed at.
+   */
+  async start() {
+    // One per launch. Issued before the socket exists so no connection can
+    // arrive in a window where there is no token to check against.
+    this.token = randomBytes(24).toString('hex');
+    return new Promise((resolve, reject) => {
+      this.wss = new WS({
+        port: this.port,
+        host: LOOPBACK,
+        verifyClient: ({ origin, req }, done) => {
+          if (admitClient({ origin, token: tokenFromUrl(req?.url), expected: this.token })) return done(true);
+          const badOrigin = !isAllowedOrigin(origin);
+          logError(this.agentLoop?.workspace, {
+            flow: 'bridge',
+            op: badOrigin ? 'rejected_origin' : 'rejected_token',
+            message: badOrigin
+              ? `Refused a connection from origin ${origin || '(none)'}`
+              : `Refused a connection from ${origin || 'a local process'} without the bridge token`,
+          });
+          // 403, and say why: a silent drop here reads as "the bridge is down".
+          done(false, 403, badOrigin
+            ? 'Only the Agent CLI browser extension may connect'
+            : 'Read the token from .agent/state/bridge.json');
+        },
+      });
+
+      this.wss.on('connection', (ws, req) => {
+        this._handleConnection(ws, req);
+      });
+
+      this.wss.on('listening', () => {
+        // When the socket opened, so the extension's arrival can be timed
+        // against it. See `extensionConnectMs` below.
+        this.listeningAt = Date.now();
+        this._writeBridgeFile();
+        resolve();
+      });
+
+      this.wss.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Where a local client — the VS Code companion's panel — finds this bridge.
+   *
+   * The port is 7777 unless `--port` says otherwise, and the panel has no other
+   * way to learn it. The pid lets a reader recognise a file left by a run that
+   * crashed before `stop()`. Several agents on one workspace overwrite each
+   * other; the newest wins, which is the one most likely to be in front of you.
+   * 0600, because it carries the token.
+   */
+  _writeBridgeFile() {
+    const workspace = this.agentLoop?.workspace;
+    if (!workspace) return;
+    try {
+      const file = paths.statePath(workspace, 'bridge.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const body = JSON.stringify({
+        port: this.wss?.address?.()?.port ?? this.port,
+        pid: process.pid,
+        token: this.token,
+        startedAt: new Date().toISOString(),
+      }, null, 2);
+      fs.writeFileSync(file, `${body}\n`, { mode: 0o600 });
+      fs.chmodSync(file, 0o600); // writeFileSync's mode only applies on create
+      this.bridgeFile = file;
+    } catch (err) {
+      logError(workspace, { flow: 'bridge', op: 'bridge_file', message: err.message });
+    }
+  }
+
+  /** Remove `bridge.json` — but only if it is still ours. Another agent may have replaced it. */
+  _removeBridgeFile() {
+    if (!this.bridgeFile) return;
+    try {
+      const current = JSON.parse(fs.readFileSync(this.bridgeFile, 'utf8'));
+      if (current.pid === process.pid && current.token === this.token) fs.unlinkSync(this.bridgeFile);
+    } catch { /* gone already, or unreadable: nothing to clean */ }
+  }
+
+  async stop() {
+    this._removeBridgeFile();
+    if (this.wss) {
+      for (const [id, client] of this.clients) {
+        client.ws.close(1000, 'Server shutting down');
+      }
+      this.wss.close();
+    }
+  }
+
+  _handleConnection(ws, req) {
+    const clientId = randomUUID();
+    const clientInfo = {
+      ws,
+      type: 'unknown',
+      connectedAt: Date.now(),
+    };
+    this.clients.set(clientId, clientInfo);
+
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        await this._handleMessage(clientId, message);
+      } catch (err) {
+        logError(this.agentLoop?.workspace, {
+          flow: 'bridge', op: 'handle_message',
+          message: err.message, detail: err.stack, meta: { clientId },
+        });
+        this._send(ws, {
+          id: randomUUID(),
+          type: 'error',
+          payload: { message: err.message },
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    ws.on('close', (code, reason) => {
+      this.clients.delete(clientId);
+    });
+
+    ws.on('error', (err) => {
+      logError(this.agentLoop?.workspace, {
+        flow: 'bridge', op: 'client_error',
+        message: err.message, meta: { clientId },
+      });
+    });
+
+    // Send welcome message
+    this._send(ws, {
+      id: randomUUID(),
+      type: 'status',
+      payload: {
+        status: 'connected',
+        clientId,
+        workspace: this.agentLoop.workspace,
+        mode: this.agentLoop.mode,
+      },
+      timestamp: Date.now(),
+    });
+
+    /**
+     * Hand the panel the conversation it cannot read for itself.
+     *
+     * Reported as "I reopened the panel and the chat got cleared". It was
+     * never cleared — `sessions/history.jsonl` has every turn, written twice
+     * on every one. The panel is a browser page with no filesystem, so it
+     * starts from an empty DOM and nothing ever offered it the record. Exactly
+     * the shape the task list had.
+     *
+     * The **last** turns, not all of them: this is one message across a socket
+     * into a page, and someone reopening a panel wants to see where they were,
+     * not six weeks of history. The rest stays on disk for `/sessions`.
+     *
+     * Tool calls and results are dropped. They are a transcript of machinery,
+     * they are the bulk of the bytes, and a restored view of them would be a
+     * wall of JSON where a conversation should be.
+     */
+    this._sendHistory(ws);
+  }
+
+  /** The tail of this workspace's conversation, for a panel that just opened. */
+  _sendHistory(ws) {
+    const MAX_TURNS = 40;
+    let turns = [];
+    try {
+      turns = this.agentLoop?.sessionStore?.loadHistory?.() || [];
+    } catch {
+      return; // a panel with no history is the ordinary first-run case
+    }
+
+    const shown = turns
+      .filter((t) => (t.role === 'user' || t.role === 'assistant' || t.role === 'agent')
+        && typeof t.content === 'string' && t.content.trim())
+      .slice(-MAX_TURNS)
+      .map((t) => ({ role: t.role === 'agent' ? 'assistant' : t.role, content: t.content }));
+    if (shown.length === 0) return;
+
+    this._send(ws, {
+      id: randomUUID(),
+      type: 'history',
+      payload: { turns: shown, total: turns.length },
+      timestamp: Date.now(),
+    });
+  }
+
+  async _handleMessage(clientId, message) {
+    const { id, type, payload } = message;
+    const client = this.clients.get(clientId);
+
+    if (!client) return;
+
+    // Identify client type from first message
+    if (payload?.clientType && client.type === 'unknown') {
+      client.type = payload.clientType;
+
+      // An extension arriving is the only thing that can drain prompts held
+      // while it was gone. Done before the timing bookkeeping below so a
+      // resumed turn is not waiting on it.
+      if (client.type === 'extension') {
+        /*
+         * Which build is actually in Chrome, said once, at the only moment it
+         * is cheap to say it.
+         *
+         * A stale extension is indistinguishable from a broken selector by
+         * watching failures — both are "the browser did not do the thing" —
+         * and on 2026-09-24 that ambiguity cost a day. The handshake already
+         * happens; this is one field on it and one row when they disagree.
+         *
+         * A row rather than a log line, because the person who can fix it is
+         * the one looking at the screen, and silence here is what let a
+         * pre-19-September build run for days claiming to be current.
+         */
+        client.extensionVersion = payload.version || null;
+        if (this.agentLoop) this.agentLoop.extensionVersion = client.extensionVersion;
+        const unbound = shortcutNotice(payload.floatingShortcut);
+        if (unbound) {
+          this.broadcast('extension', { id: randomUUID(), type: 'status', payload: { message: unbound }, timestamp: Date.now() });
+          this.agentLoop?._notify?.(unbound);
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'extension', op: 'shortcut_unbound',
+            message: 'The global floating-window shortcut has no key bound',
+            detail: 'Set it at chrome://extensions/shortcuts and choose Global.',
+          });
+        }
+        /*
+         * v8.1: a build that can reload itself is asked to, once per version
+         * and only between turns — a reload mid-turn orphans the tab's
+         * script. Owner: the notice "should be a clickable link", and a
+         * chrome:// link opens nothing from a terminal on macOS.
+         */
+        const reload = selfReloadNotice(client.extensionVersion);
+        const reloading = !!reload && !this.agentLoop?.isProcessing && this._reloadAsked !== reload.to;
+        if (reloading) {
+          this._reloadAsked = reload.to;
+          this._send(client.ws, { id: randomUUID(), type: 'reload_extension', payload: {}, timestamp: Date.now() });
+          this.agentLoop?._notify?.(reload.message);
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'bridge', op: 'extension_reload', message: 'Asked the extension to reload itself', detail: reload.message,
+          });
+        }
+        // Asked once; if the same build comes back, the reload did not take
+        // (a copy loaded from elsewhere), and the manual line is the answer.
+        const stale = reloading ? null : extensionVersionNotice(client.extensionVersion);
+        if (stale) {
+          this.broadcast('extension', {
+            id: randomUUID(),
+            type: 'status',
+            payload: { message: stale },
+            timestamp: Date.now(),
+          });
+          this.agentLoop?._notify?.(stale);
+          /*
+           * A notice, not a failure — it is the one row in the log that names
+           * its own fix.
+           *
+           * It fired **19 times over four days**, and every one of those was a
+           * true statement about a build that needed reloading rather than a
+           * fault to diagnose. Counted as a failure it did worse than take up
+           * space: a stale build makes *everything else* fail, so the `/logs`
+           * summary showed a cluster of breakage whose actual cause was one row
+           * in the same list, indistinguishable from the symptoms it caused.
+           *
+           * `stale` is the detail because `extensionVersionNotice` already
+           * writes the instruction — both versions and where to reload — and a
+           * notice that says what to do is the whole reason this level exists.
+           */
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'bridge',
+            op: 'extension_stale',
+            message: 'The extension in Chrome is not the build beside this server — reload it',
+            detail: stale,
+          });
+        }
+
+        const resumed = this.flushPendingInjects();
+        if (resumed > 0) {
+          // A repair that worked. The failure was the disconnect, which is
+          // already logged where it happened; this line says the prompts
+          // survived it, and a recovery counted as a failure makes the log
+          // report two faults where there was one and no loss.
+          logNotice(this.agentLoop?.workspace, {
+            flow: 'bridge',
+            op: 'inject_resumed',
+            message: `Extension reconnected; re-sent ${resumed} prompt(s) held while it was away`,
+          });
+        }
+
+        /*
+         * `--resume` / `--continue` finish here.
+         *
+         * They are decided in the AgentLoop constructor, which runs before
+         * this server exists — so the loop records the intent and the first
+         * extension to identify is what can act on it. `/history` and the side
+         * panel already ran the full path; only the launch flags restored the
+         * transcript and left the browser on a new conversation with no recap.
+         *
+         * Self-clearing on the first drain, so a later reconnect does not pull
+         * the tab back to where the session started.
+         */
+        const armed = this.agentLoop?.resumeThreadOnConnect?.();
+        if (armed) {
+          this.broadcast('extension', {
+            id: randomUUID(),
+            type: 'status',
+            payload: {
+              message: armed === 'thread'
+                ? '↺ Reopening the conversation this session was using…'
+                : '↺ Resumed — the next message carries a recap of it.',
+            },
+            timestamp: Date.now(),
+          });
+        }
+
+        // Warm start (v5.27): after the resume, which decides whether there is
+        // a conversation to teach. Once per launch, and only when opted in.
+        this.agentLoop?.warmUpOnConnect?.();
+      }
+
+      /**
+       * How long the extension took to notice this server, in milliseconds.
+       *
+       * Recorded because "the connection got slower" was reported from use and
+       * could not be checked from inside the product. Measured in headless
+       * Chrome the reconnect cadence is exactly 30.0s — `chrome.alarms` clamps
+       * to a 30-second floor and the extension's backoff capped at exactly that
+       * floor, so the whole ladder was a constant. Whether the fix for that
+       * helps in a *real* browser is the number this row exists to answer.
+       *
+       * First extension only: later reconnects are a different question and
+       * overwriting this would lose the startup figure, which is the one people
+       * mean.
+       */
+      if (client.type === 'extension' && this.extensionConnectMs === undefined && this.listeningAt) {
+        this.extensionConnectMs = Date.now() - this.listeningAt;
+        if (this.agentLoop) this.agentLoop.extensionConnectMs = this.extensionConnectMs;
+      }
+
+      if (client.type === 'extension' && this.agentLoop) {
+        // Ask what the mode picker is offering, now, so `/effort` has an answer
+        // the first time it is used rather than spending that call discovering.
+        // A beat, because the content script may still be mounting into the tab.
+        setTimeout(() => this.agentLoop.requestModelOptions?.(), 1500);
+      }
+    }
+
+    switch (type) {
+      case 'user_message':
+        // User typed a message in the side panel
+        await this._handleUserMessage(clientId, id, payload);
+        break;
+
+      case 'gemini_response':
+        // Content script extracted a Gemini response
+        this.agentLoop.handleGeminiResponse(id, payload);
+        break;
+
+      case 'gemini_response_stream':
+        // Content script sending partial/streaming response — forward to CLI
+        if (this.agentLoop.callbacks) {
+          this.agentLoop.callbacks.sendToPanel({
+            id,
+            type: 'response_stream',
+            payload,
+            timestamp: Date.now(),
+          });
+        }
+        break;
+
+      case 'turn_trace':
+        // How long the browser spent on each stage of a *successful* turn. The
+        // failure log has never had this, which is why "it got slower" was a
+        // feeling rather than a number.
+        // The rung is the server's to know — the tab has no idea which profile
+        // built the prompt it was handed — so it is attached here.
+        logTrace(this.agentLoop?.workspace, {
+          ...payload,
+          effort: resolveEffort(this.agentLoop?.modelConfig?.effort).id,
+          // v5.35: and the prompt version, so `/logs speed` can compare them.
+          promptVersion: this.agentLoop?.promptVersion,
+          // v7.3: and how full the thread was, so the budgets can be tested.
+          ...(this.agentLoop?.contextFill ?? {}),
+        });
+        break;
+
+      case 'model_options':
+        // What the browser's mode picker is offering. Stored, not acted on:
+        // `backend/core/models/model-match.js` decides which one an effort rung wants, and the
+        // names differ by subscription so they cannot be assumed.
+        this.agentLoop.noteModelOptions(payload?.models, payload?.switchedTo, payload?.requested);
+        break;
+
+      case 'model_selected':
+        // Picked by hand in the tab (extension 1.55.0): just the name.
+        this.agentLoop.noteSelectedModel?.(payload?.label);
+        break;
+
+      /**
+       * The side panel answering something the turn is blocked on.
+       *
+       * `ask_question` and a risky `run_command` both park the turn on an
+       * unresolved promise (`pendingQuestionResolve` / `pendingCommandResolve`)
+       * and send the prompt out through `sendToPanel`. The CLI draws those and
+       * answers them; the panel had no way to, and no inbound type existed for
+       * it either — so driving the agent from the panel hung on the first
+       * question or first command approval, permanently, with the panel's send
+       * button disabled behind `isWaitingForResponse`.
+       *
+       * The resolvers were already here and already careful (`cancelQuestion`
+       * resolves rather than rejecting, because leaving it pending is the hang).
+       * Only the way in was missing.
+       */
+      /**
+       * The side panel choosing a workspace.
+       *
+       * Same act as `/workspace <path>` in the CLI, and deliberately the same
+       * code: validation, the supervisor check and the handover file all live
+       * in `backend/core/install/restart.js` so the two front-ends cannot drift into
+       * disagreeing about what a usable workspace is.
+       *
+       * It restarts rather than switching in place. Every collaborator keyed on
+       * the workspace — the session store, memory, config, the command
+       * allowlist — is rebuilt by a restart and was *not* rebuilt by the
+       * in-place switch this replaced. The panel will see the socket drop and
+       * come back, which is the honest signal that it really did change.
+       */
+      /**
+       * The native folder chooser, opened from the side panel.
+       *
+       * A Chrome extension cannot open one — `<input webkitdirectory>` hands
+       * back a *copy of the directory's contents*, never its path, which is the
+       * only thing wanted here. But the agent runs on the same machine as the
+       * browser, so the server can open the dialog the CLI already uses and
+       * hand back what was chosen.
+       *
+       * The dialog blocks until the person is done, which is fine here: nothing
+       * else is waiting on this message, and a picker that timed out mid-browse
+       * would be worse than one that waits.
+       */
+      case 'pick_workspace': {
+        if (!canPickFolder()) {
+          this.broadcast('extension', {
+            id: randomUUID(), type: 'error',
+            payload: {
+              op: 'pick_workspace', unavailable: true,
+              message: 'No folder chooser on this machine — type the path instead.',
+            },
+            timestamp: Date.now(),
+          });
+          break;
+        }
+        const chosen = await pickFolder('Choose a workspace for the agent');
+        // Cancelled. Saying nothing would read as a hung button.
+        if (!chosen) {
+          this.broadcast('extension', {
+            id: randomUUID(), type: 'status',
+            payload: { message: 'Workspace unchanged.' },
+            timestamp: Date.now(),
+          });
+          break;
+        }
+        await this._handleMessage(clientId, { type: 'set_workspace', payload: { path: chosen } });
+        break;
+      }
+
+      /**
+       * Past conversations, for the side panel's picker.
+       *
+       * The storage and the CLI flags landed first and the panel had no way to
+       * reach any of it — reported as "I reopened the sidebar and there is no
+       * option to continue". A list nobody can open is the same as no list.
+       */
+      /**
+       * A panel asking for the conversation, because it just opened.
+       *
+       * `_sendHistory` runs when the **socket** connects — and opening the side
+       * panel does not reconnect it: the service worker holds one socket for
+       * the life of the browser session, so a panel that opens afterwards is a
+       * fresh page arriving in the middle of an existing connection and is
+       * never told anything. Reported as "opening and closing the sidebar does
+       * not persist the chat", which it looked like from the outside.
+       *
+       * So the panel asks rather than waiting to be told. The connect-time send
+       * stays for the case where the panel is already open when the socket
+       * comes up.
+       */
+      case 'get_history': {
+        const client = this.clients.get(clientId);
+        if (client) this._sendHistory(client.ws);
+        break;
+      }
+
+      case 'list_sessions': {
+        const store = this.agentLoop?.sessionStore;
+        const live = this.agentLoop?.chatThread || null;
+        const sessions = (store?.listSessions?.() || []).slice(0, 30).map((s) => ({
+          ...s,
+          // Said per row, before the choice is made, because the two are
+          // different promises: one carries on, the other has to re-explain
+          // itself to a model that was never there.
+          resume: planResume(s.thread, live, s.leftThread).action,
+        }));
+        this.broadcast('extension', {
+          id: randomUUID(), type: 'sessions',
+          payload: { sessions, thread: live },
+          timestamp: Date.now(),
+        });
+        break;
+      }
+
+      case 'resume_session': {
+        // The whole of this — file the current conversation, restore the old
+        // one, and point the tab back at its thread — lives on the loop, so
+        // the CLI's `/history` cannot drift from the panel's picker.
+        const outcome = this.agentLoop.resumeSessionById(payload?.id);
+        if (!outcome.ok) {
+          this.broadcast('extension', {
+            id: randomUUID(), type: 'error',
+            payload: { op: 'resume_session', message: outcome.message },
+            timestamp: Date.now(),
+          });
+          break;
+        }
+
+        this.broadcast('extension', {
+          id: randomUUID(), type: 'session_reset',
+          payload: { message: outcome.message },
+          timestamp: Date.now(),
+        });
+        for (const client of this.clients.values()) this._sendHistory(client.ws);
+        break;
+      }
+
+      /**
+       * The browser saying whether it reached that conversation.
+       *
+       * If it could not, the recap becomes the fallback — otherwise the model
+       * is handed a restored transcript it has no knowledge of and asked to
+       * carry on, which is the exact failure the thread id exists to prevent.
+       */
+      /**
+       * The browser answering `new_chat`.
+       *
+       * `/compact` is a handover: it summarises the old thread and sends the
+       * summary into a new one. Without this the send is blind, and a new chat
+       * that never happened means a full turn-0 payload plus a summary of
+       * turns going into the thread that already holds them.
+       */
+      case 'chat_started':
+        this.agentLoop.handleChatStarted?.(payload);
+        break;
+
+      case 'thread_opened':
+        if (!payload?.ok) {
+          this.agentLoop.promptBuilder.pendingRecap = this.agentLoop.conversationHistory;
+          this.broadcast('extension', {
+            id: randomUUID(), type: 'status',
+            payload: { message: 'Could not reopen that conversation — sending a recap instead.' },
+            timestamp: Date.now(),
+          });
+        }
+        break;
+
+      case 'set_workspace': {
+        const outcome = prepareWorkspaceSwitch(payload?.path);
+        if (!outcome.ok) {
+          this.broadcast('extension', {
+            id: randomUUID(), type: 'error',
+            payload: { op: 'set_workspace', message: outcome.error },
+            timestamp: Date.now(),
+          });
+          break;
+        }
+        this.broadcast('extension', {
+          id: randomUUID(), type: 'status',
+          payload: { message: `⟳ Restarting in ${outcome.target}…` },
+          timestamp: Date.now(),
+        });
+        // Not out from under a running turn — the browser would keep generating
+        // into a socket nobody is holding and the reply would never be drawn.
+        leaveWhenIdle(RESTART_EXIT_CODE, { wsServer: this, agentLoop: this.agentLoop });
+        break;
+      }
+
+      /**
+       * The extension telling the user what it is doing to the browser.
+       *
+       * `content.js` sends this when it cannot find your model tab and is
+       * reopening one — the moment you most want a line on screen, because the
+       * CLI otherwise just sits there. The bridge had no case for it, so it was
+       * logged as `unknown_message` and dropped: **21 times in this workspace's
+       * error log, the largest single entry in it.**
+       *
+       * `status` already exists in the other direction — the loop sends it and
+       * `use-agent-callbacks` renders it into the status line — so relaying is
+       * the whole fix. It is a notification, not a request: nothing waits on
+       * it, and dropping one costs a missing line rather than a dead turn.
+       */
+      case 'status':
+        this.agentLoop.callbacks?.sendToPanel?.({
+          id: randomUUID(),
+          type: 'status',
+          payload: { message: payload?.message || '' },
+          timestamp: Date.now(),
+        });
+        break;
+
+      case 'question_response':
+        if (payload?.cancelled) this.agentLoop.cancelQuestion();
+        else this.agentLoop.answerQuestion(payload?.answer);
+        break;
+
+      case 'command_approval_response':
+        this.agentLoop.answerCommandApproval(payload?.action, payload?.command);
+        break;
+
+      case 'diff_response':
+        // User accepted/rejected a diff
+        this.agentLoop.handleDiffResponse(id, payload);
+        break;
+
+      case 'slash_command':
+        // User typed a slash command
+        await this._handleSlashCommand(clientId, id, payload);
+        break;
+
+      case 'heartbeat':
+        // Extension checking connection is alive
+        this._send(client.ws, {
+          id,
+          type: 'heartbeat_ack',
+          payload: { status: 'alive' },
+          timestamp: Date.now(),
+        });
+        break;
+
+      case 'error':
+        // Written down before anything else. This is the only report we get
+        // from inside the browser tab, and until now it was handled and thrown
+        // away — a selector that changed on gemini.google.com looked, from the
+        // terminal, like the agent simply going quiet.
+        // A content script's *thrown* error crosses the catch as its message
+        // alone — `throw new Error('[find_input] …')` then `{message:
+        // err.message}` — so the stage rides in brackets and is lifted back out
+        // into `op` here. Payloads the script builds itself set `op` (and now
+        // `level`) directly, and the worker relays them verbatim; the prefix is
+        // for the path that cannot. Without it a changed selector on
+        // gemini.google.com arrived as "failed", the one thing you already knew.
+        const tagged = /^\[([a-z_]+)\]\s*/i.exec(payload?.message || '');
+        // A subagent's tab is named as one (v8.4): the extension's own line
+        // reads like the main chat failing.
+        const subagentTab = payload?.op === 'tab_unreachable' && payload?.isSubagent;
+        /*
+         * The browser gets to say an `error` was an expected state.
+         *
+         * Only the extension knows the difference for the case that dominated
+         * the log: a background `discover_models` declining because no tab
+         * exists yet is correct behaviour and was **65 rows**, while the same
+         * message after `/effort` opened a tab and still could not reach it is
+         * a real fault. The distinction is `userInitiated`, which lives in the
+         * browser and never reaches here.
+         *
+         * So `level` travels on the payload. It changes nothing else: the
+         * `session_lost` and `NON_FATAL_EXTENSION_OPS` branches below run
+         * exactly as before, because how loudly something is recorded must not
+         * decide what the bridge does about it — that coupling is how a demoted
+         * row would quietly stop settling the picker's watchdog.
+         */
+        logError(this.agentLoop?.workspace, {
+          flow: 'extension',
+          op: payload?.op || tagged?.[1] || payload?.stage || 'unknown',
+          message: subagentTab ? SUBAGENT_TAB_FAILED : (payload?.message || payload?.error || 'Extension reported an error')
+            .replace(/^\[[a-z_]+\]\s*/i, ''),
+          level: payload?.level === 'notice' ? 'notice' : 'error',
+          detail: payload?.detail || payload?.stack,
+          meta: { targetModel: payload?.targetModel, url: payload?.url, stage: payload?.stage },
+        });
+        /**
+         * A lost batch session is recoverable, and must not kill the run.
+         *
+         * The extension refuses an incremental prompt when the tab holding a
+         * task has been closed — rather than opening a fresh one, which would
+         * get a confident answer to a question the model never saw. That is a
+         * *request* failing, not the bridge failing, and `runBatchTask` answers
+         * it by resending the whole history once. Falling through to
+         * `abortExtensionWork()` here would take down the user's turn as well.
+         */
+        if (payload?.op === 'session_lost' && payload?.requestId) {
+          this.agentLoop.resolveSubagent?.(payload.requestId, { sessionLost: true });
+          break;
+        }
+
+        /*
+         * A subagent's tab failing is that request failing (v8.1, extension
+         * 1.58.0 says whose prompt it was). Reported with a screenshot: a
+         * delegated read of CLAUDE.md lost its tab, and the user's turn, in a
+         * different tab that was fine, ended with "Communication with the
+         * Gemini tab failed" and its message marked as never sent.
+         */
+        if (payload?.isSubagent && payload?.requestId) {
+          this.agentLoop.resolveSubagent?.(payload.requestId, {
+            success: false, error: subagentTabFailure(payload.detail),
+          });
+          break;
+        }
+
+        /**
+         * Reading the picker is not a turn, so failing to read it is not a dead
+         * turn — and until now it was one.
+         *
+         * `discover_models` and `switch_model` are messages to a tab rather
+         * than prompts; they deliberately do not take the extension lock. But
+         * their failures arrive here as ordinary `error` payloads and fell
+         * straight through to `abortExtensionWork()`, which clears the lane and
+         * abandons whatever prompt is in flight. So a `/effort` typed during a
+         * turn, or a picker that would not open, killed the turn underneath it
+         * — and the user saw an agent that stopped answering, with the reason
+         * filed under a different flow.
+         *
+         * The watchdog is settled instead of left running: it exists to notice
+         * *silence*, and this is an answer. Without that, one unreachable tab
+         * was logged twice — once here as `discover_models`, once 8 seconds
+         * later as `model_options_unanswered` — which reads as two faults.
+         */
+        if (NON_FATAL_EXTENSION_OPS.has(payload?.op)) {
+          this.agentLoop.settleModelOptions?.(payload?.message || null);
+          break;
+        }
+
+        /*
+         * **A notice is never fatal.** By definition it reports something
+         * that did not go wrong for the user — so it must never reach the two
+         * lines below, which end the turn and abort *every* lane.
+         *
+         * It did, in 1.41.0, and it was mine. `menu_left_open` is a notice sent
+         * on this channel because this channel is the only way a content script
+         * can write to the log — and the branch below decides fatality by op, so
+         * any op not on the allow-list above is treated as a dead turn. Reported
+         * with a screenshot: the `!` row in the transcript and the main turn
+         * stopped, while the subagent it had delegated to went on generating.
+         *
+         * Placed *after* the settle and `session_lost` branches, deliberately:
+         * a notice still settles the picker watchdog and still resolves a lost
+         * session. The rule this file already states — how loudly something is
+         * recorded must not decide what the bridge does about it — was written
+         * about demotion stopping a *settle*. It turns out to hold the other way
+         * too, and an allow-list of the ops that may stay alive cannot enforce
+         * it: the next informational op would be killed the same way.
+         */
+        if (payload?.level === 'notice') break;
+
+        // A prompt the tab never sent is carried into the next message (v7.10).
+        if (payload?.op === 'tab_unreachable' || payload?.op === 'no_tab' || payload?.op === 'chat_unreachable') {
+          this.agentLoop.noteUndelivered?.();
+        }
+        // Said in the terminal's own words, with what was already tried (v7.10).
+        if (payload?.op === 'chat_unreachable') {
+          message.payload = { ...payload, message: chatUnreachableMessage(payload.wanted) };
+        }
+        if (payload?.op === 'tab_unreachable') {
+          message.payload = {
+            ...payload,
+            message: tabUnreachableMessage(tabLink(this.agentLoop)),
+          };
+        }
+        // The turn is dead, so hand the bridge lock back — otherwise every
+        // later prompt queues behind a request that will never be answered.
+        this.agentLoop.isProcessing = false;
+        this.agentLoop.abortExtensionWork();
+        if (this.agentLoop.callbacks) {
+          this.agentLoop.callbacks.sendToPanel(message);
+        }
+        break;
+
+      case 'identify':
+        // Handled above to set client type, just break
+        break;
+
+      case 'tab_status':
+        if (payload?.connectedModels && payload.connectedModels.length > 0) {
+          if (!client.reportedModels || client.reportedModels.join() !== payload.connectedModels.join()) {
+            client.reportedModels = payload.connectedModels;
+          }
+        }
+        // Which tab the main lane types into (extension 1.55.0), for
+        // `/settings` → Gemini tab. An older build sends no `mainTab` key,
+        // which leaves the field unset rather than claiming "no tab".
+        if (this.agentLoop && payload && 'mainTab' in payload) {
+          this.agentLoop.browserTab = payload.mainTab || null;
+          this.agentLoop.subagentTabIds = Array.isArray(payload.subagentTabIds) ? payload.subagentTabIds : [];
+        }
+        break;
+
+      default:
+        logError(this.agentLoop?.workspace, {
+          flow: 'bridge', op: 'unknown_message',
+          message: `Unknown message type: ${type}`,
+        });
+    }
+  }
+
+  async _handleUserMessage(clientId, messageId, payload) {
+    const { content } = payload;
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    // Set up callbacks so the agent loop can send messages back
+    const callbacks = {
+      sendToPanel: (msg) => this.broadcast('extension', msg),
+      injectPrompt: (msg) => this.sendInjectPrompt(msg),
+      requestDiffApproval: (diff) => this.broadcast('extension', {
+        id: randomUUID(),
+        type: 'diff_request',
+        payload: diff,
+        timestamp: Date.now(),
+      }),
+    };
+
+    // Feed into agent loop — with any image pasted in the panel saved to a
+    // file first, so it is recorded and linked like a terminal one.
+    await this.agentLoop.handleUserMessage(savePastedImages(content, this.agentLoop.workspace), callbacks);
+  }
+
+  async _handleSlashCommand(clientId, messageId, payload) {
+    const { command, args } = payload;
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    const result = await this.agentLoop.handleSlashCommand(command, args);
+
+    // Some commands do not answer, they *replace*. `/new` and `/clear` leave
+    // the old conversation on screen otherwise, which reads as though nothing
+    // happened — and the panel would then restore that dead transcript the
+    // next time it opened.
+    if (result?.reset) {
+      this.broadcast('extension', {
+        id: randomUUID(),
+        type: 'session_reset',
+        payload: { message: result.message || '' },
+        timestamp: Date.now(),
+      });
+    }
+
+    this._send(client.ws, {
+      id: messageId,
+      type: 'command_result',
+      payload: result,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Broadcast a message to all clients of a given type.
+   * Returns true if at least one client received the message.
+   */
+  /**
+   * Send a prompt to the extension, or hold it until there is an extension.
+   *
+   * The delivery question is not "is a client connected" but "did anyone
+   * receive this", which is what `broadcast`'s return value answers and what
+   * every caller used to throw away.
+   *
+   * A held prompt is still owed an answer: the lane that dispatched it is busy
+   * and its watchdog is running, so flushing on reconnect resumes a turn that
+   * is genuinely still waiting. Past the watchdog it is not — the loop has
+   * already given up and typing it into Gemini would start a conversation
+   * nobody is listening to — so stale entries are dropped rather than sent.
+   */
+  sendInjectPrompt(msg) {
+    const message = {
+      id: randomUUID(),
+      type: 'inject_prompt',
+      // `sentAt` is when it left here; the tab records the gap to its own start
+      // as `deliver` (v6.6, #104). Same machine, same wall clock.
+      payload: { ...msg, sentAt: Date.now() },
+      timestamp: Date.now(),
+    };
+    if (this.broadcast('extension', message)) return true;
+
+    this.pendingInjects.push({ message, queuedAt: Date.now() });
+    // Bounded so a long offline stretch cannot grow without limit. The oldest
+    // go first: they are the ones closest to their watchdog.
+    while (this.pendingInjects.length > MAX_PENDING_INJECTS) this.pendingInjects.shift();
+    return false;
+  }
+
+  /**
+   * The extension is back — send it what it missed.
+   *
+   * Called when a client identifies as an extension, not on socket open: the
+   * socket is open before we know what is on the other end of it, and the side
+   * panel connects over the same transport.
+   */
+  flushPendingInjects() {
+    if (this.pendingInjects.length === 0) return 0;
+
+    const now = Date.now();
+    const queued = this.pendingInjects;
+    this.pendingInjects = [];
+
+    let sent = 0;
+    for (const entry of queued) {
+      if (now - entry.queuedAt > INJECT_BUFFER_TTL_MS) continue;
+      // Re-stamped: the time it sat here waiting for Chrome is not delivery.
+      if (entry.message.payload) entry.message.payload.sentAt = now;
+      if (this.broadcast('extension', entry.message)) sent++;
+    }
+    return sent;
+  }
+
+  broadcast(clientType, message) {
+    let sentCount = 0;
+    // What the worker would show its side panel, an editor panel gets too —
+    // and never what the worker handles itself, whoever the message was for.
+    const editorMay = !WORKER_ONLY_TYPES.has(message?.type);
+    for (const [id, client] of this.clients) {
+      if (client.type === 'editor' && !editorMay) continue;
+      if (client.type === clientType || clientType === 'all'
+        || (clientType === 'extension' && client.type === 'editor')) {
+        this._send(client.ws, message);
+        sentCount++;
+      }
+    }
+    return sentCount > 0;
+  }
+
+  /**
+   * Send a message to a specific WebSocket.
+   */
+  _send(ws, message) {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  }
+}

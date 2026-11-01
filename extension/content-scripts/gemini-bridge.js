@@ -2080,7 +2080,7 @@ function runSwitchModel(label) {
  * What Gemini offers depends on the subscription: the version numbers move, and
  * a plan can be missing a tier entirely. So the list is read from the page and
  * sent to the server, which matches it against the effort rung
- * (`core/model-match.js`). Nothing here knows what "deep" means.
+ * (`core/models/model-match.js`). Nothing here knows what "deep" means.
  */
 async function readModelOptions() {
   /*

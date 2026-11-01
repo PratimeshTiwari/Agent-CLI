@@ -1,0 +1,59 @@
+/**
+ * Tool: edit_file
+ *
+ * Propose edits to an existing file. Generates a diff and queues
+ * it for user approval via the side panel.
+ */
+
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+import { displayPath } from '../../core/workspace/paths.js';
+
+export async function editFile(args, context) {
+  const { path: filePath, edits, append } = args;
+  const { workspace, diffEngine } = context;
+
+  const absPath = filePath.startsWith('/') ? filePath : resolve(workspace, filePath);
+  // Relative inside the workspace, absolute outside it. These tools accept
+  // absolute paths, and a bare `relative()` turns one into `../../../tmp/x`
+  // in the error the model then reads — a path it never used.
+  const relPath = displayPath(workspace, absPath);
+
+  if (!existsSync(absPath)) {
+    throw new Error(`File not found: ${relPath}. Use create_file to create a new file.`);
+  }
+
+  const appending = typeof append === 'string' && append.length > 0;
+  if (!appending && (!edits || !Array.isArray(edits) || edits.length === 0)) {
+    throw new Error('Give `edits` (a non-empty array of { oldText, newText }) or `append` (text to add at the end)');
+  }
+
+  // Validate each edit has required fields
+  for (let i = 0; i < (edits || []).length; i++) {
+    const edit = edits[i];
+    if (typeof edit.oldText !== 'string') {
+      throw new Error(`Edit ${i}: 'oldText' must be a string`);
+    }
+    if (typeof edit.newText !== 'string') {
+      throw new Error(`Edit ${i}: 'newText' must be a string`);
+    }
+  }
+
+  // Generate diff
+  const diff = diffEngine.generateDiff(relPath, edits || [], { append: appending ? append : undefined });
+
+  return {
+    diffId: diff.id,
+    filePath: diff.filePath,
+    status: 'proposed',
+    patch: diff.patch,
+    hunkCount: diff.hunks.length,
+    hunks: diff.hunks.map(h => ({
+      id: h.id,
+      oldStart: h.oldStart,
+      newStart: h.newStart,
+      preview: h.lines.slice(0, 10).join('\n') + (h.lines.length > 10 ? '\n...' : ''),
+    })),
+    message: `Proposed ${appending ? 'an append' : `${edits.length} edit(s)`} to ${relPath}. Waiting for approval.`,
+  };
+}

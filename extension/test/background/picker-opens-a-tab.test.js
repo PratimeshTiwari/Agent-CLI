@@ -32,10 +32,10 @@ import { readFileSync } from 'node:fs';
 const here = dirname(fileURLToPath(import.meta.url));
 const socket = readFileSync(join(here, '../../src/background/socket.js'), 'utf8');
 const loop = readFileSync(
-  join(here, '../../../server/src/core/agent-loop.js'), 'utf8',
+  join(here, '../../../server/src/backend/core/turn/agent-loop.js'), 'utf8',
 );
 const slash = readFileSync(
-  join(here, '../../../server/src/core/slash-commands.js'), 'utf8',
+  join(here, '../../../server/src/backend/core/turn/slash-commands.js'), 'utf8',
 );
 
 /**

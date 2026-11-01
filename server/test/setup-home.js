@@ -14,7 +14,7 @@
  *
  * Tests that need their own home still set the variable — and must *restore*
  * it afterwards rather than delete it, or every later test in the same file
- * falls back to the real one. `test/core/test-home.test.js` enforces both.
+ * falls back to the real one. `test/backend/core/test-home.test.js` enforces both.
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
