@@ -87,8 +87,7 @@ not do that on purpose, it is clutter.
 ├── AGENT.md               instructions for every project (optional; you write it)
 ├── recent-workspaces.json what /set-workspace offers
 ├── workspaces/<name>-<hash>/   the second copy of each project's conversations
-├── trash/                 what /reset (and a cleanup) moved away; delete it when you are sure
-└── backups/
+└── trash/                 what /reset (and a cleanup) moved away; delete it when you are sure
 ```
 
 A few files appear briefly and remove themselves: `pending-reload.json` after `/update`,

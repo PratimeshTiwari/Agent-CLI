@@ -22,7 +22,8 @@ said "it is **not** a chat panel"; what changed is in the 1.8.0 entry below.
 
 ## How it talks to the CLI
 
-Through files under `<workspace>/.agent/state/`, never a socket:
+Through files under `<workspace>/.agent/state/` (the chat panel is the one exception: it uses the
+agent's WebSocket, see 1.8.0 below):
 
 ```
 editor.json         active file and cursor

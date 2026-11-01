@@ -55,6 +55,12 @@ editor in "From VS Code" and the architecture diagram are drawn.*
 - If the tab is on a different model, it asks before sending. If Pro is at its limit, it resends
   one rung lower, once, and says so.
 
+**Jira** (prompt v4)
+- `jira_issue` reads, searches, creates, updates, comments, moves and attaches, on Cloud and
+  Server/DC. Every write is shown first as a Send / Don't send box, in every mode.
+- Sign in once with `agent atlassian login` (the token stays in the Keychain), then `/prompt v4`;
+  `/jira` checks the sign-in.
+
 **Looking after the install**
 - `/doctor` lists every package and tool by tier, with the installed and latest versions. It can
   install, update, pick a version or remove one, and undoes a change that stops the agent
@@ -92,14 +98,14 @@ Then two things no installer can do for you:
 **Optional: the VS Code companion** (VS Code, Cursor, Antigravity, Windsurf). It gives the
 agent your open file, cursor and Problems panel, adds a chat panel to the sidebar
 (`cmd+alt+j`), and **Attach to Agent CLI** on the explorer's right-click menu. Extensions panel →
-`…` → **Install from VSIX…** → `vscode-companion/cli-agent-companion-1.8.8.vsix`.
+`…` → **Install from VSIX…** → `vscode-companion/cli-agent-companion-1.8.9.vsix`.
 
 From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigravity`,
 `windsurf`; if it is not found, run **Shell Command: Install '…' command in PATH** from the
 editor's command palette):
 
 ```bash
-<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.8.vsix
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 `<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
@@ -107,27 +113,27 @@ knows. This works for any install:
 
 ```bash
 AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
-code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.8.vsix
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 Three common setups:
 
 ```bash
 # setup.sh's default location, VS Code
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.8.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.9.vsix
 
 # a checkout from before the rename (setup.sh keeps it), Cursor
-cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
 
 # a custom AGENT_INSTALL_DIR, Antigravity
-antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 Antigravity IDE's command is `antigravity-ide`, and it is usually not on `PATH`; the full path works:
 
 ```bash
 "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide" \
-  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.8.vsix
+  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
 ```
 
 Then reload the window (**Developer: Reload Window**). Installing over an older version
@@ -169,7 +175,7 @@ agent
 | `ctrl+e` | expand or collapse every step |
 | `ctrl+o` | show or hide the task list |
 | `ctrl+b` | bring the Gemini tab to the front |
-| `shift+enter` | newline without sending, in terminals that report it (iTerm2, Ghostty, Kitty, WezTerm) and in VS Code, Cursor and Antigravity with the companion 1.8.8 |
+| `shift+enter` | newline without sending, in terminals that report it (iTerm2, Ghostty, Kitty, WezTerm) and in VS Code, Cursor and Antigravity with the companion (1.8.8 or later) |
 | `ctrl+n` | newline in any terminal |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
@@ -179,7 +185,8 @@ agent
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model to match |
 | `/settings` | everything that is set, on one page |
-| `/prompt` | which prompt version is sent (`v1` frozen, `v2` the candidate); bare `/prompt` compares them |
+| `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v4` (adds Jira); bare `/prompt` compares them |
+| `/chat <link or id>` | continue this session in another Gemini chat |
 | `/doctor` | packages and tools: install, update, pick a version, remove unused · `report` prints a table |
 | `/diff` · `/undo` | the last edit, and reverting it |
 | `/copy` | the last reply as Markdown · `/copy code` for the last code block |
@@ -236,7 +243,8 @@ every PR's date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md
 
 | Series | Dates | PRs | What it was about |
 | --- | --- | --- | --- |
-| **v7** | 2026-10-30 … | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)– | Fresh docs and screenshots, faster typing between turns, KaTeX in replies, project commands detected, code outlines on partial reads |
+| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply resent once in a fresh tab, Jira with every write approved, prompts kept in this session's chat, a tidier repo |
+| **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | Fresh docs and screenshots, faster typing between turns, KaTeX in replies, project commands detected, code outlines on partial reads, a token count that climbs |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply or revert, lean menus, Claude Code-style questions and action rows, a quieter status bar, compaction that keeps recent exchanges, large files read by a subagent, log exports, symbols in 16 languages, drag and drop |
 | **v5** | 2026-10-19 … 2026-10-28 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101) | Clean slate, one recovery policy, the VS Code chat panel, three modes, themes, first-start setup, the effort slider and Argon, documents, `/doctor`, prompt versions |
 | **v4** | 2026-09-27 … 2026-10-19 | [#60](https://github.com/PratimeshTiwari/Agent-CLI/pull/60)–[#62](https://github.com/PratimeshTiwari/Agent-CLI/pull/62) | An honest failure log, the rename to Agent CLI, fixes from real use |

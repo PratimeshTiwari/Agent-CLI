@@ -79,8 +79,8 @@ with a fake extension answering prompts from a script, so a full turn — inject
 call, tool result, next prompt — runs with no browser and no Gemini account. It lives in
 `.agent/artifacts/harness/`, not the repo. Rebuild it from this:
 
-- **`drive.py`** — `pty.fork()` the CLI with `--workspace <scratch> --port <p> --editor <shim>
-  --no-github`. `PATH` is prefixed with a `bin/` of shims for `open`, `code`, `xdg-open` and
+- **`drive.py`** — `pty.fork()` the CLI with `--workspace <scratch> --port <p> --editor <shim>`.
+  `PATH` is prefixed with a `bin/` of shims for `open`, `code`, `xdg-open` and
   `cursor` that log their argv instead of launching anything, which is how "did it open the
   editor" became checkable. Steps are a JSON list: type text, send a key, resize the window
   (`{"resize": [rows, cols]}`), or write a file into `.agent/state/` to stand in for the VS
@@ -136,8 +136,9 @@ server/src/
 ├── bridge/           # websocket-server (the Chrome-extension transport)
 ├── context/          # token budget: code-minifier, symbol-index,
 │                     # context-manager, memory-manager
-├── github/           # PR agent: poller, comment-classifier, ci-log-parser, plan-generator
+├── atlassian/        # Jira: client, config, ADF and wiki markup, `agent atlassian login`
 ├── mcp/              # mcp-server.js + tools/
+├── prompts/          # prompt files; prompts/v2/ overrides them for later versions
 ├── storage/  watcher/
 └── ui/               # the terminal front-end
     ├── cli-ui.jsx    # render(): stdin shim, hotkey routing, trailing-Enter split
@@ -146,10 +147,10 @@ server/src/
     ├── enter-splitter.js  # peels a trailing \r off a chunk so Enter is a keypress
     ├── paste.js      # collapses a big paste to a marker; expands it on submit
     ├── format.js  constants.js  transcript.js     # pure, tested
-    ├── hooks/        # use-key-bindings, use-hotkeys, use-github-tab,
-    │                 #   use-github-keys, use-slash-commands, use-agent-callbacks
-    └── components/   # Banner, TranscriptTurn, GithubTab, Menus, InputBar,
-                      #   AgentTerminal, QuestionPrompt
+    ├── hooks/        # use-key-bindings, use-hotkeys, use-slash-commands,
+    │                 #   use-agent-callbacks
+    └── components/   # Banner, TranscriptTurn, Menus, InputBar, PromptInput,
+                      #   AgentTerminal, QuestionPrompt, SettingsList, Panel
 ```
 
 Modules are kebab-case; React components keep PascalCase (`ui/App.jsx`). Tests live in
@@ -393,7 +394,7 @@ repo: **25,445 characters against 9,991, a 61% cut.** `requestToolRedeclaration(
 condensed reminder plus the full definitions and nothing else. It outranks the periodic
 refresh, because that tier sends tool *names* and names are what just failed.
 
-**`pro-hypothesis.md`** asks `standard`/`deep` what would disprove the expectation (+714
+**`pro-hypothesis.md`** asks `pro` what would disprove the expectation (+714
 characters; a numeric confidence score was declined): [`docs/history.md`](docs/history.md#saying-what-would-prove-you-wrong-pro-hypothesismd).
 
 **And the rungs were not as thin as they looked — then they were revisited and there is one.**
@@ -405,22 +406,17 @@ rung.** `pro` is the old `standard` plus `deep`'s review step; the critical-anal
 the assumption ledger are declined because they are paid in **output** tokens on every pro
 turn, which a prompt character count does not show.
 
-**On `deep`, the hostile reviewer is a different model.** `deep` ended with "read the diff as
-a hostile reviewer", and a model reviewing its own diff is the weakest reviewer available: it
-shares every assumption that produced the code. With a reviewer configured it now calls
-`ask_reviewer` instead.
-
-Scoped to `deep` **and** `topology === 'duo'`. On solo the step stays self-review, because
-naming `ask_reviewer` in a prompt that does not define it instructs a call to a tool the model
-has never been given — the drift `toolCatalogDrift` exists to catch. Verified: 9 of the 10
-effort × topology shapes byte-identical, `deep/duo` +111 characters.
+**On `pro`, the review goes to a second tab.** A model reviewing its own diff shares every
+assumption that produced it. With subagents on, step 5 sends the diff to `ask_subagent` with
+`role: "review"` (v2+: only past one file or ~30 lines). With them off it stays self-review,
+because naming a tool the prompt does not define instructs a call to it.
 
 **Why one reviewer and not a pipeline** (extra agents should add intelligence, not writes): see
 [`docs/history.md`](docs/history.md#why-one-reviewer-and-not-a-multi-agent-pipeline).
 
 It is also the only fan-out that is *real* here. `extension-lock` gives each **tab** a lane —
-`main:<model>` for the conversation you are looking at, `sub:<requestId>` for a subagent turn in
-a tab opened for it and closed after — so `ask_*` calls genuinely run at once, same model or
+`main:<model>` for the conversation you are looking at, `sub:<requestId>` for a subagent in
+a tab of its own, kept for its session — so `ask_subagent` calls genuinely run at once, same model or
 not. That was not always true: the extension addressed tabs by URL pattern, so two same-model
 requests raced for one tab and could interleave two prompts into one conversation. Tab identity
 is what removed that, and it is why a same-model reviewer is now offered at all. Claude Code's
@@ -428,10 +424,9 @@ subagents buy *context isolation* rather than speed, and Cursor
 3's eight parallel agents are bought with **git worktree isolation** — a separate filesystem per
 agent, which this project does not have and would need before parallel *writers* were safe.
 
-**Subagents are not faster here, and the reason is measured.** Each subagent turn opens a tab
-that is closed when the turn ends, so turn 2 has never seen turn 1 — **81% of characters
-resent** over ten turns. Holding one tab across a subagent's turns is the largest single waste
-left in the system, and it is a bridge change rather than a prompt one.
+**A subagent session holds one tab (`core/subagent-session.js`).** Each round sends only what
+that tab has not seen; a fresh tab per round resent **81% of characters** over ten turns. The
+tab closes when the session ends (v8.1 fixed it closing after round 1).
 
 ### Tools
 
@@ -951,8 +946,7 @@ by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and 
 `tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
 started, do not retry", and `/update` says git could not run instead of "not a git checkout".
 Verified end to end on a 15,000-file tree under the pty: `main` hands the model `EBADF`, this
-hands it the command's output. **Any new long-lived resource per file is the same bug.** `semantic_search`
-is backed by a local TF-IDF index.
+hands it the command's output. **Any new long-lived resource per file is the same bug.**
 
 ### Where `.agent/` actually is
 
@@ -993,11 +987,10 @@ walking at `$HOME`; `paths.test.js` covers it.
 
 | Path | Contents |
 | --- | --- |
-| `<ws>/.agent/config.json` | topology, `modelConfig`, `commandRules`, `memoryEnabled`, `agentName`, GitHub token |
+| `<ws>/.agent/config.json` | `modelConfig`, `commandRules`, `memoryEnabled`, `agentName`, `contextFolders`, `skillFolders` |
 | `<ws>/.agent/memory.md` | what the agent learned here — scoped, never walked, read back into `<memory>` |
-| `<ws>/.agent/artifacts/` | `task.md`, `plan.md`, `walkthrough.md` — written for the user to read |
-| `<ws>/.agent/state/` | `editor.json` (VS Code companion), `github.json`, `plan-approval.json` |
-| `<ws>/.agent/github-pr-plans/` | GitHub PR agent output |
+| `<ws>/.agent/artifacts/` | `task.md`, `implementation_plan.md`, `walkthrough.md` — written for the user to read |
+| `<ws>/.agent/state/` | the VS Code companion's files (see below) and `bridge.json` |
 | `<ws>/.agent/logs/errors.jsonl` | structured failure log — one JSON object per line |
 | `<ws>/.agent/logs/commands/<date>.jsonl` | every shell command run, blocked or rejected — an audit trail, never read back into a prompt |
 | `<ws>/.agent/backups/`, `context/`, `logs/`, `tmp/` | see `paths.js` |
@@ -1724,27 +1717,16 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   in the live frame is load-bearing, not tidiness. The arithmetic test caught the first of
   these; only the pty run caught the second.
 - **Nothing the user waits for goes in front of the first frame.** Startup was
-  2.46s to the prompt box with GitHub enabled, and almost none of it was work:
-  `main.js` awaited the 1.5s extension-greeting timeout and then
-  `githubHandler.start()` — which authenticates against api.github.com and runs
-  a full initial poll, fanning out per PR — before it created the Ink UI.
-  Neither answer is something the first frame draws. Moving both behind
-  `cli.start()` took the same measurement to **0.53s**, with no behaviour change:
-  the start tab still opens, the poller still polls. For scale, every module
+  2.46s to the prompt box, and almost none of it was work: `main.js` awaited the
+  1.5s extension-greeting timeout and then the GitHub agent's start (since
+  removed) before it created the Ink UI. Neither answer is something the first
+  frame draws. Moving both behind `cli.start()` took the same measurement to
+  **0.53s**, with no behaviour change. For scale, every module
   import in the process is 517ms together, 426ms of it ink+react, and `tsx`
   itself is 120ms — so the two waits were larger than the entire program.
   `test/core/startup-order.test.js` pins the ordering, because the regression is
   invisible in review: one more `await` before `cli.start()` reads as ordinary
   sequencing and costs a second every launch, with no failure to notice.
-
-  **Starting GitHub after the WebSocket server also fixed a silence.**
-  `poller.start()` emits `auth_rejected`, and its only listener is wired in the
-  `WebSocketServer` constructor — which used to run *after* that call. So the
-  401 message ("GitHub rejected the stored token… clear it with
-  `/github remove-token`") was emitted into an EventEmitter with nobody
-  attached, and an expired token produced no GitHub activity and no reason why.
-  The later `pollNow()` 401 at `github-poller.js:147` always worked; only the
-  startup one was unreachable.
 
 - **The startup look is Look A (v5.22, chosen 2026-10-25 from
   `.agent/artifacts/plans/2026-10-25-startup-look.md`).** A four-row `❯` mark in block characters

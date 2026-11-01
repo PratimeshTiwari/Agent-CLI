@@ -11,12 +11,13 @@ CLI  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content scri
 
 - Current version: **1.58.0**. The CLI checks it: the extension reports the version Chrome actually
   loaded (`getManifest()`), and a stale build gets one row at connect time and a line in
-  `/settings → Status → Extension build`. An extension older than 1.26.0 reports nothing, and the
+  `/settings → Status → Extension build`. From 1.58.0 on, an extension older than the checkout
+  reloads itself between turns. An extension older than 1.26.0 reports nothing, and the
   CLI says that too.
 - **A side panel and a floating window** (`⌘⇧1`, bound once at `chrome://extensions/shortcuts`)
   run the same chat as the terminal.
 - **Each request gets its own tab lane**: the main chat on `main:<model>`, a subagent in a tab of
-  its own, closed after.
+  its own, kept for its session and closed when it ends.
 - Version history: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Installing and updating
@@ -46,6 +47,8 @@ src/background/            the sources it is built from
   socket.js                the WebSocket, reconnect, server-message dispatch
   messaging.js             sendToServer / broadcastToSidePanel
   content.js               tab lanes, batch sessions, focus restoring
+  chat-url.js              a chat's /app/<id> URL, keeping a /u/<n> account
+  floating.js              the floating chat window
   state.js  policy.js
 content-scripts/
   gemini-bridge.js         type into Gemini, scrape the reply
