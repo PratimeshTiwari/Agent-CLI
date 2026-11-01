@@ -7,8 +7,8 @@
  * when a function moves. Every test passed, because no test runs `/exit`.
  *
  * This repo moves functions between files constantly (four modules changed
- * homes in one evening), and it has no linter installed — `.eslintrc.json`
- * exists for editors and there is no `lint` script — so `no-undef`, the rule
+ * homes in one evening), and it has no linter installed — `eslintConfig` in
+ * `package.json` exists for editors and there is no `lint` script — so `no-undef`, the rule
  * that would have caught this in a second, never runs.
  *
  * `acorn` is already a dependency for the symbol index, so this is that rule,

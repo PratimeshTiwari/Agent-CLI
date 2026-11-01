@@ -232,7 +232,7 @@ which question, and what is safe to delete.
 ## Release history
 
 Every change reached `main` through a pull request from a branch that is kept. The full list, with
-every PR's date, branch and notes, is in [`CHANGELOG.md`](CHANGELOG.md).
+every PR's date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 | Series | Dates | PRs | What it was about |
 | --- | --- | --- | --- |
@@ -247,7 +247,7 @@ every PR's date, branch and notes, is in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## More
 
-- [`CHANGELOG.md`](CHANGELOG.md): what changed, release by release
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md): what changed, release by release
 - [`CLAUDE.md`](CLAUDE.md): architecture, internals, and why things are the way they are
 - [`extension/README.md`](extension/README.md) · [`vscode-companion/README.md`](vscode-companion/README.md)
 

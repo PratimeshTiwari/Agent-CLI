@@ -7,7 +7,7 @@ the history, so this can be checked rather than believed:
 git log main --merges --format="%h %ad %s" --date=short
 ```
 
-Internals and the reasoning behind each change live in [`CLAUDE.md`](CLAUDE.md).
+Internals and the reasoning behind each change live in [`CLAUDE.md`](../CLAUDE.md).
 
 ## Every release
 
@@ -31,6 +31,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v7.10 | 2026-10-31 | `v7.10/token-count-climbs` | [#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | The spinner's token count climbs while Gemini writes, instead of jumping when the reply lands; a message the tab failed to send goes in front of the next one, and a lost first prompt is sent again in full; a send that fails is retried once, in the same chat in a fresh tab, and then says one line and the chat's link (extension 1.56.0) |
 | v8.0 | 2026-10-31 | `v8.0/silent-retry-and-cleaner-rows` | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142) | Table rows get a dotted rule between them when any row wraps; a call with wrong arguments reads `wrong arguments · query missing`; two minutes without reply text resends the prompt once in a fresh tab on the same chat (extension 1.57.0) |
 | v8.1 | 2026-11-01 | `v8.1/jira-tools` | [#143](https://github.com/PratimeshTiwari/Agent-CLI/pull/143) | `jira_issue` on prompt v4: read, search, create, update, comment, move and attach, Cloud and Server/DC; every write is a Send / Don't send box in every mode, with no "always"; `agent atlassian login` keeps the token in the Keychain; `/jira`; a prompt goes into this session's chat or nowhere: the tab is moved back first, and if it cannot be, a warning names `/chat <link or id>`; `/prompt` shows what each version adds to the one before, and → scrolls all of it; a subagent session keeps its tab, and its failure no longer ends your turn; the extension reloads itself when the checkout is newer (extension 1.58.0, companion 1.8.9) |
+| v8.2 | 2026-11-02 | `v8.2/tidy-root` | [#144](https://github.com/PratimeshTiwari/Agent-CLI/pull/144) | A tidier root: the CHANGELOG moves to `docs/` with an index beside it; the ESLint and Prettier settings move into `package.json`; the stale `harness/` and `npm run harness` are gone (the harness in use is in `.agent/artifacts/harness/`) |
 
 ### v6 — 2026-10-30 · PRs [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130)
 
@@ -565,7 +566,7 @@ message dispatch went from 53% to 70% covered (#47).
 #### Extension versions in this range
 
 1.35.0 → 1.40.0, three of which are listed above as bugs they fixed. The
-per-change record is in [`extension/CHANGELOG.md`](extension/CHANGELOG.md).
+per-change record is in [`extension/CHANGELOG.md`](../extension/CHANGELOG.md).
 
 ---
 
@@ -654,7 +655,7 @@ written.
 #### Extension versions in this range
 
 1.26.0 → 1.34.0. The per-change record is in
-[`extension/CHANGELOG.md`](extension/CHANGELOG.md), including the four releases that
+[`extension/CHANGELOG.md`](../extension/CHANGELOG.md), including the four releases that
 fixed the wrong thing and the measurements that disproved them. They are kept
 deliberately: this repo keeps its mistakes, because the reasoning that produced
 them is the reasoning that would produce them again.

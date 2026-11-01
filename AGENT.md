@@ -36,7 +36,7 @@ npm run build --workspace=extension  # rebuild the service worker
 Tests live in `server/test/`, mirroring `server/src/` directory for directory —
 `src/core/paths.js` is tested by `test/core/paths.test.js`. **Expected state:
 everything passes**, so a failure is a real regression. No lint script;
-`.eslintrc.json` and `.prettierrc` (100 cols, single quotes) are for editors.
+`package.json`'s `eslintConfig` and `prettier` (100 cols, single quotes) are for editors.
 
 ## Layout
 

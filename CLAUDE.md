@@ -69,15 +69,15 @@ one `PR-<n>.md` per PR, and `comment-classifier` stopped categorising by keyword
 took that over. Both test files were rewritten against the shipped behaviour, so a failure now is
 a real regression.
 
-There is no lint script; `.eslintrc.json` (eslint:recommended) and `.prettierrc`
-(100 cols, single quotes, trailing commas) exist for editor integration.
+There is no lint script; `package.json` holds `eslintConfig` (eslint:recommended) and
+`prettier` (100 cols, single quotes, trailing commas) for editors.
 
 ### The pty harness — how anything user-visible gets measured
 
 Most of the numbers in this file came from a harness that drives the **real CLI under a pty**
 with a fake extension answering prompts from a script, so a full turn — inject, reply, tool
-call, tool result, next prompt — runs with no browser and no Gemini account. It lives in the
-session scratchpad, not the repo. Rebuild it from this:
+call, tool result, next prompt — runs with no browser and no Gemini account. It lives in
+`.agent/artifacts/harness/`, not the repo. Rebuild it from this:
 
 - **`drive.py`** — `pty.fork()` the CLI with `--workspace <scratch> --port <p> --editor <shim>
   --no-github`. `PATH` is prefixed with a `bin/` of shims for `open`, `code`, `xdg-open` and
