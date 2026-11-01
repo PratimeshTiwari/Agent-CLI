@@ -1,4 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="940" height="662" viewBox="0 0 940 662" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<svg xmlns="http://www.w3.org/2000/svg" width="1036" height="758" viewBox="0 0 1036 758"><!-- backdrop -->
+<defs>
+<linearGradient id="bd-base" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset=".5" stop-color="#4c1d95"/><stop offset="1" stop-color="#831843"/></linearGradient>
+<radialGradient id="bd-sky" cx=".1" cy="0" r=".8"><stop offset="0" stop-color="#38bdf8" stop-opacity=".35"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></radialGradient>
+<radialGradient id="bd-rose" cx="1" cy="1" r=".8"><stop offset="0" stop-color="#ec4899" stop-opacity=".4"/><stop offset="1" stop-color="#ec4899" stop-opacity="0"/></radialGradient>
+<filter id="bd-shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".5"/></filter>
+</defs>
+<rect width="1036" height="758" rx="16" fill="url(#bd-base)"/>
+<rect width="1036" height="758" rx="16" fill="url(#bd-sky)"/>
+<rect width="1036" height="758" rx="16" fill="url(#bd-rose)"/>
+<rect x="48" y="48" width="940" height="662" rx="10" fill="#000" filter="url(#bd-shadow)"/>
+<svg x="48" y="48" xmlns="http://www.w3.org/2000/svg" width="940" height="662" viewBox="0 0 940 662" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
 <rect width="940" height="662" rx="10" fill="#1e1e1e"/>
 <circle cx="20" cy="16" r="6" fill="#ff5f56"/><circle cx="40" cy="16" r="6" fill="#ffbd2e"/><circle cx="60" cy="16" r="6" fill="#27c93f"/>
 <text x="470.0" y="20" fill="#8a8a8a" font-size="12" text-anchor="middle">agent — billing-app</text>
@@ -23,4 +34,5 @@
 <text x="16" y="592" xml:space="preserve" textLength="312.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68" font-weight="bold">❯ </tspan><tspan fill="#1e1e1e">A</tspan><tspan fill="#d4d4d4" fill-opacity="0.5">sk anything, or / for commands</tspan></text>
 <text x="16" y="611" xml:space="preserve" textLength="908.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
 <text x="16" y="649" xml:space="preserve" textLength="889.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#e0af68">⏸</tspan><tspan fill="#d4d4d4" fill-opacity="0.5"> plan mode</tspan><tspan fill="#d4d4d4">                                                                    </tspan><tspan fill="#d4d4d4" fill-opacity="0.5">high · ▰▱▱▱▱ 6%</tspan></text>
+</svg>
 </svg>

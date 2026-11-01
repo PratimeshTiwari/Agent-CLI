@@ -361,9 +361,12 @@ test('a link costs no columns when a reply is wrapped (v7.9)', async () => {
   assert.ok(fitLines(link, 30).includes('\n'));
 });
 
-// v8.4: a subagent that could not run was a JSON line; it says so in words.
-test('a subagent that fell back says it failed, why, and that the work stays here', () => {
-  const r = { success: true, fellBack: true, reason: 'its Gemini tab failed (No tab with id: 5)', result: 'The task subagent could not run …' };
-  assert.equal(summarizeResult('ask_subagent', r), 'subagent failed · its Gemini tab failed (No tab with id: 5) · doing it in this chat');
-  assert.equal(summarizeResult('ask_subagent', { success: true, fellBack: true }), 'subagent failed · doing it in this chat');
+// v8.5: a subagent that could not run read as a cut sentence; it says so in words.
+test('a subagent that fell back says it could not run, that the work stays here, and why', () => {
+  const said = 'The research subagent could not run (its Gemini tab failed (No tab with id: 5)). Do it here instead, in this conversation.\n\n--- the task ---\nx';
+  assert.equal(summarizeResult('ask_subagent', said), 'could not run · doing it in this chat · its Gemini tab failed (No tab with id: 5)');
+  assert.equal(summarizeResult('ask_subagent', { success: true, fellBack: true, reason: 'it timed out' }), 'could not run · doing it in this chat · it timed out');
+  assert.equal(summarizeResult('ask_subagent', { success: true, fellBack: true }), 'could not run · doing it in this chat');
+  // Control: a subagent that answered keeps its own summary.
+  assert.doesNotMatch(summarizeResult('ask_subagent', 'Found three callers.'), /could not run/);
 });

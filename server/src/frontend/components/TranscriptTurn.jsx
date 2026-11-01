@@ -342,7 +342,10 @@ export function TurnRow({ item, previous, isLive, spaced = !isLive, verbose, liv
        * them — reported as "each new event should be spaced out". A live row
        * too since v6.24, when `spaced` says the budget has room (see `spaceLive`).
        */
-      <Box flexDirection="column" marginLeft={2} marginTop={spaced && previous ? 1 : 0} width="100%">
+      // Two columns narrower than the terminal: `width="100%"` beside
+      // `marginLeft={2}` made a long row two columns too wide, and it wrapped
+      // (v8.5, a failed subagent's row at 80 columns).
+      <Box flexDirection="column" marginLeft={2} marginTop={spaced && previous ? 1 : 0} width={Math.max(10, terminalWidth - 2)}>
         <ActionRow act={item} verbose={verbose} isLive={isLive} width={terminalWidth} tick={tick} />
       </Box>
     );

@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](../CLAUDE.m
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#146](https://github.com/PratimeshTiwari/Agent-CLI/pull/146)
+### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#147](https://github.com/PratimeshTiwari/Agent-CLI/pull/147)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v8.2 | 2026-11-02 | `v8.2/tidy-root` | [#144](https://github.com/PratimeshTiwari/Agent-CLI/pull/144) | A tidier root: the CHANGELOG moves to `docs/` with an index beside it; the ESLint and Prettier settings move into `package.json`; the stale `harness/` and `npm run harness` are gone (the harness in use is in `.agent/artifacts/harness/`) |
 | v8.3 | 2026-11-02 | `v8.3/docs-current` | [#145](https://github.com/PratimeshTiwari/Agent-CLI/pull/145) | The docs match the code: no GitHub agent, `deep` rung or `ask_reviewer` left in CLAUDE.md; AGENT.md says a tool needs a catalog entry; the README links companion 1.8.9 and has Jira, `/chat`, prompt v4 and a v8 row; subagent tabs are kept for their session |
 | v8.4 | 2026-11-02 | `v8.4/backend-frontend-split` | [#146](https://github.com/PratimeshTiwari/Agent-CLI/pull/146) | `server/src` and `server/test` split into `backend/` and `frontend/`, each with a README on what is where and how to debug; `frontend/` grouped by job (`input/`, `transcript/`, `menus/`, `screen/`) and `format.js` split in five; `backend/core/` grouped into ten folders by job; a subagent's tab failing is named as the subagent's in the log, the side panel and its row (extension 1.58.1) |
+| v8.5 | 2026-11-02 | `v8.5/subagent-row-and-doctor` | [#147](https://github.com/PratimeshTiwari/Agent-CLI/pull/147) | READMEs redesigned: a hero image, the panels in Chrome and VS Code, a short How it works, and every image on a gradient backdrop; the companion's history moves to its CHANGELOG; `agent --help` lists the shell commands and `agent doctor --test` runs the suite; a failed subagent's row reads `could not run · doing it in this chat · <why>` and no longer wraps past the terminal's width |
 
 ### v7 — 2026-10-30 … 2026-10-31 · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141)
 

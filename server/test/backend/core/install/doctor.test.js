@@ -346,3 +346,16 @@ describe('installing a tool npm does not manage', () => {
     assert.deepEqual(errorOutput({ error: new Error('spawn npm EBADF') }), ['spawn npm EBADF']);
   });
 });
+
+// v8.5: `agent doctor --test` runs the checkout's suite and says how it went.
+test('agent doctor --test runs the suite in the checkout and passes its verdict on', async () => {
+  const lines = [];
+  const out = { write: (s) => lines.push(s), isTTY: false };
+  const ran = [];
+  assert.equal(await runDoctorCli(['doctor', '--test'], { out, root: '/x/agent', runTests: async (r) => { ran.push(r); return 0; } }), 0);
+  assert.deepEqual(ran, ['/x/agent']);
+  assert.match(lines.join(''), /Running the agent's tests in \/x\/agent[\s\S]*✔ Every test passed/);
+  lines.length = 0;
+  assert.equal(await runDoctorCli(['--test'], { out, root: '/x/agent', runTests: async () => 1 }), 1);
+  assert.match(lines.join(''), /✗ Some tests failed/);
+});

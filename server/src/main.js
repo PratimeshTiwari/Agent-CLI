@@ -12,11 +12,13 @@
  *   agent --port 7777        # Custom port (default: 7777)
  *   agent --continue         # Resume most recent session
  *   agent --sessions         # List past sessions
+ *   agent --help             # Everything, commands included (core/install/cli-help.js)
  */
 
 import { resolve, dirname } from 'path';
 import { homeDir, ensureDir, setActiveScope, resolveState, codeDir } from './backend/core/workspace/paths.js';
 import { runMigrations } from './backend/core/install/migrate.js';
+import { HELP_TEXT } from './backend/core/install/cli-help.js';
 import { hostEditor } from './backend/core/workspace/host-editor.js';
 import { rememberWorkspace } from './backend/core/workspace/workspaces.js';
 import { existsSync, mkdirSync } from 'fs';
@@ -67,7 +69,6 @@ function parseArgs() {
      * is hosting this terminal answers that properly; see core/workspace/host-editor.js.
      */
     editor: process.env.EDITOR || hostEditor() || 'code',
-    ciWatch: true,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -97,9 +98,6 @@ function parseArgs() {
       case '--editor':
         config.editor = args[++i];
         break;
-      case '--no-ci-watch':
-        config.ciWatch = false;
-        break;
       case '--help':
       case '-h':
         printHelp();
@@ -111,28 +109,7 @@ function parseArgs() {
 }
 
 function printHelp() {
-  console.log(`
-╔══════════════════════════════════════════════════════════╗
-║                  🤖 Agent CLI Server                     ║
-╚══════════════════════════════════════════════════════════╝
-
-Usage: agent [options]          (alias: agent-cli)
-
-Options:
-  --workspace, -w <path>   Set workspace root (default: cwd)
-  --scope, -s <name>       Work on one repo inside a group that shares a .agent/
-  --port, -p <number>      WebSocket port (default: 7777)
-  --continue, -c           Resume most recent session
-  --resume <session-id>    Resume a specific session
-  --sessions               List past sessions
-  --editor <command>       Editor command (default: $EDITOR or 'code')
-  --no-ci-watch            Disable CI failure watching (comments only)
-  --help, -h               Show this help message
-
-Environment:
-  EDITOR                   Default editor command (fallback: 'code')
-  AGENT_CLI_HOME           Agent home directory (default: ~/.agent)
-`);
+  process.stdout.write(HELP_TEXT);
 }
 
 // ── Ensure Config Directory ──────────────────────────────────────────
