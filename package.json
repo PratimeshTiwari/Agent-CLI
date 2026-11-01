@@ -11,10 +11,46 @@
     "start": "npm run start --workspace=server",
     "dev": "npm run dev --workspace=server",
     "test": "npm run test --workspace=server && npm run test --workspace=extension && npm run test:companion",
-    "test:companion": "node --import ./server/test/setup-home.js --test \"vscode-companion/test/*.test.js\"",
-    "harness": "node harness/run.mjs"
+    "test:companion": "node --import ./server/test/setup-home.js --test \"vscode-companion/test/*.test.js\""
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es2024": true,
+      "webextensions": true,
+      "browser": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2024,
+      "sourceType": "module",
+      "ecmaFeatures": {
+        "jsx": true
+      }
+    },
+    "extends": [
+      "eslint:recommended"
+    ],
+    "rules": {
+      "no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern": "^_"
+        }
+      ],
+      "no-undef": "warn"
+    }
+  },
+  "prettier": {
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "bracketSpacing": true,
+    "arrowParens": "always"
   }
 }
