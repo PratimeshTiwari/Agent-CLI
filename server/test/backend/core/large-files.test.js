@@ -14,9 +14,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DiffEngine, stripLineNumbers, nearestMatchNote } from '../../../src/backend/core/diff-engine.js';
-import { formatReadResult, fitReadResult } from '../../../src/backend/core/result-budget.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { DiffEngine, stripLineNumbers, nearestMatchNote } from '../../../src/backend/core/edits/diff-engine.js';
+import { formatReadResult, fitReadResult } from '../../../src/backend/core/turn/result-budget.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 import { readFile } from '../../../src/backend/mcp/tools/read-file.js';
 import { editFile } from '../../../src/backend/mcp/tools/edit-file.js';
 
@@ -106,13 +106,13 @@ test('edit_file with neither edits nor append says what it needs', async () => {
 });
 
 test('the prompt tells the model to append rather than rewrite a document', () => {
-  const catalog = readFileSync(new URL('../../../src/backend/core/tool-catalog.js', import.meta.url), 'utf8');
+  const catalog = readFileSync(new URL('../../../src/backend/core/prompt/tool-catalog.js', import.meta.url), 'utf8');
   assert.match(catalog, /add each section with \\`append\\`/);
   assert.match(catalog, /without read_file's line numbers/);
 });
 
 test('in auto mode an append is a safe, addition-only edit — not "could not determine"', async () => {
-  const { RiskClassifier } = await import('../../../src/backend/core/risk-classifier.js');
+  const { RiskClassifier } = await import('../../../src/backend/core/commands/risk-classifier.js');
   const rc = new RiskClassifier(mkdtempSync(join(tmpdir(), 'rc-')));
   const v = rc.classify('edit_file', { path: 'doc.md', append: '## Section\nText.\n' });
   assert.equal(v.level, 'safe');

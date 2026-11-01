@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TOOL_CATALOG, toolVerb } from '../../../src/backend/core/tool-catalog.js';
+import { TOOL_CATALOG, toolVerb } from '../../../src/backend/core/prompt/tool-catalog.js';
 import {
   actionVerb, actionState, actionHead, actionOutcome, durationLabel, commandOutputLines, STATE_TONE,
 } from '../../../src/frontend/transcript/action-row.js';

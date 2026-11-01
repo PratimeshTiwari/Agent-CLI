@@ -8,7 +8,7 @@
 
 import { readFileSync, statSync, existsSync } from 'fs';
 import { resolve, extname } from 'path';
-import { displayPath } from '../../core/paths.js';
+import { displayPath } from '../../core/workspace/paths.js';
 import { documentKind, extractDocument, looksBinary } from './documents.js';
 import { PARSEABLE, loadJsParser, definitionsIn } from '../../context/symbol-index.js';
 import { RUBY, rubyDefinitionsIn } from '../../context/ruby-symbols.js';

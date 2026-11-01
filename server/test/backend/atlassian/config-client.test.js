@@ -15,8 +15,8 @@ import {
 } from '../../../src/backend/atlassian/config.js';
 import { createJiraClient, detectKind, jiraErrorText } from '../../../src/backend/atlassian/jira-client.js';
 import { loginWith, runAtlassianCli } from '../../../src/backend/atlassian/cli.js';
-import { loadUserSettings } from '../../../src/backend/core/user-settings.js';
-import { homeDir } from '../../../src/backend/core/paths.js';
+import { loadUserSettings } from '../../../src/backend/core/workspace/user-settings.js';
+import { homeDir } from '../../../src/backend/core/workspace/paths.js';
 import { startFakeJira, TOKEN, EMAIL } from './fake-jira.js';
 
 const ENV = ['ATLASSIAN_SITE', 'ATLASSIAN_KIND', 'ATLASSIAN_EMAIL', 'ATLASSIAN_TOKEN', 'ATLASSIAN_API_TOKEN', 'AGENT_ATLASSIAN_NO_KEYCHAIN'];

@@ -1,7 +1,7 @@
 /**
  * The companion finds the agent's state directory exactly where the CLI does.
  *
- * Ported from `server/src/core/paths.js` because the companion cannot import
+ * Ported from `server/src/core/workspace/paths.js` because the companion cannot import
  * from the server; compared against the real thing here, for the ordinary
  * repo and for the monorepo layout where the two used to disagree.
  */
@@ -13,7 +13,7 @@ const path = require('path');
 const { agentStateDir } = require('../chat-panel-html.js');
 
 test('agentStateDir matches paths.stateDir', async (t) => {
-  const paths = await import('../../server/src/backend/core/paths.js');
+  const paths = await import('../../server/src/backend/core/workspace/paths.js');
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'state-parity-')));
 
   await t.test('an ordinary repo: <ws>/.agent/state', () => {

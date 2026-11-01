@@ -22,7 +22,7 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodeMinifier } from '../../../src/backend/context/code-minifier.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 const min = (v) => CodeMinifier.minifyJson(v);
 

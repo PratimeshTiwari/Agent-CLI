@@ -20,7 +20,7 @@
  */
 
 import fs from 'fs';
-import * as paths from '../../backend/core/paths.js';
+import * as paths from '../../backend/core/workspace/paths.js';
 import { droppedItem } from './file-drop.js';
 
 /** How the attachment shows up in the prompt. Short, and unmistakably a reference. */

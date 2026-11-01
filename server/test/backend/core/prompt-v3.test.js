@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promptShapes } from './prompt-golden-shapes.js';
-import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt-versions.js';
+import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 /*
  * Prompt v3 (v7.9): v2 plus "look before answering" on the cheap rungs.

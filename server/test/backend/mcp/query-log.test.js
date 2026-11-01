@@ -15,8 +15,8 @@ import {
   REPORT_MAX, findRoles, messageTemplate, normalLevel, parseTime, parseWhere, queryLog,
 } from '../../../src/backend/mcp/tools/query-log.js';
 import { detectFormat, flatten } from '../../../src/backend/mcp/tools/log-records.js';
-import { logReadRedirect, runLogRead } from '../../../src/backend/core/log-read.js';
-import { formatReadResult } from '../../../src/backend/core/result-budget.js';
+import { logReadRedirect, runLogRead } from '../../../src/backend/core/turn/log-read.js';
+import { formatReadResult } from '../../../src/backend/core/turn/result-budget.js';
 import { summarizeResult } from '../../../src/frontend/transcript/tool-rows.js';
 
 let ws;
@@ -230,7 +230,7 @@ describe('read_file of a large log is answered with the overview, where the prom
 
   test('dispatch: the overview comes before the subagent digest, and only on a version that offers the tool', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
     assert.match(src, /const logRead = logReadRedirect\(call, \{[\s\S]*?offered: Boolean\(resolvePromptVersion\(this\.promptVersion\)\.flags\?\.logQuery\)/);
     assert.match(src, /const delegate = !logRead && shouldDelegateRead\(/);
     assert.match(src, /\} else if \(logRead\) \{\s*result = await runLogRead\(/);

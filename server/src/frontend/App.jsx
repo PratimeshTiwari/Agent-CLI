@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { COMPACT_AT } from '../backend/context/context-manager.js';
-import { nextMode } from '../backend/core/modes.js';
-import { stripImageData } from '../backend/core/prompt-builder.js';
+import { nextMode } from '../backend/core/policy/modes.js';
+import { stripImageData } from '../backend/core/prompt/prompt-builder.js';
 import { Box, Text, useStdout, Static } from 'ink';
 import { Menus, DiffApproval } from './components/Menus.jsx';
 import { Banner } from './components/Banner.jsx';
@@ -20,11 +20,11 @@ import { statusBarLayout, STATUS_RIGHT_GUTTER } from './screen/status-bar.js';
 import { keysLayout } from './menus/keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
-import { resolveEffort } from '../backend/core/effort.js';
-import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt-versions.js';
+import { resolveEffort } from '../backend/core/models/effort.js';
+import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './transcript/activity.js';
-import { modelMismatch, browserModelPin } from '../backend/core/model-match.js';
-import { mismatchPolicy } from '../backend/core/model-fallback.js';
+import { modelMismatch, browserModelPin } from '../backend/core/models/model-match.js';
+import { mismatchPolicy } from '../backend/core/models/model-fallback.js';
 import { planBoxRow, findPlanFile, planWorthReviewing } from './transcript/plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript/transcript.js';
 import { expandPastes, attachedPastes } from './input/paste.js';
@@ -32,17 +32,17 @@ import { drainChatQueue } from './input/chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './input/hotkeys.js';
-import { checkForUpdate, updateLine, readPendingReload } from '../backend/core/update.js';
-import { checkInstalled, startupWarning } from '../backend/core/doctor.js';
-import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../backend/core/doctor-guard.js';
+import { checkForUpdate, updateLine, readPendingReload } from '../backend/core/install/update.js';
+import { checkInstalled, startupWarning } from '../backend/core/install/doctor.js';
+import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../backend/core/install/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
-import { isSlowCommand } from '../backend/core/slash-commands.js';
-import { progressText } from '../backend/core/compaction.js';
+import { isSlowCommand } from '../backend/core/turn/slash-commands.js';
+import { progressText } from '../backend/core/turn/compaction.js';
 import { visualRows } from './input/prompt-rows.js';
 import { buildAgentCallbacks } from './hooks/use-agent-callbacks.js';
 import fs from 'fs';
 import { exec } from 'child_process';
-import * as paths from '../backend/core/paths.js';
+import * as paths from '../backend/core/workspace/paths.js';
 import { T } from './theme.js';
 
 /**
@@ -307,7 +307,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
    */
   const [update, setUpdate] = useState({ available: false, behind: 0 });
   const [pendingReload, setPendingReload] = useState(() => readPendingReload());
-  // A package the install missed (v5.29, core/doctor.js). Read a beat after
+  // A package the install missed (v5.29, core/install/doctor.js). Read a beat after
   // mount, never before the first frame, and again after each local command
   // while it is showing, so `/doctor fix` takes the row down.
   const [healthNote, setHealthNote] = useState(null);
@@ -979,7 +979,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     const id = setTimeout(() => setHealthNote(startupWarning(checkInstalled())), 50);
     // A `/doctor` package change is kept once a start has stayed up, drawn,
     // this long; one that broke the start was undone by the bin, said here
-    // once (`backend/core/doctor-guard.js`).
+    // once (`backend/core/install/doctor-guard.js`).
     const kept = setTimeout(() => { try { confirmChange(); } catch { /* the next start decides */ } }, CONFIRM_AFTER_MS);
     let notice = null;
     try { notice = takeRevertNotice(); } catch { /* nothing to say */ }

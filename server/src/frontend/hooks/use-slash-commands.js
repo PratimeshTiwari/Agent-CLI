@@ -1,19 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import * as paths from '../../backend/core/paths.js';
-import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../backend/core/restart.js';
+import * as paths from '../../backend/core/workspace/paths.js';
+import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../backend/core/install/restart.js';
 import { exitWithFarewell } from '../screen/farewell.js';
-import { createSkill, listSkills, skillSearchPath } from '../../backend/core/skills.js';
+import { createSkill, listSkills, skillSearchPath } from '../../backend/core/prompt/skills.js';
 import { describeDestructive } from '../menus/destructive.js';
-import { planReset, applyReset } from '../../backend/core/reset.js';
+import { planReset, applyReset } from '../../backend/core/install/reset.js';
 import { canCopy, copyToClipboard } from '../input/clipboard.js';
 import { lastReply, lastCodeBlock } from '../transcript/markdown.js';
-import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../backend/core/error-log.js';
-import { listPlans } from '../../backend/core/plan-archive.js';
+import { readErrors, summarizeErrors, clearErrors, FLOWS } from '../../backend/core/logs/error-log.js';
+import { listPlans } from '../../backend/core/workspace/plan-archive.js';
 import { planBoxRow } from '../transcript/plan-box.js';
-import { listCommandDays, readCommands } from '../../backend/core/command-log.js';
-import { resolveWorkspaceInput, validateWorkspace } from '../../backend/core/workspaces.js';
+import { listCommandDays, readCommands } from '../../backend/core/logs/command-log.js';
+import { resolveWorkspaceInput, validateWorkspace } from '../../backend/core/workspace/workspaces.js';
 
 /**
  * Where `/open <target>` would actually open, and whether anything is there.
@@ -48,26 +48,26 @@ export function resolveOpenTarget(workspace, target) {
 }
 import { SLASH_COMMANDS, COMMAND_GROUPS } from '../constants.js';
 import { commandHelp } from '../menus/help.js';
-import { AGENT_COMMANDS, invalidOption } from '../../backend/core/slash-commands.js';
+import { AGENT_COMMANDS, invalidOption } from '../../backend/core/turn/slash-commands.js';
 import { oneLine } from '../text.js';
 import { renderCommandList } from '../transcript/status-rows.js';
-import { planResume } from '../../backend/core/chat-thread.js';
-import { SETTING_GROUPS } from '../../backend/core/settings.js';
-import { canPickFolder, pickFolder } from '../../backend/core/folder-picker.js';
-import { summariseTraces, formatMs } from '../../backend/core/trace-log.js';
-import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../backend/core/channel-health.js';
-import { summariseToolUsage } from '../../backend/core/tool-usage.js';
-import { TOOL_CATALOG } from '../../backend/core/tool-catalog.js';
-import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload, updateLine, pulledLine } from '../../backend/core/update.js';
-import { installRoot, installDependencies } from '../../backend/core/dep-recovery.js';
-import { claim, exclusive, INSTALL_SLOT } from '../../backend/core/local-jobs.js';
+import { planResume } from '../../backend/core/turn/chat-thread.js';
+import { SETTING_GROUPS } from '../../backend/core/workspace/settings.js';
+import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
+import { summariseTraces, formatMs } from '../../backend/core/logs/trace-log.js';
+import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../backend/core/turn/channel-health.js';
+import { summariseToolUsage } from '../../backend/core/logs/tool-usage.js';
+import { TOOL_CATALOG } from '../../backend/core/prompt/tool-catalog.js';
+import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload, updateLine, pulledLine } from '../../backend/core/install/update.js';
+import { installRoot, installDependencies } from '../../backend/core/install/dep-recovery.js';
+import { claim, exclusive, INSTALL_SLOT } from '../../backend/core/install/local-jobs.js';
 import {
   checkHealth, checkInstalled, problems, formatReport, summaryLine, findImporters, lookupLatest, applyLatest,
   REPO_ROOT, clip,
-} from '../../backend/core/doctor.js';
+} from '../../backend/core/install/doctor.js';
 import { PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
-import { saveUserSettings } from '../../backend/core/user-settings.js';
-import { countTurns } from '../../backend/core/compaction.js';
+import { saveUserSettings } from '../../backend/core/workspace/user-settings.js';
+import { countTurns } from '../../backend/core/turn/compaction.js';
 
 /** For the confirm prompt: a plan that cannot be made is described as none. */
 /**
@@ -128,10 +128,10 @@ function safePlanReset(workspace, args = []) {
  * AgentLoop.handleSlashCommand. Anything unrecognised reports itself rather
  * than being sent to the model as a prompt.
  */
-// Moved to core/restart.js so the side panel can ask for a workspace switch
+// Moved to core/install/restart.js so the side panel can ask for a workspace switch
 // too — the bridge cannot import a React hook. Re-exported because the CLI's
 // own restart paths already import it from here.
-export { leaveWhenIdle } from '../../backend/core/restart.js';
+export { leaveWhenIdle } from '../../backend/core/install/restart.js';
 
 export async function handleSlashCommand(query, {
   agentLoop,
@@ -220,7 +220,7 @@ export async function handleSlashCommand(query, {
     // `tsx --watch` and nothing under `agent-cli` — where it printed
     // "Restarting server..." and stayed exactly where it was.
     /**
-     * `/reset` — start this repo fresh. See core/reset.js for what moves and
+     * `/reset` — start this repo fresh. See core/install/reset.js for what moves and
      * why nothing is deleted. Confirmed above; refused mid-turn, because the
      * turn would go on writing into the folders being moved.
      */
@@ -362,7 +362,7 @@ export async function handleSlashCommand(query, {
       }
 
       // A pull and its install rewrite the checkout and node_modules, so they
-      // hold the one install slot (core/local-jobs.js) until both are done.
+      // hold the one install slot (core/install/local-jobs.js) until both are done.
       const slot = claim(INSTALL_SLOT, '/update pull');
       if (!slot.ok) { say(`! \`${slot.holder}\` is still running — \`/update pull\` when it finishes.`); return; }
       let outcome;
@@ -520,7 +520,7 @@ export async function handleSlashCommand(query, {
       return;
     }
 
-    // The substance moved to `backend/core/slash-commands.js` so the side panel can
+    // The substance moved to `backend/core/turn/slash-commands.js` so the side panel can
     // reach it too — it used to be here, which is why `/new` from the panel
     // answered "No such command". Only the view reset stays, because that is
     // the part that genuinely differs between a terminal and a web page.
@@ -706,7 +706,7 @@ export async function handleSlashCommand(query, {
      * network — and the registry's answer fills in a second later, so the
      * menu never waits on a slow company registry. `/doctor <package>` opens
      * at that package; `/doctor fix` runs the install; `/doctor report` (or
-     * `offline`) prints the table, for pasting. See `backend/core/doctor.js`.
+     * `offline`) prints the table, for pasting. See `backend/core/install/doctor.js`.
      */
     if (command === 'doctor' || command === 'health') {
       const sub = (args[0] || '').toLowerCase();
@@ -1294,7 +1294,7 @@ export async function handleSlashCommand(query, {
      */
     async function switchWorkspace(raw) {
       // Validation, the supervisor check and the handover file are all in
-      // core/restart.js now, because the side panel asks for the same thing
+      // core/install/restart.js now, because the side panel asks for the same thing
       // and the bridge cannot reach a React hook. Only the wording is local.
       const outcome = prepareWorkspaceSwitch(raw);
       if (!outcome.ok) {

@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFile, unreadOutline } from '../../../src/backend/mcp/tools/read-file.js';
-import { fitReadResult } from '../../../src/backend/core/result-budget.js';
+import { fitReadResult } from '../../../src/backend/core/turn/result-budget.js';
 
 const doc = [
   '# Title', 'intro', '## Install', 'steps',

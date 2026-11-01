@@ -23,8 +23,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { homeDir } from '../core/paths.js';
-import { loadUserSettings, saveUserSettings } from '../core/user-settings.js';
+import { homeDir } from '../core/workspace/paths.js';
+import { loadUserSettings, saveUserSettings } from '../core/workspace/user-settings.js';
 
 export const KEYCHAIN_SERVICE = 'agent-cli-atlassian';
 

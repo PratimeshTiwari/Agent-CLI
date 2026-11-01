@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 /**
  * `_extractToolCalls` is what stands in for a tool-call API here — the call is
@@ -242,7 +242,7 @@ test('a block that is not a call stays in the reply', async (t) => {
  * only the leftovers reached the screen.
  */
 test('a fence on the same line as the prose', async (t) => {
-  const call = '{"name": "read_file", "args": {"path": "server/src/core/agent-loop.js"}}';
+  const call = '{"name": "read_file", "args": {"path": "server/src/core/turn/agent-loop.js"}}';
 
   await t.test('the shape from the stored history cleans to the prose alone', () => {
     const { toolCalls, cleanContent } = parse(

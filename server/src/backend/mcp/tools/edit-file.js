@@ -7,7 +7,7 @@
 
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { displayPath } from '../../core/paths.js';
+import { displayPath } from '../../core/workspace/paths.js';
 
 export async function editFile(args, context) {
   const { path: filePath, edits, append } = args;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 /*
  * v7.3: the compaction budgets in `effort.js` are guesses, and nothing that
@@ -24,10 +24,10 @@ test('contextFill is the token count and the active rung\'s budget', () => {
 });
 
 test('provider errors, tool amnesia, compactions and traces carry it', () => {
-  const loop = read('../../../src/backend/core/agent-loop.js');
+  const loop = read('../../../src/backend/core/turn/agent-loop.js');
   assert.match(loop, /op: 'provider_error',[\s\S]{0,200}\.\.\.this\.contextFill/);
   assert.match(loop, /op: 'tool_amnesia',[\s\S]{0,250}meta: \{ \.\.\.this\.contextFill \}/);
-  const compaction = read('../../../src/backend/core/compaction.js');
+  const compaction = read('../../../src/backend/core/turn/compaction.js');
   // Read before the summary is asked for, or a reset would record zero.
   assert.match(compaction, /const fill = loop\.contextFill \?\? \{\};\s*\n\s*const asked = await loop\._askThread/);
   assert.match(compaction, /kept: countTurns\(toKeep\), \.\.\.fill \}/);

@@ -21,11 +21,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { hasHandoverBlock } from '../../../src/backend/core/handover-audit.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { hasHandoverBlock } from '../../../src/backend/core/turn/handover-audit.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
-const loopSrc = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+const loopSrc = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
 const parse = (t) => Object.create(AgentLoop.prototype)._extractToolCalls(t);
 const block = (body) => '```json\n' + body + '\n```';
 const CALL = block('{"name":"read_file","args":{"path":"a.js"}}');

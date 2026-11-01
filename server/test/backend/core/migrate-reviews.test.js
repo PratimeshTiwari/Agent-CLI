@@ -16,7 +16,7 @@ import assert from 'node:assert';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { migrateGitHubReviews } from '../../../src/backend/core/migrate.js';
+import { migrateGitHubReviews } from '../../../src/backend/core/install/migrate.js';
 
 let ws;
 beforeEach(() => { ws = mkdtempSync(join(tmpdir(), 'mig-')); });

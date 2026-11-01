@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { wrapLines, panelRoom, listWindow, settingTone } from '../../../src/frontend/menus/panel.js';
 import { ROLES } from '../../../src/frontend/theme.js';
-import { describeSettings } from '../../../src/backend/core/settings.js';
+import { describeSettings } from '../../../src/backend/core/workspace/settings.js';
 
 test('listWindow: never taller than its room, and the cursor is always shown', () => {
   for (let count = 0; count <= 30; count++) {

@@ -19,7 +19,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pickModelFor } from '../../../src/backend/core/model-match.js';
+import { pickModelFor } from '../../../src/backend/core/models/model-match.js';
 
 const P = (label, description = '') => ({ label, description });
 const pick = (rung, opts) => pickModelFor(rung, opts, null)?.model?.label ?? null;

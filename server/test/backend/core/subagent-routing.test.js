@@ -20,8 +20,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { runSubAgentSession } from '../../../src/backend/core/subagent-session.js';
-import { subagentEffort } from '../../../src/backend/core/loop-tools.js';
+import { runSubAgentSession } from '../../../src/backend/core/subagents/subagent-session.js';
+import { subagentEffort } from '../../../src/backend/core/turn/loop-tools.js';
 
 const PLAN = [
   { label: '3.5 Flash-Lite', description: 'Fastest answers' },

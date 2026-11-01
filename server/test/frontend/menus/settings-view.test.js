@@ -10,7 +10,7 @@ import {
   stepValue, controlParts, controlWidth, rowHint, filterUnderline, settingsKeys, isFilterText,
   HINT_MIN_COLS, UNDERLINE_MIN,
 } from '../../../src/frontend/menus/settings-view.js';
-import { describeSettings } from '../../../src/backend/core/settings.js';
+import { describeSettings } from '../../../src/backend/core/workspace/settings.js';
 
 const sw = (value) => ({ label: 'Subagents', value, control: { kind: 'switch', options: ['on', 'off'] } });
 const ladder = (value) => ({ label: 'Effort', value, control: { kind: 'ladder', options: ['low', 'medium', 'high', 'max'] } });

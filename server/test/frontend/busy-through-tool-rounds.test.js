@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../src/backend/core/turn/agent-loop.js';
 import { buildAgentCallbacks } from '../../src/frontend/hooks/use-agent-callbacks.js';
 
 const TOOL_REPLY = "I'll read the notes first.\n```json\n"

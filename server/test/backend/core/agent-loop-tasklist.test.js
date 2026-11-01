@@ -11,8 +11,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 let ws;
 beforeEach(() => { ws = mkdtempSync(join(tmpdir(), 'tl-')); });

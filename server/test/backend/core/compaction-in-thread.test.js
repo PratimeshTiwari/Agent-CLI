@@ -12,10 +12,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { compactHistory, usableSummary, HANDOVER_POINTER } from '../../../src/backend/core/compaction.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { compactHistory, usableSummary, HANDOVER_POINTER } from '../../../src/backend/core/turn/compaction.js';
 
-const SRC = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+const SRC = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
 
 /** A loop with a fake lane: records what is enqueued. */
 function loop() {
@@ -79,7 +79,7 @@ test('a reply that arrives after it gave up is swallowed, not read as a turn', a
 test('a summary made of tool calls, or of nothing, is not used', () => {
   assert.equal(usableSummary(TOOL_REPLY), false);
   assert.equal(usableSummary('ok'), false);
-  assert.equal(usableSummary('The task is to fix the parser; core/agent-loop.js was edited, tests pass.'), true);
+  assert.equal(usableSummary('The task is to fix the parser; core/turn/agent-loop.js was edited, tests pass.'), true);
 });
 
 test('the fresh chat is told where the rest is, and when to look', async () => {
@@ -88,7 +88,7 @@ test('the fresh chat is told where the rest is, and when to look', async () => {
     conversationHistory: history, workspace: mkdtempSync(join(tmpdir(), 'cit2-')), contextTokens: 1,
     sessionStore: { saveHistory() {} }, promptBuilder: { resetPromptState() {} }, callbacks: { sendToPanel() {} },
     _resetContextCount() {}, async startNewChat() { return true; },
-    async _askThread() { return { ok: true, text: 'Goal: fix the parser. Edited core/agent-loop.js; tests pass.' }; },
+    async _askThread() { return { ok: true, text: 'Goal: fix the parser. Edited core/turn/agent-loop.js; tests pass.' }; },
   };
   await compactHistory(fake);
   assert.match(fake.conversationHistory[0].content, /Goal: fix the parser/);
@@ -138,8 +138,8 @@ test('a new chat is refused while the main tab has a prompt in flight', async ()
 // ── What the run under the pty found ─────────────────────────────────────────
 
 import { mergeLoopHistory } from '../../../src/frontend/transcript/transcript.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { recentMessages } from '../../../src/backend/core/compaction.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { recentMessages } from '../../../src/backend/core/turn/compaction.js';
 
 test('the fresh chat is handed the summary — it never was', () => {
   const pb = Object.create(PromptBuilder.prototype);
@@ -158,7 +158,7 @@ test('compaction sets it, restarts the count at zero, and records how far the fr
     conversationHistory: history, workspace: mkdtempSync(join(tmpdir(), 'cit3-')), contextTokens: 1,
     sessionStore: { saveHistory() {} }, promptBuilder: {}, callbacks: { sendToPanel() {} },
     reset: null, _resetContextCount(n) { this.reset = n; }, async startNewChat() { return true; },
-    async _askThread() { return { ok: true, text: 'Goal: fix the parser; edited core/agent-loop.js; tests pass.' }; },
+    async _askThread() { return { ok: true, text: 'Goal: fix the parser; edited core/turn/agent-loop.js; tests pass.' }; },
   };
   const r = await compactHistory(fake, undefined, { auto: true });
   assert.equal(r.handedOver, true);
@@ -175,7 +175,7 @@ test('control: a refused handover hands nothing over and leaves the count', asyn
     conversationHistory: history, workspace: mkdtempSync(join(tmpdir(), 'cit4-')), contextTokens: 1,
     sessionStore: { saveHistory() {} }, promptBuilder: {}, callbacks: { sendToPanel() {} },
     reset: null, _resetContextCount(n) { this.reset = n; }, async startNewChat() { return false; },
-    async _askThread() { return { ok: true, text: 'Goal: fix the parser; edited core/agent-loop.js; tests pass.' }; },
+    async _askThread() { return { ok: true, text: 'Goal: fix the parser; edited core/turn/agent-loop.js; tests pass.' }; },
   };
   await compactHistory(fake, undefined, { auto: true });
   assert.equal(fake.promptBuilder.pendingCompactedContext, undefined, 'the old thread already has it all');

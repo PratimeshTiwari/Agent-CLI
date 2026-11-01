@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { logTrace } from '../../src/backend/core/trace-log.js';
+import { logTrace } from '../../src/backend/core/logs/trace-log.js';
 import { browserTimings } from '../../src/frontend/hooks/use-slash-commands.js';
 
 // v7.2 (#104): recorded and read in one change — a field with no view is the

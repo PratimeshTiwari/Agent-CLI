@@ -22,7 +22,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 /** Just enough loop to exercise the switch, with a lane whose busyness we set. */
 const stub = (busy) => {

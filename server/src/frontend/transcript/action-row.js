@@ -17,7 +17,7 @@
  * Pure, so the shapes are tested without Ink; `TranscriptTurn.jsx` draws them.
  */
 
-import { toolVerb } from '../../backend/core/tool-catalog.js';
+import { toolVerb } from '../../backend/core/prompt/tool-catalog.js';
 import { subjectOf, summarizeResult, clampForDisplay } from './tool-rows.js';
 import { oneLine } from '../text.js';
 

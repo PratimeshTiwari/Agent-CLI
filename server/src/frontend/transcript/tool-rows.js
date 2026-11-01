@@ -5,7 +5,7 @@
  * Split out of `format.js` (v8.4) along the groups it already had.
  */
 
-import { normalizeQuestionSet } from '../../backend/core/question.js';
+import { normalizeQuestionSet } from '../../backend/core/turn/question.js';
 import { oneLine, shortenPath } from '../text.js';
 
 /**
@@ -181,6 +181,10 @@ export function summarizeResult(toolName, result) {
         if (out) return oneLine(out.split('\n')[0]);
         break;
       }
+      case 'ask_subagent':
+        // v8.4: a subagent that could not run said so only inside a JSON line.
+        if (r?.fellBack) return `subagent failed${r.reason ? ` · ${oneLine(r.reason)}` : ''} · doing it in this chat`;
+        break;
       case 'jira_issue':
         // v8.1: the first line is the answer (`Created PROJ-45 · …`); a hand-off
         // says whose step it is now.

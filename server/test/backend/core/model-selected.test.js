@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 const LIST = [
   { label: '3.1 Flash-Lite' }, { label: '3.8 Flash' }, { label: '3.1 Pro', selected: true },

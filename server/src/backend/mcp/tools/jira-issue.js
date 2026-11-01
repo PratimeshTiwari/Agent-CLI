@@ -5,7 +5,7 @@
  * Reads run as any tool does. A write runs in two steps, and the second only
  * with the person's yes:
  *
- * 1. `planJiraWrite(args)` — called by `backend/core/external-approval.js` — checks the
+ * 1. `planJiraWrite(args)` — called by `backend/core/policy/external-approval.js` — checks the
  *    arguments, reads what it needs (the issue as it is, the transitions that
  *    exist, who "me" is), and returns the lines the approval box shows plus a
  *    `perform` that does exactly that write.
@@ -24,7 +24,7 @@ import path from 'node:path';
 import { diffLines } from 'diff';
 import { atlassianCredentials } from '../../atlassian/config.js';
 import { createJiraClient, JiraError } from '../../atlassian/jira-client.js';
-import { consumeApproval } from '../../core/approval-token.js';
+import { consumeApproval } from '../../core/policy/approval-token.js';
 
 export const JIRA_READS = new Set(['get', 'search']);
 export const JIRA_WRITES = new Set(['create', 'update', 'comment', 'transition', 'attach']);

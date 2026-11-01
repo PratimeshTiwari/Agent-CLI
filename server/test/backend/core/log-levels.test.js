@@ -22,7 +22,7 @@ import os from 'os';
 import path from 'path';
 import {
   logError, logNotice, readErrors, summarizeErrors, weightedErrors, clearErrors, flushPending,
-} from '../../../src/backend/core/error-log.js';
+} from '../../../src/backend/core/logs/error-log.js';
 
 const fresh = () => fs.mkdtempSync(path.join(os.tmpdir(), 'loglevel-'));
 

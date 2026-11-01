@@ -13,7 +13,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import * as paths from '../../backend/core/paths.js';
+import * as paths from '../../backend/core/workspace/paths.js';
 import { PLAN_FILES } from './transcript.js';
 
 /**

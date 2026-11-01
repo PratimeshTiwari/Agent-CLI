@@ -15,8 +15,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 /** A loop wired just enough to finish a turn and be watched doing it. */
 function loopIn(dir, evidence = new Map()) {

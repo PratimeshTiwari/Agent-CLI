@@ -9,7 +9,7 @@ import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
 import { animationAllowed, OUTRO_MS } from './screen/intro.js';
 import { setTheme, startupTheme } from './theme.js';
-import { loadUserSettings } from '../backend/core/user-settings.js';
+import { loadUserSettings } from '../backend/core/workspace/user-settings.js';
 import { createProbeHold } from './input/ink-probe-hold.js';
 import { asBracketedDrop, createDropJoiner } from './input/file-drop.js';
 

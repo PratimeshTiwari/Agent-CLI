@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gitOrError } from '../../../src/backend/core/update.js';
+import { gitOrError } from '../../../src/backend/core/install/update.js';
 import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
 
 const failing = (err) => async () => { throw err; };

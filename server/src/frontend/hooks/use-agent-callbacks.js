@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
-import * as paths from '../../backend/core/paths.js';
+import * as paths from '../../backend/core/workspace/paths.js';
 import { mergeLoopHistory } from '../transcript/transcript.js';
 import { FOCUS_INPUT } from '../constants.js';
 

@@ -13,7 +13,7 @@
  * terminal's own scroll and copy), so "click" is ↑↓ and enter.
  */
 
-import { TIERS, withoutBeyondTier, firstSentence, compareVersions, satisfies, newerCount, problems, clip } from '../../backend/core/doctor.js';
+import { TIERS, withoutBeyondTier, firstSentence, compareVersions, satisfies, newerCount, problems, clip } from '../../backend/core/install/doctor.js';
 import { wrapLines } from './panel.js';
 
 const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·', removed: '·' };

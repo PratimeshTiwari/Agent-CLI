@@ -22,7 +22,7 @@ import assert from 'node:assert';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 let ws;
 beforeEach(() => {

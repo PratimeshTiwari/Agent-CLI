@@ -6,9 +6,9 @@
  */
 
 import { execFile } from 'child_process';
-import { findRg } from '../../core/find-rg.js';
-import { AGENT_DIR } from '../../core/paths.js';
-import { logNotice } from '../../core/error-log.js';
+import { findRg } from '../../core/install/find-rg.js';
+import { AGENT_DIR } from '../../core/workspace/paths.js';
+import { logNotice } from '../../core/logs/error-log.js';
 import { promisify } from 'util';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, relative, extname, sep } from 'path';
@@ -220,7 +220,7 @@ async function ripgrepSearch(patterns, workspace, { isRegex, includes, maxResult
 
   args.push(workspace);
 
-  // PATH first, then the copy every VS Code and Cursor ships (core/find-rg.js).
+  // PATH first, then the copy every VS Code and Cursor ships (core/install/find-rg.js).
   const { stdout } = await execFileAsync(findRg()?.path || 'rg', args, {
     maxBuffer: 10 * 1024 * 1024,
     timeout: 15000,

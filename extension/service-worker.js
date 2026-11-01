@@ -698,7 +698,7 @@
           detail: lastTabFailure?.message,
           // Short, as asked: by now it has reloaded the tab and reopened the chat
           // in a fresh one. The terminal adds a link (server bridge/tab-failure.js).
-          message: `Communication with the ${targetModel} tab failed \xB7 check the browser`,
+          message: payload.isSubagent ? `A subagent's ${targetModel} tab failed \xB7 your turn goes on without it` : `Communication with the ${targetModel} tab failed \xB7 check the browser`,
           // Whose prompt it was (1.58.0): a subagent's failure is that request's,
           // and must not end the user's turn in another tab.
           ...payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}

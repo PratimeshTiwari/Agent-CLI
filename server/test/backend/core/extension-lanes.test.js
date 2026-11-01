@@ -10,7 +10,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 import { ExtensionLock, mainLane, subLane } from '../../../src/backend/bridge/extension-lock.js';
 
 /** An AgentLoop with only the parts these paths touch. */

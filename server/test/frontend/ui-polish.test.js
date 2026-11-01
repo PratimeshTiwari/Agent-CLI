@@ -9,8 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workBreakdown } from '../../src/frontend/transcript/tool-rows.js';
 import { shortenPath } from '../../src/frontend/text.js';
-import { handleSlashCommand } from '../../src/backend/core/slash-commands.js';
-import { DiffEngine } from '../../src/backend/core/diff-engine.js';
+import { handleSlashCommand } from '../../src/backend/core/turn/slash-commands.js';
+import { DiffEngine } from '../../src/backend/core/edits/diff-engine.js';
 
 const act = (toolName) => ({ type: 'tool', toolName });
 const src = (p) => readFileSync(new URL(`../../src/${p}`, import.meta.url), 'utf8');
@@ -67,7 +67,7 @@ test('/diff shows the last edit, and what happened to it', async () => {
 });
 
 test('a compaction that worked is one line; one that needs you keeps the long text', () => {
-  const loopSrc = src('backend/core/agent-loop.js');
+  const loopSrc = src('backend/core/turn/agent-loop.js');
   assert.match(loopSrc, /content: result\.handedOver\s*\? `🗜 /);
 });
 

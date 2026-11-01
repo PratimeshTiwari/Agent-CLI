@@ -25,8 +25,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 const WS = process.cwd();
 

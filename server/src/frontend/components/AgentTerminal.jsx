@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import fs from 'fs';
 import { exec } from 'child_process';
-import * as paths from '../../backend/core/paths.js';
+import * as paths from '../../backend/core/workspace/paths.js';
 import { FOCUS_INPUT, FOCUS_TERMINAL } from '../constants.js';
 import { T } from '../theme.js';
 

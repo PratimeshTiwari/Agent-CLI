@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 const ws = mkdtempSync(join(tmpdir(), 'dedup-'));
 const sys = (effort) => new PromptBuilder(ws)._buildSystemInstructions('plan', true, { effort });

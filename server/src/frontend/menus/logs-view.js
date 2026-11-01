@@ -10,8 +10,8 @@
  *
  * Pure, like `doctor-view.js`: the menu draws what this returns.
  */
-import { formatMs } from '../../backend/core/trace-log.js';
-import { formatRate } from '../../backend/core/channel-health.js';
+import { formatMs } from '../../backend/core/logs/trace-log.js';
+import { formatRate } from '../../backend/core/turn/channel-health.js';
 
 const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
 

@@ -16,7 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 const WS = process.cwd();
 const OPTS = {

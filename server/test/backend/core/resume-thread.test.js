@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 /**
  * Resuming has to reach the browser, and from the launch flags it did not.
@@ -184,7 +184,7 @@ test('the bridge is what drains it', () => {
  * bootstrap ladder existed to make it common.
  */
 import { SessionStore } from '../../../src/backend/storage/session-store.js';
-import { planResume } from '../../../src/backend/core/chat-thread.js';
+import { planResume } from '../../../src/backend/core/turn/chat-thread.js';
 
 const OLD = { model: 'gemini', id: 'OLD_abandoned_chat' };
 const NEW = { model: 'gemini', id: 'NEW_live_chat' };

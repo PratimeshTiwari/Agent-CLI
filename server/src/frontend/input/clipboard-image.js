@@ -27,7 +27,7 @@
 import { execFileSync } from 'child_process';
 import { readFileSync, statSync } from 'fs';
 import { join } from 'path';
-import * as paths from '../../backend/core/paths.js';
+import * as paths from '../../backend/core/workspace/paths.js';
 
 /** What the clipboard is asked for, in order of preference. */
 const FORMATS = [

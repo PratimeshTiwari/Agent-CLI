@@ -25,8 +25,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { migrateWorkspace } from '../../../src/backend/core/migrate.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { migrateWorkspace } from '../../../src/backend/core/install/migrate.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 /** The pre-`.agent/` layout, as `migrateWorkspace`'s plan describes it. */
 function legacyWorkspace() {

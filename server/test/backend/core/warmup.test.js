@@ -14,10 +14,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { startupMode, loadUserSettings } from '../../../src/backend/core/user-settings.js';
-import { handleSlashCommand } from '../../../src/backend/core/slash-commands.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { startupMode, loadUserSettings } from '../../../src/backend/core/workspace/user-settings.js';
+import { handleSlashCommand } from '../../../src/backend/core/turn/slash-commands.js';
 
 const PRO = [{ label: '3.1 Pro', isMode: false, selected: true }];
 
@@ -180,7 +180,7 @@ describe('the warm-up\'s chat is not filed on its own', () => {
 });
 
 test('the settings page lists it', async () => {
-  const { describeSettings } = await import('../../../src/backend/core/settings.js');
+  const { describeSettings } = await import('../../../src/backend/core/workspace/settings.js');
   const { l, done } = loop();
   l.startupMode = 'cold';
   const row = describeSettings(l).find((r) => r.label === 'Startup');

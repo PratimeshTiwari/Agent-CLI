@@ -1,4 +1,4 @@
-import { recall } from '../../core/session-recall.js';
+import { recall } from '../../core/turn/session-recall.js';
 
 /**
  * Search this conversation's own past, including what compaction dropped.

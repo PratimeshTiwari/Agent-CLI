@@ -6,7 +6,7 @@
 
 import { readdirSync, statSync, existsSync } from 'fs';
 import { resolve, relative, join } from 'path';
-import { displayPath } from '../../core/paths.js';
+import { displayPath } from '../../core/workspace/paths.js';
 
 export async function listDirectory(args, context) {
   const { path: dirPath = '.', recursive = false, maxDepth = 3 } = args;

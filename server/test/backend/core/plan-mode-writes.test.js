@@ -22,8 +22,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isAgentArtifact } from '../../../src/backend/core/agent-loop.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { isAgentArtifact } from '../../../src/backend/core/turn/agent-loop.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 /**
  * A real directory, and the artifacts path asked for rather than assumed.

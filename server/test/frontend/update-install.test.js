@@ -2,7 +2,7 @@
  * `/update` installs what it pulled, and does not restart into a tree it knows
  * is out of sync.
  *
- * The gap this closes, from the other direction to `backend/core/dep-recovery.js`: a
+ * The gap this closes, from the other direction to `backend/core/install/dep-recovery.js`: a
  * pull that changes `package.json` leaves new code against an old
  * `node_modules`, and the next start dies with the fatal `Cannot find package`
  * the owner reported. `/update` used to print `npm install` and refuse to

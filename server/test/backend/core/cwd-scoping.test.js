@@ -15,7 +15,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { RiskClassifier } from '../../../src/backend/core/risk-classifier.js';
+import { RiskClassifier } from '../../../src/backend/core/commands/risk-classifier.js';
 
 const WS = '/work/project';
 const level = (cwd, command = 'npm test') =>

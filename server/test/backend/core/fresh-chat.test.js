@@ -15,7 +15,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentLoop, NEW_CHAT_TIMEOUT_MS } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop, NEW_CHAT_TIMEOUT_MS } from '../../../src/backend/core/turn/agent-loop.js';
 import { SessionStore } from '../../../src/backend/storage/session-store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -180,7 +180,7 @@ test('the warm-up opens the new chat before the setup prompt', async () => {
 test('the first message spends it before the model switch and the send', () => {
   // A source assertion, as for `turnInFlight`: driving handleUserMessage needs
   // the whole turn machinery, and moving the call below the send reads as tidying.
-  const src = fs.readFileSync(join(HERE, '../../../src/backend/core/agent-loop.js'), 'utf8');
+  const src = fs.readFileSync(join(HERE, '../../../src/backend/core/turn/agent-loop.js'), 'utf8');
   const start = src.indexOf('  async handleUserMessage(');
   const body = src.slice(start, src.indexOf('this.conversationHistory.push(turn);', start));
   const fresh = body.indexOf('await this._startFreshChatIfOwed();');

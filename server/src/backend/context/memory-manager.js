@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { memoryPath, ensureParent, configPath } from '../core/paths.js';
+import { memoryPath, ensureParent, configPath } from '../core/workspace/paths.js';
 
 /**
  * What the agent has learned about this project, in `.agent/<scope>/memory.md`.

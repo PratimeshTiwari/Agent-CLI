@@ -4,8 +4,8 @@ import { readFileSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashedShapes, promptShapes } from './prompt-golden-shapes.js';
-import { clearPromptCache } from '../../../src/backend/core/prompt-loader.js';
-import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt-versions.js';
+import { clearPromptCache } from '../../../src/backend/core/prompt/prompt-loader.js';
+import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 /*
  * Prompt v1 is frozen (v5.32). The point of a selectable prompt version is a
@@ -16,7 +16,7 @@ import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt-versions.js';
  * the compaction prompt — is hashed against what v5.31 sent.
  *
  * A failure here means a change reached v1. Put it in a newer version instead
- * (core/prompt-versions.js: a file under prompts/<dir>/, or a flag).
+ * (core/prompt/prompt-versions.js: a file under prompts/<dir>/, or a flag).
  */
 
 const here = dirname(fileURLToPath(import.meta.url));

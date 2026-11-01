@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roundsBar, promptPanelPlan, roundsLabel } from '../../../src/frontend/menus/prompt-view.js';
-import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges, versionAdds } from '../../../src/backend/core/prompt-versions.js';
+import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges, versionAdds } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 test('a bar fills to the median and traces to the p90, scaled to the largest p90', () => {
   assert.deepEqual(roundsBar({ median: 1, p90: 3, max: 3, width: 12 }), { fill: 4, tail: 8 });

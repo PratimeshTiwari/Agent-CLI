@@ -6,7 +6,7 @@
  */
 
 import { exec } from 'child_process';
-import { configPath as configPathFor } from '../../core/paths.js';
+import { configPath as configPathFor } from '../../core/workspace/paths.js';
 import { resolve } from 'path';
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
@@ -142,7 +142,7 @@ export async function runCommand(args, context) {
     });
 
     /*
-     * Output as it arrives, for the screen (`backend/core/output-tail.js`).
+     * Output as it arrives, for the screen (`backend/core/commands/output-tail.js`).
      *
      * Listeners beside `exec`'s own rather than a switch to `spawn`: `exec`
      * still collects, times out and returns exactly what it did, so the model's

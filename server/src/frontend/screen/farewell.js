@@ -34,7 +34,7 @@
  * Pure parts are exported for tests; `.js` rather than `.jsx` so the repo's
  * plain `node --test` can import it.
  */
-import { leave } from '../../backend/core/restart.js';
+import { leave } from '../../backend/core/install/restart.js';
 import { rewindSequence } from './screen-span.js';
 
 

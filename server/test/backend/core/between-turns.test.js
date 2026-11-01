@@ -13,8 +13,8 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { logTrace, readTraces, STAGES } from '../../../src/backend/core/trace-log.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { logTrace, readTraces, STAGES } from '../../../src/backend/core/logs/trace-log.js';
 
 const server = () => new WebSocketServer({
   port: 0, githubHandler: null, agentLoop: { workspace: '/tmp/nowhere', setBackgroundCallbacks() {} },
@@ -69,19 +69,19 @@ test('the three stages come first in the order, and a trace keeps the prompt len
 });
 
 test('a new message starts with no reply clock, so idle time is never round_work', () => {
-  const src = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
   const start = src.indexOf('async handleUserMessage(content, callbacks, options = {}) {');
   const body = src.slice(start, src.indexOf('this._wantsCompaction()', start));
   assert.match(body, /this\._replyAt = null;\s*this\._parkedMs = 0;/);
 });
 
 test('the reply clock and the gap are wired where the turn passes them', () => {
-  const src = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
   assert.match(src, /this\._replyAt = Date\.now\(\);\s*this\._parkedMs = 0;/);
   assert.match(src, /\.\.\.\(gap \? \{ gap \} : \{\}\)/);
   assert.match(src, /await this\._parked\(new Promise/, 'the command approval is parked');
-  assert.match(readFileSync(new URL('../../../src/backend/core/diff-approval.js', import.meta.url), 'utf8'), /parked\(loop, new Promise/);
-  assert.match(readFileSync(new URL('../../../src/backend/core/loop-tools.js', import.meta.url), 'utf8'), /loop\._parked\(asked\)/);
+  assert.match(readFileSync(new URL('../../../src/backend/core/edits/diff-approval.js', import.meta.url), 'utf8'), /parked\(loop, new Promise/);
+  assert.match(readFileSync(new URL('../../../src/backend/core/turn/loop-tools.js', import.meta.url), 'utf8'), /loop\._parked\(asked\)/);
   // The terminal broadcasts its own inject rather than calling sendInjectPrompt;
   // the first pty run had no `deliver` on any prompt because of it.
   assert.match(readFileSync(new URL('../../../src/frontend/hooks/use-agent-callbacks.js', import.meta.url), 'utf8'),

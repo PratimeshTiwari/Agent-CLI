@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { retiredInstructionFiles } from '../../../src/backend/core/migrate.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { retiredInstructionFiles } from '../../../src/backend/core/install/migrate.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 /** A workspace with its own `.agent/`, i.e. the ordinary single-repo case. */
 function workspace() {

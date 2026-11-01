@@ -13,7 +13,7 @@ import { statSync, readFileSync, copyFileSync, mkdtempSync, rmSync, utimesSync }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFile } from '../../../src/backend/mcp/tools/read-file.js';
-import { formatReadResult } from '../../../src/backend/core/result-budget.js';
+import { formatReadResult } from '../../../src/backend/core/turn/result-budget.js';
 import {
   textutilToText, readZipEntries, clearDocumentCache, extractDocument, looksBinary,
 } from '../../../src/backend/mcp/tools/documents.js';

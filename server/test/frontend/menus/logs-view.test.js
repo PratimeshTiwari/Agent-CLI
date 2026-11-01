@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { logsHomeItems, failureItems } from '../../../src/frontend/menus/logs-view.js';
 import { handleSlashCommand } from '../../../src/frontend/hooks/use-slash-commands.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { logError, logNotice, flushPending } from '../../../src/backend/core/error-log.js';
-import { logTrace, summariseTraces } from '../../../src/backend/core/trace-log.js';
-import { logToolUsage } from '../../../src/backend/core/tool-usage.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { logError, logNotice, flushPending } from '../../../src/backend/core/logs/error-log.js';
+import { logTrace, summariseTraces } from '../../../src/backend/core/logs/trace-log.js';
+import { logToolUsage } from '../../../src/backend/core/logs/tool-usage.js';
 
 /*
  * The `/logs` picker (v5.35): every question the log answers, each row with

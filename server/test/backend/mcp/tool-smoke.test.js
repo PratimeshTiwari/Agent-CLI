@@ -25,8 +25,8 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
-import { TaskManager } from '../../../src/backend/core/task-manager.js';
-import { DiffEngine } from '../../../src/backend/core/diff-engine.js';
+import { TaskManager } from '../../../src/backend/core/commands/task-manager.js';
+import { DiffEngine } from '../../../src/backend/core/edits/diff-engine.js';
 import { startFakeJira, useFakeJira } from '../atlassian/fake-jira.js';
 
 let ws;

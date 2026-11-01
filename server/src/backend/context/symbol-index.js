@@ -33,7 +33,7 @@
 import { readFileSync, statSync } from 'fs';
 import { relative, extname } from 'path';
 import fg from 'fast-glob';
-import { AGENT_DIR } from '../core/paths.js';
+import { AGENT_DIR } from '../core/workspace/paths.js';
 import { RUBY, rubyCodeLines, rubyDefinitionsIn, rubyReferencesIn } from './ruby-symbols.js';
 import { PATTERN_EXTS, languageFor, patternCodeLines, patternDefinitionsIn, patternReferencesIn } from './pattern-symbols.js';
 

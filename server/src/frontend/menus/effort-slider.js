@@ -10,7 +10,7 @@
  * Pure and `.js`, so `node --test` can import it: every row is laid out here
  * at an exact width, and the menu only colours it.
  */
-import { pickModelFor, browserModelPin } from '../../backend/core/model-match.js';
+import { pickModelFor, browserModelPin } from '../../backend/core/models/model-match.js';
 
 /**
  * The model a stop would put the tab on, on this account (C2).

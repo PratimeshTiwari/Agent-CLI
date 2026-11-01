@@ -72,7 +72,7 @@ export function controlParts(row, { skip = [] } = {}) {
       { text: ' ▸', role: stepValue(row, 1, { skip }) == null ? 'dim' : 'plain' },
     ];
   }
-  // Clamped as the old page clamped it (`VALUE_MAX` in core/settings.js).
+  // Clamped as the old page clamped it (`VALUE_MAX` in core/workspace/settings.js).
   const text = value.replace(/\s+/g, ' ').trim();
   return [{ text: text.length > 30 ? `${text.slice(0, 29)}…` : text, role: 'plain' }];
 }

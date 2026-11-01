@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateArgs, schemaFor } from '../../../src/backend/mcp/validate-args.js';
 import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
-import { readErrors } from '../../../src/backend/core/error-log.js';
+import { readErrors } from '../../../src/backend/core/logs/error-log.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

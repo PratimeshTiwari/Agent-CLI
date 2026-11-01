@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeJira, useFakeJira } from '../atlassian/fake-jira.js';
 import { jiraIssue, planJiraWrite, isJiraWrite } from '../../../src/backend/mcp/tools/jira-issue.js';
-import { issueApproval } from '../../../src/backend/core/approval-token.js';
+import { issueApproval } from '../../../src/backend/core/policy/approval-token.js';
 import { _resetTokenCache } from '../../../src/backend/atlassian/config.js';
 
 /** Plan, then run with a fresh token — what external-approval does after Send. */

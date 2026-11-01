@@ -13,7 +13,7 @@ import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { homeDir } from '../../../src/backend/core/paths.js';
+import { homeDir } from '../../../src/backend/core/workspace/paths.js';
 
 const TEST_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

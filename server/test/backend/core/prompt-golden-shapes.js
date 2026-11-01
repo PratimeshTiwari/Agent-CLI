@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
 
 const EFFORTS = ['low', 'medium', 'high'];
 const MODES = ['plan', 'auto', 'strict'];

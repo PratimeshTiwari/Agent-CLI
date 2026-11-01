@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import { editorStatePath } from '../../core/paths.js';
+import { editorStatePath } from '../../core/workspace/paths.js';
 
 /**
  * What the user is looking at — the pointer, never the contents.

@@ -18,6 +18,14 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.58.1 — 2026-11-02
+
+**A subagent's tab failing says it was a subagent's** (agent v8.4). The side panel read
+"Communication with the gemini tab failed · check the browser" for a subagent's tab too, which
+looks like the main chat breaking while the user's turn carries on. It now reads "A subagent's
+gemini tab failed · your turn goes on without it". The agent's log row and the terminal's
+`ask_subagent` row say the same, whatever build sent it.
+
 ### 1.58.0 — 2026-10-31
 
 **A Jira write is a Send / Don't send card in the side panel** (agent v8.1). The approval for

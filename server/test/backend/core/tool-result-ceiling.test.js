@@ -14,8 +14,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import * as paths from '../../../src/backend/core/paths.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
 
 const SRC = `${process.cwd()}/server`;
 

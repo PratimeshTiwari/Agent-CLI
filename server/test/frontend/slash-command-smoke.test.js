@@ -25,11 +25,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handleSlashCommand } from '../../src/frontend/hooks/use-slash-commands.js';
 import { SLASH_COMMANDS } from '../../src/frontend/constants.js';
-import { AgentLoop } from '../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../src/backend/core/turn/agent-loop.js';
 import { MemoryManager } from '../../src/backend/context/memory-manager.js';
 import { ContextManager } from '../../src/backend/context/context-manager.js';
-import { DiffEngine } from '../../src/backend/core/diff-engine.js';
-import { TaskManager } from '../../src/backend/core/task-manager.js';
+import { DiffEngine } from '../../src/backend/core/edits/diff-engine.js';
+import { TaskManager } from '../../src/backend/core/commands/task-manager.js';
 
 /**
  * Not driven from a test, each for a reason that is not "it might fail".
@@ -263,7 +263,7 @@ describe('a bare slash is the question, not an unknown command', () => {
  * wrong word as if it were not there. Every command with a fixed set of
  * options must name the word it did not take and list its forms.
  */
-import { COMMAND_OPTIONS, invalidOption, isSlowCommand } from '../../src/backend/core/slash-commands.js';
+import { COMMAND_OPTIONS, invalidOption, isSlowCommand } from '../../src/backend/core/turn/slash-commands.js';
 
 describe('a word a command does not take', () => {
   test('is named, with the forms it does take', async () => {

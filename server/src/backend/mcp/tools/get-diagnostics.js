@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import { diagnosticsPath } from '../../core/paths.js';
+import { diagnosticsPath } from '../../core/workspace/paths.js';
 
 /** Beyond this the list stops being useful and starts being a token bill. */
 const MAX_REPORTED = 40;

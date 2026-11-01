@@ -5,7 +5,7 @@
  */
 
 import fg from 'fast-glob';
-import { AGENT_DIR } from '../../core/paths.js';
+import { AGENT_DIR } from '../../core/workspace/paths.js';
 import { relative } from 'path';
 
 /**

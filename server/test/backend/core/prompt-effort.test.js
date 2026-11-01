@@ -14,9 +14,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { rungForModel } from '../../../src/backend/core/model-match.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { rungForModel } from '../../../src/backend/core/models/model-match.js';
 
 const THREE = (selected) => ['3.1 Flash-Lite', '3 Flash', '3.1 Pro']
   .map((label) => ({ label, isMode: false, selected: label === selected }))

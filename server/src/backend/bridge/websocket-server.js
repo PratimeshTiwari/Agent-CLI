@@ -14,21 +14,21 @@
  * }
  */
 
-import { savePastedImages } from '../core/panel-images.js';
+import { savePastedImages } from '../core/turn/panel-images.js';
 import { WebSocketServer as WS } from 'ws';
 import { randomUUID, randomBytes, timingSafeEqual } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import * as paths from '../core/paths.js';
-import { logTrace } from '../core/trace-log.js';
-import { resolveEffort } from '../core/effort.js';
-import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/restart.js';
-import { canPickFolder, pickFolder } from '../core/folder-picker.js';
-import { planResume } from '../core/chat-thread.js';
-import { logError, logNotice } from '../core/error-log.js';
-import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/extension-version.js';
-import { tabUnreachableMessage, chatUnreachableMessage } from './tab-failure.js';
-import { tabLink } from '../core/compaction.js';
+import * as paths from '../core/workspace/paths.js';
+import { logTrace } from '../core/logs/trace-log.js';
+import { resolveEffort } from '../core/models/effort.js';
+import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/install/restart.js';
+import { canPickFolder, pickFolder } from '../core/workspace/folder-picker.js';
+import { planResume } from '../core/turn/chat-thread.js';
+import { logError, logNotice } from '../core/logs/error-log.js';
+import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/install/extension-version.js';
+import { tabUnreachableMessage, chatUnreachableMessage, SUBAGENT_TAB_FAILED, subagentTabFailure } from './tab-failure.js';
+import { tabLink } from '../core/turn/compaction.js';
 
 /**
  * Loopback only. Not `localhost`, which resolves through the hosts file and has
@@ -39,7 +39,7 @@ const LOOPBACK = '127.0.0.1';
 /**
  * How long a prompt held for an absent extension is still worth delivering.
  *
- * Tied to `EXTENSION_RESPONSE_TIMEOUT` in `backend/core/agent-loop.js`: that is when
+ * Tied to `EXTENSION_RESPONSE_TIMEOUT` in `backend/core/turn/agent-loop.js`: that is when
  * the lane's watchdog gives up on the turn, and a prompt delivered after it
  * would be typed into Gemini for a turn the loop has already abandoned.
  */
@@ -602,7 +602,7 @@ export class WebSocketServer {
 
       case 'model_options':
         // What the browser's mode picker is offering. Stored, not acted on:
-        // `backend/core/model-match.js` decides which one an effort rung wants, and the
+        // `backend/core/models/model-match.js` decides which one an effort rung wants, and the
         // names differ by subscription so they cannot be assumed.
         this.agentLoop.noteModelOptions(payload?.models, payload?.switchedTo, payload?.requested);
         break;
@@ -632,7 +632,7 @@ export class WebSocketServer {
        *
        * Same act as `/workspace <path>` in the CLI, and deliberately the same
        * code: validation, the supervisor check and the handover file all live
-       * in `backend/core/restart.js` so the two front-ends cannot drift into
+       * in `backend/core/install/restart.js` so the two front-ends cannot drift into
        * disagreeing about what a usable workspace is.
        *
        * It restarts rather than switching in place. Every collaborator keyed on
@@ -864,6 +864,9 @@ export class WebSocketServer {
         // for the path that cannot. Without it a changed selector on
         // gemini.google.com arrived as "failed", the one thing you already knew.
         const tagged = /^\[([a-z_]+)\]\s*/i.exec(payload?.message || '');
+        // A subagent's tab is named as one (v8.4): the extension's own line
+        // reads like the main chat failing.
+        const subagentTab = payload?.op === 'tab_unreachable' && payload?.isSubagent;
         /*
          * The browser gets to say an `error` was an expected state.
          *
@@ -883,7 +886,7 @@ export class WebSocketServer {
         logError(this.agentLoop?.workspace, {
           flow: 'extension',
           op: payload?.op || tagged?.[1] || payload?.stage || 'unknown',
-          message: (payload?.message || payload?.error || 'Extension reported an error')
+          message: subagentTab ? SUBAGENT_TAB_FAILED : (payload?.message || payload?.error || 'Extension reported an error')
             .replace(/^\[[a-z_]+\]\s*/i, ''),
           level: payload?.level === 'notice' ? 'notice' : 'error',
           detail: payload?.detail || payload?.stack,
@@ -913,7 +916,7 @@ export class WebSocketServer {
          */
         if (payload?.isSubagent && payload?.requestId) {
           this.agentLoop.resolveSubagent?.(payload.requestId, {
-            success: false, error: payload.detail || payload.message || 'The subagent tab could not be reached.',
+            success: false, error: subagentTabFailure(payload.detail),
           });
           break;
         }

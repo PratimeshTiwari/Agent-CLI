@@ -18,6 +18,19 @@ export function chatUnreachableMessage(wanted) {
     + '\n/chat <link or id> continues in a chat you choose · /new starts fresh';
 }
 
+/**
+ * A subagent's tab failed, not the user's (v8.4). Reported: the log and the
+ * side panel said "Communication with the gemini tab failed", which reads as
+ * the main chat breaking while the user's turn went on. The log row says
+ * whose tab it was; `subagentTabFailure` is the reason the subagent's result
+ * gives, which the terminal's `ask_subagent` row shows.
+ */
+export const SUBAGENT_TAB_FAILED = 'A subagent\'s Gemini tab failed · your turn goes on without it';
+
+export function subagentTabFailure(detail) {
+  return `its Gemini tab failed${detail ? ` (${String(detail).replace(/\.$/, '')})` : ''}`;
+}
+
 export function tabUnreachableMessage(url) {
   return `Communication with the Gemini tab failed · check the browser${url ? `\n${url}` : ''}`;
 }

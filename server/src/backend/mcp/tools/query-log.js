@@ -15,7 +15,7 @@
 import { existsSync, openSync, readSync, closeSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { resolve } from 'path';
-import { displayPath } from '../../core/paths.js';
+import { displayPath } from '../../core/workspace/paths.js';
 import { detectFormat, readHead, readRecords } from './log-records.js';
 
 export const REPORT_MAX = 6000;

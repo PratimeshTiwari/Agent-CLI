@@ -20,7 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { canReadClipboardImage, readClipboardImage } from './clipboard-image.js';
-import { stripImageData } from '../../backend/core/prompt-builder.js';
+import { stripImageData } from '../../backend/core/prompt/prompt-builder.js';
 
 export const imageTag = (n) => `[Image #${n}]`;
 

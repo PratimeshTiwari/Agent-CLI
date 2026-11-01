@@ -12,7 +12,7 @@
  * times a second, and a setState per chunk is the re-render storm App.jsx
  * avoids during streaming. The UI samples this once a second instead.
  */
-import { resolveEffort } from '../../backend/core/effort.js';
+import { resolveEffort } from '../../backend/core/models/effort.js';
 
 let lastAt = Date.now();
 

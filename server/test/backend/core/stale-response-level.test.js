@@ -23,8 +23,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { readErrors, summarizeErrors } from '../../../src/backend/core/error-log.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { readErrors, summarizeErrors } from '../../../src/backend/core/logs/error-log.js';
 
 const handleGeminiResponse = AgentLoop.prototype.handleGeminiResponse;
 const noteUserStop = AgentLoop.prototype.noteUserStop;
@@ -102,7 +102,7 @@ test('and a new turn is what clears it', () => {
    * flag set for exactly the long session where it has had time to go stale.
    */
   const src = readFileSync(
-    join(fileURLToPath(new URL('../../../src/backend/core/agent-loop.js', import.meta.url))), 'utf8',
+    join(fileURLToPath(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url))), 'utf8',
   );
   const head = src.slice(
     src.indexOf('async handleUserMessage(content, callbacks, options = {}) {'),

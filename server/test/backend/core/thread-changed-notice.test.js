@@ -13,8 +13,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { readErrors, summarizeErrors } from '../../../src/backend/core/error-log.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { readErrors, summarizeErrors } from '../../../src/backend/core/logs/error-log.js';
 
 const recordThread = AgentLoop.prototype._recordThread;
 const url = (id) => `https://gemini.google.com/app/${id}`;

@@ -8,8 +8,8 @@ import { Header as BannerHeader, Mark, MARK } from './Banner.jsx';
 import { FRAMES } from './RunningLine.jsx';
 import ThemePreview from './ThemePreview.jsx';
 import { copyToClipboard } from '../input/clipboard.js';
-import { saveUserSettings } from '../../backend/core/user-settings.js';
-import { MAX_AGENT_NAME } from '../../backend/core/slash-commands.js';
+import { saveUserSettings } from '../../backend/core/workspace/user-settings.js';
+import { MAX_AGENT_NAME } from '../../backend/core/turn/slash-commands.js';
 import {
   STEPS, extensionDir, extensionStatus, onboardingLayout, progressBar, revealColumns, tildify,
 } from '../screen/welcome.js';

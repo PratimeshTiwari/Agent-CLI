@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import * as paths from '../../../src/backend/core/paths.js';
-import { skillSearchPath } from '../../../src/backend/core/skills.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import * as paths from '../../../src/backend/core/workspace/paths.js';
+import { skillSearchPath } from '../../../src/backend/core/prompt/skills.js';
 
 function group() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-'));

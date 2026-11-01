@@ -15,25 +15,25 @@
  */
 
 import { resolve, dirname } from 'path';
-import { homeDir, ensureDir, setActiveScope, resolveState, codeDir } from './backend/core/paths.js';
-import { runMigrations } from './backend/core/migrate.js';
-import { hostEditor } from './backend/core/host-editor.js';
-import { rememberWorkspace } from './backend/core/workspaces.js';
+import { homeDir, ensureDir, setActiveScope, resolveState, codeDir } from './backend/core/workspace/paths.js';
+import { runMigrations } from './backend/core/install/migrate.js';
+import { hostEditor } from './backend/core/workspace/host-editor.js';
+import { rememberWorkspace } from './backend/core/workspace/workspaces.js';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { exitWithFarewell } from './frontend/screen/farewell.js';
 import { WebSocketServer } from './backend/bridge/websocket-server.js';
 import { MCPServer } from './backend/mcp/mcp-server.js';
-import { AgentLoop } from './backend/core/agent-loop.js';
-import { PromptBuilder } from './backend/core/prompt-builder.js';
-import { DiffEngine } from './backend/core/diff-engine.js';
-import { RiskClassifier } from './backend/core/risk-classifier.js';
+import { AgentLoop } from './backend/core/turn/agent-loop.js';
+import { PromptBuilder } from './backend/core/prompt/prompt-builder.js';
+import { DiffEngine } from './backend/core/edits/diff-engine.js';
+import { RiskClassifier } from './backend/core/commands/risk-classifier.js';
 import { FileWatcher } from './backend/watcher/file-watcher.js';
-import { TaskManager } from './backend/core/task-manager.js';
-import { logError } from './backend/core/error-log.js';
-import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/dep-recovery.js';
-import { RESTART_EXIT_CODE } from './backend/core/restart.js';
-import { loadUserSettings, saveUserSettings } from './backend/core/user-settings.js';
+import { TaskManager } from './backend/core/commands/task-manager.js';
+import { logError } from './backend/core/logs/error-log.js';
+import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/install/dep-recovery.js';
+import { RESTART_EXIT_CODE } from './backend/core/install/restart.js';
+import { loadUserSettings, saveUserSettings } from './backend/core/workspace/user-settings.js';
 import { firstRunState } from './frontend/screen/welcome.js';
 
 /**
@@ -64,7 +64,7 @@ function parseArgs() {
      * to be a bare `'code'`, which is not installed by any VS Code *fork* — so
      * from a terminal inside one, `/open` fell through to the OS default for
      * the file type and opened a markdown file in RStudio. Asking which editor
-     * is hosting this terminal answers that properly; see core/host-editor.js.
+     * is hosting this terminal answers that properly; see core/workspace/host-editor.js.
      */
     editor: process.env.EDITOR || hostEditor() || 'code',
     ciWatch: true,
@@ -426,7 +426,7 @@ async function main() {
  * **This catches what `main()` rejects with**, which covers every dynamically
  * imported module — `frontend/cli-ui.jsx`, and through it `App.jsx`, the file the
  * report came from. A package missing from main.js's *static* imports fails
- * before this function is ever reached; see `backend/core/dep-recovery.js`.
+ * before this function is ever reached; see `backend/core/install/dep-recovery.js`.
  */
 main().catch(async (err) => {
   let said = false;

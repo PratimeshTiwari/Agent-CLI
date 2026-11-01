@@ -27,8 +27,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { MUTATING_TOOLS, SHELL_TOOLS } from '../../../src/backend/core/tool-catalog.js';
-import { RiskClassifier } from '../../../src/backend/core/risk-classifier.js';
+import { MUTATING_TOOLS, SHELL_TOOLS } from '../../../src/backend/core/prompt/tool-catalog.js';
+import { RiskClassifier } from '../../../src/backend/core/commands/risk-classifier.js';
 
 describe('the sets say what they are for', () => {
   test('both shell tools are in both sets', () => {

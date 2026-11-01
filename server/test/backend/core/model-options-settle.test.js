@@ -13,7 +13,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 const settleModelOptions = AgentLoop.prototype.settleModelOptions;
 // Borrowed too, because `settleModelOptions` calls it: a failure row that does

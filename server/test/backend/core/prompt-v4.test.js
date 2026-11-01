@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges } from '../../../src/backend/core/prompt-versions.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { PROMPT_VERSIONS, FLAG_NOTES, versionChanges } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 const ws = mkdtempSync(join(tmpdir(), 'v4-'));
 

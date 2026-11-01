@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { normalizeQuestionSet, FREEFORM_VALUE } from '../../backend/core/question.js';
+import { normalizeQuestionSet, FREEFORM_VALUE } from '../../backend/core/turn/question.js';
 import { T } from '../theme.js';
 import { listWindow, wrapLines } from '../menus/panel.js';
 import { Panel } from './Panel.jsx';

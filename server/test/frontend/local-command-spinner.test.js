@@ -21,7 +21,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SLASH_COMMANDS } from '../../src/frontend/constants.js';
-import { SLOW_COMMANDS, AGENT_COMMANDS, isSlowCommand } from '../../src/backend/core/slash-commands.js';
+import { SLOW_COMMANDS, AGENT_COMMANDS, isSlowCommand } from '../../src/backend/core/turn/slash-commands.js';
 
 const appSrc = readFileSync(new URL('../../src/frontend/App.jsx', import.meta.url), 'utf8');
 

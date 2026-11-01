@@ -1,8 +1,8 @@
 import { watch as fsWatch, existsSync, statSync } from 'fs';
 import path from 'path';
-import { AgentLoop } from '../core/agent-loop.js';
-import { logError } from '../core/error-log.js';
-import { isOwnWrite } from '../core/own-writes.js';
+import { AgentLoop } from '../core/turn/agent-loop.js';
+import { logError } from '../core/logs/error-log.js';
+import { isOwnWrite } from '../core/edits/own-writes.js';
 
 /**
  * FileWatcher

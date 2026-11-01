@@ -15,8 +15,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { MAX_PROVIDER_RETRIES } from '../../../src/backend/core/reply-recovery.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { MAX_PROVIDER_RETRIES } from '../../../src/backend/core/turn/reply-recovery.js';
 
 const PROVIDER = 'Sorry, something went wrong. Please try your request again.';
 const TOOL_ROUND = '<tool_results>\n[read_file] the file the model asked for\n</tool_results>\nContinue.';

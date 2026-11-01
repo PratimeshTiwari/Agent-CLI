@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   compactHistory, countTurns, countsAsTurn, recentMessages, splitForCompaction,
-} from '../../../src/backend/core/compaction.js';
+} from '../../../src/backend/core/turn/compaction.js';
 import { FileWatcher } from '../../../src/backend/watcher/file-watcher.js';
-import { clearOwnWrites, isOwnWrite, noteOwnWrite } from '../../../src/backend/core/own-writes.js';
-import { DiffEngine } from '../../../src/backend/core/diff-engine.js';
+import { clearOwnWrites, isOwnWrite, noteOwnWrite } from '../../../src/backend/core/edits/own-writes.js';
+import { DiffEngine } from '../../../src/backend/core/edits/diff-engine.js';
 import { readFileSync } from 'node:fs';
 
 const fs = (n) => ({ role: 'system', type: 'fs_event', content: `[System Event] File f${n}.js was modified externally by the user.` });

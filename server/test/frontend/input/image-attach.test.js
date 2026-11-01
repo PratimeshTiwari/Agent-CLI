@@ -23,7 +23,7 @@ import {
 import { OSASCRIPT_STDIO } from '../../../src/frontend/input/clipboard-image.js';
 import {
   promptCharge, IMAGE_CHARGE_CHARS, stripImageData, stripImageHeaders,
-} from '../../../src/backend/core/prompt-builder.js';
+} from '../../../src/backend/core/prompt/prompt-builder.js';
 import { parseTurnActions } from '../../../src/frontend/transcript/transcript.js';
 import { SLASH_COMMANDS } from '../../../src/frontend/constants.js';
 
@@ -146,7 +146,7 @@ describe('what is sent, and what is recorded', () => {
     const recorded = `${recordedImageBlock([img(1)])}what is [Image #1]`;
     assert.equal(stripImageHeaders(recorded), 'what is [Image #1]');
     assert.equal(stripImageHeaders('plain'), 'plain');
-    assert.match(src('backend/core/agent-loop.js'), /this\.currentObjective = stripImageHeaders\(remembered\);/);
+    assert.match(src('backend/core/turn/agent-loop.js'), /this\.currentObjective = stripImageHeaders\(remembered\);/);
   });
 });
 
@@ -211,7 +211,7 @@ describe('the meter charges an image what Gemini does', () => {
 
   test('a prompt with no image is its length, and both send paths use it', () => {
     assert.equal(promptCharge('hello'), 5);
-    const loop = src('backend/core/agent-loop.js');
+    const loop = src('backend/core/turn/agent-loop.js');
     assert.equal((loop.match(/contextChars \+= promptCharge\(prompt\)/g) || []).length, 2);
   });
 });

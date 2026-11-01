@@ -21,7 +21,7 @@ import { manageTask } from './tools/manage-task.js';
 import getEditorState from './tools/get-editor-state.js';
 import recallHistory from './tools/recall-history.js';
 import getDiagnostics from './tools/get-diagnostics.js';
-import { logError } from '../core/error-log.js';
+import { logError } from '../core/logs/error-log.js';
 import { validateArgs } from './validate-args.js';
 
 // Tool registry with schemas
@@ -108,7 +108,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     // v8.1: offered by prompt versions with `jira` (v4), and only once a site
-    // is set up. Writes ask every time: core/external-approval.js.
+    // is set up. Writes ask every time: core/policy/external-approval.js.
     name: 'jira_issue',
     description: 'Read, search, create, update, comment on, move and attach files to Jira issues, on the '
       + 'site the user signed in to. Text is Markdown both ways. Every write is shown to the user and sent only '

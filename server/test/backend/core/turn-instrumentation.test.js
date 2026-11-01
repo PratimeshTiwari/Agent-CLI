@@ -12,10 +12,10 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CHANNEL_OPS, MIN_TURNS_FOR_RATE } from '../../../src/backend/core/channel-health.js';
-import { modelMismatch } from '../../../src/backend/core/model-match.js';
+import { CHANNEL_OPS, MIN_TURNS_FOR_RATE } from '../../../src/backend/core/turn/channel-health.js';
+import { modelMismatch } from '../../../src/backend/core/models/model-match.js';
 
-const loopSrc = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+const loopSrc = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
 
 describe('what /logs rates can answer', () => {
   test('the two new failures have rows', () => {

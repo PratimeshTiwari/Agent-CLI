@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop, SILENT_REPLY_MS } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop, SILENT_REPLY_MS } from '../../../src/backend/core/turn/agent-loop.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -22,7 +22,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
-import { readErrors, summarizeErrors } from '../../../src/backend/core/error-log.js';
+import { readErrors, summarizeErrors } from '../../../src/backend/core/logs/error-log.js';
 
 function fakeLoop() {
   const workspace = mkdtempSync(join(tmpdir(), 'error-level-'));

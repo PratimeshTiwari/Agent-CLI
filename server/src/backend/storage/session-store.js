@@ -17,12 +17,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import { logError } from '../core/error-log.js';
+import { logError } from '../core/logs/error-log.js';
 import {
   localSessionPath,
   homeSessionPath,
   ensureParent,
-} from '../core/paths.js';
+} from '../core/workspace/paths.js';
 
 /**
  * Sortable, filename-safe, and readable — the id doubles as the date.

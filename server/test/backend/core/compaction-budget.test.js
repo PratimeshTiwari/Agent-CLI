@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compactHistory } from '../../../src/backend/core/compaction.js';
+import { compactHistory } from '../../../src/backend/core/turn/compaction.js';
 
 const rows = (n, len) => Array.from({ length: n }, (_, i) => ({
   role: i % 2 ? 'assistant' : 'user',
@@ -109,7 +109,7 @@ test('what it does do', async (t) => {
 });
 
 test('the watchdog survives for the callers it was written for', () => {
-  const src = readFileSync(new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
   assert.match(src, /SUBAGENT_WATCHDOG_MS/,
     'the default deadline is gone, so a background subagent can hold a lane forever');
   assert.match(src, /timeoutMs = SUBAGENT_WATCHDOG_MS/,

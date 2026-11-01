@@ -33,7 +33,7 @@ const bar = readFileSync(
   new URL('../../src/frontend/components/InputBar.jsx', import.meta.url), 'utf8',
 );
 const loop = readFileSync(
-  new URL('../../src/backend/core/agent-loop.js', import.meta.url), 'utf8',
+  new URL('../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8',
 );
 
 /** The body of the `error` arm in the CLI's `sendToPanel`. */

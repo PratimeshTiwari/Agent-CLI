@@ -24,8 +24,8 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
-import { resolveEffort } from '../../../src/backend/core/effort.js';
-import { _setExpectedExtensionVersion } from '../../../src/backend/core/extension-version.js';
+import { resolveEffort } from '../../../src/backend/core/models/effort.js';
+import { _setExpectedExtensionVersion } from '../../../src/backend/core/install/extension-version.js';
 
 /** A loop that records what it was asked to do, and nothing else. */
 function fakeLoop(extra = {}) {
@@ -240,9 +240,12 @@ test("a subagent's tab failing settles that request, and leaves the user's turn 
     resolveSubagent(id, outcome) { settled.push([id, outcome]); return true; },
   });
   await deliver(loop, { type: 'error', payload: { op: 'tab_unreachable', isSubagent: true, requestId: 'r1', detail: 'No tab with id: 5.' } });
-  assert.deepEqual(settled, [['r1', { success: false, error: 'No tab with id: 5.' }]]);
+  assert.deepEqual(settled, [['r1', { success: false, error: 'its Gemini tab failed (No tab with id: 5)' }]]);
   assert.equal(loop.isProcessing, true);
   assert.deepEqual(loop.calls, [], 'not aborted, not carried as undelivered');
+  // v8.4: the log says whose tab it was, whatever the extension called it.
+  const logged = JSON.parse(readFileSync(join(loop.workspace, '.agent', 'logs', 'errors.jsonl'), 'utf8').trim().split('\n').pop());
+  assert.equal(logged.message, "A subagent's Gemini tab failed · your turn goes on without it");
 
   // Control: the main lane's own failure still ends the turn.
   const main = fakeLoop({ isProcessing: true, noteUndelivered() { this.calls.push(['noteUndelivered']); }, resolveSubagent() {} });
@@ -256,6 +259,8 @@ test('a session tab outlives its turn: the worker asks its own map, not the repl
   assert.match(src, /if \(!isSessionTab\(sender\.tab\.id\)\) \{\s*\n\s*forgetTab\(sender\.tab\.id\);\s*\n\s*chrome\.tabs\.remove/);
   const content = readFileSync(new URL('../../../../extension/src/background/content.js', import.meta.url), 'utf8');
   assert.match(content, /\.\.\.\(payload\.isSubagent \? \{ isSubagent: true, requestId: payload\.requestId \} : \{\}\)/);
+  // v8.4: the side panel's line says it was a subagent's tab.
+  assert.match(content, /payload\.isSubagent\s*\n\s*\? `A subagent's \$\{targetModel\} tab failed/);
 });
 
 // v8.1, owner: "the agent should check whether it is continuing on the same

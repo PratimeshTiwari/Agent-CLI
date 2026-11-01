@@ -11,8 +11,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { summariseToolUsage } from '../../../src/backend/core/tool-usage.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { summariseToolUsage } from '../../../src/backend/core/logs/tool-usage.js';
 
 test('a finished turn records how many tool rounds it took', () => {
   const dir = mkdtempSync(join(tmpdir(), 'rounds-'));

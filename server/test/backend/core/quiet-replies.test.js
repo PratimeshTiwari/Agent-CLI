@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changed, handleSlashCommand } from '../../../src/backend/core/slash-commands.js';
+import { changed, handleSlashCommand } from '../../../src/backend/core/turn/slash-commands.js';
 
 test('a change names both ends; no change says already', () => {
   assert.equal(changed('mode', 'plan', 'auto'), '⚙ mode  **plan** → **auto**');

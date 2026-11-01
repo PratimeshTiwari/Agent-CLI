@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promptShapes } from './prompt-golden-shapes.js';
-import { PromptBuilder } from '../../../src/backend/core/prompt-builder.js';
-import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt-versions.js';
+import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.js';
+import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 /*
  * Prompt v2 (v5.34): the dedup plan, as a version beside the frozen v1.

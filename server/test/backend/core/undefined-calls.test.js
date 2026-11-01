@@ -2,7 +2,7 @@
  * Calling something nothing defines.
  *
  * `/exit` crashed the process with `ReferenceError: leave is not defined`.
- * `leave` had been moved into `backend/core/restart.js` and the local copy deleted —
+ * `leave` had been moved into `backend/core/install/restart.js` and the local copy deleted —
  * and the one call site was not updated, because nothing looks at call sites
  * when a function moves. Every test passed, because no test runs `/exit`.
  *

@@ -85,7 +85,7 @@ bodies off the page.
   tool. An allowlisted `git` is still a shell unless `-c`, `-C` and
   `--exec-path` are refused: `git -c core.pager=sh` runs `sh`.
 - **`.agent/github-reviews/` and `/plans` meant two different things.**
-  `migrateGitHubReviews` in `core/migrate.js` renamed the older
+  `migrateGitHubReviews` in `core/install/migrate.js` renamed the older
   `github-pr-plans/` and refused to clobber; that migration is kept.
 - **Starting GitHub after the WebSocket server fixed a silence** (moved from CLAUDE.md).
   `poller.start()` emits `auth_rejected`, and its only listener is wired in the
@@ -311,7 +311,7 @@ second way to give the model standing instructions, and that is the thing being 
 the ability to ask what the prompt currently costs.
 
 Retired files are **named, never moved**. `.agent/rules.md` and `.agent/mistakes.md` stop being
-read, and `runMigrations` prints one line saying so (`retiredInstructionFiles` in `core/migrate.js`).
+read, and `runMigrations` prints one line saying so (`retiredInstructionFiles` in `core/install/migrate.js`).
 Folding them into `AGENT.md` automatically was the obvious move and is wrong: `AGENT.md` is
 usually tracked in git, so the agent would be writing an unasked-for diff into the user's repo on
 startup — and CLAUDE.md's own rule is that `AGENT.md` can always be trusted to say what the human
@@ -350,7 +350,7 @@ was a third name for the first — written on every change, read only as a fallb
 apologised for the impossible combinations at the point of use ("you are on the FLASH tier,
 where reasoning levels do nothing") instead of preventing them.
 
-`core/effort.js` is now the one ladder — `flash`, `flash-thinking`, `brief`, `standard`,
+`core/models/effort.js` is now the one ladder — `flash`, `flash-thinking`, `brief`, `standard`,
 `deep` as of phase 4, then **three rungs**, then **renamed to the picker's own words**:
 `lite`, `flash`, `pro` (2026-09-20). The old `flash` is `lite` and the old `flash-thinking`
 is `flash`; the collision was the point, because "flash" named our terse rung while the
@@ -431,7 +431,7 @@ In auto mode `safe` means *executes with no approval*. The model does not have t
 for this to fire — a plausible-looking `grep … || npm publish` is exactly the shape a confused
 model emits.
 
-**Fixed.** `core/shell-split.js` is a lexer, not a shell: it only needs to know where one
+**Fixed.** `core/commands/shell-split.js` is a lexer, not a shell: it only needs to know where one
 command ends and the next begins, and which text will be executed at all. It respects quoting
 (`echo "a; b"` is one command), follows `$(…)` and backticks — including inside double quotes,
 where `echo "$(rm -rf /)"` really does run `rm` — and keeps `2>&1` and `&>log` attached rather
@@ -536,7 +536,7 @@ dispatch paths still want scaffolding and are left for the split in P3.
   **Generating the tool definitions — done, 2026-09-16.** It could not be done as originally
   described: `ask_question`, `ask_subagent`, `ask_researcher`, `ask_reviewer` and `manage_memory`
   are dispatched in `agent-loop.js` and were in no array at all, so there was nothing complete to
-  generate *from*. `core/tool-catalog.js` is that list — all eighteen, declared once, with which
+  generate *from*. `core/prompt/tool-catalog.js` is that list — all eighteen, declared once, with which
   tier sees what and which topology offers it — and `_buildToolDefinitions` is now two lines that
   assemble it. `_buildToolAnchor` and `_buildToolIndex` already derived from that method, so they
   followed for free.
@@ -605,7 +605,7 @@ dispatch paths still want scaffolding and are left for the split in P3.
 - **Restructure the GitHub PR agent** — overtaken: the agent was deleted on 2026-09-19
   instead. See "GitHub agent — removed 2026-09-19" for what to keep if it is rebuilt.
 - Split `agent-loop.js` — *done.* The sixteen-case slash-command switch moved to
-  `core/slash-commands.js` as a function taking the loop, so the dependency reads in the
+  `core/turn/slash-commands.js` as a function taking the loop, so the dependency reads in the
   signature instead of as seventeen implicit `this.` references. 1,910 → 1,594 lines, interface
   unchanged. This is what unblocks generating the tool definitions: `ask_question`,
   `ask_subagent`, `ask_researcher`, `ask_reviewer` and `manage_memory` are still dispatched from
@@ -648,7 +648,7 @@ call block. Free, no product decisions.
 
 **B. Measure before believing.** `parse_tool_calls`, `tool_amnesia`, `provider_error` and
 `multiple_drafts` are logged, and **`/logs rates` reads them back as rates** —
-`core/channel-health.js`, gated at `MIN_TURNS_FOR_RATE` so a handful of turns cannot look like
+`core/turn/channel-health.js`, gated at `MIN_TURNS_FOR_RATE` so a handful of turns cannot look like
 a trend. This note used to say nothing read them; that stopped being true and the note did not
 follow, which nearly bought a second implementation of a view that already shipped.
 
@@ -685,7 +685,7 @@ longer exists.
   reaches `history.jsonl`, so the delegation rate is unrecoverable after the
   fact: a probe over every stored session returned `0 of 2790`, and all 2790
   were `"name"` keys inside tool *results*. The one-off *41 sessions, 529 calls*
-  figure this file quotes was never repeatable. `core/tool-usage.js` records it
+  figure this file quotes was never repeatable. `core/logs/tool-usage.js` records it
   now, one row per turn from the tally `_turnEvidence` already keeps; `/logs
   tools` reads it back, with `neverCalled` taken from the **catalog** rather
   than from the log, because a list of what was seen cannot contain what was
@@ -999,7 +999,7 @@ will find every place that was quietly relying on it being unreliable.**
 
 **Turn latency, measured — and where it actually goes.**
 
-`core/trace-log.js` records five stages per turn (`find_input`, `type`, `send`,
+`core/logs/trace-log.js` records five stages per turn (`find_input`, `type`, `send`,
 `first_token`, `complete`); `/trace` reads them back. From 74 real turns on the
 owner's machine:
 
@@ -1041,7 +1041,7 @@ of: the next tool call"* — singular, and the line the model reads last and mos
 asks for independent reads and searches in one reply. **Judge it from `/logs tools` after a
 few days of use, not from the argument.**
 
-**One recovery table (`core/reply-recovery.js`, v5.1).** `handleGeminiResponse` was 510 lines
+**One recovery table (`core/turn/reply-recovery.js`, v5.1).** `handleGeminiResponse` was 510 lines
 holding five retry policies inline; the decisions are pure functions now, in the shape of
 `tool-policy.js`, and the handler is under 200 lines. Three behaviours changed, each from the
 log rather than from taste:

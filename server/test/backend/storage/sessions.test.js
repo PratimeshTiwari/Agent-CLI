@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { SessionStore } from '../../../src/backend/storage/session-store.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 let dir, savedHome;
 beforeEach(() => {
@@ -319,13 +319,13 @@ describe('/new', () => {
   };
 
   test('it is a command the shared handler knows', async () => {
-    const { AGENT_COMMANDS } = await import('../../../src/backend/core/slash-commands.js');
+    const { AGENT_COMMANDS } = await import('../../../src/backend/core/turn/slash-commands.js');
     assert.equal(AGENT_COMMANDS.has('new'), true,
       'the panel would be told there is no such command');
   });
 
   test('it files the old conversation rather than destroying it', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const store = conversation(new SessionStore(dir), 'the one before');
     const { loop } = loopFor(store);
 
@@ -335,7 +335,7 @@ describe('/new', () => {
   });
 
   test('it takes the artifacts with it', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const store = conversation(new SessionStore(dir));
     mkdirSync(join(dir, '.agent', 'artifacts'), { recursive: true });
     writeFileSync(join(dir, '.agent', 'artifacts', 'task.md'), '- [x] done\n');
@@ -346,7 +346,7 @@ describe('/new', () => {
   });
 
   test('it starts a fresh browser thread, and keeps the address of the old one', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const { loop, sent } = loopFor(conversation(new SessionStore(dir)));
     await handleSlashCommand(loop, 'new', []);
     assert.deepEqual(sent, ['new_chat'], 'the model kept the old conversation in mind');
@@ -360,13 +360,13 @@ describe('/new', () => {
   // Without this the panel keeps displaying a conversation the agent has
   // forgotten, and restores that dead transcript next time it opens.
   test('it tells the front-ends to replace what they are showing', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const result = await handleSlashCommand(loopFor(conversation(new SessionStore(dir))).loop, 'new', []);
     assert.equal(result.reset, true);
   });
 
   test('/clear says the same, for the same reason', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const result = await handleSlashCommand(loopFor(conversation(new SessionStore(dir))).loop, 'clear', []);
     assert.equal(result.reset, true);
   });
@@ -403,7 +403,7 @@ describe('a filed conversation is named', () => {
 
   // The id is the thing `--resume` takes, so it has to be the thing shown.
   test('/new names the session it just filed', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const store = conversation(new SessionStore(dir));
     const loop = {
       sessionStore: store, conversationHistory: [],
@@ -416,7 +416,7 @@ describe('a filed conversation is named', () => {
   });
 
   test('and says nothing about an id when there was nothing to file', async () => {
-    const { handleSlashCommand } = await import('../../../src/backend/core/slash-commands.js');
+    const { handleSlashCommand } = await import('../../../src/backend/core/turn/slash-commands.js');
     const loop = {
       sessionStore: new SessionStore(dir), conversationHistory: [],
       promptBuilder: { resetPromptState() {} }, startNewChat() {},

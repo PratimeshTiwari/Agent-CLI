@@ -20,7 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { looksLikeCapabilityDenial } from '../../../src/backend/core/drift-detector.js';
+import { looksLikeCapabilityDenial } from '../../../src/backend/core/turn/drift-detector.js';
 
 const DENIALS = [
   ['the known phrasing', 'I cannot execute local commands or access your local file system.'],

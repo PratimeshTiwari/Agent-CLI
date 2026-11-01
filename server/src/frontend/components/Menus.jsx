@@ -15,27 +15,27 @@ import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
-import { canPickFolder, pickFolder } from '../../backend/core/folder-picker.js';
-import { readCommands, listCommandDays } from '../../backend/core/command-log.js';
-import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/effort.js';
-import { mismatchPolicy } from '../../backend/core/model-fallback.js';
-import { describeSettings, filterSettings, stagedChanges, changedLines, SETTING_GROUPS } from '../../backend/core/settings.js';
-import { listWorkspaceCandidates } from '../../backend/core/workspaces.js';
-import { skillsDir, agentDir } from '../../backend/core/paths.js';
-import { skillSearchPath, listSkills } from '../../backend/core/skills.js';
+import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
+import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
+import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/models/effort.js';
+import { mismatchPolicy } from '../../backend/core/models/model-fallback.js';
+import { describeSettings, filterSettings, stagedChanges, changedLines, SETTING_GROUPS } from '../../backend/core/workspace/settings.js';
+import { listWorkspaceCandidates } from '../../backend/core/workspace/workspaces.js';
+import { skillsDir, agentDir } from '../../backend/core/workspace/paths.js';
+import { skillSearchPath, listSkills } from '../../backend/core/prompt/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
-import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../backend/core/slash-commands.js';
-import { versionChanges, versionAdds } from '../../backend/core/prompt-versions.js';
+import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../backend/core/turn/slash-commands.js';
+import { versionChanges, versionAdds } from '../../backend/core/prompt/prompt-versions.js';
 import { promptPanelPlan, changesPage, roundsBar, roundsLabel } from '../menus/prompt-view.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
-import { saveUserSettings } from '../../backend/core/user-settings.js';
+import { saveUserSettings } from '../../backend/core/workspace/user-settings.js';
 import {
   REPO_ROOT, checkInstalled, checkTools, applyLatest, installPackage, installTool, listVersions, findImporters,
   errorOutput, uninstallPackage,
-} from '../../backend/core/doctor.js';
-import { installRoot, installDependencies } from '../../backend/core/dep-recovery.js';
-import { exclusive, INSTALL_SLOT } from '../../backend/core/local-jobs.js';
-import { snapshotBeforeChange } from '../../backend/core/doctor-guard.js';
+} from '../../backend/core/install/doctor.js';
+import { installRoot, installDependencies } from '../../backend/core/install/dep-recovery.js';
+import { exclusive, INSTALL_SLOT } from '../../backend/core/install/local-jobs.js';
+import { snapshotBeforeChange } from '../../backend/core/install/doctor-guard.js';
 import {
   homeItems, homeCursor, homeStatus, findEntry, HEALTH_TABS, nextHealthTab, tabCounts, packageLines, packageActions, versionItems,
   versionCursor, jobLine, errorLines,
@@ -174,7 +174,7 @@ export function Menus({
     const result = await exclusive(INSTALL_SLOT, label, async () => {
       if (isTool) return installTool(entry);
       // A change to package.json is tried on the next start; the bin puts it
-      // back if that start breaks (`backend/core/doctor-guard.js`).
+      // back if that start breaks (`backend/core/install/doctor-guard.js`).
       if (version || remove) {
         snapshotBeforeChange({
           root: REPO_ROOT,
@@ -831,7 +831,7 @@ export function Menus({
         */}
         {/*
           The effort says one model and the browser is on another (v5.28,
-          `backend/core/model-fallback.js`). Asked before the message is typed, once per
+          `backend/core/models/model-fallback.js`). Asked before the message is typed, once per
           disagreement; the message waits here and comes back to the box on esc.
         */}
         {/*

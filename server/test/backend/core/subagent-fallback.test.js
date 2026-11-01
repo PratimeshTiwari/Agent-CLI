@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 describe('_runSubAgentSession falls back to prose', () => {
   let ws;
@@ -208,7 +208,7 @@ describe('a failed subagent falls back in-thread', () => {
  */
 test('the subagent watchdog stays within reach of measured turn times', () => {
   const src = readFileSync(
-    new URL('../../../src/backend/core/agent-loop.js', import.meta.url), 'utf8',
+    new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8',
   );
   const expr = /const SUBAGENT_WATCHDOG_MS = ([^;]+);/.exec(src)[1];
   // eslint-disable-next-line no-eval

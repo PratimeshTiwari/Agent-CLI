@@ -17,7 +17,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { runSubAgentSession } from '../../../src/backend/core/subagent-session.js';
+import { runSubAgentSession } from '../../../src/backend/core/subagents/subagent-session.js';
 
 /**
  * A loop whose `_executeSubagent` is scripted, recording every call.

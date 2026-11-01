@@ -26,9 +26,9 @@ import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
-import { DiffEngine } from '../../../src/backend/core/diff-engine.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
-import { resolveDiff } from '../../../src/backend/core/diff-approval.js';
+import { DiffEngine } from '../../../src/backend/core/edits/diff-engine.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { resolveDiff } from '../../../src/backend/core/edits/diff-approval.js';
 
 /** A workspace with one file, and a loop wired far enough to park on a diff. */
 function bench() {

@@ -4,8 +4,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { threadFromInput } from '../../../src/backend/core/chat-thread.js';
-import { AgentLoop } from '../../../src/backend/core/agent-loop.js';
+import { threadFromInput } from '../../../src/backend/core/turn/chat-thread.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 
 test('a link, an account link, a bare host or the id alone', () => {
   const t = { model: 'gemini', id: '84788ca589e6a9f6' };

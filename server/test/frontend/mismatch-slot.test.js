@@ -29,8 +29,8 @@ test('there is no mismatch row above the input any more; the footer says it (v7.
  * silent — on every config written before the rename.
  */
 test('the row is computed from the resolved rung, not the stored word', async () => {
-  const { modelMismatch } = await import('../../src/backend/core/model-match.js');
-  const { resolveEffort } = await import('../../src/backend/core/effort.js');
+  const { modelMismatch } = await import('../../src/backend/core/models/model-match.js');
+  const { resolveEffort } = await import('../../src/backend/core/models/effort.js');
   const models = [{ label: '3.1 Flash-Lite' }, { label: '3 Flash', selected: true }, { label: '3.1 Pro' }];
   // Control: the raw retired word is silent — which is the bug, if passed raw.
   assert.equal(modelMismatch('standard', models), null);

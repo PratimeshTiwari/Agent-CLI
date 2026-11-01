@@ -4,7 +4,7 @@
  * Same rules as the terminal: the tag goes in at the caret, backspace takes
  * the whole tag, and an image goes only while its tag is in the text. The
  * block it becomes on send is checked end to end, through the server and the
- * bridge, in `server/test/backend/core/panel-images.test.js`.
+ * bridge, in `server/test/backend/core/turn/panel-images.test.js`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

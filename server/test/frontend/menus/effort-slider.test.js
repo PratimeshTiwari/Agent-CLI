@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { sliderLayout } from '../../../src/frontend/menus/effort-slider.js';
-import { EFFORT_LEVELS } from '../../../src/backend/core/effort.js';
+import { EFFORT_LEVELS } from '../../../src/backend/core/models/effort.js';
 
 const FOUR = [...EFFORT_LEVELS, { id: 'max', name: 'Max' }];
 
