@@ -115,5 +115,5 @@ and why it went:
 
 **Files ending in ` 2`** (`history 2.jsonl`, `bridge 2.json`) are copies made by iCloud Drive or
 Finder when two writes collide. The agent never reads them. `~/Documents` syncs to iCloud on many
-Macs, and one of these copies, `server/src/context/ruby-symbols 2.js`, was committed to git. A
+Macs, and one of these copies, `server/src/backend/context/ruby-symbols 2.js`, was committed to git. A
 checkout outside iCloud-synced folders avoids them.

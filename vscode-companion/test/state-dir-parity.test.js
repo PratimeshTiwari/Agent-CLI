@@ -13,7 +13,7 @@ const path = require('path');
 const { agentStateDir } = require('../chat-panel-html.js');
 
 test('agentStateDir matches paths.stateDir', async (t) => {
-  const paths = await import('../../server/src/core/paths.js');
+  const paths = await import('../../server/src/backend/core/paths.js');
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'state-parity-')));
 
   await t.test('an ordinary repo: <ws>/.agent/state', () => {

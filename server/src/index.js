@@ -21,9 +21,9 @@ import { homedir } from 'os';
 // Defined in core/restart.js, which is where the paths that *ask* for a
 // restart live. Two copies of a protocol number is the drift this repo keeps
 // finding; the shim is the consumer, so it imports rather than declares.
-export { RESTART_EXIT_CODE } from './core/restart.js';
-import { RESTART_EXIT_CODE } from './core/restart.js';
-import { shouldRevert, revertChange, readRecord } from './core/doctor-guard.js';
+export { RESTART_EXIT_CODE } from './backend/core/restart.js';
+import { RESTART_EXIT_CODE } from './backend/core/restart.js';
+import { shouldRevert, revertChange, readRecord } from './backend/core/doctor-guard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mainJs = resolve(__dirname, 'main.js');
@@ -36,21 +36,21 @@ if (!existsSync(tsxPath)) {
 // `agent doctor` answers before tsx is looked for: it exists for the machine
 // whose install is broken, and core/doctor.js imports only built-ins.
 if (process.argv[2] === 'doctor' || process.argv.includes('--doctor')) {
-  const { runDoctorCli } = await import('./core/doctor.js');
+  const { runDoctorCli } = await import('./backend/core/doctor.js');
   process.exit(await runDoctorCli(process.argv.slice(2)));
 }
 
 // `agent atlassian login | logout | status` (v8.1): in a shell of its own so a
 // token is typed with echo off, never into the agent's prompt and history.
 if (process.argv[2] === 'atlassian') {
-  const { runAtlassianCli } = await import('./atlassian/cli.js');
+  const { runAtlassianCli } = await import('./backend/atlassian/cli.js');
   process.exit(await runAtlassianCli(process.argv.slice(3)));
 }
 
 if (!existsSync(tsxPath)) {
   console.error("✗ 'tsx' not found. Please run 'npm install' in the workspace root or server directory.\n");
   // Whatever else that install is missing, said now rather than one crash at a time.
-  const { runDoctorCli } = await import('./core/doctor.js');
+  const { runDoctorCli } = await import('./backend/core/doctor.js');
   await runDoctorCli(['--offline']);
   process.exit(1);
 }
@@ -107,7 +107,7 @@ for (let restarts = 0; ; restarts++) {
   });
 
   // A start that broke after `/doctor` changed a package: put it back, once,
-  // and start again (`core/doctor-guard.js`).
+  // and start again (`backend/core/doctor-guard.js`).
   if (result.status !== RESTART_EXIT_CODE && shouldRevert(result.status, process.env, result.pid)) {
     // Said before npm runs: its output is the next thing on screen, and
     // without this line nothing says why an install started after a crash.

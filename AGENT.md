@@ -19,7 +19,7 @@ plus a standalone `vscode-companion/`.
   and are *not* bundled.
 - **Never commit or push to `main`.** Work lands on a branch and merges by PR.
 - **All workspace state lives under `.agent/`.** Never hardcode that path —
-  import `server/src/core/paths.js`, which is the single source of truth.
+  import `server/src/backend/core/paths.js`, which is the single source of truth.
 - `server/src/index.js` is the bin and only re-spawns `main.js` under `tsx`; the
   sources contain JSX, so plain `node src/main.js` fails.
 
@@ -29,12 +29,12 @@ plus a standalone `vscode-companion/`.
 npm install                          # both workspaces, from the root
 npm run start                        # server, workspace pinned to ../
 npm test                             # server, extension and companion
-node --test server/test/core/paths.test.js        # one file
+node --test server/test/backend/core/paths.test.js        # one file
 npm run build --workspace=extension  # rebuild the service worker
 ```
 
 Tests live in `server/test/`, mirroring `server/src/` directory for directory —
-`src/core/paths.js` is tested by `test/core/paths.test.js`. **Expected state:
+`src/backend/core/paths.js` is tested by `test/backend/core/paths.test.js`. **Expected state:
 everything passes**, so a failure is a real regression. No lint script;
 `package.json`'s `eslintConfig` and `prettier` (100 cols, single quotes) are for editors.
 
@@ -42,18 +42,16 @@ everything passes**, so a failure is a real regression. No lint script;
 
 ```
 server/src/
-├── main.js           # arg parsing, wiring, bootstrap
-├── core/             # agent-loop, prompt-builder, diff-engine, risk-classifier,
-│                     #   paths, migrate, workspaces, slash-commands, effort
-├── atlassian/        # Jira: client, config, ADF and wiki markup
-├── bridge/           # the Chrome-extension transport
-├── context/          # token budget (minifier, context, memory) and code search:
-│                     #   symbol-index (find_symbol / find_references: acorn for JS,
-│                     #   ruby-symbols, pattern-symbols for every other language)
-├── mcp/              # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
-├── prompts/          # the prompt files; prompts/v2/ overrides them for later versions
-├── storage/  watcher/ # session history; external edits reported into it
-└── ui/               # the terminal front-end (App.jsx, hooks/, components/)
+├── main.js        # arg parsing, wiring, bootstrap
+├── backend/
+│   ├── core/      # agent-loop, prompt-builder, diff-engine, risk-classifier, paths,
+│   │              #   migrate, workspaces, slash-commands, effort
+│   ├── bridge/    # the Chrome-extension transport
+│   ├── context/   # token budget and code search: symbol-index (find_symbol /
+│   │              #   find_references), ruby-symbols, pattern-symbols
+│   ├── mcp/       # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
+│   └── atlassian/  prompts/  storage/  watcher/
+└── frontend/      # the terminal UI (App.jsx, hooks/, components/); imports backend/
 ```
 
 **How it works** — the turn lifecycle, the bridge to the browser, prompt
@@ -74,7 +72,7 @@ disagree, so **the description is the contract**.
   `DiffEngine` diff with per-hunk accept/reject, backups and `undo()`. Commands
   pass through `core/risk-classifier.js`, which classifies *every* segment of a
   shell line, not just the first word.
-- **The live frame must never outgrow the viewport** (`server/src/ui/`). When
+- **The live frame must never outgrow the viewport** (`server/src/frontend/`). When
   Ink's dynamic output is taller than the terminal it clears the screen and
   repaints on *every* render, deleting the user's scrollback and selection
   several times a second. Settled turns go to `<Static>`; only the in-flight

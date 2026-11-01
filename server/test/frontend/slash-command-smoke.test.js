@@ -1,0 +1,298 @@
+/**
+ * Every slash command, driven once, bare and with arguments.
+ *
+ * `use-slash-commands.js` is 967 lines at **8.69% line coverage** — the lowest
+ * in the repo — and it is the surface almost every bug reported from use has
+ * come from: `/image` with no way to detach, `/clear` not saying which half it
+ * cleared, `/effort` not reporting what the picker reads, a local command
+ * cancelling a running turn.
+ *
+ * Same shape as `test/backend/mcp/tool-smoke.test.js`, for the same reason: shallow and
+ * total beats deep and partial when the failure being guarded is "this entry
+ * point throws". A command that crashes takes the turn with it, and the CLI is
+ * the only place the user can see it happen.
+ *
+ * **The collaborators are real**, not stubs. A first pass used hand-written
+ * stubs and produced three confident false positives — `getAllMemories is not a
+ * function` against a method that exists and has three callers — because the
+ * stub was wrong, not the code. Real `MemoryManager`, `ContextManager`,
+ * `DiffEngine` and `TaskManager` cost nothing here and cannot lie that way.
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { handleSlashCommand } from '../../src/frontend/hooks/use-slash-commands.js';
+import { SLASH_COMMANDS } from '../../src/frontend/constants.js';
+import { AgentLoop } from '../../src/backend/core/agent-loop.js';
+import { MemoryManager } from '../../src/backend/context/memory-manager.js';
+import { ContextManager } from '../../src/backend/context/context-manager.js';
+import { DiffEngine } from '../../src/backend/core/diff-engine.js';
+import { TaskManager } from '../../src/backend/core/task-manager.js';
+
+/**
+ * Not driven from a test, each for a reason that is not "it might fail".
+ *
+ * `exit` and `restart` leave the process — under `node --test` that takes the
+ * runner with them. `update` runs `git pull` against the real remote. `compact`
+ * and `new` both wait on a browser round trip that has no extension here.
+ */
+// `doctor` asks the registry (`npm outdated`); its offline form is driven below.
+const NOT_DRIVEN = new Set(['exit', 'restart', 'update', 'compact', 'new', 'doctor']);
+
+function harness() {
+  const ws = fs.mkdtempSync(join(tmpdir(), 'slash-'));
+  fs.mkdirSync(join(ws, '.agent'), { recursive: true });
+
+  const loop = Object.create(AgentLoop.prototype);
+  Object.assign(loop, {
+    workspace: ws,
+    codeDir: ws,
+    mode: 'auto',
+    modelConfig: { main: 'gemini', effort: 'high' },
+    conversationHistory: [],
+    isProcessing: false,
+    commandRules: { enabled: true, allow: [], block: [] },
+    sessionStore: { appendTurn() {}, saveHistory() {}, listSessions: () => [] },
+    promptBuilder: { resetPromptState() {}, noteMessageSent() {} },
+    memoryManager: new MemoryManager(ws),
+    contextManager: new ContextManager(ws),
+    diffEngine: new DiffEngine(ws),
+    taskManager: new TaskManager(ws),
+    callbacks: { sendToPanel() {} },
+    _saveConfig() {},
+  });
+
+  const history = [];
+  const run = (query) => handleSlashCommand(query, {
+    agentLoop: loop,
+    wsServer: { clients: new Set() },
+    resetScreen() {},
+    setActiveMenu() {},
+    setHistory: (f) => history.push(typeof f === 'function' ? f([]) : f),
+    setIsProcessing() {},
+  });
+
+  const lastMessage = () => {
+    const last = history.at(-1);
+    const entry = Array.isArray(last) ? last.at(-1) : last;
+    return String(entry?.content ?? '');
+  };
+
+  return { ws, loop, run, lastMessage, cleanup: () => fs.rmSync(ws, { recursive: true, force: true }) };
+}
+
+describe('every command runs', () => {
+  test('none of them throws', async () => {
+    const broken = [];
+
+    for (const { name } of SLASH_COMMANDS) {
+      if (NOT_DRIVEN.has(name)) continue;
+      const h = harness();
+      try {
+        await h.run(`/${name}`);
+      } catch (e) {
+        broken.push(`/${name}: ${e.message}`);
+      } finally {
+        h.cleanup();
+      }
+    }
+
+    assert.deepEqual(broken, [], `\n  ${broken.join('\n  ')}\n`);
+  });
+
+  /*
+   * A command that answers "No such command" about itself is the `/name` bug:
+   * it shipped fully implemented, listed in the menu, and unreachable because
+   * the dispatcher kept its own copy of the list.
+   */
+  test('none of them is unreachable', async () => {
+    const missing = [];
+
+    for (const { name } of SLASH_COMMANDS) {
+      if (NOT_DRIVEN.has(name)) continue;
+      const h = harness();
+      await h.run(`/${name}`);
+      if (/No such command/.test(h.lastMessage())) missing.push(`/${name}`);
+      h.cleanup();
+    }
+
+    assert.deepEqual(missing, [], `listed in the menu and not dispatched: ${missing.join(', ')}`);
+  });
+
+  // The control. If the sweep cannot detect an unreachable command it proves
+  // nothing, so check that the detector fires on a name that really is absent.
+  test('and the check would notice if one were', async () => {
+    const h = harness();
+    await h.run('/definitelyNotACommand');
+
+    assert.match(h.lastMessage(), /No such command/);
+    h.cleanup();
+  });
+});
+
+describe('arguments do not break anything', () => {
+  /*
+   * The forms people actually type, including the wrong ones. Bare commands are
+   * the easy path; every bug reported from use has been in an argument form or
+   * a mistake.
+   */
+  const CASES = [
+    '/open', '/open nope.txt',
+    '/logs agent', '/logs nosuchflow', '/logs rates', '/logs tools', '/logs speed', '/logs failures', '/logs notices',
+    '/name Ada', '/name',
+    '/subagents', '/subagents off', '/subagents on', '/config', '/copy code', '/shell', '/terminal',
+    '/memory on', '/memory off',
+    '/allowlist', '/allowlist add ls',
+    '/effort pro', '/effort nonsense',
+    '/help extra args', '/context', '/plans', '/plan show', '/history', '/commands', '/skills',
+    '/doctor offline',
+  ];
+
+  test('none of them throws', async () => {
+    const broken = [];
+
+    for (const q of CASES) {
+      const h = harness();
+      try {
+        await h.run(q);
+      } catch (e) {
+        broken.push(`${q}: ${e.message}`);
+      } finally {
+        h.cleanup();
+      }
+    }
+
+    assert.deepEqual(broken, [], `\n  ${broken.join('\n  ')}\n`);
+  });
+});
+
+describe('a wrong word is rejected, not ignored', () => {
+  /*
+   * `/effort deeep` used to fall through to the status display, which prints
+   * the current rung and the ladder — indistinguishable from a confirmation.
+   * The typo is the likeliest way to get there, and believing the setting
+   * changed means every later turn goes out on the old rung.
+   */
+  test('an invalid effort says so and changes nothing', async () => {
+    const h = harness();
+    await h.run('/effort nonsense');
+
+    assert.match(h.lastMessage(), /not an effort level/);
+    assert.equal(h.loop.modelConfig.effort, 'high', 'it changed the effort to something invalid');
+    h.cleanup();
+  });
+
+  /*
+   * Max on an account without Argon (v5.26): the owner's rule is that it never
+   * lands on Pro in silence, so it says why and the rung stays where it was.
+   */
+  test('/effort max without Argon says so and stays on the current rung', async () => {
+    const h = harness();
+    h.loop.modelOptions = [
+      { label: '3.1 Flash-Lite', isMode: false }, { label: '3 Flash', isMode: false },
+      { label: '3.1 Pro', isMode: false, selected: true },
+    ];
+    let switched = null;
+    h.loop.switchModelTo = (label) => { switched = label; };
+    await h.run('/effort max');
+    assert.match(h.lastMessage(), /Argon is not available on this account/);
+    assert.equal(h.loop.modelConfig.effort, 'high');
+    assert.equal(switched, null, 'it switched the tab anyway');
+
+    // Control: the account that has it.
+    h.loop.modelOptions.push({ label: '4 Argon', isMode: false });
+    await h.run('/effort max');
+    assert.equal(h.loop.modelConfig.effort, 'max');
+    assert.equal(switched, '4 Argon');
+    h.cleanup();
+  });
+
+  test('/effort max before the picker is read asks, and waits', async () => {
+    const h = harness();
+    let asked = false;
+    h.loop.requestModelOptions = () => { asked = true; };
+    await h.run('/effort max');
+    assert.equal(h.loop.modelConfig.effort, 'high');
+    assert.ok(asked, 'nothing asked the tab which models it has');
+    assert.match(h.lastMessage(), /try `\/effort max` again/);
+    h.cleanup();
+  });
+
+  test('a valid one still applies, silently on the rejection front', async () => {
+    const h = harness();
+    await h.run('/effort lite');
+
+    assert.equal(h.loop.modelConfig.effort, 'low');
+    assert.doesNotMatch(h.lastMessage(), /not an effort level/);
+    h.cleanup();
+  });
+});
+
+describe('a bare slash is the question, not an unknown command', () => {
+  /*
+   * It answered `No such command: /` and then advised "Type `/` on its own to
+   * see what there is" — which is what had just been done. The input bar opens
+   * the menu while you type it, so this is reached by submitting it, and the
+   * one reply guaranteed to be useless was the one it gave.
+   */
+  test('it lists the commands instead of refusing', async () => {
+    const h = harness();
+    await h.run('/');
+
+    const msg = h.lastMessage();
+    assert.doesNotMatch(msg, /No such command/);
+    assert.match(msg, /\/help/);
+    assert.match(msg, /\/effort/);
+    h.cleanup();
+  });
+
+  test('an unknown command still says so, and then lists them', async () => {
+    const h = harness();
+    await h.run('/nosuchthing');
+
+    assert.match(h.lastMessage(), /No such command: `\/nosuchthing`/);
+    assert.match(h.lastMessage(), /\/help/, 'refusing without saying what there is instead');
+    h.cleanup();
+  });
+});
+
+/*
+ * v6.24: `/update ayz` ran the update check, and twelve commands answered a
+ * wrong word as if it were not there. Every command with a fixed set of
+ * options must name the word it did not take and list its forms.
+ */
+import { COMMAND_OPTIONS, invalidOption, isSlowCommand } from '../../src/backend/core/slash-commands.js';
+
+describe('a word a command does not take', () => {
+  test('is named, with the forms it does take', async () => {
+    const silent = [];
+    for (const name of Object.keys(COMMAND_OPTIONS)) {
+      if (NOT_DRIVEN.has(name) && name !== 'update') continue;
+      const h = harness();
+      await h.run(`/${name} zzqjunk`);
+      if (!/zzqjunk/.test(h.lastMessage())) silent.push(`/${name}`);
+      h.cleanup();
+    }
+    assert.deepEqual(silent, [], `answered as if the word were not there: ${silent.join(', ')}`);
+  });
+
+  test('/update lists check, pull and done, and does not wait on the network', () => {
+    const msg = invalidOption('update', ['ayz']);
+    assert.match(msg, /`\/update ayz` — no option `ayz`/);
+    for (const form of ['`/update`', '`/update pull`', '`/update done`']) assert.ok(msg.includes(form), form);
+    assert.equal(isSlowCommand('update', ['ayz']), false);
+    assert.equal(isSlowCommand('update', ['pull']), true);
+  });
+
+  // Controls: every real form, aliases and free text after a known word pass.
+  test('real forms pass', () => {
+    for (const [cmd, args] of [['update', []], ['update', ['pull']], ['update', ['now']], ['update', ['done']],
+      ['plan', ['show']], ['copy', ['code']], ['reset', ['--keep-settings']], ['startup', ['warm']],
+      ['memory', ['forget', '2']], ['allowlist', ['add', 'npm', 'test']], ['subagents', ['large-files', 'direct']],
+      ['subagents', ['solo']], ['auto', []], ['effort', ['whatever']]]) {
+      assert.equal(invalidOption(cmd, args), null, `/${cmd} ${args.join(' ')}`);
+    }
+  });
+});

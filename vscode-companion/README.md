@@ -90,7 +90,7 @@ nothing. Only the newest build is tracked — git keeps the rest, and two VSIXs 
 is how someone installs the wrong one.
 
 `extension.js` duplicates the `.agent` directory name because it cannot import from
-`server/`. Changing `AGENT_DIR` in `server/src/core/paths.js` means changing it here too.
+`server/`. Changing `AGENT_DIR` in `server/src/backend/core/paths.js` means changing it here too.
 
 ## Version history
 
