@@ -32,7 +32,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findRg } from './find-rg.js';
@@ -666,11 +666,12 @@ export function findImporters(name, dir = path.join(REPO_ROOT, 'server', 'src'),
 }
 
 /**
- * `agent doctor [package] [--offline]`, run by the bin before tsx — so it
- * answers on the machine whose install is broken. Exit 1 when something the
- * agent needs is missing, so a setup script can gate on it.
+ * `agent doctor [package] [--offline] [--test]`, run by the bin before tsx —
+ * so it answers on the machine whose install is broken. Exit 1 when something
+ * the agent needs is missing, so a setup script can gate on it.
  */
-export async function runDoctorCli(argv, { out = process.stdout, root = REPO_ROOT } = {}) {
+export async function runDoctorCli(argv, { out = process.stdout, root = REPO_ROOT, runTests = runSuite } = {}) {
+  if (argv.includes('--test')) return testInstall({ out, root, runTests });
   const offline = argv.includes('--offline');
   const name = argv.find((a) => !a.startsWith('-') && a !== 'doctor');
   const tty = Boolean(out.isTTY) && !process.env.NO_COLOR;
@@ -688,6 +689,30 @@ export async function runDoctorCli(argv, { out = process.stdout, root = REPO_ROO
   out.write(formatReport(report, { width }).map(paint).join('\n') + '\n\n' + paint(summaryLine(report)) + '\n');
   out.write(clip('agent doctor <package>: why it is used', width) + '\n');
   return problems(report.groups).some((p) => p.tier === 'required') ? 1 : 0;
+}
+
+/**
+ * `agent doctor --test` (v8.5): the checkout's own suite, as `setup.sh` runs it.
+ * Owner: "a command … to trigger the agent test". The report says what is
+ * installed; this says whether what is installed works, on this machine.
+ * The suite's output streams as it runs, and one line at the end says how it
+ * went. The exit code is the suite's.
+ */
+export async function testInstall({ out = process.stdout, root = REPO_ROOT, runTests = runSuite } = {}) {
+  out.write(`Running the agent's tests in ${root} (npm test, a minute or two)…\n\n`);
+  const code = await runTests(root);
+  out.write(code === 0
+    ? '\n✔ Every test passed: this install works.\n'
+    : '\n✗ Some tests failed. The lines marked "not ok" above say which; `agent doctor` checks the install.\n');
+  return code === 0 ? 0 : 1;
+}
+
+function runSuite(root) {
+  return new Promise((done) => {
+    const child = spawn('npm', ['test'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+    child.on('error', () => done(127));
+    child.on('close', (code) => done(code ?? 1));
+  });
 }
 
 /* ------------------------------------------------------- versions, install */

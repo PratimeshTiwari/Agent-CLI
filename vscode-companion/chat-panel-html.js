@@ -13,7 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// Must match AGENT_DIR in server/src/core/workspace/paths.js
+// Must match AGENT_DIR in server/src/backend/core/workspace/paths.js
 const AGENT_DIR = '.agent';
 
 /**
@@ -54,7 +54,7 @@ const THEME_BRIDGE = `
  * The agent's state directory for a workspace — where it reads `editor.json`
  * and writes `bridge.json`.
  *
- * A port of `resolveState` + `agentDir` in `server/src/core/workspace/paths.js`: walk up
+ * A port of `resolveState` + `agentDir` in `server/src/backend/core/workspace/paths.js`: walk up
  * from the workspace to the first existing `.agent`, the way git finds `.git`;
  * the path from there down is the scope. Not found means `<workspace>/.agent`.
  *

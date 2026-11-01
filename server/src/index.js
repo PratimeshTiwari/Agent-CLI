@@ -33,6 +33,14 @@ if (!existsSync(tsxPath)) {
   tsxPath = resolve(__dirname, '../../node_modules/.bin/tsx');
 }
 
+// `agent --help` too (v8.5): it names `agent doctor`, which is for an install
+// that cannot start.
+if (['--help', '-h', 'help'].includes(process.argv[2])) {
+  const { HELP_TEXT } = await import('./backend/core/install/cli-help.js');
+  process.stdout.write(HELP_TEXT);
+  process.exit(0);
+}
+
 // `agent doctor` answers before tsx is looked for: it exists for the machine
 // whose install is broken, and core/install/doctor.js imports only built-ins.
 if (process.argv[2] === 'doctor' || process.argv.includes('--doctor')) {
