@@ -1,5 +1,14 @@
 # Agent CLI Companion: version history
 
+## 1.8.12 — 2026-11-03
+
+**The status-bar entry always opens the chat.** Reported with a screenshot from Antigravity IDE:
+clicking `Agent CLI` answered `command 'agentCli.chatSecondary.focus' not found`. 1.8.11 had been
+installed over 1.8.9, which has no secondary-side-bar view, and the window was not reloaded, so it
+had never registered that view; a view's `.focus` command exists only once it has. The chat now
+opens in whichever home the window has, the activity-bar one if the secondary one is missing, and
+when neither is there it says so and offers **Reload Window** instead of a raw error.
+
 ## 1.8.11 — 2026-11-03
 
 **A temp dir's own `.agent` is not a project's state.** The CLI stopped adopting one in v8.7 (on
