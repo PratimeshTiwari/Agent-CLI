@@ -11,7 +11,7 @@
     "start": "npm run start --workspace=server",
     "dev": "npm run dev --workspace=server",
     "test": "npm run test --workspace=server && npm run test --workspace=extension && npm run test:companion",
-    "test:companion": "node --import ./server/test/setup-home.js --test \"vscode-companion/test/*.test.js\""
+    "test:companion": "node --import ./server/test/setup-home.js --test --test-timeout=120000 \"vscode-companion/test/*.test.js\""
   },
   "engines": {
     "node": ">=20.0.0"

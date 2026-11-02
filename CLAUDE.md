@@ -69,8 +69,8 @@ one `PR-<n>.md` per PR, and `comment-classifier` stopped categorising by keyword
 took that over. Both test files were rewritten against the shipped behaviour, so a failure now is
 a real regression.
 
-**CI runs the suite on every push (v8.7, `.github/workflows/ci.yml`)**: macOS and Linux, Node 20
-and 22, after `agent --help` and `agent doctor --offline`. Three tests guard what used to ship stale:
+**CI runs the suite on every push (v8.7, `.github/workflows/ci.yml`)**: macOS and Linux, Node 22
+and 24, after `agent --help` and `agent doctor --offline`. Three tests guard what used to ship stale:
 `extension/test/bundle-fresh.test.js` (the committed `service-worker.js` is the build of its sources),
 `vscode-companion/test/vsix-fresh.test.js` (the one committed `.vsix` holds the current companion and
 side panel) and `server/test/docs-size.test.js` (this file stays under 145,000 characters).

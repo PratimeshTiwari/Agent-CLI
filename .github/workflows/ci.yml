@@ -31,7 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
-        node: [20, 22]
+        # 22 and 24: the test scripts' quoted globs need Node 21+ to expand,
+        # and Node 20 reached end of life in April 2026.
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,4 +45,8 @@ jobs:
       # with a readable report rather than inside a test.
       - run: node server/src/index.js --help
       - run: node server/src/index.js doctor --offline
-      - run: npm test
+      # The watcher's OPEN_MAX control opens 10,300 descriptors; the macOS
+      # runner's soft limit is lower. Every test is capped at two minutes
+      # (--test-timeout in the scripts), so a hang names its test.
+      - run: ulimit -n 20000 2>/dev/null || ulimit -n "$(ulimit -Hn)"; npm test
+        shell: bash

@@ -66,11 +66,16 @@ const PROBE = `
   });
 `;
 
-test('control: past OPEN_MAX descriptors, macOS refuses to spawn', { skip: !darwin }, () => {
+test('control: past OPEN_MAX descriptors, macOS refuses to spawn', { skip: !darwin }, (t) => {
   const out = inChild(`${PROBE}
     import { openSync } from 'node:fs';
-    for (let i = 0; i < 10_300; i++) openSync('/dev/null', 'r');
+    try { for (let i = 0; i < 10_300; i++) openSync('/dev/null', 'r'); }
+    catch (e) { console.log(JSON.stringify({ room: e.code })); process.exit(0); }
     console.log(JSON.stringify({ exec: await tryExec() }));`);
+  // The control needs a soft limit above OPEN_MAX (a Mac's is unlimited by
+  // default; CI's runner was 256 until the workflow raised it). Below it the
+  // process runs out of descriptors before it can show what OPEN_MAX does.
+  if (out.room) return t.skip(`ulimit -n is below 10,300 here (${out.room})`);
   assert.equal(out.exec, 'ERR EBADF');
 });
 
