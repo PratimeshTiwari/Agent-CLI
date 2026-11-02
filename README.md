@@ -27,9 +27,12 @@ repo.
 
 The same conversation, outside the terminal:
 
-| | | |
-| --- | --- | --- |
-| ![Chrome side panel](docs/images/side-panel.png)<br>**Chrome side panel** | ![Floating window](docs/images/floating-window.png)<br>**Floating window**, `⌘⇧1` from any app | ![VS Code chat panel](docs/images/vscode-chat.png)<br>**VS Code chat panel**, `⌥⌘J` |
+![The Chrome side panel beside the Gemini tab the agent types into](docs/images/side-panel.png)
+**Chrome side panel**: docked beside the Gemini tab the agent types into.
+
+| | |
+| --- | --- |
+| ![Floating window over the terminal](docs/images/floating-window.png)<br>**Floating window**, `⌘⇧1` from any app | ![VS Code chat panel beside the code](docs/images/vscode-chat.png)<br>**VS Code chat panel**, `⌥⌘J`, beside your code |
 
 ## How it works
 
