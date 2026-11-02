@@ -1234,3 +1234,231 @@ outside the conditional.
 **The numeric confidence score was declined.** A model asked for a number produces one, and a
 fabricated `87` reads as evidence. The instruction is behavioural instead — if you would not
 bet on it, ask — which is the part that changes what the agent *does*.
+
+## Moved from CLAUDE.md in v8.7
+
+Cut on 2026-11-02 to keep CLAUDE.md under the 150,000 characters Claude Code loads
+(`server/test/docs-size.test.js`). Each section is verbatim; CLAUDE.md keeps the rule it led to.
+
+### Tool amnesia: the old repair
+
+**The repair for tool amnesia used to be the heaviest prompt in the system.** It called
+`resetPromptState()`, which does not mean "send the tools again" — it means "pretend this
+chat has never seen a prompt", so the next turn was a full turn-0 payload: system
+instructions, tool definitions, `AGENT.md`, memory and the skill catalogue. The model had
+not forgotten the project; it had forgotten one block. And the reason prompts are tiered at
+all is that a large repeated payload trips Gemini's repetition and A/B-test filters — so
+the old repair fired the largest prompt available at exactly the moment the session was
+already unhealthy, which makes it a plausible *cause* of the next failure. Measured on this
+repo: **25,445 characters against 9,991, a 61% cut.** `requestToolRedeclaration()` sends the
+condensed reminder plus the full definitions and nothing else. It outranks the periodic
+refresh, because that tier sends tool *names* and names are what just failed.
+
+### The pro rungs
+
+**And the rungs were not as thin as they looked — then they were revisited and there is one.**
+An earlier note here claimed the three pro rungs "differ only by `isBrief`". Measured:
+21,907 / 25,436 / 26,343 characters, differing by plan-first, a phase-2 analysis, adversarial
+self-review and an assumption ledger. What was genuinely thin was `standard` → `deep` at
+**+3.6%**, and that is the one that was acted on: **since 2026-09-20 there is a single pro
+rung.** `pro` is the old `standard` plus `deep`'s review step; the critical-analysis phase and
+the assumption ledger are declined because they are paid in **output** tokens on every pro
+turn, which a prompt character count does not show.
+
+### find_references and methods
+
+**`find_references` answered 0 for every method in the repo, and said "It may be dead code".**
+A method is only ever called as `x.name()`, and `referencesIn` excluded member properties —
+correctly, for a *binding*: `fs.readFile` does not use a `readFile` variable. Nothing
+distinguished that question from "who calls this method?", so the second one always answered
+nothing. Measured through the real tool before the fix: `buildToolResultBatch` **0** against 17
+real call sites, `acceptDiff` **0** against 17, `classify` 4 (the standalone function only)
+against 14. This is the `semantic_search` failure exactly — the model reaches for the tool, is
+told the code is not there, and acts on it — except that here the action it invites is deletion.
+
+`includeMembers` is the second question, and the caller has to say which one it is asking.
+Hits found that way are tagged `viaMember`, because `x.name` genuinely cannot be told from a
+same-named method on another object; an answer that hides its own ambiguity is the one that
+gets acted on wrongly. **It is gated on the name being defined as a method in this repo**, not
+on always: measured unconditionally, `find_references("map")` is 165 rows of `Array.prototype`
+and `join` 180 — a wall of text about the standard library, every character of which is retyped
+into a browser next turn. Neither is defined here, so the gate excludes both.
+
+**And the definition was missing from the answer that promises to list it.** The prompt says
+"list the definition too (default true)" and "the definition is marked". For a function, whose
+`id` is a real Identifier, that was true; for a method, whose non-computed `MethodDefinition`
+key is deliberately never visited, it never was. Added in the handler rather than in
+`referencesIn`, so that function goes on answering only the question it is good at.
+
+### grep_search alternation
+
+**`grep_search` answered 0 to `a|b|c`.** `isRegex` defaults to false, which is
+`--fixed-strings`, so the most ingrained grep habit a model has searched for the literal string,
+pipes included. On this repo `parseToolCall|tool_call|extractToolCalls|handleToolCall` returned
+**0** where the regex returned **26**, and in the session that surfaced it the model then read a
+131 KB file three times. Identifier-only alternation is searched as alternatives now, and says so
+in the result; a literal `a || b` or a shell pipe is still searched as written.
+
+### Ruby references, v6.19
+
+**References are precise since v6.19.** Measured against Ripper's lexer over every name defined in
+macOS's Ruby stdlib (883 files, 8,570 names): precision **91.8% → 99.5%**, recall **99.1% →
+99.96%**. `codeOf` is a literal scanner now: regexes (`/…/` after an operator, keyword, or
+`name ` with no space after, as Ruby reads `split /,/`), `%w[] %i[] %q() %r{}` and friends, strings
+nested in `#{}`, `?/` one-character strings and heredoc bodies' `#{}`. A literal open at the end
+of a line carries into the next, capped at `CARRY_MAX` (40) so a misread start cannot blank a
+file — the first run lost forty lines of `fileutils.rb` to `chomp(?/)` read as a regex. A method
+named like a keyword (`next`, `class`) matches only after `.`, `:` or `def`; `__END__` ends the
+code. Definitions lost by the carry were all inside strings (Ripper's `def` count agrees). Cost:
+115 ms for the 883 files against 67 before, cached by mtime; lines with no quote, `/`, `%`, `?`,
+`#` or `$` skip the scan. The comparison scripts are `rb/lex.rb` and `rb/compare.mjs` in the
+session scratchpad: `ruby lex.rb $(cat files.txt) > lex.json`, then `ALL=1 node compare.mjs lex.json`
+from `server/`.
+
+### What the language oracles found
+
+Java's oracle found what fixtures had not: `void` was in the "expression keyword" list (it is an
+operator in TypeScript only), so every `void` method in Java, C# and C++ was rejected; and the type
+class accepted spaces, so indentation counted as a return type. C++ was **59 / 61** until v6.23
+measured it: methods in a class body were never found (column 0 only), `TEST(…) {` read as a
+function (ALL-CAPS names are macro calls now), and `) const;` passed as a body. C++ counts only
+definitions with a body (`bodyOnly`), skips multi-line `#define` bodies, and compares on lines
+`clang -E` keeps. A `'` after a letter is JSX text in TypeScript, and inside a number a C++14
+digit separator (`gluedQuote`). **Kotlin, C#, Swift, Scala, Rust, PHP, Elixir, Lua and shell
+have fixtures, not an oracle.** The index skips files over 2 MB as
+generated, plus `vendor`, `.venv`, `site-packages`, `target`, `Pods`, `.gradle`, `.next` and
+`*.d.ts`. 821 JDK files index in 0.9 s cold, 14 ms warm. Answers carry `patternNote` and mark
+such files `byText`. v2's `find_symbol` names the languages; v1 keeps "JavaScript and JSX only".
+The oracles are in the session scratchpad's `gen/` folder (`compare.mjs <oracle.json>`).
+
+### The watcher and EBADF, v5.6
+
+**The watcher took the shell down on a large repo (fixed v5.6).** On the work laptop, 2026-10-23,
+*every* spawn failed with `spawn EBADF` — nine `run_command`s, `run_background`, the browser-open
+at launch, `/update`'s git — so approved Ruby scripts never started and `/update` claimed the
+checkout was not one. macOS refuses `posix_spawn` once a process holds a descriptor numbered at or
+above `OPEN_MAX` (10,240 — bisected to the descriptor), and chokidar 4 dropped fsevents, so it
+holds about one descriptor per watched *file* (852 for 131 directories here). A big repo crossed
+the line at startup. On macOS and Windows the watcher is now Node's recursive `fs.watch` —
+FSEvents, **zero** extra descriptors on the same tree. chokidar was kept for Linux until v5.31,
+then removed (owner: this is a macOS tool); Linux uses the same `fs.watch`, recursive since Node
+20, and a tree past `max_user_watches` only turns the announcements off. Ignores are
+by path segment (the old regexes silently ignored `distance.rb` as `dist/`) and add `vendor`,
+`tmp`, `log`, `coverage`. A spawn `EBADF` is rewritten for the model as "the command never
+started, do not retry", and `/update` says git could not run instead of "not a git checkout".
+Verified end to end on a 15,000-file tree under the pty: `main` hands the model `EBADF`, this
+hands it the command's output. **Any new long-lived resource per file is the same bug.**
+
+### Failures and notices
+
+**Failures and notices are counted apart, and the number was off by a factor of 25.** Over
+09-25 → 09-27 the log held **274 rows**; roughly **ten** were product failures. The largest
+single entry was **65 rows** of a background `discover_models` poll declining to open a tab
+at connect, before any tab exists — correct behaviour, filed as a failure on every session
+forever. While that was true nobody could open `/logs` and see a regression, which is the
+only thing the log is for. `logNotice` writes a `level: 'notice'` field; `summarizeErrors`
+counts failures and reports notices beside them; `/logs notices` lists them.
+
+The field is present **only** on notices, so every line written before it existed reads as a
+failure — the honest reading of history, since those rows were written by call sites that
+believed they reported breakage.
+
+### Migration tests
+
+**Those three claims are now assertions** (`test/backend/core/migrate-workspace.test.js`), because the
+module moves the user's data — config, instructions, backups, logs — on startup, before
+anything is on screen, and it sat at **46% line coverage** with one narrow rename tested. Same
+combination as `diff-engine.js`, which was 358 lines with no tests and was writing backups
+outside the backup directory.
+
+Nothing was wrong: all four behaviours were probed against the real code first and all four
+held. What the tests buy is that the failure mode is silent and unrecoverable — a migration
+that clobbers has already destroyed the thing it overwrote by the time anyone looks. The one
+that would hurt most is `rules.md` → `AGENT.md`, the only move that writes into the user's
+*tracked* tree; the test asserts both that a human-written `AGENT.md` survives **and** that
+declining to move it does not delete the source instead. Coverage 46% → 70%.
+
+**A wrong fixture made correct code look broken first.** The first probe put sessions in
+`.gemini/sessions/`, which never existed — they lived in the *home* directory, and
+`migrateHome` handles them. The fixture has to come from the migration's own plan, not from
+memory of what the old layout probably was.
+
+### Plan mode and Markdown
+
+**Plan mode exempts the agent's own artifacts, and nothing else.** *(Now true of `strict`.)* The check was
+`path.endsWith('.md')`, beside a comment reading "Creating/Editing Markdown files (like plans)
+is harmless". The intent was real — `task.md` and `plan.md` are files the system prompt *tells*
+the model to keep current, and it cannot do that if every tick needs a keystroke. But the test
+was the **extension**, not the **location**, so in plan mode the agent could silently write any
+markdown anywhere: `README.md`, `CLAUDE.md`, and `AGENT.md` — the one file this project promises
+"can always be trusted to say what the human wrote" — plus anything outside the workspace,
+because these tools accept absolute paths.
+
+Reported from use: `create_file test-agent-cli.md` in plan mode returned `"status":"applied"`.
+Meanwhile `prompt-builder.js:362` tells the model *"All file modifications and command
+executions require user approval before being applied"* and the status row reads *"plan — every
+edit needs approval"*. **The model was told the truth and the enforcement was not doing it** —
+which is the worst arrangement of the three, because nothing on screen or in the prompt gives
+you any reason to doubt it.
+
+`isAgentArtifact` resolves the path and prefix-checks it against `paths.artifactsDir`, because
+the model supplies that string: `task.md`, `./task.md`, an absolute path and
+`.agent/artifacts/../../../task.md` are one string test and four different files. It fails
+closed — anything unresolvable, or outside, needs approval.
+
+### The live reply clamp
+
+**The agent's reply was the unbudgeted row, and it was the biggest one.**
+`TranscriptTurn` capped the *action* rows at `liveBudget` and then rendered
+the reply underneath in full, live or not. Reported as "it gave me much more
+output but I received only a portion of it", with a screenshot of an answer
+cut mid-sentence and blank space below. **Nothing was lost** —
+`history.jsonl` held all 5,090 characters and `renderMarkdown` returns all of
+them, both checked before touching anything — but at ~85 rendered rows in a
+~30-row terminal the frame blew past the viewport, and what survived the
+repaint was its top. `liveMessageText` clamps it while live and says
+`… +N more lines`; the committed copy in `<Static>` is untouched, so the rest
+appears a moment later. It lives in `live-layout.js` rather than beside its only
+caller because a test importing a `.jsx` file cannot run under the repo's
+plain `node --test`.
+
+**Its first version counted `\n`, which was the same bug again, and it
+shipped looking fixed.** It was reported a second time — extension updated,
+agent restarted, still truncated, still no marker. A 1,450-character reply
+is **18 source lines and 26 rendered rows at 100 columns**, so an 18-line
+clamp against a 14-row budget let the text straight through while the frame
+still overflowed by twelve rows. The rule immediately below had already
+said it. The budget is spent in *wrapped* rows now, at the width the
+terminal actually is. **A clamp measured in the wrong unit reads as a fix
+and behaves as nothing.**
+
+### /update and SLOW_COMMANDS
+
+**But a set can only answer for a whole command, and `/update` is two
+commands wearing one name.** Bare `/update` runs `checkForUpdate`, which is
+`git fetch origin` — **1,086ms measured warm, bounded by `FETCH_TIMEOUT_MS`
+at 10s cold** — while `/update done` reads a file. It was in neither the set
+nor anything else, so the input box cleared and nothing happened for up to
+ten seconds: reported as *"/update seems glitched out, its loading is a bit
+late and no loading animation"*. The comment in `use-slash-commands.js` had
+asserted a spinner was "not available, because `SLOW_COMMANDS` is keyed on
+the first word and `/update` on its own answers instantly" — the keying was
+the real obstacle, and the second clause was never measured and is false.
+`isSlowCommand(command, args)` takes the args, so `/update` and
+`/update pull` wait and `/update done` stays instant, which is what keeps the
+stranded row from returning through the new door.
+
+### minifyJson
+
+**Nothing had ever called it from a test, and two things were wrong behind that.** Every
+fixture in the suite passed a *string* result, so the branch that serialises an object was
+never taken — while real tool results are mostly objects. `undefined` came back as `undefined`
+rather than a string, under a `@returns {string}` annotation, and the caller reads `.length`
+off it, so the whole prompt build throws and every other result in the batch dies with it.
+Worse, **a cycle or a BigInt threw, was caught, and returned `''`** — the model handed a tool
+that ran and produced nothing, which is a confident wrong answer where the other is merely a
+dead turn. A replacer keeps what can be serialised and marks what cannot.
+
+Neither was reachable from a path traced today — every `ask_question` resolver passes a
+`result` — so this is a contract made true rather than a reported bug. The doc already promised
+a caller could "pass it anything a tool handler might have produced".

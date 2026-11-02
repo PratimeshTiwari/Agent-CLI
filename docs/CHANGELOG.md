@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](../CLAUDE.m
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#150](https://github.com/PratimeshTiwari/Agent-CLI/pull/150)
+### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#151](https://github.com/PratimeshTiwari/Agent-CLI/pull/151)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v8.5.1 | 2026-11-02 | `v8.5.1/panels-in-context` | [#148](https://github.com/PratimeshTiwari/Agent-CLI/pull/148) | The panel screenshots show their host: the side panel beside the Gemini tab in Chrome, the floating window over the terminal, the VS Code chat beside the code |
 | v8.5.2 | 2026-11-02 | `v8.5.2/readme-images-full-width` | [#149](https://github.com/PratimeshTiwari/Agent-CLI/pull/149) | The README's images at full width, captions above them, six under a "More screens" fold: in two columns they were too small to read |
 | v8.6 | 2026-11-02 | `v8.6/panels-catch-up` | [#150](https://github.com/PratimeshTiwari/Agent-CLI/pull/150) | The panels catch up (extension 1.59.0, companion 1.8.10): attach files with a paperclip, stop with the button or esc, messages sent during a turn queue, a footer with effort, model and context, tables and lists in replies; esc in the terminal stops the Gemini tab too (`stop_generation` never reached it); the VS Code chat moves to the secondary side bar on 1.106+ (Antigravity IDE), with a status-bar entry and an icon |
+| v8.7 | 2026-11-02 | `v8.7/ci-and-lean-claude-md` | [#151](https://github.com/PratimeshTiwari/Agent-CLI/pull/151) | CI: the suite on every push and PR, macOS and Linux × Node 20 and 22; tests that fail when `service-worker.js` or the `.vsix` is stale or CLAUDE.md nears the 150k Claude Code loads; CLAUDE.md cut from 149,949 to about 140k characters, the history moved verbatim to `docs/history.md`; a plan for a live check against the Gemini page and for splitting `agent-loop.js` |
 
 ### v7 — 2026-10-30 … 2026-10-31 · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141)
 

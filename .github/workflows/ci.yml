@@ -1,0 +1,46 @@
+# The whole suite on every push and every PR into main (v8.7).
+#
+# Before this the tests ran only when someone remembered to. The suite
+# includes three freshness checks that matter most here: the committed
+# service-worker.js is the build of its sources, the committed .vsix holds the
+# current companion and side panel, and CLAUDE.md is under the size Claude Code
+# loads. Each of those has shipped stale or oversized at least once.
+#
+# macOS is the platform this is built for (textutil, osascript, FSEvents);
+# Linux runs too, so a test that silently depends on macOS is visible.
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The bin answers these before tsx loads; a broken install fails here
+      # with a readable report rather than inside a test.
+      - run: node server/src/index.js --help
+      - run: node server/src/index.js doctor --offline
+      - run: npm test
