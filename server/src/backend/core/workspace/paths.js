@@ -35,7 +35,7 @@
 
 import path from 'path';
 import os from 'os';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, realpathSync } from 'fs';
 import crypto from 'crypto';
 
 /** Name of the per-workspace agent directory. */
@@ -56,9 +56,29 @@ const MAX_WALK = 64;
  * every project on the machine. A naive upward walk from anything under $HOME
  * finds it and would quietly adopt it as the root, putting every project's
  * state in one place and every project's rules in everyone else's prompt.
+ *
+ * A temp directory's own `.agent` is the same trap (v8.7). On Linux
+ * `os.tmpdir()` is the shared `/tmp`, so one stray `/tmp/.agent` was adopted
+ * by every scratch workspace made under it: in CI, eighteen tests read each
+ * other's skills, logs and artifacts through it. A folder *inside* a temp dir
+ * may still be a project root; only the temp dir's own `.agent` is refused.
  */
 function forbiddenRoots() {
-  return new Set([homeDir(), path.join(os.homedir(), AGENT_DIR)]);
+  return new Set([homeDir(), path.join(os.homedir(), AGENT_DIR), ...tempAgentDirs()]);
+}
+
+/**
+ * The `.agent` directly inside each temp directory, as typed and as resolved.
+ * Every walk that looks for `.agent` upward skips these (`skillSearchPath`
+ * walks on its own, to the filesystem root).
+ */
+export function tempAgentDirs() {
+  const dirs = new Set();
+  for (const dir of [os.tmpdir(), '/tmp', '/var/tmp']) {
+    dirs.add(path.join(dir, AGENT_DIR));
+    try { dirs.add(path.join(realpathSync(dir), AGENT_DIR)); } catch { /* no such dir */ }
+  }
+  return dirs;
 }
 
 // resolveState hits the filesystem, and the path helpers call it constantly.

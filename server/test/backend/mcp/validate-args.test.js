@@ -108,7 +108,7 @@ test('schemaFor mirrors the declaration', async (t) => {
 });
 
 test('executeTool refuses a bad call before the handler sees it', async (t) => {
-  const server = new MCPServer('/tmp', null);
+  const server = new MCPServer(mkdtempSync(join(tmpdir(), 'validate-ws-')), null);
 
   await t.test('the schema error comes back instead of a handler crash', async () => {
     const r = await server.executeTool('read_file', {}, {});

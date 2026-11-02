@@ -913,7 +913,11 @@ are scoped. `/scope` still answers, but only to say where you are and how to cha
 **The landmine:** `homeDir()` is `~/.agent`. A naive upward walk from any project under `$HOME`
 finds it and would adopt the global home as a project root, pooling every project's state and
 leaking every project's rules into everyone else's prompt. `resolveState` excludes it and stops
-walking at `$HOME`; `paths.test.js` covers it.
+walking at `$HOME`; `paths.test.js` covers it. **A temp dir's own `.agent` is the same trap (v8.7,
+`tempAgentDirs`)**: on Linux `os.tmpdir()` is the shared `/tmp`, and tests passing a literal
+`'/tmp'` as the workspace left a `/tmp/.agent` that every scratch workspace adopted, 18 CI
+failures. `resolveState` and `skillSearchPath` skip it; `setup-home.js` gives each test process
+its own `TMPDIR`. A test workspace is a `mkdtemp`, never a literal path.
 
 | Path | Contents |
 | --- | --- |

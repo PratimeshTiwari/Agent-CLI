@@ -22,6 +22,12 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { runSubAgentSession } from '../../../src/backend/core/subagents/subagent-session.js';
 import { subagentEffort } from '../../../src/backend/core/turn/loop-tools.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 const PLAN = [
   { label: '3.5 Flash-Lite', description: 'Fastest answers' },
@@ -32,7 +38,7 @@ const PLAN = [
 const stub = (modelOptions, modelConfig = {}) => {
   const calls = [];
   const loop = {
-    workspace: '/tmp/ws',
+    workspace: SCRATCH_WS,
     modelOptions,
     modelConfig,
     promptBuilder: { buildSubagentWrapper: () => '<role>x</role>' },

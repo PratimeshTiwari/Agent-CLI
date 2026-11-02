@@ -19,11 +19,16 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync } from 'node:fs';
 import { TOOL_CATALOG, toolsFor, toolNames, renderToolDefinitions, toolCatalogDrift }
   from '../../../../src/backend/core/prompt/tool-catalog.js';
 import { MCPServer } from '../../../../src/backend/mcp/mcp-server.js';
 import { HEADLESS_SYSTEM_PROMPT } from '../../../../src/backend/core/turn/agent-loop.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 /**
  * The loop-dispatched tools, read out of the **source that dispatches them**.
@@ -50,7 +55,7 @@ const LOOP_DISPATCHED = [...new Set(
 
 /** The runnable registry, read the way the prompt builder would have to. */
 function registry() {
-  const server = new MCPServer('/tmp');
+  const server = new MCPServer(SCRATCH_WS);
   return server.getToolDefinitions
     ? server.getToolDefinitions()
     : server.tools ?? [];
