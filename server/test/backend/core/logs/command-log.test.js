@@ -89,7 +89,12 @@ test('it never gets in the way', async (t) => {
   // A failure to write the audit log must not fail the command, and must
   // certainly not fail the turn.
   await t.test('an unwritable location is swallowed', () => {
-    assert.doesNotThrow(() => logCommand('/proc/nonexistent/nope', { command: 'ls', outcome: 'ran' }));
+    // Under a regular file, so mkdir fails with ENOTDIR on every OS. It was
+    // /proc/…, where Linux's recursive mkdir spins forever (EEXIST on /proc,
+    // ENOENT under it): the whole file hung until the 2-minute cap (v8.7).
+    const blocked = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'blocked-')), 'a-file');
+    fs.writeFileSync(blocked, '');
+    assert.doesNotThrow(() => logCommand(path.join(blocked, 'nope'), { command: 'ls', outcome: 'ran' }));
   });
 
   await t.test('a half-written line from an append in flight is skipped', () => {

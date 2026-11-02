@@ -21,9 +21,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// Every test process gets a temp dir of its own, first (v8.7). On Linux the
+// system one is the shared /tmp: a test that left a `.agent` there was found
+// by every other test's upward walk, and eighteen failed in CI reading each
+// other's skills, logs and artifacts. os.tmpdir() reads TMPDIR on each call, so
+// everything below, and every test, makes its scratch folders in here, and
+// they go when the process ends instead of piling up (~400 a run).
+const tmp = mkdtempSync(join(tmpdir(), 'agent-test-tmp-'));
+process.env.TMPDIR = tmp;
+
 const home = mkdtempSync(join(tmpdir(), 'agent-test-home-'));
 process.env.AGENT_CLI_HOME = home;
 
 process.on('exit', () => {
-  try { rmSync(home, { recursive: true, force: true }); } catch { /* best effort */ }
+  try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
 });

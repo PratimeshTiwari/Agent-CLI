@@ -1,6 +1,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { ContextManager } from '../../../src/backend/context/context-manager.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 /**
  * `needsCompaction` had no tests, and that is exactly why auto-compaction never
@@ -12,7 +18,7 @@ import { ContextManager } from '../../../src/backend/context/context-manager.js'
  * So these cover the threshold, and then refuse the argument that broke it.
  */
 describe('ContextManager.needsCompaction', () => {
-  const cm = new ContextManager('/tmp', null);
+  const cm = new ContextManager(SCRATCH_WS, null);
   // The budget is an argument now, not a field: it has to track the active
   // rung, and the field that used to hold it never did.
   const at = (budget) => ({

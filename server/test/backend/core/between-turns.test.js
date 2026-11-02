@@ -16,8 +16,11 @@ import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js
 import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 import { logTrace, readTraces, STAGES } from '../../../src/backend/core/logs/trace-log.js';
 
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
+
 const server = () => new WebSocketServer({
-  port: 0, githubHandler: null, agentLoop: { workspace: '/tmp/nowhere', setBackgroundCallbacks() {} },
+  port: 0, githubHandler: null, agentLoop: { workspace: SCRATCH_WS, setBackgroundCallbacks() {} },
 });
 const attach = (srv) => {
   const received = [];

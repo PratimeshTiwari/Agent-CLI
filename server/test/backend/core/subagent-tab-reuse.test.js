@@ -18,6 +18,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { runSubAgentSession } from '../../../src/backend/core/subagents/subagent-session.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 /**
  * A loop whose `_executeSubagent` is scripted, recording every call.
@@ -27,7 +33,7 @@ const stub = (replies) => {
   const calls = [];
   const ended = [];
   const loop = {
-    workspace: '/tmp/ws',
+    workspace: SCRATCH_WS,
     promptBuilder: { buildSubagentWrapper: () => '<role>tester</role>' },
     callbacks: { sendToPanel() {} },
     mcpServer: { executeTool: async () => ({ success: true, result: 'FILE BODY' }) },

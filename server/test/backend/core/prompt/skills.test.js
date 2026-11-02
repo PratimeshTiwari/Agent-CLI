@@ -181,3 +181,34 @@ test('skillSearchPath — the monorepo case', async (t) => {
     assert.ok(skillSearchPath('/').length < 8);
   });
 });
+
+test('skillSearchPath — a temp dir\'s own .agent is not a parent folder (v8.7)', async (t) => {
+  // On Linux os.tmpdir() is the shared /tmp, and a skill left in
+  // /tmp/.agent/skills was listed for every workspace under it. TMPDIR points
+  // somewhere private here, so the stray can be planted safely.
+  const saved = process.env.TMPDIR;
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tmpdir-')));
+  process.env.TMPDIR = tmp;
+  t.after(() => {
+    if (saved === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+  assert.equal(os.tmpdir(), tmp, 'os.tmpdir() did not follow TMPDIR; the test proves nothing');
+  fs.mkdirSync(path.join(tmp, '.agent/skills'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, '.agent/skills/stray.md'), '---\nname: stray\ndescription: x\n---\nbody');
+
+  await t.test('a workspace in the temp dir does not see it', () => {
+    const ws = fs.mkdtempSync(path.join(tmp, 'skills-test-'));
+    assert.ok(!skillSearchPath(ws).includes(path.join(tmp, '.agent/skills')));
+    assert.ok(!listSkills(ws).some((s) => s.name === 'stray'));
+  });
+
+  await t.test('control: a folder inside the temp dir is still a parent', () => {
+    const group = fs.mkdtempSync(path.join(tmp, 'group-'));
+    fs.mkdirSync(path.join(group, '.agent/skills'), { recursive: true });
+    fs.writeFileSync(path.join(group, '.agent/skills/house.md'), '---\nname: house\ndescription: x\n---\nbody');
+    const repo = path.join(group, 'repo-1');
+    fs.mkdirSync(repo);
+    assert.ok(listSkills(repo).some((s) => s.name === 'house'));
+  });
+});

@@ -108,6 +108,11 @@ describe('archiveTurns', () => {
   });
 
   test('never throws — it must not be able to fail a compaction', () => {
-    assert.doesNotThrow(() => archiveTurns('/proc/nope/nowhere', [turn('user', 'x', 1)]));
+    // Under a regular file, so mkdir fails with ENOTDIR on every OS. It was
+    // /proc/…, where Linux's recursive mkdir spins forever (EEXIST on /proc,
+    // ENOENT under it): the whole file hung until the 2-minute cap (v8.7).
+    const blocked = join(mkdtempSync(join(tmpdir(), 'blocked-')), 'a-file');
+    writeFileSync(blocked, '');
+    assert.doesNotThrow(() => archiveTurns(join(blocked, 'nowhere'), [turn('user', 'x', 1)]));
   });
 });

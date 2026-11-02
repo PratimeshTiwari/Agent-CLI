@@ -100,6 +100,42 @@ test('the ~/.agent landmine', async (t) => {
   });
 });
 
+test('the temp-dir landmine (v8.7)', async (t) => {
+  // On Linux os.tmpdir() is the shared /tmp. One stray /tmp/.agent was adopted
+  // by every scratch workspace under it, and eighteen CI tests read each
+  // other's state. The temp dir is pointed somewhere private here, so the
+  // test can plant the stray without writing into the real one.
+  const saved = process.env.TMPDIR;
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tmpdir-')));
+  process.env.TMPDIR = tmp;
+  t.after(() => {
+    if (saved === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved;
+    fs.rmSync(tmp, { recursive: true, force: true });
+    clearPathCache();
+  });
+  assert.equal(os.tmpdir(), tmp, 'os.tmpdir() did not follow TMPDIR; the test proves nothing');
+  fs.mkdirSync(path.join(tmp, AGENT_DIR));
+
+  await t.test('a workspace in the temp dir never adopts the temp dir\'s .agent', () => {
+    clearPathCache();
+    const ws = fs.mkdtempSync(path.join(tmp, 'scratch-'));
+    const state = resolveState(ws);
+    assert.equal(state.discovered, false);
+    assert.equal(state.root, path.join(ws, AGENT_DIR));
+  });
+
+  await t.test('control: a folder inside the temp dir can still be a group root', () => {
+    clearPathCache();
+    const group = fs.mkdtempSync(path.join(tmp, 'group-'));
+    fs.mkdirSync(path.join(group, AGENT_DIR));
+    const repo = path.join(group, 'repo-1');
+    fs.mkdirSync(repo);
+    const state = resolveState(repo);
+    assert.equal(state.root, path.join(group, AGENT_DIR));
+    assert.equal(state.scope, 'repo-1');
+  });
+});
+
 test('setActiveScope', async (t) => {
   t.afterEach(() => { setActiveScope(null); clearPathCache(); });
 

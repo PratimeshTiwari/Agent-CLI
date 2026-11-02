@@ -12,12 +12,18 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 import { ExtensionLock, mainLane, subLane } from '../../../src/backend/bridge/extension-lock.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 /** An AgentLoop with only the parts these paths touch. */
 function loop() {
   const sent = [];
   const self = Object.create(AgentLoop.prototype);
-  self.workspace = '/tmp';
+  self.workspace = SCRATCH_WS;
   // `mainModel` is a getter over modelConfig — set the config, not the getter.
   self.modelConfig = { main: 'gemini' };
   self.pendingSubagents = new Map();

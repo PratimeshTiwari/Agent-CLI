@@ -13,11 +13,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A private workspace: a literal '/tmp' wrote the shared /tmp/.agent (v8.7).
+const SCRATCH_WS = mkdtempSync(join(tmpdir(), 'scratch-ws-'));
 
 /** A server with no socket of its own, so the delivery logic can be driven directly. */
 function server() {
   const agentLoop = {
-    workspace: '/tmp/nowhere',
+    workspace: SCRATCH_WS,
     setBackgroundCallbacks() {},
   };
   return new WebSocketServer({ port: 0, agentLoop, githubHandler: null });

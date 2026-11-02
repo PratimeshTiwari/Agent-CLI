@@ -14,6 +14,12 @@ import { join } from 'node:path';
 import { AgentLoop, SILENT_REPLY_MS } from '../../../src/backend/core/turn/agent-loop.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Polls until `cond` holds; a fixed sleep let both 30 ms clocks pass on a slow runner (v8.7). */
+const until = async (cond, ms = 2000) => {
+  const end = Date.now() + ms;
+  while (!cond() && Date.now() < end) await wait(2);
+  return cond();
+};
 
 function loop() {
   const l = new AgentLoop({
@@ -38,16 +44,15 @@ test('silence: the same prompt again, flagged for a fresh tab, once; then the tu
   const { l, sent, panel } = loop();
   await l.handleUserMessage('write a plan file', l.callbacks);
   assert.equal(sent.length, 1);
-  await wait(60);
-  assert.equal(sent.length, 2, 'resent');
+  assert.ok(await until(() => sent.length === 2), 'resent');
+  assert.equal(l.isProcessing, true, 'the resend keeps the turn open');
   assert.equal(sent[1].prompt, sent[0].prompt, 'verbatim');
   assert.equal(sent[1].freshTab, true);
   assert.ok(panel.some((m) => m.type === 'status' && /No response from Gemini in 2 min · retrying/.test(m.payload.message)));
-  assert.equal(l.isProcessing, true);
 
+  assert.ok(await until(() => !l.isProcessing), 'the second silence ends the turn');
   await wait(60);
   assert.equal(sent.length, 2, 'not a third time');
-  assert.equal(l.isProcessing, false);
   const err = panel.find((m) => m.type === 'error');
   assert.match(err.payload.message, /^Communication with the Gemini tab failed · check the browser\nhttps:\/\/gemini\.google\.com\/app/);
 });

@@ -111,9 +111,14 @@ export function skillSearchPath(workspace, extraFolders = []) {
   // From the code, not the workspace: with the group open and repo-1 active,
   // repo-1's own skills live under repo-1, and starting at the workspace
   // never saw them.
+  // A temp dir's own `.agent` is skipped, as in paths.resolveState: on Linux
+  // that is /tmp/.agent, and anything left there was offered to every
+  // workspace under /tmp (v8.7).
+  const skip = paths.tempAgentDirs();
   let dir = paths.codeDir(workspace);
   for (let i = 0; i < 64; i++) {
-    dirs.push(path.join(dir, paths.AGENT_DIR, 'skills'));
+    const agent = path.join(dir, paths.AGENT_DIR);
+    if (!skip.has(agent)) dirs.push(path.join(agent, 'skills'));
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

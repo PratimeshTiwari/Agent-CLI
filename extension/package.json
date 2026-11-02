@@ -4,7 +4,7 @@
   "description": "Browser bridge for the Agent CLI",
   "scripts": {
     "build": "esbuild src/background/main.js --bundle --outfile=service-worker.js",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test --test-timeout=120000 \"test/**/*.test.js\""
   },
   "devDependencies": {
     "esbuild": "^0.23.0",

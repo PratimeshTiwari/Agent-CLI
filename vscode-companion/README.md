@@ -50,7 +50,7 @@ From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigr
 editor's command palette):
 
 ```bash
-<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.10.vsix
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.11.vsix
 ```
 
 `<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
@@ -58,27 +58,27 @@ knows. This works for any install:
 
 ```bash
 AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
-code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.10.vsix
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.11.vsix
 ```
 
 Three common setups:
 
 ```bash
 # setup.sh's default location, VS Code
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.10.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.11.vsix
 
 # a checkout from before the rename (setup.sh keeps it), Cursor
-cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.11.vsix
 
 # a custom AGENT_INSTALL_DIR, Antigravity
-antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.11.vsix
 ```
 
 Antigravity IDE's command is `antigravity-ide`, and it is usually not on `PATH`; the full path works:
 
 ```bash
 "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide" \
-  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
+  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.11.vsix
 ```
 
 Then reload the window (**Developer: Reload Window**). Installing over an older version

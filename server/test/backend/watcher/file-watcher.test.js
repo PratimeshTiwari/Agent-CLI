@@ -66,11 +66,31 @@ const PROBE = `
   });
 `;
 
-test('control: past OPEN_MAX descriptors, macOS refuses to spawn', { skip: !darwin }, () => {
+test('control: past OPEN_MAX descriptors, macOS refuses to spawn', { skip: !darwin }, (t) => {
   const out = inChild(`${PROBE}
-    import { openSync } from 'node:fs';
-    for (let i = 0; i < 10_300; i++) openSync('/dev/null', 'r');
+    import { openSync, closeSync } from 'node:fs';
+    // stdout and stderr each take a descriptor on first use; console may
+    // touch either, so both are opened before the descriptors run out.
+    process.stdout.write(''); process.stderr.write('');
+    const held = [];
+    const noRoom = (code) => {
+      held.splice(0, 200).forEach((fd) => closeSync(fd)); // room to say so
+      console.log(JSON.stringify({ room: code }));
+      process.exit(0);
+    };
+    try { for (let i = 0; i < 10_300; i++) held.push(openSync('/dev/null', 'r')); }
+    catch (e) { noRoom(e.code); }
+    // Spare descriptors for exec's pipes and libuv's kqueue, held back so a
+    // limit just above 10,300 reads as no room rather than as a crash.
+    const spare = [];
+    try { for (let i = 0; i < 64; i++) spare.push(openSync('/dev/null', 'r')); }
+    catch (e) { spare.forEach((fd) => closeSync(fd)); noRoom(e.code + ' (no headroom)'); }
+    spare.forEach((fd) => closeSync(fd));
     console.log(JSON.stringify({ exec: await tryExec() }));`);
+  // The control needs a soft limit above OPEN_MAX with room to spare (a Mac's
+  // is unlimited by default; CI's runner was 256 until the workflow raised it,
+  // and then just enough that the child died with EMFILE writing its answer).
+  if (out.room) return t.skip(`ulimit -n leaves no room past 10,300 here (${out.room})`);
   assert.equal(out.exec, 'ERR EBADF');
 });
 
