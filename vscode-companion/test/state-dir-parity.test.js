@@ -42,4 +42,25 @@ test('agentStateDir matches paths.stateDir', async (t) => {
     fs.mkdirSync(ws, { recursive: true });
     assert.equal(agentStateDir(ws, { home: fakeHome }), path.join(ws, '.agent', 'state'));
   });
+
+  // v8.7: the CLI stopped adopting a temp dir's own .agent, and this port has
+  // to follow. CI had no stray to find, so the walk changed and this stayed
+  // green; the stray is planted here, under a private TMPDIR.
+  await t.test("a temp dir's own .agent is never adopted, on either side", () => {
+    const saved = process.env.TMPDIR;
+    const tmp = path.join(base, 'tmp');
+    fs.mkdirSync(path.join(tmp, '.agent'), { recursive: true });
+    process.env.TMPDIR = tmp;
+    try {
+      assert.equal(os.tmpdir(), tmp, 'os.tmpdir() did not follow TMPDIR; the case proves nothing');
+      const ws = path.join(tmp, 'scratch');
+      fs.mkdirSync(ws);
+      paths.clearPathCache();
+      assert.equal(agentStateDir(ws), paths.stateDir(ws));
+      assert.equal(agentStateDir(ws), path.join(ws, '.agent', 'state'));
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved;
+      paths.clearPathCache();
+    }
+  });
 });

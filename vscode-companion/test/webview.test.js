@@ -127,8 +127,11 @@ test('the panel, through the shim, against the real bridge', async (t) => {
 
   await t.test('it connects, identifies as an editor, and shows the history', async () => {
     assert.ok(await until(() => doc.getElementById('connection-text').textContent === 'Connected'), 'never connected');
-    const editor = [...server.clients.values()].find((c) => c.type === 'editor');
-    assert.ok(editor, 'the server should see an editor client');
+    // "Connected" is drawn when the socket opens; the server learns it is an
+    // editor only when the identify frame lands, which on a slow CI runner
+    // is after that check had already run.
+    const isEditor = () => [...server.clients.values()].some((c) => c.type === 'editor');
+    assert.ok(await until(isEditor), 'the server should see an editor client');
     assert.ok(await until(() => doc.body.textContent.includes('an earlier answer')), 'history was not drawn');
   });
 

@@ -917,7 +917,9 @@ walking at `$HOME`; `paths.test.js` covers it. **A temp dir's own `.agent` is th
 `tempAgentDirs`)**: on Linux `os.tmpdir()` is the shared `/tmp`, and tests passing a literal
 `'/tmp'` as the workspace left a `/tmp/.agent` that every scratch workspace adopted, 18 CI
 failures. `resolveState` and `skillSearchPath` skip it; `setup-home.js` gives each test process
-its own `TMPDIR`. A test workspace is a `mkdtemp`, never a literal path.
+its own `TMPDIR`. A test workspace is a `mkdtemp`, never a literal path. An unwritable one is a
+path under a regular file (ENOTDIR everywhere), never `/proc/…`: Linux's recursive `mkdirSync`
+spins forever there, which hung three test files until the 2-minute cap.
 
 | Path | Contents |
 | --- | --- |

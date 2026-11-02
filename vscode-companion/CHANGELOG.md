@@ -1,5 +1,11 @@
 # Agent CLI Companion: version history
 
+## 1.8.11 — 2026-11-03
+
+**A temp dir's own `.agent` is not a project's state.** The CLI stopped adopting one in v8.7 (on
+Linux `/tmp` is shared, and a stray `/tmp/.agent` was picked up by every folder under it); the
+companion finds the state directory the same way, so it follows.
+
 ## 1.8.10 — 2026-11-02
 
 **The chat lives in the secondary side bar**, the right-hand one, the way Claude Code's extension

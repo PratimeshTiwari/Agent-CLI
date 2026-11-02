@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, rmSync, existsSync, appendFileSync, readFileSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logTrace, readTraces, summariseTraces, percentile, formatMs, STAGES } from '../../../../src/backend/core/logs/trace-log.js';
@@ -80,7 +80,12 @@ describe('logTrace / summariseTraces', () => {
   });
 
   test('an unwritable workspace does not throw', () => {
-    assert.doesNotThrow(() => logTrace('/proc/nope/nowhere', { stages: { find_input: 1 } }));
+    // Under a regular file, so mkdir fails with ENOTDIR on every OS. It was
+    // /proc/…, where Linux's recursive mkdir spins forever (EEXIST on /proc,
+    // ENOENT under it): the whole file hung until the 2-minute cap (v8.7).
+    const blocked = join(mkdtempSync(join(tmpdir(), 'blocked-')), 'a-file');
+    writeFileSync(blocked, '');
+    assert.doesNotThrow(() => logTrace(join(blocked, 'nowhere'), { stages: { find_input: 1 } }));
   });
 
   test('a half-written line does not lose the rest of the file', () => {

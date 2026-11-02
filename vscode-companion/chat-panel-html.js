@@ -73,6 +73,12 @@ const THEME_BRIDGE = `
 function agentStateDir(workspace, { home = os.homedir(), agentHome = process.env.AGENT_CLI_HOME } = {}) {
     const ws = path.resolve(workspace);
     const forbidden = new Set([path.join(home, AGENT_DIR), agentHome ? path.resolve(agentHome) : null]);
+    // A temp dir's own .agent, as paths.js's tempAgentDirs (1.8.11): on Linux
+    // /tmp is shared, and a stray /tmp/.agent was adopted by everything under it.
+    for (const tmp of [os.tmpdir(), '/tmp', '/var/tmp']) {
+        forbidden.add(path.join(tmp, AGENT_DIR));
+        try { forbidden.add(path.join(fs.realpathSync(tmp), AGENT_DIR)); } catch { /* no such dir */ }
+    }
     let dir = ws;
     for (let i = 0; i < 64; i++) {
         const candidate = path.join(dir, AGENT_DIR);
