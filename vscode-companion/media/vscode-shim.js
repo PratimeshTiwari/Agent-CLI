@@ -120,6 +120,10 @@
     };
     window.chrome = Object.assign(window.chrome || {}, { runtime });
 
+    // The panel's paperclip asks the editor (1.8.10): its picker offers the
+    // workspace's files and the selection, which a webview cannot list.
+    window.__agentPickFiles = () => vscode.postMessage({ type: 'pick_file' });
+
     /** Replace the `@` that opened the picker with the marker, and remember what it means. */
     function insertAttachment({ marker, body }) {
         const input = document.getElementById('command-input');
@@ -146,9 +150,12 @@
                 const reason = m.payload && m.payload.missing;
                 if (reason && reason !== toldMissing) {
                     toldMissing = reason;
-                    deliver({ type: 'status', payload: { message: reason === 'stale'
-                        ? 'The agent for this folder has stopped. Run `agent` in a terminal, or **Agent CLI: Start Agent**.'
-                        : 'No agent is running for this folder. Run `agent` in a terminal, or **Agent CLI: Start Agent**.' } });
+                    // Plain words: a one-line status is not rendered, so
+                    // `**…**` showed its asterisks (1.8.10). `kind` lets the
+                    // panel remove the line once the agent connects.
+                    deliver({ type: 'status', payload: { kind: 'no_agent', message: reason === 'stale'
+                        ? 'The agent for this folder has stopped. Run agent in a terminal, or Agent CLI: Start Agent from the command palette.'
+                        : 'No agent is running for this folder. Run agent in a terminal, or Agent CLI: Start Agent from the command palette.' } });
                 }
                 askForBridgeSoon();
             }

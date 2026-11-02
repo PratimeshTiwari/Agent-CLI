@@ -93,6 +93,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'set_workspace':
       case 'question_response':
       case 'command_approval_response':
+      case 'stop_turn': // the panel's stop button (1.59.0)
       case 'turn_trace':
       /*
        * The three below are what a **content script** reports, and their

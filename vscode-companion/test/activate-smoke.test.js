@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const Module = require('module');
 
-function stubVscode(root) {
+function stubVscode(root, version = '1.107.0') {
   const registered = { commands: new Map(), views: new Map(), providers: new Map() };
   const disposable = { dispose() {} };
   class EventEmitter { constructor() { this.event = () => disposable; } fire() {} }
@@ -24,8 +24,10 @@ function stubVscode(root) {
   };
   const shown = [];
   const executed = [];
+  const statusItems = [];
   const vscode = {
-    Uri, EventEmitter,
+    version, Uri, EventEmitter,
+    StatusBarAlignment: { Left: 1, Right: 2 },
     Range: class {}, CodeLens: class {}, CodeAction: class {},
     CodeActionKind: { Empty: 'empty' },
     workspace: {
@@ -43,6 +45,11 @@ function stubVscode(root) {
       showWarningMessage: (...a) => { shown.push(a[0]); return Promise.resolve(undefined); },
       showErrorMessage: (...a) => { shown.push(a[0]); return Promise.resolve(undefined); },
       setStatusBarMessage: () => disposable,
+      createStatusBarItem: () => {
+        const item = { shown: false, show() { item.shown = true; }, dispose() {} };
+        statusItems.push(item);
+        return item;
+      },
       showQuickPick: async (items) => items[items.length - 1],
       createTerminal: (o) => ({ show() {}, sendText: (t) => executed.push(['terminal', o.cwd, t]) }),
       showTextDocument: async () => {},
@@ -58,8 +65,79 @@ function stubVscode(root) {
       executeCommand: async (...a) => { executed.push(a); },
     },
   };
-  return { vscode, registered, shown, executed };
+  return { vscode, registered, shown, executed, statusItems };
 }
+
+/** Drops every companion module from the cache, so the next require binds to the new stub. */
+function forgetCompanion() {
+  const dir = path.join(__dirname, '..') + path.sep;
+  for (const k of Object.keys(require.cache)) {
+    if (k.startsWith(dir) && !k.includes(`${path.sep}test${path.sep}`) && !k.includes('node_modules')) delete require.cache[k];
+  }
+}
+
+/** Activates the companion against a stub; returns the stub's records. */
+function activateWith(t, root, version, globalState) {
+  const stub = stubVscode(root, version);
+  const realLoad = Module._load;
+  Module._load = function (req, ...rest) { return req === 'vscode' ? stub.vscode : realLoad.call(this, req, ...rest); };
+  t.after(() => { Module._load = realLoad; });
+  forgetCompanion();
+  require('../extension.js').activate({
+    subscriptions: [],
+    extensionUri: stub.vscode.Uri.file(path.join(__dirname, '..')),
+    extension: { packageJSON: require('../package.json') },
+    globalState,
+  });
+  return stub;
+}
+
+const memento = (seed = {}) => {
+  const data = { ...seed };
+  return { data, get: (k) => data[k], update: (k, v) => { data[k] = v; return Promise.resolve(); } };
+};
+
+test('the chat lives in the secondary side bar where the editor has one', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-bar-'));
+  const pkg = require('../package.json').contributes;
+  activateWith(t, root, '1.107.0', memento()); // chat-panel.js needs the stub to load
+  const { supportsSecondarySidebar } = require('../chat-panel.js');
+
+  await t.test('1.106 and later have it; Cursor 2.x is built on older', () => {
+    assert.equal(supportsSecondarySidebar('1.107.0'), true);
+    assert.equal(supportsSecondarySidebar('1.106.0'), true);
+    assert.equal(supportsSecondarySidebar('1.105.1'), false);
+    assert.equal(supportsSecondarySidebar('1.93.0'), false);
+    assert.equal(supportsSecondarySidebar(undefined), false);
+  });
+
+  await t.test('package.json gates each home on the context key, so exactly one shows', () => {
+    assert.equal(pkg.viewsContainers.secondarySidebar[0].when, '!agentCli:noSecondarySidebar');
+    assert.equal(pkg.viewsContainers.activitybar[0].when, 'agentCli:noSecondarySidebar');
+    assert.equal(pkg.views.agentCliSecondary[0].id, 'agentCli.chatSecondary');
+    assert.equal(pkg.views.agentCli[0].id, 'agentCli.chat');
+  });
+
+  for (const [version, key, view] of [['1.107.0', false, 'agentCli.chatSecondary'], ['1.99.3', true, 'agentCli.chat']]) {
+    await t.test(`VS Code ${version}: context key ${key}, focus goes to ${view}`, async () => {
+      const state = memento();
+      const { registered, executed, statusItems } = activateWith(t, root, version, state);
+      assert.ok(registered.views.has('agentCli.chat') && registered.views.has('agentCli.chatSecondary'));
+      assert.ok(executed.some((a) => a[0] === 'setContext' && a[1] === 'agentCli:noSecondarySidebar' && a[2] === key));
+      assert.ok(executed.some((a) => a[0] === `${view}.focus`), 'first activation shows the chat');
+      assert.equal(state.data['agentCli.chatOpenedOnce'], true);
+      assert.ok(statusItems[0]?.shown && statusItems[0].command === 'agentCli.focusChat', 'the status bar opens it');
+      executed.length = 0;
+      await registered.commands.get('agentCli.focusChat')();
+      assert.ok(executed.some((a) => a[0] === `${view}.focus`));
+    });
+  }
+
+  await t.test('control: it is shown once, not on every start', () => {
+    const { executed } = activateWith(t, root, '1.107.0', memento({ 'agentCli.chatOpenedOnce': true }));
+    assert.ok(!executed.some((a) => /\.focus$/.test(String(a[0]))));
+  });
+});
 
 test('the companion activates and the chat view answers its page', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-smoke-'));
@@ -69,7 +147,7 @@ test('the companion activates and the chat view answers its page', async (t) => 
   const realLoad = Module._load;
   Module._load = function (req, ...rest) { return req === 'vscode' ? vscode : realLoad.call(this, req, ...rest); };
   t.after(() => { Module._load = realLoad; });
-  delete require.cache[require.resolve('../extension.js')];
+  forgetCompanion();
   const ext = require('../extension.js');
 
   const context = {

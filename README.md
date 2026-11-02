@@ -72,7 +72,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.9.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.10.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in
@@ -208,7 +208,7 @@ date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 | Series | Dates | PRs | Highlights |
 | --- | --- | --- | --- |
-| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend |
+| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | New docs and screenshots; faster typing between turns; formulas in replies; test and build commands detected; outlines on partial reads; a live token count |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply in place; Claude Code-style questions and action rows; a quieter status bar; large files and log exports; symbols in 16 languages; drag and drop |
 | **v5** | 2026-10-19 … 2026-10-28 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101) | The VS Code chat panel; three modes; themes; first-start setup; the effort slider; documents; `/doctor`; prompt versions |
