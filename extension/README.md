@@ -5,7 +5,7 @@ WebSocket; the extension **types it into a Gemini tab** you are signed into, rea
 streams, and sends the text back. It also gives you the same conversation in a side panel and a
 floating window.
 
-![The Chrome side panel](../docs/images/side-panel.png)
+![The Chrome side panel beside the Gemini tab](../docs/images/side-panel.png)
 
 | | |
 | --- | --- |
