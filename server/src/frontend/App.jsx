@@ -1058,22 +1058,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
 
     const cleanQuery = query.trim().toLowerCase();
     if (cleanQuery === ':stop' || cleanQuery === '/stop') {
-      wsServer.broadcast('extension', { type: 'stop_generation', timestamp: Date.now(), id: Date.now().toString() });
-      agentLoop.isProcessing = false;
-      // Before the abort, because the browser may already be generating and the
-      // reply that lands in a moment is discarded on purpose. Without this the
-      // log cannot tell "you stopped it" from "something gave up on it", and
-      // those are opposite readings of the same row.
-      agentLoop.noteUserStop();
-      agentLoop.abortExtensionWork();
-      if (agentLoop.pendingCommandResolve) {
-        agentLoop.pendingCommandResolve({ approved: false });
-        agentLoop.pendingCommandResolve = null;
-      }
-      if (agentLoop.pendingQuestionResolve) {
-        agentLoop.pendingQuestionResolve({ success: false, result: 'Cancelled by user' });
-        agentLoop.pendingQuestionResolve = null;
-      }
+      // The loop's half (v8.6, shared with the panels' stop button): the
+      // browser told to stop, the stop noted before the abort so the late
+      // reply reads as stopped, and any approval or question answered no.
+      agentLoop.stopTurn();
       setActiveToolCalls([]);
       setDiffRequest(null);
       setActiveMenu(null);

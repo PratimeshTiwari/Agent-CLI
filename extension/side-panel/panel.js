@@ -16,6 +16,9 @@ const connectionText = document.getElementById('connection-text');
 const modeToggle = document.getElementById('mode-toggle');
 const modeIcon = document.getElementById('mode-icon');
 const modeText = document.getElementById('mode-text');
+const attachBtn = document.getElementById('attach-btn');
+const attachInput = document.getElementById('attach-input');
+const panelStateEl = document.getElementById('panel-state');
 
 // ── State ────────────────────────────────────────────────────────────
 let currentMode = 'plan';
@@ -24,6 +27,10 @@ let isWaitingForResponse = false;
 let currentWorkspace = '';
 let historyRestored = false;
 let historyRequested = false;
+// Messages typed while a turn runs (1.59.0), sent one at a time as each turn
+// ends — the terminal's queue. Each is `{ content, div }`: what goes to the
+// agent, and the bubble already drawn for it.
+let queuedSends = [];
 
 // ── Initialization ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -55,14 +62,35 @@ function showVersion() {
 
 function setupEventListeners() {
   // Send message
-  sendBtn.addEventListener('click', sendMessage);
+  // While a turn runs and the box is empty, the button is a stop (1.59.0).
+  sendBtn.addEventListener('click', () => {
+    if (isWaitingForResponse && !commandInput.value.trim()) stopTurn();
+    else sendMessage();
+  });
   commandInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
       return;
     }
+    if (e.key === 'Escape' && isWaitingForResponse) {
+      e.preventDefault();
+      stopTurn();
+      return;
+    }
     backspaceTag(e);
+  });
+  // The paperclip (1.59.0). In VS Code the editor's own picker answers it
+  // (workspace files and the selection, by path); in Chrome a file dialog,
+  // whose files are handled as dropped ones are.
+  attachBtn?.addEventListener('click', () => {
+    if (typeof window.__agentPickFiles === 'function') window.__agentPickFiles();
+    else attachInput?.click();
+  });
+  attachInput?.addEventListener('change', () => {
+    attachFiles([...(attachInput.files || [])]);
+    attachInput.value = '';
+    commandInput.focus();
   });
   // An image on the clipboard goes in as an `[Image #n]` tag.
   commandInput.addEventListener('paste', onPasteImage);
@@ -205,8 +233,13 @@ function renderSessions(payload) {
  * message was ready to go was the text you had just typed.
  */
 function reflectSendState() {
-  const ready = commandInput.value.trim().length > 0 && !isWaitingForResponse;
-  sendBtn.classList.toggle('ready', ready);
+  const typed = commandInput.value.trim().length > 0;
+  // Typed during a turn, it queues; so the button stays a send.
+  const stop = isWaitingForResponse && !typed;
+  sendBtn.classList.toggle('ready', typed);
+  sendBtn.classList.toggle('stop', stop);
+  sendBtn.disabled = false;
+  sendBtn.title = stop ? 'Stop (Esc)' : isWaitingForResponse ? 'Queue (Enter): sent when this turn ends' : 'Send (Enter)';
 }
 
 function setupSurfaces() {
@@ -429,8 +462,31 @@ function updateConnectionUI(connected) {
   connectionDot.className = `dot ${connected ? 'connected' : 'disconnected'}`;
   connectionText.textContent = connected ? 'Connected' : 'Disconnected';
 
-  if (connected && welcomeMessage) {
-    // Don't auto-remove welcome, let first message do it
+  // "No agent is running for this folder" stops being true the moment the
+  // agent connects (1.59.0); it stayed on screen above a working chat.
+  if (connected) messageStream.querySelectorAll('.message-status[data-kind="no_agent"]').forEach((el) => el.remove());
+}
+
+/**
+ * The footer under the input (1.59.0): effort, the tab's model and how full
+ * the chat is, as the terminal's status bar says them. Empty until the agent
+ * has said.
+ */
+function panelStateLine(state) {
+  if (!state) return '';
+  return [
+    state.effort,
+    state.model,
+    Number.isFinite(state.contextPct) ? `${state.contextPct}% context` : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function showPanelState(state) {
+  if (!panelStateEl || !state) return;
+  panelStateEl.textContent = panelStateLine(state);
+  if (state.mode && state.mode !== currentMode) {
+    currentMode = state.mode;
+    updateModeUI();
   }
 }
 
@@ -617,6 +673,11 @@ function onDropFiles(e) {
     for (const p of paths) addFileTag({ name: baseName(p), path: p });
     return;
   }
+  attachFiles(files);
+}
+
+/** Files from a drop or the paperclip: an image as a pasted one, text up to 8 KB inline. */
+function attachFiles(files) {
   for (const file of files) {
     if (file.type?.startsWith('image/')) { addImage(file); continue; }
     if (file.size > DROP_INLINE_MAX) {
@@ -678,7 +739,8 @@ function fileBlock(content) {
 
 function sendMessage() {
   const content = commandInput.value.trim();
-  if (!content || isWaitingForResponse) return;
+  // Not refused while a turn runs: it queues, below.
+  if (!content) return;
 
   if (orphaned) {
     if (welcomeMessage) welcomeMessage.remove();
@@ -714,28 +776,61 @@ function sendMessage() {
 
   // Display user message
   appendMessage('user', content);
-  ownSends.push(content);
+  const bubble = messageStream.lastElementChild;
 
-  // Send to service worker → server, with the images whose tags it carries.
+  // With the images and files whose tags it carries, in the terminal's order:
+  // images, then file headers, then the message.
   const { used, block } = imageBlock(content);
   pastedImages = pastedImages.filter((img) => !used.includes(img));
   const dropped = fileBlock(content);
   droppedFiles = droppedFiles.filter((f) => !dropped.used.includes(f));
-  chrome.runtime.sendMessage({
-    type: 'user_message',
-    // The terminal's order: images, then file headers, then the message.
-    payload: { content: block + dropped.block + content },
-  });
+  const outgoing = block + dropped.block + content;
 
-  // Clear input
   commandInput.value = '';
   commandInput.style.height = 'auto';
-  reflectSendState();
 
-  // Show thinking indicator
+  // A turn is running: queue it, as the terminal does (1.59.0). It was refused
+  // here and dropped by the agent, which answers one turn at a time.
+  if (isWaitingForResponse) {
+    bubble?.classList.add('queued');
+    queuedSends.push({ shown: content, content: outgoing, div: bubble });
+    if (bubble) scrollToBottom();
+    reflectSendState();
+    return;
+  }
+  dispatchMessage(content, outgoing);
+}
+
+/** Hand one message to the agent and wait for its turn. */
+function dispatchMessage(shown, outgoing) {
+  ownSends.push(shown);
+  chrome.runtime.sendMessage({ type: 'user_message', payload: { content: outgoing } });
   showThinking();
   isWaitingForResponse = true;
-  sendBtn.disabled = true;
+  reflectSendState();
+}
+
+/** The turn ended: send the next queued message, if any. */
+function drainQueue() {
+  const next = queuedSends.shift();
+  if (!next) return;
+  next.div?.classList.remove('queued');
+  dispatchMessage(next.shown, next.content);
+}
+
+/**
+ * Stop the running turn (1.59.0): the panel's esc. The agent stops Gemini,
+ * answers any pending approval no, and goes idle; a queue does not outlive a
+ * stop, or the next message would start the moment you halted it.
+ */
+function stopTurn() {
+  chrome.runtime.sendMessage({ type: 'stop_turn' });
+  for (const q of queuedSends) q.div?.remove();
+  queuedSends = [];
+  removeThinking();
+  clearStreamPartial();
+  isWaitingForResponse = false;
+  appendStatus('Interrupted');
   reflectSendState();
 }
 
@@ -768,17 +863,18 @@ function handleSlashCommand(input) {
 
 // ── Message Rendering ───────────────────────────────────────────────
 /**
- * Markdown, to the small extent the panel needs it.
+ * Markdown, to the extent a reply uses it.
  *
  * The reply is model output, so **escaping comes first** and the formatting is
  * applied to the already-escaped string — a `<` in the text can never become a
  * tag, whatever the model wrote.
  *
  * Deliberately not a markdown library: the panel is a plain page with no build
- * step, and the whole of what a reply actually uses is fenced blocks, inline
- * code and bold. Lists and tables are left as their source, which reads fine
- * in a monospace column; the alternative was shipping a parser to the browser
- * for two constructs.
+ * step. Fenced blocks, inline code, bold and links were the first cut; tables,
+ * lists and headings came in 1.59.0, because the terminal draws them and the
+ * panel showed their source — a table as rows of pipes.
+ *
+ * Self-contained on purpose: tests lift this one function by name.
  */
 function renderMarkdownish(text) {
   const escaped = escapeHtml(String(text ?? ''));
@@ -792,11 +888,65 @@ function renderMarkdownish(text) {
     return `\u0000${blocks.length - 1}\u0000`;
   });
 
-  const inline = withoutFences
+  const inline = (t) => t
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`\n]+)`/g, '<code class="md-inline">$1</code>');
+    .replace(/`([^`\n]+)`/g, '<code class="md-inline">$1</code>')
+    // Only http(s): the text is already escaped, so `&quot;` cannot close the attribute.
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-  return inline.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)] ?? '');
+  const isRow = (l) => /^\s*\|.*\|\s*$/.test(l || '');
+  const isRule = (l) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(l || '');
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => inline(c.trim()));
+  const listItem = (l) => /^\s*([-*+]|\d+[.)])\s+(.*)$/.exec(l || '');
+
+  // Each line becomes text (joined by newlines, as the reply is pre-wrap) or a
+  // block (which brings its own spacing, so no newline around it).
+  const out = [];
+  const lines = withoutFences.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isRow(line) && isRule(lines[i + 1])) {
+      const head = cells(line);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && isRow(lines[i])) rows.push(cells(lines[i++]));
+      i -= 1;
+      out.push({ block: true, html: '<table class="md-table"><thead><tr>'
+        + head.map((c) => `<th>${c}</th>`).join('') + '</tr></thead><tbody>'
+        + rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
+        + '</tbody></table>' });
+      continue;
+    }
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (heading) {
+      out.push({ block: true, html: `<div class="md-h md-h${heading[1].length}">${inline(heading[2])}</div>` });
+      continue;
+    }
+    if (listItem(line)) {
+      const ordered = /^\s*\d/.test(line);
+      const items = [];
+      while (i < lines.length && listItem(lines[i]) && /^\s*\d/.test(lines[i]) === ordered) {
+        items.push(`<li>${inline(listItem(lines[i])[2])}</li>`);
+        i += 1;
+      }
+      i -= 1;
+      const tag = ordered ? 'ol' : 'ul';
+      out.push({ block: true, html: `<${tag} class="md-list">${items.join('')}</${tag}>` });
+      continue;
+    }
+    if (/^\u0000\d+\u0000$/.test(line.trim())) {
+      out.push({ block: true, html: line.trim() });
+      continue;
+    }
+    out.push({ block: false, html: inline(line) });
+  }
+
+  let html = '';
+  for (let i = 0; i < out.length; i++) {
+    html += out[i].html;
+    if (i < out.length - 1 && !out[i].block && !out[i + 1].block) html += '\n';
+  }
+  return html.replace(/\u0000(\d+)\u0000/g, (_m, n) => blocks[Number(n)] ?? '');
 }
 
 function appendMessage(role, content) {
@@ -935,7 +1085,7 @@ function appendDiff(diffData) {
  */
 let lastStatusText = '';
 
-function appendStatus(text) {
+function appendStatus(text, kind) {
   const body = String(text ?? '');
 
   // Identical consecutive statuses collapse. Nothing should be able to fill
@@ -946,6 +1096,8 @@ function appendStatus(text) {
 
   const div = document.createElement('div');
   div.className = `message message-status${isBlock ? ' status-block' : ''}`;
+  // A status that a later event retires (`no_agent`, gone once connected).
+  if (kind) div.dataset.kind = kind;
   div.innerHTML = isBlock
     ? `<div class="status-body">${renderMarkdownish(body)}</div>`
     : `<span class="status-text">${escapeHtml(body)}</span>`;
@@ -1324,10 +1476,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           currentMode = payload.mode;
           updateModeUI();
         }
+        showPanelState(payload.state);
       } else if (payload.status === 'waiting_for_gemini') {
         // Already showing thinking indicator
       } else if (payload.message) {
-        appendStatus(payload.message);
+        appendStatus(payload.message, payload.kind);
       }
       break;
 
@@ -1344,8 +1497,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
       isWaitingForResponse = false;
-      sendBtn.disabled = false;
       reflectSendState();
+      drainQueue();
       break;
     }
 
@@ -1376,8 +1529,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'turn_idle':
       removeThinking();
       isWaitingForResponse = false;
-      sendBtn.disabled = false;
       reflectSendState();
+      showPanelState(payload?.state);
+      drainQueue();
       break;
 
     case 'history': {

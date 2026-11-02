@@ -20,7 +20,23 @@ const path = require('path');
 const crypto = require('crypto');
 const { buildWebviewHtml, readBridge, selectionMarker, selectionBody, agentStateDir } = require('./chat-panel-html.js');
 
+/*
+ * Two homes for one view (1.8.10), the way Claude Code's extension does it:
+ * the secondary side bar (right) where the editor supports it — VS Code 1.106
+ * and later, which includes Antigravity IDE — else the activity bar. Each is a
+ * container whose `when` reads `agentCli:noSecondarySidebar`, set below, so
+ * exactly one shows. Asked with a screenshot: in Antigravity the activity-bar
+ * icon was nowhere to be seen and only the shortcut found the chat.
+ */
 const VIEW_ID = 'agentCli.chat';
+const SECONDARY_VIEW_ID = 'agentCli.chatSecondary';
+const OPENED_ONCE_KEY = 'agentCli.chatOpenedOnce';
+
+/** Whether this editor has a secondary side bar for extensions (VS Code 1.106+). */
+function supportsSecondarySidebar(version) {
+    const [major = 0, minor = 0] = String(version || '').split('.').map(Number);
+    return major > 1 || (major === 1 && minor >= 106);
+}
 const PROPOSED_SCHEME = 'agent-cli-proposed';
 /** Large enough for any source file worth attaching; small enough not to type a bundle into a browser. */
 const MAX_ATTACH_BYTES = 200 * 1024;
@@ -61,19 +77,43 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
         });
     }
 
-    sub(vscode.window.registerWebviewViewProvider(VIEW_ID, {
+    const secondary = supportsSecondarySidebar(vscode.version);
+    const activeViewId = secondary ? SECONDARY_VIEW_ID : VIEW_ID;
+    vscode.commands.executeCommand('setContext', 'agentCli:noSecondarySidebar', !secondary);
+
+    const provider = {
         resolveWebviewView(webviewView) {
             view = webviewView;
             webviewView.webview.options = { enableScripts: true, localResourceRoots: [media] };
             webviewView.webview.html = html(webviewView.webview);
             webviewView.webview.onDidReceiveMessage(onMessage);
-            webviewView.onDidDispose(() => { view = null; });
+            webviewView.onDidDispose(() => { if (view === webviewView) view = null; });
         },
-    }, {
-        // The socket lives in the page. Without this, hiding the sidebar would
-        // drop the connection and a long turn's stream with it.
-        webviewOptions: { retainContextWhenHidden: true },
-    }));
+    };
+    for (const id of [VIEW_ID, SECONDARY_VIEW_ID]) {
+        sub(vscode.window.registerWebviewViewProvider(id, provider, {
+            // The socket lives in the page. Without this, hiding the sidebar would
+            // drop the connection and a long turn's stream with it.
+            webviewOptions: { retainContextWhenHidden: true },
+        }));
+    }
+
+    // Always findable: a status-bar entry opens the chat in every editor,
+    // whatever its side bars show.
+    const statusItem = vscode.window.createStatusBarItem?.(vscode.StatusBarAlignment?.Right ?? 2, 100);
+    if (statusItem) {
+        statusItem.text = '$(comment-discussion) Agent CLI';
+        statusItem.tooltip = 'Open the Agent CLI chat (⌥⌘J)';
+        statusItem.command = 'agentCli.focusChat';
+        statusItem.show();
+        sub(statusItem);
+    }
+
+    // Shown once after install, so the first look says where it lives.
+    if (context.globalState && !context.globalState.get(OPENED_ONCE_KEY)) {
+        context.globalState.update(OPENED_ONCE_KEY, true);
+        Promise.resolve(vscode.commands.executeCommand(`${activeViewId}.focus`)).catch(() => {});
+    }
 
     // ── Requests from the page ────────────────────────────────────────
     function onMessage(message) {
@@ -220,10 +260,10 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     sub(
         vscode.commands.registerCommand('agentCli.startAgent', startAgent),
         vscode.commands.registerCommand('agentCli.focusChat', async () => {
-            await vscode.commands.executeCommand(`${VIEW_ID}.focus`);
+            await vscode.commands.executeCommand(`${activeViewId}.focus`);
             post({ type: 'focus_input' });
         }),
     );
 }
 
-module.exports = { registerChatPanel, PROPOSED_SCHEME };
+module.exports = { registerChatPanel, PROPOSED_SCHEME, supportsSecondarySidebar };

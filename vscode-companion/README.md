@@ -15,7 +15,7 @@ conversation, one browser tab.
 
 | | |
 | --- | --- |
-| **Chat** | The Agent CLI icon in the activity bar; `cmd+alt+j` focuses it. Type `@` to attach a file or your selection; edits open in the editor's diff view with ✓ / ✕ in the title bar. **Agent CLI: Start Agent** opens one in a terminal if none is running. |
+| **Chat** | In the secondary side bar (the right one) on VS Code 1.106+ and Antigravity IDE, like Claude Code's; in the activity bar on older editors such as Cursor. `cmd+alt+j` or **Agent CLI** in the status bar opens it. Type `@` or press the paperclip to attach a file; edits open in the editor's diff view with ✓ / ✕ in the title bar. Messages sent during a turn queue; esc stops the turn. **Agent CLI: Start Agent** opens one in a terminal if none is running. |
 | **Add to Agent Chat** | Send the selection to the agent's prompt as `@file.js:12-30`: `cmd+alt+l`, the editor context menu, the editor title bar, or the line-number gutter. |
 | **Attach to Agent CLI** | Right-click files or folders in the explorer (or an editor tab) to put them in the prompt as `[File #n]`, `[Folder #n]` or `[Image #n]` tags. The agent gets the path and reads what it needs. |
 | **Editor state** | The active file and cursor, so the agent can answer "what am I looking at?" (`get_editor_state`). |
@@ -50,7 +50,7 @@ From a terminal, with your editor's command-line tool (`code`, `cursor`, `antigr
 editor's command palette):
 
 ```bash
-<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.9.vsix
+<editor> --install-extension <checkout>/vscode-companion/cli-agent-companion-1.8.10.vsix
 ```
 
 `<checkout>` is wherever `setup.sh` put the agent. If you are not sure, the `agent` command
@@ -58,27 +58,27 @@ knows. This works for any install:
 
 ```bash
 AGENT_HOME_DIR="$(sed -n 's|^exec node "\(.*\)/server/src/index.js".*|\1|p' "$(command -v agent)")"
-code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.9.vsix
+code --install-extension "$AGENT_HOME_DIR"/vscode-companion/cli-agent-companion-1.8.10.vsix
 ```
 
 Three common setups:
 
 ```bash
 # setup.sh's default location, VS Code
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.9.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.10.vsix
 
 # a checkout from before the rename (setup.sh keeps it), Cursor
-cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
+cursor --install-extension ~/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
 
 # a custom AGENT_INSTALL_DIR, Antigravity
-antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
+antigravity --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
 ```
 
 Antigravity IDE's command is `antigravity-ide`, and it is usually not on `PATH`; the full path works:
 
 ```bash
 "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide" \
-  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.9.vsix
+  --install-extension ~/Documents/Gemini-Agent/vscode-companion/cli-agent-companion-1.8.10.vsix
 ```
 
 Then reload the window (**Developer: Reload Window**). Installing over an older version

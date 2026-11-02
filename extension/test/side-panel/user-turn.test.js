@@ -50,8 +50,12 @@ test('a prompt it never sent is drawn', () => {
 });
 
 test('a sent prompt is recorded as its own', () => {
+  // Recorded when it is handed over, not when it is drawn: a queued message
+  // is drawn at once and sent when the turn ends (1.59.0).
   const send = take('sendMessage');
-  assert.ok(send.indexOf('ownSends.push(content)') > send.indexOf("appendMessage('user', content)"));
+  assert.ok(send.indexOf('dispatchMessage(content, outgoing)') > send.indexOf("appendMessage('user', content)"));
+  assert.match(take('dispatchMessage'), /ownSends\.push\(shown\)/);
+  assert.match(take('drainQueue'), /dispatchMessage\(next\.shown, next\.content\)/);
 });
 
 test('user_turn draws unless it is the panel\'s own', () => {

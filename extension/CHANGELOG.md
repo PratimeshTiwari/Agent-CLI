@@ -18,6 +18,29 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.59.0 — 2026-11-02
+
+**The panels catch up with the terminal** (agent v8.6). Asked: "update the chrome side panel,
+floating window and vscode side panel with all our latest features".
+
+- **Attach files.** A paperclip beside the input opens a file picker; what it picks goes through
+  the same path as a drop (an image as a pasted one, a text file up to 8 KB inline, anything larger
+  refused). In the VS Code chat it opens the editor's own picker and attaches the path.
+- **Stop.** While a turn runs with nothing typed, the send button is a stop, and esc stops too. It
+  sends `stop_turn`; the agent stops Gemini, answers any pending approval or question no, and goes
+  idle, the same as esc in the terminal.
+- **Queue.** A message sent during a turn is queued (a dashed bubble marked "queued") and goes when
+  the turn ends; a stop drops the queue. It used to be refused.
+- **A footer under the input** says the effort, the model selected in the tab and how full the
+  chat is, from the agent's `panelState` on connect and at the end of every turn.
+- **Replies render tables, numbered and bulleted lists, headings and links.**
+- **`stop_generation` reaches the Gemini tab.** It had no case in the worker and fell to the
+  default branch, which sends to the side panel, so esc in the terminal never stopped the tab's
+  generation. `editor-routing.test.js` had excused it as "consumed by the content script", which
+  never sees the socket.
+- The welcome card lists the commands added since it was written (`/effort`, `/undo`, `/compact`,
+  `/context`, `/chat`, `/new`).
+
 ### 1.58.1 — 2026-11-02
 
 **A subagent's tab failing says it was a subagent's** (agent v8.4). The side panel read

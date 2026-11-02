@@ -42,7 +42,7 @@ function panel(value = '', caret = value.length) {
     const imageTag = (n) => \`[Image #\${n}]\`;
     ${constant('DROP_INLINE_MAX')} ${constant('fileTag')} ${constant('baseName')}
     ${take('insertAtCaret')} ${take('addImage')} ${take('droppedPaths')} ${take('addFileTag')}
-    ${take('onDropFiles')} ${take('backspaceTag')} ${take('fileBlock')}
+    ${take('attachFiles')} ${take('onDropFiles')} ${take('backspaceTag')} ${take('fileBlock')}
     return { onDropFiles, backspaceTag, fileBlock, droppedPaths, images: () => pastedImages, files: () => droppedFiles };`)(
     commandInput, window.FileReader, window.Event, (t) => statuses.push(t));
   return { window, commandInput, statuses, ...api };
@@ -130,8 +130,11 @@ test('a file goes only while its tag is in the text, and backspace takes the tag
 });
 
 test('send puts images, then file headers, then the message', () => {
-  const send = src.slice(src.indexOf('function sendMessage('), src.indexOf('function sendMessage(') + 3000);
-  assert.match(send, /payload: \{ content: block \+ dropped\.block \+ content \}/);
+  // Built in sendMessage, sent by dispatchMessage (1.59.0: a queued one is sent later).
+  const send = take('sendMessage');
+  assert.match(send, /const outgoing = block \+ dropped\.block \+ content;/);
+  assert.match(send, /dispatchMessage\(content, outgoing\)/);
+  assert.match(take('dispatchMessage'), /payload: \{ content: outgoing \}/);
   assert.match(src, /document\.addEventListener\('drop'/);
   assert.match(src, /document\.addEventListener\('dragover'[\s\S]*?e\.preventDefault\(\)/, 'without it the browser never fires drop');
 });

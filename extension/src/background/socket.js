@@ -444,6 +444,11 @@ async function handleServerMessage(message) {
         });
       }
       break;
+    // A stop from the terminal or a panel (1.59.0). It fell to `default` and
+    // went to the side panel, so Gemini went on writing after every stop.
+    case 'stop_generation':
+      await sendToModelTab({ type: 'stop_generation' }, payload?.targetModel || 'gemini');
+      break;
     case 'heartbeat_ack':
       break;
     // 1.58.0: an older build than the agent's checkout reloads itself from

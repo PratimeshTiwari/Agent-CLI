@@ -139,9 +139,17 @@ test(':stop tells the loop, and does it before the abort', () => {
     join(fileURLToPath(new URL('../../../src/frontend/App.jsx', import.meta.url))), 'utf8',
   );
   const stop = app.slice(app.indexOf("cleanQuery === ':stop'"), app.indexOf("note: 'Interrupted'"));
-  assert.match(stop, /agentLoop\.noteUserStop\(\)/, ':stop no longer records that you stopped it');
+  // Since v8.6 the steps live in `stopTurn()`, which the panels' stop button
+  // calls too; `:stop` must still go through it.
+  assert.match(stop, /agentLoop\.stopTurn\(\)/, ':stop no longer goes through stopTurn');
+  const loopSrc = readFileSync(
+    join(fileURLToPath(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url))), 'utf8',
+  );
+  const at = loopSrc.indexOf('  stopTurn() {');
+  const body = loopSrc.slice(at, loopSrc.indexOf('\n  }\n', at));
+  assert.match(body, /this\.noteUserStop\(\)/, 'stopTurn no longer records that you stopped it');
   assert.ok(
-    stop.indexOf('noteUserStop') < stop.indexOf('abortExtensionWork'),
+    body.indexOf('noteUserStop') < body.indexOf('abortExtensionWork'),
     'recorded after the abort, which is the order that loses the reason',
   );
 });

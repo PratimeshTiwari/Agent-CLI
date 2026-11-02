@@ -2948,6 +2948,44 @@ export class AgentLoop {
   }
 
   /**
+   * Stop the turn, from whichever surface asked (v8.6).
+   *
+   * This was inline in the terminal's `handleSubmit`, so `:stop` was the only
+   * way to stop and the panels had no stop at all. The loop's half lives here;
+   * each surface clears its own screen. Order matters: the stop is noted before
+   * the abort, so the reply that lands a moment later reads as stopped.
+   */
+  stopTurn() {
+    this._toExtension('stop_generation');
+    this.isProcessing = false;
+    this.noteUserStop();
+    this.abortExtensionWork();
+    if (this.pendingCommandResolve) {
+      this.pendingCommandResolve({ approved: false });
+      this.pendingCommandResolve = null;
+    }
+    if (this.pendingQuestionResolve) {
+      this.pendingQuestionResolve({ success: false, result: 'Cancelled by user' });
+      this.pendingQuestionResolve = null;
+    }
+  }
+
+  /**
+   * What a panel shows under its input (v8.6): the mode, the effort, the
+   * model selected in the tab (null until the picker is read) and how full
+   * the chat is. The terminal's status bar says the same from the same fields.
+   */
+  panelState() {
+    const limit = this.contextLimit;
+    return {
+      mode: this.mode,
+      effort: resolveEffort(this.modelConfig?.effort).id,
+      model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
+      contextPct: limit > 0 ? Math.round((this.contextTokens / limit) * 100) : null,
+    };
+  }
+
+  /**
    * The content script gives up after RESPONSE_MAX_TIMEOUT (5 min) and reports
    * `timedOut`. This is the backstop for when it never gets the message at all
    * — an asleep service worker, a tab with no bridge — where nothing would come

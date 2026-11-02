@@ -2,7 +2,8 @@
   "name": "cli-agent-companion",
   "displayName": "Agent CLI Companion",
   "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
-  "version": "1.8.9",
+  "icon": "media/icon.png",
+  "version": "1.8.10",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"
@@ -170,7 +171,16 @@
         {
           "id": "agentCli",
           "title": "Agent CLI",
-          "icon": "media/agent.svg"
+          "icon": "media/agent.svg",
+          "when": "agentCli:noSecondarySidebar"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "agentCliSecondary",
+          "title": "Agent CLI",
+          "icon": "media/agent.svg",
+          "when": "!agentCli:noSecondarySidebar"
         }
       ]
     },
@@ -179,7 +189,16 @@
         {
           "type": "webview",
           "id": "agentCli.chat",
-          "name": "Chat"
+          "name": "Chat",
+          "when": "agentCli:noSecondarySidebar"
+        }
+      ],
+      "agentCliSecondary": [
+        {
+          "type": "webview",
+          "id": "agentCli.chatSecondary",
+          "name": "Chat",
+          "when": "!agentCli:noSecondarySidebar"
         }
       ]
     }

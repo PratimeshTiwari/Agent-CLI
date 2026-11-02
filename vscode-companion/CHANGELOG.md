@@ -1,5 +1,24 @@
 # Agent CLI Companion: version history
 
+## 1.8.10 — 2026-11-02
+
+**The chat lives in the secondary side bar**, the right-hand one, the way Claude Code's extension
+does it. Asked with a screenshot: in Antigravity IDE the activity-bar icon was nowhere to be seen
+and only `⌥⌘J` found the chat. Editors on VS Code 1.106 or later (Antigravity IDE is 1.107) get a
+container in the secondary side bar; older ones (Cursor 2.x) keep the activity-bar icon. Exactly
+one shows: both are gated on `agentCli:noSecondarySidebar`, which the companion sets from
+`vscode.version`. Drag it to the other side if you prefer; the editor remembers.
+
+**Always findable.** An `Agent CLI` entry in the status bar opens the chat, and the chat is shown
+once after install so the first look says where it lives.
+
+**An icon** for the Extensions list and the container.
+
+**The chat panel carries extension 1.59.0's side panel:** a paperclip to attach files (the
+editor's own file picker), stop and esc, a queue for messages sent during a turn, the footer with
+effort, model and context, and tables and lists in replies. "No agent is running" is plain text
+now, and goes away by itself once the agent connects.
+
 ## 1.8.9 — 2026-11-01
 
 **The chat panel carries extension 1.58.0's side panel:** a Jira write arrives as a Send / Don't

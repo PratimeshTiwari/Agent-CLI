@@ -1007,3 +1007,105 @@ body.is-popup {
 /* The two outcomes read differently on purpose — they are different promises. */
 .sess-continue { color: var(--green); }
 .sess-recap { color: var(--orange); }
+
+/* ── 1.59.0: attach, stop, queue, the footer, richer replies ─────────── */
+#attach-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#attach-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-accent);
+}
+
+#send-btn .icon-stop { display: none; }
+#send-btn.stop .icon-send { display: none; }
+#send-btn.stop .icon-stop { display: block; }
+#send-btn.stop {
+  color: var(--red, #f85149);
+  border-color: var(--red, #f85149);
+}
+
+/* A message typed during a turn waits its turn, and says so. */
+.message-user.queued .message-content {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.message-user.queued {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.message-user.queued::after {
+  content: 'queued';
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.panel-state {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 2px 0;
+  min-height: 1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-state:empty { display: none; }
+
+.md-table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 12px;
+  white-space: normal;
+  display: block;
+  overflow-x: auto;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border-color);
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.md-list {
+  margin: 4px 0;
+  padding-left: 20px;
+  white-space: normal;
+}
+
+.md-list li { margin: 2px 0; }
+
+.md-h {
+  font-weight: 700;
+  margin: 8px 0 2px;
+}
+
+.md-h1 { font-size: 15px; }
+.md-h2 { font-size: 14px; }
+.md-h3,
+.md-h4 { font-size: 13px; }
+
+.message-content a {
+  color: var(--text-accent);
+}

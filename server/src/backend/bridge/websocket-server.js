@@ -192,7 +192,7 @@ export class WebSocketServer {
      * (`user_turn`), its thinking row would outlive an esc in the terminal.
      */
     this.agentLoop.onIdle?.(() => this.broadcast('extension', {
-      id: randomUUID(), type: 'turn_idle', payload: {}, timestamp: Date.now(),
+      id: randomUUID(), type: 'turn_idle', payload: { state: this.agentLoop.panelState?.() || null }, timestamp: Date.now(),
     }));
   }
 
@@ -352,6 +352,8 @@ export class WebSocketServer {
         clientId,
         workspace: this.agentLoop.workspace,
         mode: this.agentLoop.mode,
+        // Effort, model and context fill for the panel's footer (v8.6).
+        state: this.agentLoop.panelState?.() || null,
       },
       timestamp: Date.now(),
     });
@@ -834,6 +836,12 @@ export class WebSocketServer {
       case 'diff_response':
         // User accepted/rejected a diff
         this.agentLoop.handleDiffResponse(id, payload);
+        break;
+
+      // The panels' stop button (v8.6). The terminal's own rows clear on the
+      // idle edge `stopTurn` raises, as they do when a turn ends.
+      case 'stop_turn':
+        this.agentLoop.stopTurn?.();
         break;
 
       case 'slash_command':

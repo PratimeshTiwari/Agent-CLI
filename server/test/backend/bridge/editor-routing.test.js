@@ -89,9 +89,10 @@ test('WORKER_ONLY_TYPES matches what the worker handles itself', () => {
   assert.ok(workerOnly.includes('inject_prompt'), 'control: the parse found the worker cases');
   assert.ok(!workerOnly.includes('agent_response'), 'control: panel cases are told apart');
 
-  // stop_generation is not a worker case — it is consumed by the content
-  // script — but it is a browser command, not something to draw.
-  const expected = [...WORKER_ONLY_TYPES].filter((t) => t !== 'stop_generation').sort();
+  // stop_generation is a worker case since extension 1.59.0. This test had
+  // excused it as "consumed by the content script", but a content script never
+  // sees the socket: it fell to `default` and every stop went to the panel.
+  const expected = [...WORKER_ONLY_TYPES].sort();
   assert.deepEqual(workerOnly.sort(), expected);
 });
 
