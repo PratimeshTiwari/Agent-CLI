@@ -7,9 +7,13 @@ floating window.
 
 ![The Chrome side panel beside the Gemini tab](../docs/images/side-panel.png)
 
-| | |
-| --- | --- |
-| ![Floating window](../docs/images/floating-window.png)<br>**Floating window**: `⌘⇧1` from any app | ![Architecture](../docs/images/architecture.svg)<br>**Where it sits**: between the agent and your Gemini tab |
+**Floating window**: `⌘⇧1` from any app.
+
+![Floating window over the terminal](../docs/images/floating-window.png)
+
+**Where it sits**: between the agent and your Gemini tab.
+
+![Architecture](../docs/images/architecture.svg)
 
 ## What it does
 

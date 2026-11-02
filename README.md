@@ -16,23 +16,72 @@ repo.
 
 ## See it work
 
-| | |
-| --- | --- |
-| ![Diff approval](docs/images/diff-approval.svg)<br>**Every edit is a diff** you approve first | ![Queued messages](docs/images/queued.svg)<br>**Keep typing**: messages queue during a turn |
-| ![Compaction](docs/images/compaction.svg)<br>**Long sessions** summarise and carry on | ![Settings](docs/images/settings.svg)<br>**`/settings`**: switches, changed with `←/→` |
-| ![Effort slider](docs/images/effort.svg)<br>**`/effort`**: faster to smarter, on a slider | ![Effort mismatch](docs/images/effort-mismatch.svg)<br>**Browser on another model?** It asks first |
-| ![Step down](docs/images/step-down.svg)<br>**Pro at its limit**: steps down and says so | ![Reading a PDF](docs/images/pdf-read.svg)<br>**Documents**: a PDF read as Markdown |
-| ![Health check](docs/images/doctor.svg)<br>**`/doctor`**: every package, installed and latest | ![Package detail](docs/images/doctor-package.svg)<br>**`/doctor <package>`**: why it is used |
-| ![First-start setup](docs/images/setup.svg)<br>**First start**: theme, name, Chrome | ![Add to chat](docs/images/add-to-chat.svg)<br>**From VS Code**: send a selection with `⌥⌘L` |
+**Every edit is a diff** you approve first
 
-The same conversation, outside the terminal:
+![Diff approval](docs/images/diff-approval.svg)
 
-![The Chrome side panel beside the Gemini tab the agent types into](docs/images/side-panel.png)
+**Keep typing**: messages queue during a turn
+
+![Queued messages](docs/images/queued.svg)
+
+**`/settings`**: switches, changed with `←/→`
+
+![Settings](docs/images/settings.svg)
+
+**`/effort`**: faster to smarter, on a slider
+
+![Effort slider](docs/images/effort.svg)
+
+**Long sessions** summarise and carry on
+
+![Compaction](docs/images/compaction.svg)
+
+**Documents**: a PDF read as Markdown
+
+![Reading a PDF](docs/images/pdf-read.svg)
+
+<details>
+<summary><b>More screens</b>: model fallback, <code>/doctor</code>, first start, VS Code</summary>
+
+**Browser on another model?** It asks first
+
+![Effort mismatch](docs/images/effort-mismatch.svg)
+
+**Pro at its limit**: steps down and says so
+
+![Step down](docs/images/step-down.svg)
+
+**`/doctor`**: every package, installed and latest
+
+![Health check](docs/images/doctor.svg)
+
+**`/doctor <package>`**: why it is used
+
+![Package detail](docs/images/doctor-package.svg)
+
+**First start**: theme, name, Chrome
+
+![First-start setup](docs/images/setup.svg)
+
+**From VS Code**: send a selection with `⌥⌘L`
+
+![Add to chat](docs/images/add-to-chat.svg)
+
+</details>
+
+### The same conversation, outside the terminal
+
 **Chrome side panel**: docked beside the Gemini tab the agent types into.
 
-| | |
-| --- | --- |
-| ![Floating window over the terminal](docs/images/floating-window.png)<br>**Floating window**, `⌘⇧1` from any app | ![VS Code chat panel beside the code](docs/images/vscode-chat.png)<br>**VS Code chat panel**, `⌥⌘J`, beside your code |
+![The Chrome side panel beside the Gemini tab the agent types into](docs/images/side-panel.png)
+
+**Floating window**, `⌘⇧1` from any app.
+
+![Floating window over the terminal](docs/images/floating-window.png)
+
+**VS Code chat panel**, `⌥⌘J`, beside your code.
+
+![VS Code chat panel beside the code](docs/images/vscode-chat.png)
 
 ## How it works
 
