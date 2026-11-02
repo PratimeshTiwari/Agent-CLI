@@ -14,7 +14,7 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](../CLAUDE.m
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#149](https://github.com/PratimeshTiwari/Agent-CLI/pull/149)
+### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#150](https://github.com/PratimeshTiwari/Agent-CLI/pull/150)
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
@@ -25,7 +25,8 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 | v8.4 | 2026-11-02 | `v8.4/backend-frontend-split` | [#146](https://github.com/PratimeshTiwari/Agent-CLI/pull/146) | `server/src` and `server/test` split into `backend/` and `frontend/`, each with a README on what is where and how to debug; `frontend/` grouped by job (`input/`, `transcript/`, `menus/`, `screen/`) and `format.js` split in five; `backend/core/` grouped into ten folders by job; a subagent's tab failing is named as the subagent's in the log, the side panel and its row (extension 1.58.1) |
 | v8.5 | 2026-11-02 | `v8.5/subagent-row-and-doctor` | [#147](https://github.com/PratimeshTiwari/Agent-CLI/pull/147) | READMEs redesigned: a hero image, the panels in Chrome and VS Code, a short How it works, and every image on a gradient backdrop; the companion's history moves to its CHANGELOG; `agent --help` lists the shell commands and `agent doctor --test` runs the suite; a failed subagent's row reads `could not run · doing it in this chat · <why>` and no longer wraps past the terminal's width |
 | v8.5.1 | 2026-11-02 | `v8.5.1/panels-in-context` | [#148](https://github.com/PratimeshTiwari/Agent-CLI/pull/148) | The panel screenshots show their host: the side panel beside the Gemini tab in Chrome, the floating window over the terminal, the VS Code chat beside the code |
-| v8.6 | 2026-11-02 | `v8.6/panels-catch-up` | [#149](https://github.com/PratimeshTiwari/Agent-CLI/pull/149) | The panels catch up (extension 1.59.0, companion 1.8.10): attach files with a paperclip, stop with the button or esc, messages sent during a turn queue, a footer with effort, model and context, tables and lists in replies; esc in the terminal stops the Gemini tab too (`stop_generation` never reached it); the VS Code chat moves to the secondary side bar on 1.106+ (Antigravity IDE), with a status-bar entry and an icon |
+| v8.5.2 | 2026-11-02 | `v8.5.2/readme-images-full-width` | [#149](https://github.com/PratimeshTiwari/Agent-CLI/pull/149) | The README's images at full width, captions above them, six under a "More screens" fold: in two columns they were too small to read |
+| v8.6 | 2026-11-02 | `v8.6/panels-catch-up` | [#150](https://github.com/PratimeshTiwari/Agent-CLI/pull/150) | The panels catch up (extension 1.59.0, companion 1.8.10): attach files with a paperclip, stop with the button or esc, messages sent during a turn queue, a footer with effort, model and context, tables and lists in replies; esc in the terminal stops the Gemini tab too (`stop_generation` never reached it); the VS Code chat moves to the secondary side bar on 1.106+ (Antigravity IDE), with a status-bar entry and an icon |
 
 ### v7 — 2026-10-30 … 2026-10-31 · PRs [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141)
 
