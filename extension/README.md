@@ -23,12 +23,15 @@ floating window.
   own, kept for its session and closed when it ends.
 - **Keeps the right chat.** Before each prompt it puts the tab back on this session's chat, and
   reopens it in a fresh tab if the page stops answering.
-- **Side panel and floating window.** Both run the same chat as the terminal: diffs to accept,
-  commands to approve, questions to answer, files to attach with the paperclip, a queue for
-  messages sent during a turn, esc to stop, and a footer with the effort, model and context. Bind
-  `⌘⇧1` once at `chrome://extensions/shortcuts` (choose **Global**).
+- **Side panel and floating window.** Both run the same chat as the terminal, and draw it the same
+  way. Mode and effort are menus in the composer, effort naming the model each level uses on your
+  account, and `/` opens the command list. Diffs to accept, commands to approve and questions to
+  answer are rows in the conversation. Attach files with the paperclip, see a pasted image as a
+  thumbnail, send during a turn to queue, press esc to stop. The composer shows the context meter
+  and `⚠` when the tab is on another model. Bind `⌘⇧1` once at `chrome://extensions/shortcuts`
+  (choose **Global**).
 - **Stays current.** The agent checks the version Chrome loaded, and from 1.58.0 on an extension
-  older than the checkout reloads itself between turns. Current version: **1.59.0**.
+  older than the checkout reloads itself between turns. Current version: **1.60.0**.
 
 ```
 agent  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content script  ──▶  gemini.google.com

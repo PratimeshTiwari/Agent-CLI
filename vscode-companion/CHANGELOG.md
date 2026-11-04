@@ -1,5 +1,23 @@
 # Agent CLI Companion: version history
 
+## 1.8.14 — 2026-11-05
+
+**Attach any file, not only this workspace's.** Asked for from the first look at 1.8.13: the
+paperclip's list stopped at the repo. Its first row is now **Browse in Finder…** (**Browse…** off
+macOS), the system dialog, several files at once. An image goes in as a pasted one does, thumbnail
+included; anything else goes by path, as a file dragged from the explorer does, so a PDF or a large
+file works.
+
+The chat's footer no longer stays one model behind the tab, and its header says the project's own
+name: see extension 1.60.0.
+
+## 1.8.13 — 2026-11-05
+
+**The chat is rebuilt on the terminal's design.** Reported with screenshots: replies in grey pills
+showing their `**`, a grey slab beside the send button, nothing to click after `/effort`. It is the
+Chrome panel's own page (extension 1.60.0), so see that entry for the changes. Here, the theme
+bridge re-points the new colour roles at the editor's theme, in dark and light.
+
 ## 1.8.12 — 2026-11-03
 
 **The status-bar entry always opens the chat.** Reported with a screenshot from Antigravity IDE:

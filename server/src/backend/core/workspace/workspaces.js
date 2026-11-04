@@ -20,6 +20,19 @@ export function isDirectory(dir) {
 }
 
 /**
+ * What a project calls itself, for the panels' header: the checkout's folder can
+ * be anything, and this repo's says `Gemini-Agent` where the project says
+ * `agent-cli`. The `name` in its package.json (a scope dropped), else the folder.
+ */
+export function projectName(workspace) {
+  try {
+    const { name } = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
+    if (typeof name === 'string' && name.trim()) return name.trim().replace(/^@[^/]+\//, '');
+  } catch { /* no manifest, or one that does not parse: the folder is the answer */ }
+  return path.basename(path.resolve(String(workspace || '')));
+}
+
+/**
  * Resolve what a user typed into an absolute path: `~` expands, relative paths
  * resolve against `base`, and a trailing slash is dropped.
  */

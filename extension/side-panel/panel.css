@@ -1,791 +1,248 @@
 /* ═══════════════════════════════════════════════════════════
-   Agent CLI — Side Panel Styles
-   Terminal-aesthetic dark theme with syntax highlighting
+   Agent CLI — the panel (Chrome side panel and the editor's chat)
+
+   v8.8: rebuilt on the terminal's design, which is the reference for how
+   anything here looks. Colour is a role, as in frontend/theme.js: the values
+   below are its `dark` and `light` palettes. A conversation is rows, not
+   bubbles: `▌` for what you said, `●` for a reply, `● Verb(subject)` with `⎿`
+   for a call, dim one-liners for everything the agent reports. Quiet by
+   default; colour means something needs attention or names a state.
+
+   The editor's theme re-points these roles in chat-panel-html.js, so every
+   colour here must stay a variable.
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* Color palette */
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #1c2128;
-  --bg-hover: #21262d;
-  --bg-active: #30363d;
+  --bg: #1e1e1e;
+  --bg-raised: #26272c;
+  --bg-sunken: #18181b;
+  --bg-hover: rgba(255, 255, 255, 0.07);
+  --border: #36383f;
+  --border-subtle: #2b2c31;
 
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --text-accent: #58a6ff;
+  --text: #e6e6e6;
+  --muted: #9ba1b8;
+  --faint: #7c8197;
 
-  --border-color: #30363d;
-  --border-subtle: #21262d;
+  --accent: #7aa2f7;
+  --attention: #ff9e64;
+  --success: #9ece6a;
+  --danger: #f7768e;
+  --link: #7dcfff;
+  --plan: #e0af68;
+  --auto: #73daca;
+  --strict: #bb9af7;
 
-  /* Status colors */
-  --green: #3fb950;
-  --red: #f85149;
-  --orange: #d29922;
-  --blue: #58a6ff;
-  --purple: #bc8cff;
-  --cyan: #39d2c0;
+  --add-bg: #132a1f;
+  --del-bg: #2d1a1d;
+  --on-accent: #16161a;
 
-  /* Diff colors */
-  --diff-add-bg: rgba(63, 185, 80, 0.12);
-  --diff-add-border: rgba(63, 185, 80, 0.3);
-  --diff-add-text: #3fb950;
-  --diff-del-bg: rgba(248, 81, 73, 0.12);
-  --diff-del-border: rgba(248, 81, 73, 0.3);
-  --diff-del-text: #f85149;
-  --diff-hunk-bg: rgba(56, 139, 253, 0.08);
+  --user-bg: color-mix(in srgb, var(--accent) 14%, transparent);
 
-  /* Typography */
-  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Menlo, monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
 
-  /* Spacing */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 12px;
-  --spacing-lg: 16px;
-  --spacing-xl: 24px;
-
-  /* Borders */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --gutter: 14px;
+  --dot-col: 16px;
+  --radius: 7px;
 }
 
-/* ── Reset ────────────────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --bg-raised: #f4f5f7;
+    --bg-sunken: #eceef1;
+    --bg-hover: rgba(0, 0, 0, 0.06);
+    --border: #d5d8de;
+    --border-subtle: #e4e6ea;
+
+    --text: #1f2328;
+    --muted: #57606a;
+    --faint: #6e7781;
+
+    --accent: #0969da;
+    --attention: #bc4c00;
+    --success: #1a7f37;
+    --danger: #cf222e;
+    --link: #0550ae;
+    --plan: #9a6700;
+    --auto: #0b7a75;
+    --strict: #8250df;
+
+    --add-bg: #dafbe1;
+    --del-bg: #ffebe9;
+    --on-accent: #ffffff;
+  }
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+/* `display` on a class would otherwise beat the attribute. */
+[hidden] { display: none !important; }
+
 body {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  background: var(--bg-primary);
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* ── Status Bar ───────────────────────────────────────── */
+button { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Header ─────────────────────────────────────────────── */
 #status-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  min-height: 40px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 var(--gutter);
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 .status-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 8px;
+  min-width: 0;
 }
 
 .status-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  transition: background-color 0.3s ease;
+  flex-shrink: 0;
 }
 
-.dot.connected {
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-}
+.dot.connected { background: var(--success); }
+.dot.disconnected { background: var(--danger); }
 
-.dot.disconnected {
-  background: var(--red);
-}
+#connection-text { color: var(--danger); white-space: nowrap; }
+#connection-text:empty { display: none; }
 
-#connection-text {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-/* Mode Toggle */
-.mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mode-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.mode-btn.auto-mode {
-  border-color: var(--orange);
-  color: var(--orange);
-}
-
-/* Context Bar */
-
-
-
-
-
-/* ── Message Stream ───────────────────────────────────── */
-#message-stream {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-md);
-  scroll-behavior: smooth;
-}
-
-#message-stream::-webkit-scrollbar {
-  width: 6px;
-}
-
-#message-stream::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#message-stream::-webkit-scrollbar-thumb {
-  background: var(--bg-active);
-  border-radius: 3px;
-}
-
-/* Welcome */
-/* The welcome screen.
-   Left-aligned, because centred monospace goes ragged on every line and this
-   panel is monospace throughout. No 48px emoji: the rest of the product draws
-   state with `●` and `○` and dim text, and a cartoon face at four times the
-   body size was the loudest thing on a screen whose job is to be quiet. */
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: var(--spacing-lg);
-}
-
-.welcome h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-xs);
-  font-family: var(--font-mono, monospace);
-}
-
-.welcome p {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-  margin-bottom: var(--spacing-md);
-  max-width: 46ch;
-}
-
-.welcome code {
-  display: inline-block;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  color: var(--cyan);
-  font-size: 12px;
-  margin-bottom: var(--spacing-lg);
-}
-
-/* One per line and aligned, not a centred staircase of pills. The command
-   column is fixed so the descriptions line up, which is the whole reason to
-   list them rather than write them into a sentence. */
-.welcome-tips {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 3px var(--spacing-sm);
-  font-size: 11px;
-  width: 100%;
-}
-
-.tip-key { color: var(--text-secondary); }
-.tip-what { color: var(--text-muted); }
-
-/* Message Bubbles */
-.message {
-  margin-bottom: var(--spacing-md);
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.message-user {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.message-user .message-content {
-  background: #1a3a5c;
-  border: 1px solid #1f4a6e;
-  border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  max-width: 85%;
-  color: var(--text-primary);
-  font-size: 13px;
-  word-wrap: break-word;
-}
-
-.message-agent {
-  display: flex;
-  flex-direction: column;
-}
-
-.message-agent .message-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px var(--radius-md) var(--radius-md) var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  max-width: 95%;
-  color: var(--text-primary);
-  font-size: 13px;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-}
-
-.message-agent .message-content code {
-  background: var(--bg-tertiary);
-  padding: 1px 4px;
-  border-radius: 3px;
-  color: var(--cyan);
-  font-size: 12px;
-}
-
-/* Tool Call Messages */
-.message-tool {
-  margin-left: var(--spacing-md);
-  border-left: 2px solid var(--border-color);
-  padding-left: var(--spacing-md);
-  margin-bottom: var(--spacing-sm);
-}
-
-.tool-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  cursor: pointer;
-  padding: var(--spacing-xs) 0;
-  user-select: none;
-}
-
-/* One dot whose colour is the state, as in the terminal: running, then done or failed. */
-.tool-dot {
-  font-size: 10px;
-  color: var(--cyan);
-}
-
-.tool-result-success .tool-dot {
-  color: var(--green);
-}
-
-.tool-result-error .tool-dot {
-  color: var(--red);
-}
-
-.tool-name {
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.tool-args {
-  color: var(--text-muted);
-  font-size: 11px;
+.ws-name {
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
 }
 
-.tool-details {
-  display: none;
-  margin-top: var(--spacing-xs);
-  padding: var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  color: var(--text-secondary);
-  max-height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+.ext-version {
+  color: var(--faint);
+  font-size: 10.5px;
+  margin-right: 6px;
 }
 
-.tool-details.expanded {
-  display: block;
-}
-
-.tool-result-success {
-  border-left-color: var(--green);
-}
-
-.tool-result-error {
-  border-left-color: var(--red);
-}
-
-/* Status Messages */
-.message-status {
-  text-align: center;
-  padding: var(--spacing-xs);
-}
-
-/* ...but only the pill is centred.
-   A status that is really a block is prose — often a list built for a
-   monospace terminal, with its own leading indentation — and centring prose
-   re-ragged every line and threw that indentation away. `/effort` came out as
-   a column of text with the ladder's alignment destroyed. */
-.message-status.status-block {
-  text-align: left;
-}
-
-.message-status .status-text {
-  display: inline-block;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-/* Diff Viewer */
-.diff-container {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  margin: var(--spacing-sm) 0;
-  overflow: hidden;
-}
-
-.diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.diff-file-path {
-  color: var(--text-accent);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.diff-status {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.diff-status.pending {
-  background: rgba(210, 153, 34, 0.15);
-  color: var(--orange);
-}
-
-.diff-status.accepted {
-  background: rgba(63, 185, 80, 0.15);
-  color: var(--green);
-}
-
-.diff-status.rejected {
-  background: rgba(248, 81, 73, 0.15);
-  color: var(--red);
-}
-
-.diff-content {
-  padding: var(--spacing-sm);
-  font-size: 12px;
-  overflow-x: auto;
-}
-
-.diff-line {
-  padding: 1px var(--spacing-sm);
-  font-family: var(--font-mono);
-  white-space: pre;
-}
-
-.diff-line.add {
-  background: var(--diff-add-bg);
-  color: var(--diff-add-text);
-}
-
-.diff-line.del {
-  background: var(--diff-del-bg);
-  color: var(--diff-del-text);
-}
-
-.diff-line.hunk-header {
-  background: var(--diff-hunk-bg);
-  color: var(--blue);
-  font-style: italic;
-}
-
-.diff-line.context {
-  color: var(--text-secondary);
-}
-
-.diff-actions {
-  display: flex;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--border-color);
-}
-
-.diff-btn {
-  flex: 1;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.diff-btn.accept {
-  background: rgba(63, 185, 80, 0.1);
-  border-color: var(--green);
-  color: var(--green);
-}
-
-.diff-btn.accept:hover {
-  background: rgba(63, 185, 80, 0.2);
-}
-
-.diff-btn.reject {
-  background: rgba(248, 81, 73, 0.1);
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.diff-btn.reject:hover {
-  background: rgba(248, 81, 73, 0.2);
-}
-
-/* Error Messages */
-.message-error .message-content {
-  background: rgba(248, 81, 73, 0.08);
-  border-color: rgba(248, 81, 73, 0.2);
-  color: var(--red);
-}
-
-/* ── Input Area ───────────────────────────────────────── */
-#input-area {
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-/* A file dragged over the panel (v6.17): the box it will land in says so. */
-#input-area.drop-target .input-wrapper {
-  border-color: var(--text-accent);
-  border-style: dashed;
-}
-
-.input-wrapper {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm);
-  transition: border-color 0.2s ease;
-}
-
-.input-wrapper:focus-within {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.1);
-}
-
-#command-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  resize: none;
-  max-height: 150px;
-  line-height: 1.5;
-}
-
-#command-input::placeholder {
-  color: var(--text-muted);
-}
-
-/* Muted, and only coloured once there is something to send.
-   A solid blue tile is the brightest thing on the panel and it is lit even
-   when the box is empty — drawing the eye to the one control that cannot do
-   anything yet. `#send-btn:enabled` is driven by the same disabled state the
-   waiting-for-a-reply lock already sets, so it doubles as the turn indicator. */
-#send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-  flex-shrink: 0;
-}
-
-#send-btn:not(:disabled):hover {
-  background: var(--bg-hover);
-  color: var(--text-accent);
-  border-color: var(--blue);
-}
-
-#send-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* A quiet square that matches the mode button beside it. */
 .icon-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1;
-  padding: 4px 7px;
-  margin-right: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--muted);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
 }
+
+.icon-btn svg { width: 15px; height: 15px; }
 
 .icon-btn:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
+  color: var(--text);
 }
 
-#send-btn:disabled {
-  background: var(--bg-active);
-  color: var(--text-muted);
-  cursor: not-allowed;
-  transform: none;
+/* ── The conversation ───────────────────────────────────── */
+#message-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gutter);
 }
 
-/* ── Loading Indicator ────────────────────────────────── */
-.thinking {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  color: var(--text-muted);
-  font-size: 12px;
+.message { margin-bottom: 14px; }
+
+/* What you said: the terminal's bar, an accent edge down a tinted row. */
+.message-user .message-content {
+  background: var(--user-bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
-.thinking-dots {
-  display: flex;
-  gap: 3px;
+.message-user { margin-top: 18px; }
+#message-stream > .message-user:first-child { margin-top: 0; }
+
+/* A command is a row of its own kind, and quieter than a message. */
+.message-user.is-command .message-content { font-weight: 400; color: var(--muted); }
+
+.message-user.queued .message-content { opacity: 0.6; }
+
+.message-user.queued::after {
+  content: 'queued · sent when this turn ends';
+  display: block;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  margin: 3px 0 0 13px;
 }
 
-.thinking-dots span {
-  width: 4px;
-  height: 4px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  animation: bounce 1.4s ease-in-out infinite both;
+/* A reply: `●` in the margin, the text beside it, no box. */
+.message-agent {
+  display: grid;
+  grid-template-columns: var(--dot-col) minmax(0, 1fr);
 }
 
-.thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
-.thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+.msg-dot {
+  font-size: 8px;
+  line-height: calc(13px * 1.55);
+  color: var(--text);
 }
 
-/* ── Blocking prompts ────────────────────────────────────────────────
-   A question or a command approval parks the turn server-side on a promise
-   that nothing else resolves, so these two are the only way such a turn ends.
-   Bordered rather than bubbled: they are asking for something, not reporting. */
-
-.message-question,
-.message-approval {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--blue);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-  margin: var(--spacing-sm) 0;
-}
-
-.message-approval {
-  border-left-color: var(--orange);
-}
-
-.question-block + .question-block {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.question-text {
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-sm);
-}
-
-.question-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: var(--spacing-sm);
-}
-
-.question-option,
-.approval-actions button,
-.question-actions button {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.question-option:hover:not(:disabled),
-.approval-actions button:hover:not(:disabled),
-.question-actions button:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.question-option.selected,
-.approval-actions button.selected {
-  border-color: var(--blue);
-  color: var(--text-accent);
-}
-
-.question-freeform {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  padding: 5px 8px;
-  font-size: 12px;
-  font-family: inherit;
-}
-
-.question-actions,
-.approval-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: var(--spacing-sm);
-}
-
-.question-submit {
-  border-color: var(--blue) !important;
-  color: var(--text-accent) !important;
-}
-
-/* Disabled rather than removed: the question stays readable as a record of
-   what was asked and what it was answered with. */
-.message-question button:disabled,
-.message-question input:disabled,
-.message-approval button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.question-closed {
-  margin-top: var(--spacing-sm);
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.approval-head {
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-sm);
-}
-
-.approval-risk {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.approval-risk.risk-critical { color: var(--red); }
-.approval-risk.risk-high     { color: var(--orange); }
-
-.approval-command {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm);
-  margin: 0;
-  color: var(--cyan);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.approval-cwd,
-.approval-reason {
-  color: var(--text-secondary);
-  font-size: 11px;
-  margin-top: 4px;
-}
-
-/* The cursor-ish tail while text is still arriving. */
 .message-agent.streaming .message-content::after {
   content: '▌';
-  color: var(--text-muted);
+  color: var(--faint);
 }
-
-/* The loaded build, in the status bar. Quiet — it is a fact you go looking
-   for, not one that should compete with the connection dot. */
-.ext-version {
-  color: var(--text-muted);
-  font-size: 11px;
-  margin-right: var(--spacing-sm);
-}
-
-/* ── Rendered replies ────────────────────────────────────────────────
-   Escaped first, then formatted — see renderMarkdownish. */
 
 .message-content,
 .status-body {
@@ -793,112 +250,452 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* What the agent reports: one dim row, left-aligned, as the terminal's system
+   rows. Bold inside it is how `⚙ mode plan → auto` shows what changed. */
+.message-status {
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  padding-left: var(--dot-col);
+}
+
+.message-status.status-block { text-align: left; }
+
+.status-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-status strong { color: var(--text); font-weight: 600; }
+
+.status-body {
+  display: block;
+  line-height: 1.5;
+}
+
+.message-error {
+  display: grid;
+  grid-template-columns: var(--dot-col) minmax(0, 1fr);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ── Tool calls: `● Verb(subject)`, `⎿ what came back` ─── */
+.message-tool {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.tool-header {
+  display: grid;
+  grid-template-columns: var(--dot-col) auto minmax(0, 1fr);
+  align-items: baseline;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 3px;
+}
+
+.tool-header:hover .tool-name { color: var(--accent); }
+
+/* One dot whose colour is the state: running, then done or failed. */
+.tool-dot { font-size: 8px; color: var(--faint); }
+.tool-result-success .tool-dot { color: var(--success); }
+.tool-result-error .tool-dot { color: var(--danger); }
+
+.tool-name { font-weight: 600; }
+
+.tool-args {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-summary {
+  color: var(--faint);
+  padding-left: var(--dot-col);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-summary:empty { display: none; }
+.tool-summary::before { content: '⎿  '; }
+.tool-result-error .tool-summary { color: var(--danger); }
+
+.tool-details {
+  display: none;
+  margin: 4px 0 8px var(--dot-col);
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-details.expanded { display: block; }
+
+/* ── The working row ────────────────────────────────────── */
+.thinking {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin: 4px 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.spin { width: var(--dot-col); flex-shrink: 0; }
+.think-meta { color: var(--faint); margin-left: 6px; }
+
+/* ── A diff ─────────────────────────────────────────────── */
+.diff-container {
+  border-top: 1px solid var(--attention);
+  margin: 10px 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.diff-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.diff-verb { font-weight: 600; color: var(--attention); }
+
+.diff-file-path {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-stat { color: var(--muted); white-space: nowrap; }
+.diff-stat .add { color: var(--success); }
+.diff-stat .del { color: var(--danger); }
+
+.diff-status { color: var(--faint); white-space: nowrap; }
+.diff-status.pending { color: var(--attention); }
+.diff-status.accepted { color: var(--success); }
+.diff-status.rejected { color: var(--danger); }
+
+.diff-content {
+  overflow-x: auto;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  padding: 4px 0;
+}
+
+.diff-line {
+  padding: 0 8px;
+  white-space: pre;
+  width: max-content;
+  min-width: 100%;
+}
+
+.diff-line.add { background: var(--add-bg); color: var(--success); }
+.diff-line.del { background: var(--del-bg); color: var(--danger); }
+.diff-line.hunk-header { color: var(--link); }
+.diff-line.context { color: var(--muted); }
+
+.diff-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.diff-btn {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.diff-btn:hover { background: var(--bg-hover); }
+
+.diff-btn.accept {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.diff-btn.accept:hover { filter: brightness(1.08); }
+
+/* ── Asking you something ───────────────────────────────────
+   A question or an approval parks the turn server-side, and these are the only
+   way such a turn ends. The terminal's Panel shape: a rule, a title, choices. */
+.message-question,
+.message-approval {
+  border-top: 1px solid var(--accent);
+  padding-top: 8px;
+  margin: 10px 0 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.message-approval { border-top-color: var(--attention); }
+
+.question-block + .question-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.question-header {
+  color: var(--faint);
+  font-size: 10.5px;
+  margin-bottom: 2px;
+}
+
+.question-text,
+.approval-head {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.approval-risk {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.approval-risk.risk-critical { color: var(--danger); }
+.approval-risk.risk-high { color: var(--attention); }
+
+.approval-command {
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.approval-cwd,
+.approval-reason {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* A list of rows, numbered as the terminal's `Choices`. */
+.question-options,
+.approval-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0;
+  counter-reset: choice;
+}
+
+.question-option,
+.approval-actions button {
+  counter-increment: choice;
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.question-option::before,
+.approval-actions button::before {
+  content: counter(choice) '.';
+  color: var(--faint);
+  margin-right: 8px;
+}
+
+.question-option:hover:not(:disabled),
+.approval-actions button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.question-option.selected,
+.approval-actions button.selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.question-freeform {
+  width: 100%;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.question-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.question-actions button {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.question-actions button:hover:not(:disabled) { background: var(--bg-hover); }
+
+.question-actions .question-submit {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* Disabled rather than removed: a record of what was asked and answered. */
+.message-question button:disabled,
+.message-question input:disabled,
+.message-approval button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.question-closed {
+  margin-top: 6px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ── Rendered replies ───────────────────────────────────────
+   Escaped first, then formatted: see renderMarkdownish. */
 .md-inline {
-  background: var(--bg-tertiary);
+  background: var(--bg-raised);
   border-radius: 3px;
   padding: 1px 4px;
-  color: var(--cyan);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
 }
+
+.message-status .md-inline { background: none; padding: 0; color: var(--text); }
 
 .md-code {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-sm);
-  margin: var(--spacing-sm) 0;
-  overflow-x: auto;          /* the block scrolls, the panel never does */
+  background: var(--bg-sunken);
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  overflow-x: auto;
   white-space: pre;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
-.md-code code { color: var(--text-primary); }
+.md-code code { font-family: inherit; }
 
-/* The language, where a copy button would be if this had one. */
 .md-code[data-lang]::before {
   content: attr(data-lang);
   display: block;
-  color: var(--text-muted);
+  color: var(--faint);
   font-size: 10px;
   margin-bottom: 4px;
 }
 
-/* A status that is really a block: no pill, no centring, just readable. */
-.message-status.status-block .status-body {
-  display: block;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  color: var(--text-secondary);
+.md-table {
+  border-collapse: collapse;
+  margin: 8px 0;
   font-size: 12px;
-  line-height: 1.5;
+  white-space: normal;
+  display: block;
+  overflow-x: auto;
 }
 
-/* A toolbar popup has no size of its own: Chrome sizes it to the content, and
-   an empty transcript would collapse it to a sliver. */
-body.is-popup {
-  width: 420px;
-  height: 600px;
+.md-table th,
+.md-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 12px 4px 0;
+  text-align: left;
+  vertical-align: top;
 }
 
-/* The question's own label — "Parser choice" above "Which parser?". The
-   terminal draws this too; the panel was dropping it. */
-.question-header {
-  color: var(--text-muted);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 2px;
+.md-table th {
+  border-bottom-color: var(--border);
+  font-weight: 600;
 }
 
-/* Something to send. The muted default says "nothing to do here"; this says
-   the opposite, without becoming the brightest thing on the panel again. */
-#send-btn.ready {
-  color: var(--text-accent);
-  border-color: var(--blue);
+.md-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  white-space: normal;
 }
 
-#send-btn.ready:hover {
-  background: var(--bg-hover);
+.md-list li { margin: 2px 0; }
+
+.md-h {
+  font-weight: 600;
+  margin: 12px 0 3px;
 }
 
-/* ── The checklist, above the input ──────────────────────────────────
-   State rather than an event: one row, replaced each turn, and it does not
-   scroll away with the conversation. */
-.task-list {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
-  flex-shrink: 0;
-}
+.md-h:first-child { margin-top: 0; }
+.md-h1 { font-size: 15px; }
+.md-h2 { font-size: 14px; }
+.md-h3,
+.md-h4 { font-size: 13px; }
+
+.message-content a { color: var(--link); }
+
+/* ── The checklist and the handover review, folded ──────── */
+.task-list,
+.review-block { margin-bottom: 10px; }
 
 .task-summary,
 .review-summary {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+  align-items: baseline;
+  gap: 6px;
   width: 100%;
   background: none;
   border: none;
-  padding: 6px var(--spacing-md);
-  color: var(--text-secondary);
+  border-radius: 3px;
+  padding: 2px 0;
+  color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 11.5px;
   text-align: left;
   cursor: pointer;
 }
 
 .task-summary:hover,
-.review-summary:hover { background: var(--bg-hover); }
+.review-summary:hover { color: var(--text); }
 
 .task-caret,
-.review-caret { color: var(--text-muted); }
-.task-count { color: var(--text-accent); }
+.review-caret { color: var(--faint); width: 10px; flex-shrink: 0; }
 
-/* The next unfinished item, which is the one thing worth seeing collapsed. */
+.task-count { color: var(--accent); flex-shrink: 0; }
+.review-label { color: var(--strict); flex-shrink: 0; }
+
 .task-next,
 .review-first {
-  color: var(--text-muted);
+  color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -910,46 +707,370 @@ body.is-popup {
 .review-block.open .review-body { display: block; }
 
 .task-items {
-  padding: 0 var(--spacing-md) var(--spacing-sm);
-  max-height: 40vh;      /* never let the plan eat the conversation */
+  padding: 4px 0 2px var(--dot-col);
+  max-height: 40vh;
   overflow-y: auto;
 }
 
 .task-item {
   display: flex;
-  gap: var(--spacing-sm);
-  padding: 2px 0;
-  font-size: 11px;
-  color: var(--text-primary);
+  gap: 8px;
+  padding: 1px 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
-.task-box { color: var(--text-muted); }
-.task-item.done .task-text { color: var(--text-muted); text-decoration: line-through; }
-.task-item.done .task-box { color: var(--green); }
-
-/* ── The handover review, folded ───────────────────────────────────── */
-.review-block {
-  border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--green);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  margin: var(--spacing-sm) 0;
-}
-
-.review-label { color: var(--green); }
+.task-box { color: var(--faint); flex-shrink: 0; }
+.task-item.done .task-text { color: var(--faint); text-decoration: line-through; }
+.task-item.done .task-box { color: var(--success); }
 
 .review-body {
-  padding: 0 var(--spacing-md) var(--spacing-sm);
+  padding: 6px 0 2px var(--dot-col);
+  color: var(--muted);
   font-size: 12px;
-  color: var(--text-secondary);
 }
 
-/* ── Past conversations ──────────────────────────────────────────────
-   A drawer, not a column: the panel is narrow, and a permanent list would
-   cost the conversation half its width. */
+/* ── Welcome: the terminal's header, then what to try ───── */
+.welcome { padding: 6px 0; }
+
+.welcome-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.welcome-mark {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.welcome-name {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.welcome-by {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.welcome p {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 14px;
+  max-width: 46ch;
+}
+
+.welcome code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--text);
+}
+
+.welcome-tips {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.tip-key {
+  background: none;
+  border: none;
+  padding: 1px 0;
+  text-align: left;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.tip-key:hover { text-decoration: underline; }
+.tip-what { color: var(--faint); }
+
+/* ── Images: in the composer, then under the message ───── */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 9px 0;
+}
+
+.attachment { position: relative; line-height: 0; }
+
+.thumb {
+  height: 56px;
+  max-width: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.attachment-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.attachment-remove:hover { color: var(--text); }
+
+.sent-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0 13px;
+}
+
+.sent-images .thumb { height: 72px; max-width: 180px; }
+
+/* ── The composer ───────────────────────────────────────── */
+#input-area {
+  position: relative;
+  padding: 8px 10px 10px;
+  flex-shrink: 0;
+}
+
+.input-wrapper {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.input-wrapper:focus-within { border-color: var(--accent); }
+
+#input-area.drop-target .input-wrapper {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+/* `overflow: hidden` until the box reaches its cap: a one-row textarea draws a
+   scrollbar otherwise, which was the grey slab beside the send button. The
+   input handler turns scrolling on at the cap. */
+#command-input {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 9px 11px 3px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: none;
+  max-height: 170px;
+  overflow-y: hidden;
+}
+
+#command-input::placeholder { color: var(--faint); }
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 5px 5px;
+}
+
+.bar-spacer { flex: 1; min-width: 4px; }
+
+.bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.bar-btn svg { width: 14px; height: 14px; }
+.bar-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* Mode and effort: what they read now, and they open a menu. */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  min-width: 0;
+  padding: 0 5px 0 7px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:hover,
+.chip[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.chev { width: 11px; height: 11px; color: var(--faint); flex-shrink: 0; }
+
+/* Only the mode's glyph is coloured, as on the terminal's status row. */
+.chip-glyph { font-size: 10px; }
+.mode-plan .chip-glyph { color: var(--plan); }
+.mode-auto .chip-glyph { color: var(--auto); }
+.mode-strict .chip-glyph { color: var(--strict); }
+
+#effort-text { overflow: hidden; text-overflow: ellipsis; }
+.tab-differs { color: var(--attention); }
+
+.panel-state {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  margin-right: 6px;
+}
+
+.panel-state:empty { display: none; }
+.panel-state.warn { color: var(--attention); }
+.panel-state.danger { color: var(--danger); }
+
+/* Muted until there is something to send: the brightest thing on the panel
+   should never be the one control that cannot do anything yet. */
+#send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+#send-btn svg { width: 15px; height: 15px; stroke-width: 2.25; }
+#send-btn .icon-stop { display: none; fill: currentColor; stroke: none; }
+#send-btn.stop .icon-send { display: none; }
+#send-btn.stop .icon-stop { display: block; }
+
+#send-btn.ready {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+#send-btn.stop {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+
+#send-btn:not(.ready):not(.stop):hover { background: var(--bg-hover); color: var(--text); }
+
+/* A thin panel gives up the meter's cells before anything you can click. */
+@media (max-width: 300px) {
+  .ext-version,
+  .meter-cells { display: none; }
+}
+
+/* ── The popover: mode, effort, and the `/` palette ─────── */
+.popover {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% - 4px);
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  z-index: 10;
+}
+
+.pop-title {
+  padding: 3px 7px 5px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.pop-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 0 6px;
+  align-items: baseline;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 7px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.pop-row.active { background: var(--bg-hover); }
+.pop-row.active .pop-name { color: var(--accent); }
+
+.pop-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pop-glyph { color: var(--faint); font-size: 10px; }
+.pop-glyph.mode-plan { color: var(--plan); }
+.pop-glyph.mode-auto { color: var(--auto); }
+.pop-glyph.mode-strict { color: var(--strict); }
+
+.pop-name { font-weight: 600; }
+.pop-check { color: var(--success); }
+
+.pop-detail {
+  grid-column: 2 / -1;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The palette is one line per command, as in the terminal. */
+.popover.is-palette .pop-row { grid-template-columns: max-content minmax(0, 1fr); gap: 0 12px; }
+.popover.is-palette .pop-name { font-weight: 400; color: var(--accent); }
+.popover.is-palette .pop-detail { grid-column: 2; }
+
+.pop-keys {
+  padding: 5px 7px 2px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+/* ── Past conversations ─────────────────────────────────── */
 #sessions-drawer {
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
   max-height: 55vh;
   overflow-y: auto;
   flex-shrink: 0;
@@ -959,32 +1080,31 @@ body.is-popup {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px var(--spacing-md);
-  color: var(--text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   position: sticky;
   top: 0;
-  background: var(--bg-secondary);
+  padding: 3px 8px 3px var(--gutter);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 .drawer-empty {
-  padding: var(--spacing-md);
-  color: var(--text-muted);
+  padding: 8px var(--gutter) 12px;
+  color: var(--faint);
   font-size: 12px;
-  line-height: 1.6;
 }
+
+.drawer-empty code { font-family: var(--font-mono); }
 
 .sess {
   display: block;
   width: 100%;
-  text-align: left;
   background: none;
   border: none;
   border-top: 1px solid var(--border-subtle);
-  padding: var(--spacing-sm) var(--spacing-md);
-  color: var(--text-primary);
+  padding: 7px var(--gutter);
+  text-align: left;
   font-family: var(--font-mono);
   cursor: pointer;
 }
@@ -999,113 +1119,18 @@ body.is-popup {
 }
 
 .sess-meta {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--faint);
+  margin-top: 1px;
 }
 
-/* The two outcomes read differently on purpose — they are different promises. */
-.sess-continue { color: var(--green); }
-.sess-recap { color: var(--orange); }
+/* Different promises, so they read differently. */
+.sess-continue { color: var(--success); }
+.sess-recap { color: var(--attention); }
 
-/* ── 1.59.0: attach, stop, queue, the footer, richer replies ─────────── */
-#attach-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-#attach-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-accent);
-}
-
-#send-btn .icon-stop { display: none; }
-#send-btn.stop .icon-send { display: none; }
-#send-btn.stop .icon-stop { display: block; }
-#send-btn.stop {
-  color: var(--red, #f85149);
-  border-color: var(--red, #f85149);
-}
-
-/* A message typed during a turn waits its turn, and says so. */
-.message-user.queued .message-content {
-  opacity: 0.55;
-  border-style: dashed;
-}
-
-.message-user.queued {
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.message-user.queued::after {
-  content: 'queued';
-  color: var(--text-muted);
-  font-size: 10px;
-  margin-top: 2px;
-}
-
-.panel-state {
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 4px 2px 0;
-  min-height: 1em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.panel-state:empty { display: none; }
-
-.md-table {
-  border-collapse: collapse;
-  margin: 6px 0;
-  font-size: 12px;
-  white-space: normal;
-  display: block;
-  overflow-x: auto;
-}
-
-.md-table th,
-.md-table td {
-  border: 1px solid var(--border-color);
-  padding: 3px 8px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.md-table th {
-  background: var(--bg-tertiary);
-  font-weight: 600;
-}
-
-.md-list {
-  margin: 4px 0;
-  padding-left: 20px;
-  white-space: normal;
-}
-
-.md-list li { margin: 2px 0; }
-
-.md-h {
-  font-weight: 700;
-  margin: 8px 0 2px;
-}
-
-.md-h1 { font-size: 15px; }
-.md-h2 { font-size: 14px; }
-.md-h3,
-.md-h4 { font-size: 13px; }
-
-.message-content a {
-  color: var(--text-accent);
+/* A toolbar popup has no size of its own, and an empty transcript would
+   collapse it to a sliver. */
+body.is-popup {
+  width: 420px;
+  height: 600px;
 }

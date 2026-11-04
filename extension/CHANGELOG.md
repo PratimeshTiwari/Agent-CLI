@@ -18,7 +18,29 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
-### 1.59.0 — 2026-11-02
+### 1.60.0 — 2026-11-05
+
+**The side panel is rebuilt on the terminal's design** (VS Code's chat is the same page, companion
+1.8.14). Colour is a role, from the terminal's palettes; a conversation is rows, not bubbles.
+
+- **Mode and effort are menus in the composer.** Effort lists the model each level uses on this
+  account, and refuses one the account does not have. Bare `/effort` and `/mode` open them.
+- **`/` opens a command list**, filtered as you type, with the terminal's descriptions.
+- **The footer follows the tab.** It was one switch behind, with a false `⚠`, because `/effort`
+  answers before the tab has moved. A new `panel_state` message updates it when the tab lands, and
+  when a model is picked by hand in the tab.
+- **The header says the project's name** (`name` in its `package.json`, else the folder), so this
+  repo reads `agent-cli` wherever it is checked out.
+- **Status lines render their Markdown.** A one-line status was escaped and never formatted, so
+  `**High**` was drawn with its asterisks.
+- **The slab beside send is gone.** It was the input's own scrollbar at one row.
+- **A pasted image shows as a thumbnail** in the composer and under the sent message.
+- Replies carry `●`, calls read `● Run(npm test)` with `⎿` and the outcome, and a result lands on its
+  own call when several finish out of order. The working row counts, `✻ Thinking… (12s · esc to
+  stop)`. Diffs start at the first hunk and say `+2 −1`. Approvals and questions are numbered choices.
+- The header shows the folder's name, and says "Disconnected" only when it is.
+
+## 1.59.0 — 2026-11-02
 
 **The panels catch up with the terminal** (agent v8.6). Asked: "update the chrome side panel,
 floating window and vscode side panel with all our latest features".

@@ -36,18 +36,32 @@ const EDITOR_ABSENT_BUTTONS = ['dock-btn', 'popout-btn', 'workspace-btn'];
  */
 const THEME_BRIDGE = `
 :root {
-  --bg-primary: var(--vscode-sideBar-background, #0d1117);
-  --bg-secondary: var(--vscode-editor-background, #161b22);
-  --bg-tertiary: var(--vscode-input-background, #1c2128);
-  --bg-hover: var(--vscode-list-hoverBackground, #21262d);
-  --bg-active: var(--vscode-list-activeSelectionBackground, #30363d);
-  --text-primary: var(--vscode-foreground, #e6edf3);
-  --text-secondary: var(--vscode-descriptionForeground, #8b949e);
-  --text-muted: var(--vscode-disabledForeground, #484f58);
-  --text-accent: var(--vscode-textLink-foreground, #58a6ff);
-  --border-color: var(--vscode-panel-border, #30363d);
-  --border-subtle: var(--vscode-widget-border, #21262d);
+  --bg: var(--vscode-sideBar-background, #1e1e1e);
+  --bg-raised: var(--vscode-input-background, #26272c);
+  --bg-sunken: var(--vscode-textCodeBlock-background, #18181b);
+  --bg-hover: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.15));
+  --border: var(--vscode-input-border, var(--vscode-widget-border, #36383f));
+  --border-subtle: var(--vscode-widget-border, var(--vscode-panel-border, #2b2c31));
+  --text: var(--vscode-foreground, #e6e6e6);
+  --muted: var(--vscode-descriptionForeground, #9ba1b8);
+  --faint: color-mix(in srgb, var(--vscode-descriptionForeground, #9ba1b8) 78%, transparent);
+  --accent: var(--vscode-focusBorder, #7aa2f7);
+  --link: var(--vscode-textLink-foreground, #7dcfff);
+  --attention: var(--vscode-editorWarning-foreground, #ff9e64);
+  --danger: var(--vscode-errorForeground, #f7768e);
+  --success: var(--vscode-testing-iconPassed, #9ece6a);
+  --plan: var(--vscode-charts-yellow, #e0af68);
+  --auto: var(--vscode-charts-green, #73daca);
+  --strict: var(--vscode-charts-purple, #bb9af7);
+  --add-bg: var(--vscode-diffEditor-insertedLineBackground, #132a1f);
+  --del-bg: var(--vscode-diffEditor-removedLineBackground, #2d1a1d);
+  --on-accent: var(--vscode-button-foreground, #16161a);
+  --font-ui: var(--vscode-font-family, -apple-system, sans-serif);
   --font-mono: var(--vscode-editor-font-family, Menlo, monospace);
+}
+#send-btn.ready, .diff-btn.accept, .question-actions .question-submit {
+  background: var(--vscode-button-background, var(--accent));
+  border-color: var(--vscode-button-background, var(--accent));
 }`;
 
 /**
@@ -199,6 +213,39 @@ function selectionBody(entry) {
     ].join('\n');
 }
 
+/*
+ * A file chosen in the system dialog. An image goes in as a pasted one does,
+ * because the model has to see it and `read_file` cannot show it; anything else
+ * goes by path, as a file dragged from the explorer does, so the model reads the
+ * range it needs and a PDF or a large file works. An image too big to paste, or
+ * one that cannot be read, falls back to its path rather than being lost.
+ */
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const MAX_PICKED_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function pickedFile(filePath) {
+    const mime = IMAGE_TYPES[path.extname(filePath).toLowerCase()];
+    if (!mime) return { path: filePath };
+    try {
+        const bytes = fs.readFileSync(filePath);
+        if (bytes.length > MAX_PICKED_IMAGE_BYTES) return { path: filePath };
+        return {
+            path: filePath,
+            mime,
+            sizeKB: Math.max(1, Math.round(bytes.length / 1024)),
+            dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
+        };
+    } catch {
+        return { path: filePath };
+    }
+}
+
+/** The picker's first row: Finder by name where that is what opens. */
+function browseLabel(platform = process.platform) {
+    return platform === 'darwin' ? 'Browse in Finder…' : 'Browse…';
+}
+
 module.exports = {
+    browseLabel, pickedFile,
     AGENT_DIR, agentStateDir, EDITOR_ABSENT_BUTTONS, buildWebviewHtml, readBridge, pidAlive, selectionMarker, selectionBody,
 };

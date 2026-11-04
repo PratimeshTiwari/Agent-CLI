@@ -19,6 +19,11 @@ const modeText = document.getElementById('mode-text');
 const attachBtn = document.getElementById('attach-btn');
 const attachInput = document.getElementById('attach-input');
 const panelStateEl = document.getElementById('panel-state');
+const workspaceNameEl = document.getElementById('workspace-name');
+const effortBtn = document.getElementById('effort-btn');
+const effortText = document.getElementById('effort-text');
+const popoverEl = document.getElementById('popover');
+const attachmentsEl = document.getElementById('attachments');
 
 // ── State ────────────────────────────────────────────────────────────
 let currentMode = 'plan';
@@ -31,6 +36,12 @@ let historyRequested = false;
 // ends — the terminal's queue. Each is `{ content, div }`: what goes to the
 // agent, and the bubble already drawn for it.
 let queuedSends = [];
+// What the agent last said about itself (v8.8): the footer and both menus read
+// this, so the menus can open between its updates.
+let panelState = null;
+let slashCommands = [];
+// The open popover, or null: `{ kind, rows, at }`.
+let popover = null;
 
 // ── Initialization ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -68,6 +79,7 @@ function setupEventListeners() {
     else sendMessage();
   });
   commandInput.addEventListener('keydown', (e) => {
+    if (popoverKey(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -115,13 +127,27 @@ function setupEventListeners() {
   // to send. Muted-until-useful was half the idea; without this half the
   // button looks equally dead whether the box is empty or full.
   commandInput.addEventListener('input', () => {
-    commandInput.style.height = 'auto';
-    commandInput.style.height = Math.min(commandInput.scrollHeight, 150) + 'px';
+    fitInput();
     reflectSendState();
+    updatePalette();
+    showAttachments();
   });
 
-  // Mode toggle
-  modeToggle.addEventListener('click', toggleMode);
+  // The two menus. The click that opens one must not count as a click outside.
+  modeToggle.addEventListener('click', () => togglePopover('mode'));
+  effortBtn?.addEventListener('click', () => togglePopover('effort'));
+  document.addEventListener('mousedown', (e) => {
+    if (popover && !e.target.closest?.('#popover, #mode-toggle, #effort-btn')) closePopover();
+  });
+
+  // The welcome screen's commands are the command, not a picture of one.
+  document.querySelectorAll('.tip-key').forEach((tip) => {
+    tip.addEventListener('click', () => {
+      commandInput.value = tip.dataset.cmd;
+      commandInput.focus();
+      commandInput.dispatchEvent(new Event('input'));
+    });
+  });
 
   setupPopout();
   setupWorkspace();
@@ -460,7 +486,9 @@ function watchConnection() {
 function updateConnectionUI(connected) {
   isConnected = connected;
   connectionDot.className = `dot ${connected ? 'connected' : 'disconnected'}`;
-  connectionText.textContent = connected ? 'Connected' : 'Disconnected';
+  connectionDot.title = connected ? 'Connected to the agent' : 'Not connected to the agent';
+  // The dot says it when all is well; only the fault is worth a word.
+  connectionText.textContent = connected ? '' : 'Disconnected';
 
   // "No agent is running for this folder" stops being true the moment the
   // agent connects (1.59.0); it stayed on screen above a working chat.
@@ -481,44 +509,254 @@ function panelStateLine(state) {
   ].filter(Boolean).join(' · ');
 }
 
+/** The terminal's meter: five cells, then the number. */
+function contextMeter(pct) {
+  const filled = Math.min(5, Math.max(0, Math.round(pct / 20)));
+  return { cells: '▰'.repeat(filled) + '▱'.repeat(5 - filled), label: `${pct}%` };
+}
+
+/**
+ * The tab's model when it is not the one the effort maps to, else ''. The
+ * terminal's footer says the same, `⚠ 3.8 Flash`, and nothing more.
+ */
+function tabDiffers(state) {
+  // Mid-switch the tab has not answered yet, so this is not a disagreement.
+  if (state?.switching) return '';
+  const rung = (state?.efforts || []).find((e) => e.id === state.effort);
+  if (!rung?.available || !state?.model) return '';
+  return rung.model.trim().toLowerCase() === state.model.trim().toLowerCase() ? '' : state.model;
+}
+
 function showPanelState(state) {
   if (!panelStateEl || !state) return;
-  panelStateEl.textContent = panelStateLine(state);
+  panelState = state;
+  const differs = tabDiffers(state);
+  if (effortText) {
+    effortText.textContent = state.effort || 'effort';
+    if (differs) {
+      const mark = document.createElement('span');
+      mark.className = 'tab-differs';
+      mark.textContent = ` ⚠ ${differs}`;
+      effortText.appendChild(mark);
+    }
+    effortBtn.title = differs
+      ? `Effort ${state.effort}, but the tab is on ${differs}`
+      : panelStateLine(state);
+  }
+  const pct = state.contextPct;
+  panelStateEl.textContent = '';
+  panelStateEl.classList.toggle('warn', pct > 50 && pct <= 80);
+  panelStateEl.classList.toggle('danger', pct > 80);
+  if (Number.isFinite(pct) && pct > 0) {
+    const { cells, label } = contextMeter(pct);
+    const bar = document.createElement('span');
+    bar.className = 'meter-cells';
+    bar.textContent = `${cells} `;
+    panelStateEl.append(bar, label);
+    panelStateEl.title = `${pct}% of this chat's budget used`;
+  }
   if (state.mode && state.mode !== currentMode) {
     currentMode = state.mode;
     updateModeUI();
   }
 }
 
+/** The folder's name in the header; the whole path on hover. */
+function showWorkspace(path, name) {
+  if (!workspaceNameEl) return;
+  workspaceNameEl.textContent = name || baseName(path);
+  workspaceNameEl.title = path;
+}
+
 // ── Mode Toggle ─────────────────────────────────────────────────────
 // The CLI's order (server/src/backend/core/policy/modes.js): plan → auto → strict.
 const MODE_ORDER = ['plan', 'auto', 'strict'];
 
-function toggleMode() {
-  currentMode = MODE_ORDER[(MODE_ORDER.indexOf(currentMode) + 1) % MODE_ORDER.length];
-  updateModeUI();
+// The terminal's glyphs (status-rows.js), so a mode looks the same in both.
+const MODE_GLYPHS = { plan: '⏸', auto: '⏵⏵', strict: '⏹' };
 
-  // Send slash command to server
+function setMode(mode) {
+  currentMode = mode;
+  updateModeUI();
   chrome.runtime.sendMessage({
     type: 'slash_command',
-    payload: { command: currentMode, args: [] },
+    payload: { command: mode, args: [] },
   });
 }
 
 function updateModeUI() {
-  // `●` / `○`, the same two glyphs the CLI's status bar uses for connected and
-  // not. Filled means it acts on its own; hollow means it asks first.
-  // Strict asks for everything, Markdown included; plan lets the repo's own
-  // Markdown through. `◎` so the two plan-like modes are not one glyph.
-  if (currentMode === 'auto') {
-    modeIcon.textContent = '●';
-    modeText.textContent = 'Auto';
-    modeToggle.classList.add('auto-mode');
-  } else {
-    modeIcon.textContent = currentMode === 'strict' ? '◎' : '○';
-    modeText.textContent = currentMode === 'strict' ? 'Strict' : 'Plan';
-    modeToggle.classList.remove('auto-mode');
+  modeIcon.textContent = MODE_GLYPHS[currentMode] || MODE_GLYPHS.plan;
+  modeText.textContent = currentMode;
+  for (const m of MODE_ORDER) modeToggle.classList.toggle(`mode-${m}`, m === currentMode);
+}
+
+// ── The popover ─────────────────────────────────────────────────────
+/**
+ * The mode menu, the effort menu and the `/` palette are one list drawn above
+ * the composer (v8.8). The caret stays in the input, so the keys that move it
+ * are the ones the terminal uses, and typing carries on filtering the palette.
+ *
+ * What a menu offers comes from the agent (`panelState`): the models are this
+ * account's, and an effort it cannot reach is listed and refused, as the
+ * terminal's slider does.
+ */
+function menuRows(kind) {
+  if (kind === 'mode') {
+    const modes = panelState?.modes || MODE_ORDER.map((id) => ({ id, about: '' }));
+    return modes.map((m) => ({
+      value: m.id,
+      glyph: MODE_GLYPHS[m.id],
+      glyphClass: `mode-${m.id}`,
+      name: m.id,
+      detail: m.about,
+      current: m.id === currentMode,
+    }));
   }
+  return (panelState?.efforts || []).map((e) => ({
+    value: e.id,
+    name: e.name,
+    detail: e.model,
+    current: e.id === panelState.effort,
+    disabled: !e.available,
+  }));
+}
+
+function matchingCommands(typed) {
+  const q = typed.toLowerCase();
+  const rank = (c) => (c.name.startsWith(q) ? 0 : 1);
+  return slashCommands
+    .filter((c) => c.name.includes(q))
+    .sort((a, b) => rank(a) - rank(b))
+    .map((c) => ({ value: c.name, name: `/${c.name}`, detail: c.desc }));
+}
+
+/** The chip's own highlight follows the popover it opened. */
+function markChips() {
+  modeToggle.setAttribute('aria-expanded', String(popover?.kind === 'mode'));
+  effortBtn?.setAttribute('aria-expanded', String(popover?.kind === 'effort'));
+}
+
+function renderPopover() {
+  const { kind, rows, at } = popover;
+  popoverEl.classList.toggle('is-palette', kind === 'palette');
+  const title = { mode: 'Mode', effort: 'Effort · the model each level uses' }[kind];
+  popoverEl.innerHTML = (title ? `<div class="pop-title">${escapeHtml(title)}</div>` : '')
+    + rows.map((r, i) => `
+      <button class="pop-row${i === at ? ' active' : ''}" role="option" data-i="${i}"${r.disabled ? ' disabled' : ''}>
+        ${kind === 'palette' ? '' : `<span class="pop-glyph ${r.glyphClass || ''}">${r.glyph || ''}</span>`}
+        <span class="pop-name">${escapeHtml(r.name)}</span>
+        ${kind === 'palette' ? '' : `<span class="pop-check">${r.current ? '✔' : ''}</span>`}
+        ${r.detail ? `<span class="pop-detail">${escapeHtml(r.detail)}</span>` : ''}
+      </button>`).join('')
+    + '<div class="pop-keys">↑↓ move · enter choose · esc close</div>';
+  popoverEl.hidden = false;
+  popoverEl.querySelectorAll('.pop-row').forEach((row) => {
+    // `mousedown`, or the input loses the caret before the choice is made.
+    row.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      popover.at = Number(row.dataset.i);
+      choosePopover();
+    });
+  });
+  popoverEl.querySelector('.active')?.scrollIntoView?.({ block: 'nearest' });
+  markChips();
+}
+
+function openPopover(kind, rows) {
+  if (rows.length === 0) { closePopover(); return false; }
+  const current = rows.findIndex((r) => r.current);
+  popover = { kind, rows, at: current >= 0 ? current : 0 };
+  renderPopover();
+  return true;
+}
+
+function closePopover() {
+  popover = null;
+  popoverEl.hidden = true;
+  markChips();
+}
+
+function togglePopover(kind) {
+  if (popover?.kind === kind) { closePopover(); return; }
+  if (!isConnected) { appendStatus('Not connected — start the agent first.'); return; }
+  // An agent older than this panel sends no list: its text answer is the most
+  // there is, and a button that does nothing would be worse.
+  if (!openPopover(kind, menuRows(kind))) {
+    chrome.runtime.sendMessage({ type: 'slash_command', payload: { command: kind, args: [] } });
+  }
+  commandInput.focus();
+}
+
+function movePopover(step) {
+  const { rows } = popover;
+  let at = popover.at;
+  for (let i = 0; i < rows.length; i++) {
+    at = (at + step + rows.length) % rows.length;
+    if (!rows[at].disabled) break;
+  }
+  popover.at = at;
+  renderPopover();
+}
+
+function choosePopover() {
+  const { kind, rows, at } = popover;
+  const row = rows[at];
+  if (!row || row.disabled) return;
+  closePopover();
+  if (kind === 'mode') { if (!row.current) setMode(row.value); return; }
+  if (kind === 'effort') {
+    if (!row.current) {
+      chrome.runtime.sendMessage({ type: 'slash_command', payload: { command: 'effort', args: [row.value] } });
+    }
+    return;
+  }
+  // `/chat` is nothing without its link, so the caret waits for one.
+  if (row.value === 'chat') {
+    commandInput.value = '/chat ';
+    fitInput();
+    return;
+  }
+  commandInput.value = `/${row.value}`;
+  sendMessage();
+}
+
+/** One key, if the popover wants it. Returns whether it took it. */
+function popoverKey(e) {
+  if (!popover) return false;
+  const take = () => { e.preventDefault(); return true; };
+  if (e.key === 'ArrowDown') { movePopover(1); return take(); }
+  if (e.key === 'ArrowUp') { movePopover(-1); return take(); }
+  if (e.key === 'Escape') { closePopover(); return take(); }
+  if (e.key === 'Enter' && !e.shiftKey) { choosePopover(); return take(); }
+  if (e.key === 'Tab' && popover.kind === 'palette') {
+    commandInput.value = `/${popover.rows[popover.at].value} `;
+    fitInput();
+    closePopover();
+    return take();
+  }
+  return false;
+}
+
+/** `/` alone on the line opens the palette; a space means it has been chosen. */
+function updatePalette() {
+  const typed = /^\/(\S*)$/.exec(commandInput.value);
+  if (typed) {
+    if (!isConnected || !openPopover('palette', matchingCommands(typed[1]))) return;
+  } else if (popover?.kind === 'palette') {
+    closePopover();
+  }
+}
+
+/**
+ * The box follows its text up to the stylesheet's cap, and only then scrolls. A
+ * textarea with `overflow: auto` draws a scrollbar at one row, which sat beside
+ * the send button as an unexplained grey slab.
+ */
+function fitInput() {
+  commandInput.style.height = 'auto';
+  const full = commandInput.scrollHeight;
+  commandInput.style.height = `${Math.min(full, 170)}px`;
+  commandInput.style.overflowY = full > 170 ? 'auto' : 'hidden';
 }
 
 // ── Send Message ────────────────────────────────────────────────────
@@ -612,15 +850,65 @@ function onPasteImage(e) {
   for (const file of files) addImage(file);
 }
 
+/** An image as a thumbnail. The data is ours, read from the paste itself. */
+function thumbnail(img) {
+  const el = document.createElement('img');
+  el.className = 'thumb';
+  el.src = img.dataUrl;
+  el.alt = imageTag(img.n);
+  el.title = `${imageTag(img.n)} · ${img.sizeKB} KB`;
+  return el;
+}
+
+/**
+ * The images going with this message, above the text (v8.8). The tag stays the
+ * rule, as in the terminal: an image goes while its tag is in the text, so the
+ * `×` takes the tag out and the strip follows the box.
+ */
+function showAttachments() {
+  if (!attachmentsEl) return;
+  const here = pastedImages.filter((img) => commandInput.value.includes(imageTag(img.n)));
+  attachmentsEl.hidden = here.length === 0;
+  attachmentsEl.replaceChildren(...here.map((img) => {
+    const item = document.createElement('div');
+    item.className = 'attachment';
+    const remove = document.createElement('button');
+    remove.className = 'attachment-remove';
+    remove.title = `Remove ${imageTag(img.n)}`;
+    remove.setAttribute('aria-label', remove.title);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      commandInput.value = commandInput.value.replace(`${imageTag(img.n)} `, '').replace(imageTag(img.n), '');
+      commandInput.dispatchEvent(new Event('input'));
+      commandInput.focus();
+    });
+    item.append(thumbnail(img), remove);
+    return item;
+  }));
+}
+
+/** The images that went with a message, under it in the transcript. */
+function showSentImages(bubble, images) {
+  if (!bubble || images.length === 0) return;
+  const strip = document.createElement('div');
+  strip.className = 'sent-images';
+  strip.append(...images.map(thumbnail));
+  bubble.appendChild(strip);
+}
+
 function addImage(file) {
   const reader = new FileReader();
   reader.onload = () => {
-    pastedCount += 1;
-    pastedImages.push({ n: pastedCount, dataUrl: reader.result, mime: file.type, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
-    insertAtCaret(commandInput, imageTag(pastedCount));
-    commandInput.dispatchEvent(new Event('input'));
+    addImageData({ dataUrl: reader.result, mime: file.type, sizeKB: Math.max(1, Math.round(file.size / 1024)) });
   };
   reader.readAsDataURL(file);
+}
+
+function addImageData(image) {
+  pastedCount += 1;
+  pastedImages.push({ n: pastedCount, dataUrl: image.dataUrl, mime: image.mime, sizeKB: image.sizeKB });
+  insertAtCaret(commandInput, imageTag(pastedCount));
+  commandInput.dispatchEvent(new Event('input'));
 }
 
 /*
@@ -661,6 +949,14 @@ function addFileTag(f) {
   insertAtCaret(commandInput, fileTag(entry));
   commandInput.dispatchEvent(new Event('input'));
 }
+
+/** Files chosen in the editor's own dialog (Browse in Finder…): images as pasted, the rest by path. */
+window.__agentAddFiles = (files) => {
+  for (const f of files) {
+    if (f.dataUrl) addImageData(f);
+    else addFileTag({ name: baseName(f.path), path: f.path });
+  }
+};
 
 function onDropFiles(e) {
   const dt = e.dataTransfer;
@@ -781,6 +1077,7 @@ function sendMessage() {
   // With the images and files whose tags it carries, in the terminal's order:
   // images, then file headers, then the message.
   const { used, block } = imageBlock(content);
+  showSentImages(bubble, used);
   pastedImages = pastedImages.filter((img) => !used.includes(img));
   const dropped = fileBlock(content);
   droppedFiles = droppedFiles.filter((f) => !dropped.used.includes(f));
@@ -788,6 +1085,7 @@ function sendMessage() {
 
   commandInput.value = '';
   commandInput.style.height = 'auto';
+  showAttachments();
 
   // A turn is running: queue it, as the terminal does (1.59.0). It was refused
   // here and dropped by the agent, which answers one turn at a time.
@@ -839,20 +1137,26 @@ function handleSlashCommand(input) {
   const command = parts[0];
   const args = parts.slice(1);
 
-  // Handle local commands
-  if (MODE_ORDER.includes(command)) {
-    currentMode = command;
-    updateModeUI();
-  }
-
   if (!isConnected) {
     appendMessage('user', input);
     explainDisconnected();
     return;
   }
 
+  // Asking what they are is asking to change them: the terminal opens its
+  // menu for these too, and `/effort`'s text answer offered nothing to click.
+  if (args.length === 0 && (command === 'effort' || command === 'mode')) {
+    togglePopover(command);
+    return;
+  }
+
+  if (MODE_ORDER.includes(command) && args.length === 0) {
+    currentMode = command;
+    updateModeUI();
+  }
+
   // Display the command
-  appendStatus(`/${command} ${args.join(' ')}`.trim());
+  appendMessage('user', input);
 
   // Send to server
   chrome.runtime.sendMessage({
@@ -957,8 +1261,16 @@ function appendMessage(role, content) {
   contentDiv.className = 'message-content';
   // The user's own message is shown exactly as typed; only the agent's reply
   // is formatted, and that path escapes before it formats.
-  if (role === 'user') contentDiv.textContent = content;
-  else contentDiv.innerHTML = renderMarkdownish(content);
+  if (role === 'user') {
+    contentDiv.textContent = content;
+    if (content.startsWith('/')) div.classList.add('is-command');
+  } else {
+    contentDiv.innerHTML = renderMarkdownish(content);
+    const dot = document.createElement('span');
+    dot.className = 'msg-dot';
+    dot.textContent = '●';
+    div.appendChild(dot);
+  }
 
   div.appendChild(contentDiv);
   messageStream.appendChild(div);
@@ -968,6 +1280,7 @@ function appendMessage(role, content) {
 function appendToolCall(name, args, verb) {
   const div = document.createElement('div');
   div.className = 'message-tool';
+  div.dataset.name = name;
 
   // A one-line summary of the arguments.
   //
@@ -1002,29 +1315,48 @@ function appendToolCall(name, args, verb) {
       <span class="tool-name">${escapeHtml(verb || name)}</span>
       <span class="tool-args">${escapeHtml(subject ? `(${preview(subject.trim())})` : argsPreview)}</span>
     </div>
+    <div class="tool-summary"></div>
     <div class="tool-details">${escapeHtml(JSON.stringify(args, null, 2))}</div>
   `;
   // A listener, not an `onclick` attribute: an extension page's default CSP
   // refuses inline handlers, so the attribute never ran — the row could not
   // be expanded. Same reason as the diff buttons below.
   div.querySelector('.tool-header').addEventListener('click', (e) => {
-    e.currentTarget.nextElementSibling.classList.toggle('expanded');
+    e.currentTarget.parentElement.querySelector('.tool-details').classList.toggle('expanded');
   });
 
   messageStream.appendChild(div);
   scrollToBottom();
 }
 
-function appendToolResult(name, success, result, error) {
-  const lastTool = messageStream.querySelector('.message-tool:last-of-type');
-  if (lastTool) {
-    lastTool.classList.add(success ? 'tool-result-success' : 'tool-result-error');
+/** What a result comes to, in the one line under its call. */
+function toolOutcome(success, result, error) {
+  const said = error
+    || (typeof result === 'string' ? result : result?.message || result?.summary || '');
+  const line = String(said).split('\n').map((l) => l.trim()).find(Boolean);
+  if (!line) {
+    if (Array.isArray(result)) return `${result.length} item${result.length === 1 ? '' : 's'}`;
+    return success ? 'done' : 'failed';
+  }
+  return line.length > 100 ? `${line.slice(0, 99)}…` : line;
+}
 
-    const details = lastTool.querySelector('.tool-details');
-    if (details) {
-      const resultStr = error || (typeof result === 'string' ? result : JSON.stringify(result, null, 2));
-      details.textContent += '\n\n─── Result ───\n' + resultStr.substring(0, 2000);
-    }
+function appendToolResult(name, success, result, error) {
+  // The newest unfinished call of this name: calls in one round run at once and
+  // finish in any order, and `:last-of-type` counted every div in the stream.
+  const open = [...messageStream.querySelectorAll('.message-tool')]
+    .filter((row) => !row.classList.contains('tool-result-success') && !row.classList.contains('tool-result-error'));
+  const lastTool = open.filter((row) => row.dataset.name === name).pop() || open.pop();
+  if (!lastTool) return;
+  lastTool.classList.add(success ? 'tool-result-success' : 'tool-result-error');
+
+  const summary = lastTool.querySelector('.tool-summary');
+  if (summary) summary.textContent = toolOutcome(success, result, error);
+
+  const details = lastTool.querySelector('.tool-details');
+  if (details) {
+    const resultStr = error || (typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+    details.textContent += '\n\n─── Result ───\n' + String(resultStr).substring(0, 2000);
   }
 }
 
@@ -1036,7 +1368,11 @@ function appendDiff(diffData) {
   div.id = `diff-${diffId}`;
 
   // Parse patch into lines
-  const diffLines = (patch || '').split('\n').map(line => {
+  const patchLines = (patch || '').split('\n');
+  // From the first hunk: `Index:`, the rule and the `---`/`+++` pair repeat the
+  // path the header already names, and the terminal draws none of them.
+  const firstHunk = Math.max(0, patchLines.findIndex((l) => l.startsWith('@@')));
+  const diffLines = patchLines.slice(firstHunk).map(line => {
     let cls = 'context';
     if (line.startsWith('+') && !line.startsWith('+++')) cls = 'add';
     else if (line.startsWith('-') && !line.startsWith('---')) cls = 'del';
@@ -1044,19 +1380,21 @@ function appendDiff(diffData) {
     return `<div class="diff-line ${cls}">${escapeHtml(line)}</div>`;
   }).join('');
 
+  const shown = patchLines.slice(firstHunk);
+  const added = shown.filter((l) => l.startsWith('+')).length;
+  const removed = shown.filter((l) => l.startsWith('-')).length;
+
   div.innerHTML = `
     <div class="diff-header">
-      <span class="diff-file-path">📄 ${escapeHtml(filePath)}</span>
-      <span class="diff-status pending">PENDING</span>
+      <span class="diff-verb">Edit</span>
+      <span class="diff-file-path" title="${escapeHtml(filePath)}">${escapeHtml(filePath)}</span>
+      <span class="diff-stat"><span class="add">+${added}</span> <span class="del">−${removed}</span></span>
+      <span class="diff-status pending">waiting</span>
     </div>
     <div class="diff-content">${diffLines}</div>
     <div class="diff-actions">
-      <button class="diff-btn accept" data-action="accept">
-        ✅ Accept
-      </button>
-      <button class="diff-btn reject" data-action="reject">
-        ❌ Reject
-      </button>
+      <button class="diff-btn accept" data-action="accept">Accept</button>
+      <button class="diff-btn reject" data-action="reject">Reject</button>
     </div>
   `;
   /*
@@ -1100,7 +1438,7 @@ function appendStatus(text, kind) {
   if (kind) div.dataset.kind = kind;
   div.innerHTML = isBlock
     ? `<div class="status-body">${renderMarkdownish(body)}</div>`
-    : `<span class="status-text">${escapeHtml(body)}</span>`;
+    : `<span class="status-text">${renderMarkdownish(body)}</span>`;
   messageStream.appendChild(div);
   scrollToBottom();
 }
@@ -1108,10 +1446,13 @@ function appendStatus(text, kind) {
 function appendError(text) {
   const div = document.createElement('div');
   div.className = 'message message-error';
-  div.innerHTML = `<div class="message-content">❌ ${escapeHtml(text)}</div>`;
+  div.innerHTML = `<span>✗</span><div class="message-content">${escapeHtml(text)}</div>`;
   messageStream.appendChild(div);
   scrollToBottom();
 }
+
+// The terminal's spinner: one glyph, the word, how long, and how to stop.
+const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
 
 function showThinking() {
   removeThinking();
@@ -1119,16 +1460,29 @@ function showThinking() {
   div.className = 'thinking';
   div.id = 'thinking-indicator';
   div.innerHTML = `
-    <div class="thinking-dots"><span></span><span></span><span></span></div>
-    <span>Thinking...</span>
+    <span class="spin">${SPINNER[0]}</span>
+    <span>Thinking…</span>
+    <span class="think-meta"></span>
   `;
+  const started = Date.now();
+  let tick = 0;
+  const glyph = div.querySelector('.spin');
+  const meta = div.querySelector('.think-meta');
+  // Kept on the row, so taking the row down always stops its clock.
+  div.clock = setInterval(() => {
+    tick += 1;
+    glyph.textContent = SPINNER[tick % SPINNER.length];
+    meta.textContent = `(${Math.floor((Date.now() - started) / 1000)}s · esc to stop)`;
+  }, 120);
   messageStream.appendChild(div);
   scrollToBottom();
 }
 
 function removeThinking() {
   const el = document.getElementById('thinking-indicator');
-  if (el) el.remove();
+  if (!el) return;
+  clearInterval(el.clock);
+  el.remove();
 }
 
 /**
@@ -1412,11 +1766,12 @@ function appendStreamChunk(payload) {
     el = document.createElement('div');
     el.className = 'message message-agent streaming';
     el.id = 'stream-partial';
-    el.innerHTML = '<div class="message-content"></div>';
+    el.innerHTML = '<span class="msg-dot">●</span><div class="message-content"></div>';
     messageStream.appendChild(el);
   }
-  // The server sends the reply so far, not a delta.
-  el.querySelector('.message-content').textContent = text;
+  // The server sends the reply so far, not a delta. Rendered as it arrives, so
+  // the reply does not change shape the moment it ends.
+  el.querySelector('.message-content').innerHTML = renderMarkdownish(text);
   scrollToBottom();
 }
 
@@ -1441,10 +1796,10 @@ window.respondToDiff = function(diffId, action) {
 
     if (action === 'accept') {
       status.className = 'diff-status accepted';
-      status.textContent = 'ACCEPTED';
+      status.textContent = 'accepted';
     } else {
       status.className = 'diff-status rejected';
-      status.textContent = 'REJECTED';
+      status.textContent = 'rejected';
     }
 
     if (actions) actions.remove();
@@ -1470,13 +1825,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         updateConnectionUI(true);
         if (payload.workspace) {
           currentWorkspace = payload.workspace;
-          appendStatus(`Workspace: ${payload.workspace}`);
+          showWorkspace(payload.workspace, payload.workspaceName);
         }
         if (payload.mode) {
           currentMode = payload.mode;
           updateModeUI();
         }
         showPanelState(payload.state);
+        if (Array.isArray(payload.commands)) slashCommands = payload.commands;
       } else if (payload.status === 'waiting_for_gemini') {
         // Already showing thinking indicator
       } else if (payload.message) {
@@ -1526,6 +1882,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // The loop went idle: the turn ended, was stopped, or failed. The only
     // end a stopped turn has — it sends no `agent_response`.
+    // The tab's model changed; nothing else about the turn did.
+    case 'panel_state':
+      showPanelState(payload?.state);
+      break;
+
     case 'turn_idle':
       removeThinking();
       isWaitingForResponse = false;
@@ -1631,7 +1992,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
 
     case 'diff_auto_applied':
-      appendStatus(`✅ Auto-applied: ${payload.filePath}`);
+      appendStatus(`Applied \`${payload.filePath}\``);
       break;
 
     case 'command_result':
@@ -1639,6 +2000,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       isWaitingForResponse = false;
       sendBtn.disabled = false;
       reflectSendState();
+      showPanelState(payload.state);
       if (payload.message) {
         appendStatus(payload.message);
       }

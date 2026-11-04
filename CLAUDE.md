@@ -1111,6 +1111,18 @@ no dependencies. Three rules hold it together:
   everything except a process that can read the user's files. **The pty harness's fake
   extension still works because it sends a `chrome-extension://` Origin.**
 
+**The panel is built on the terminal's design (v8.8, extension 1.60.0, companion 1.8.14).** Reported
+with screenshots as far behind the terminal. Colour is a role (`panel.css` holds `theme.js`'s `dark`
+and `light`; `THEME_BRIDGE` re-points them at the editor's theme), and a conversation is rows: `▌`,
+`●`, `● Verb(x)` with `⎿`. Mode and effort are menus in the composer, one `#popover` with the `/`
+palette; `panelState()` sends each rung's model on this account and each mode's line, so the panel
+keeps no copy, and main.js hands over `SLASH_COMMANDS ∩ AGENT_COMMANDS`, because backend/ cannot import
+frontend/. `command_result` carries `state`, but `/effort` answers before the tab moves, so
+`panel_state` follows every `onModels` (`switching` holds the `⚠` meanwhile): without it the footer
+stayed one switch behind. An agent older than the panel sends no list, and the
+button falls back to the command. `panel-controls.test.js` runs the real page in jsdom. Headless
+Chrome's window has a 500-pixel minimum, so judge narrow widths in an iframe.
+
 A turn started in the panel runs on the server's callbacks, so the terminal draws it on its
 next turn rather than live — the same as the Chrome side panel always has. A turn started in
 the terminal reaches the panel live, through the mirror.

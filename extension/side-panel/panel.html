@@ -7,40 +7,46 @@
   <link rel="stylesheet" href="panel.css">
 </head>
 <body>
-  <!-- Status Bar -->
+  <!-- The header (v8.8): where the agent works and how it is connected, then
+       the actions as icons. The mode moved to the composer, beside effort, as
+       the terminal keeps both on its status row under the prompt. -->
   <header id="status-bar">
     <div class="status-left">
-      <span id="connection-dot" class="dot disconnected"></span>
+      <span id="connection-dot" class="dot disconnected" title="Not connected to the agent"></span>
       <span id="connection-text">Disconnected</span>
+      <span id="workspace-name" class="ws-name"></span>
     </div>
     <div class="status-right">
-      <!-- Which build is loaded. Three artifacts ship from one repo and only
-           one of them updates when you pull, so "which version am I running"
-           is the first question when something behaves unexpectedly. Filled in
-           from the manifest at load, so it cannot drift from the real one. -->
-      <button id="new-btn" class="icon-btn" title="New chat">+</button>
-      <button id="sessions-btn" class="icon-btn" title="Past conversations">↺</button>
-      <button id="workspace-btn" class="icon-btn" title="Change the workspace">⌂</button>
+      <!-- Which build is loaded: three artifacts ship from one repo and only
+           one of them updates when you pull. Filled from the manifest. -->
       <span id="ext-version" class="ext-version" title="Extension version"></span>
-      <!-- Chrome's side panel is docked by design and no API floats it. A
-           popup window is a real floating window: movable anywhere, including
-           another monitor, and it is this same page. -->
-      <button id="dock-btn" class="icon-btn" title="Dock to the side panel">⊟</button>
-      <button id="popout-btn" class="icon-btn" title="Open in a floating window">⧉</button>
-      <button id="mode-toggle" class="mode-btn" title="Cycle Plan / Auto / Strict mode">
-        <span id="mode-icon">○</span>
-        <span id="mode-text">Plan</span>
+      <button id="new-btn" class="icon-btn" title="New chat (/new)" aria-label="New chat">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button id="sessions-btn" class="icon-btn" title="Past conversations" aria-label="Past conversations">
+        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/></svg>
+      </button>
+      <button id="workspace-btn" class="icon-btn" title="Change the workspace" aria-label="Change the workspace">
+        <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>
+      </button>
+      <!-- Chrome's side panel is docked by design; a popup window is a real
+           floating window and this same page. -->
+      <button id="dock-btn" class="icon-btn" title="Dock to the side panel" aria-label="Dock to the side panel">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/></svg>
+      </button>
+      <button id="popout-btn" class="icon-btn" title="Open in a floating window" aria-label="Open in a floating window">
+        <svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>
       </button>
     </div>
   </header>
 
-  <!-- Past conversations. Hidden until asked for: it is a drawer, not a
-       permanent column, and the panel is narrow enough that a list would cost
-       the conversation half its width. -->
+  <!-- Past conversations: a drawer, not a column, in a narrow panel. -->
   <section id="sessions-drawer" hidden>
     <div class="drawer-head">
       <span>Past conversations</span>
-      <button id="sessions-close" class="icon-btn" title="Close">×</button>
+      <button id="sessions-close" class="icon-btn" title="Close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
     <div id="sessions-list"></div>
   </section>
@@ -48,52 +54,65 @@
   <!-- Message Stream -->
   <main id="message-stream">
     <div id="welcome-message" class="welcome">
-      <h2>Agent CLI</h2>
-      <p>Start the agent in a terminal, then open a Gemini tab and sign in.
-         Inference happens in your own browser session — there is no API key.</p>
-      <code>agent</code>
+      <div class="welcome-head">
+        <span class="welcome-mark">❯</span>
+        <div>
+          <div class="welcome-name">Agent CLI</div>
+          <div class="welcome-by">Gemini in your own browser · no API key</div>
+        </div>
+      </div>
+      <p>Start the agent with <code>agent</code> in a terminal and keep a Gemini tab signed in.</p>
       <div class="welcome-tips">
-        <span class="tip-key">/effort</span><span class="tip-what">how hard it works</span>
-        <span class="tip-key">/undo</span><span class="tip-what">revert the last edit</span>
-        <span class="tip-key">/compact</span><span class="tip-what">summarise, carry on</span>
-        <span class="tip-key">/context</span><span class="tip-what">what the prompt holds</span>
-        <span class="tip-key">/chat</span><span class="tip-what">continue in another chat</span>
-        <span class="tip-key">/new</span><span class="tip-what">a fresh chat</span>
-        <span class="tip-key">📎</span><span class="tip-what">attach files · esc stops a turn</span>
+        <button class="tip-key" data-cmd="/effort">/effort</button><span class="tip-what">how hard it works, and which model</span>
+        <button class="tip-key" data-cmd="/context">/context</button><span class="tip-what">what the prompt holds</span>
+        <button class="tip-key" data-cmd="/compact">/compact</button><span class="tip-what">summarise, carry on</span>
+        <button class="tip-key" data-cmd="/undo">/undo</button><span class="tip-what">revert the last edit</span>
+        <button class="tip-key" data-cmd="/chat ">/chat</button><span class="tip-what">continue in another chat</span>
+        <button class="tip-key" data-cmd="/">/</button><span class="tip-what">every command · esc stops a turn</span>
       </div>
     </div>
   </main>
 
   <!-- Input Area -->
   <footer id="input-area">
+    <!-- The one popover: the mode and effort menus and the `/` palette (v8.8),
+         drawn above the composer the way the terminal draws its palette. -->
+    <div id="popover" class="popover" role="listbox" hidden></div>
     <div class="input-wrapper">
-      <!-- Attach files (1.59.0): a file dialog here, the editor's own picker
-           in VS Code. The files become [File #n] / [Image #n] tags. -->
-      <button id="attach-btn" title="Attach files">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-        </svg>
-      </button>
-      <input type="file" id="attach-input" multiple hidden>
+      <!-- A pasted image's thumbnail, for as long as its tag is in the text. -->
+      <div id="attachments" class="attachments" hidden></div>
       <textarea
         id="command-input"
-        placeholder="Ask the agent anything..."
+        placeholder="Ask anything, or / for commands"
         rows="1"
         autofocus
       ></textarea>
-      <!-- Send; while a turn runs with nothing typed, a stop (1.59.0). -->
-      <button id="send-btn" title="Send (Enter)">
-        <svg class="icon-send" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 2L11 13"></path>
-          <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
-        </svg>
-        <svg class="icon-stop" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="5" y="5" width="14" height="14" rx="2"></rect>
-        </svg>
-      </button>
+      <div class="composer-bar">
+        <!-- Attach files: a file dialog here, the editor's own picker in VS
+             Code. The files become [File #n] / [Image #n] tags. -->
+        <button id="attach-btn" class="bar-btn" title="Attach files" aria-label="Attach files">
+          <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <button id="mode-toggle" class="chip mode-chip mode-plan" title="Mode" aria-haspopup="listbox">
+          <span id="mode-icon" class="chip-glyph">⏸</span>
+          <span id="mode-text">plan</span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <button id="effort-btn" class="chip" title="Effort" aria-haspopup="listbox">
+          <span id="effort-text">effort</span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <span class="bar-spacer"></span>
+        <!-- How full the chat is, coloured as the terminal's meter. -->
+        <span id="panel-state" class="panel-state"></span>
+        <!-- Send; while a turn runs with nothing typed, a stop. -->
+        <button id="send-btn" title="Send (Enter)" aria-label="Send">
+          <svg class="icon-send" viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg>
+          <svg class="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+      </div>
     </div>
-    <!-- Effort, the tab's model and how full the chat is (1.59.0). -->
-    <div id="panel-state" class="panel-state"></div>
+    <input type="file" id="attach-input" multiple hidden>
   </footer>
 
   <script src="panel.js"></script>

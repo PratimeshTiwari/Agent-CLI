@@ -24,6 +24,7 @@ import { logTrace } from '../core/logs/trace-log.js';
 import { resolveEffort } from '../core/models/effort.js';
 import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/install/restart.js';
 import { canPickFolder, pickFolder } from '../core/workspace/folder-picker.js';
+import { projectName } from '../core/workspace/workspaces.js';
 import { planResume } from '../core/turn/chat-thread.js';
 import { logError, logNotice } from '../core/logs/error-log.js';
 import { extensionVersionNotice, selfReloadNotice, shortcutNotice } from '../core/install/extension-version.js';
@@ -149,9 +150,13 @@ export const WORKER_ONLY_TYPES = new Set([
 ]);
 
 export class WebSocketServer {
-  constructor({ port, agentLoop }) {
+  constructor({ port, agentLoop, commands = [] }) {
     this.port = port;
     this.agentLoop = agentLoop;
+    // The panels' `/` palette (v8.8): the commands they can run, with the
+    // terminal's own descriptions. main.js hands them over because the list
+    // lives in frontend/, which backend/ never imports.
+    this.commands = commands;
     this.wss = null;
     this.clients = new Map(); // id -> { ws, type, connectedAt }
     /**
@@ -193,6 +198,15 @@ export class WebSocketServer {
      */
     this.agentLoop.onIdle?.(() => this.broadcast('extension', {
       id: randomUUID(), type: 'turn_idle', payload: { state: this.agentLoop.panelState?.() || null }, timestamp: Date.now(),
+    }));
+    /*
+     * The tab moved, and the panels' footer must follow. `/effort`'s result goes
+     * out before the switch lands, so without this the footer showed the previous
+     * model and a false ⚠ until the turn after next. Also covers a model picked
+     * by hand in the tab, which no command answers at all.
+     */
+    this.agentLoop.onModels?.(() => this.broadcast('extension', {
+      id: randomUUID(), type: 'panel_state', payload: { state: this.agentLoop.panelState?.() || null }, timestamp: Date.now(),
     }));
   }
 
@@ -351,9 +365,11 @@ export class WebSocketServer {
         status: 'connected',
         clientId,
         workspace: this.agentLoop.workspace,
+        workspaceName: projectName(this.agentLoop.workspace),
         mode: this.agentLoop.mode,
         // Effort, model and context fill for the panel's footer (v8.6).
         state: this.agentLoop.panelState?.() || null,
+        commands: this.commands,
       },
       timestamp: Date.now(),
     });
@@ -1069,7 +1085,9 @@ export class WebSocketServer {
     this._send(client.ws, {
       id: messageId,
       type: 'command_result',
-      payload: result,
+      // With the state after it (v8.8): `/effort max` or a mode change is
+      // drawn in the panel's controls at once, not at the next turn's end.
+      payload: { ...(result || {}), state: this.agentLoop.panelState?.() || null },
       timestamp: Date.now(),
     });
   }
