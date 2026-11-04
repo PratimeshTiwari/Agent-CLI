@@ -35,6 +35,32 @@ test('agentStateDir matches paths.stateDir', async (t) => {
       'the old rule answered <repo>/.agent/state, where the CLI never looks');
   });
 
+  // v8.9: a repo's .agent holding only what a tool wrote is no root when a real
+  // one sits above it. Both sides must agree or the bridge file is not found.
+  await t.test('a stray under a shared root: both skip it, and neither skips a real one', () => {
+    const mono = path.join(base, 'mono-stray');
+    const repo = path.join(mono, 'repo-1');
+    fs.mkdirSync(path.join(mono, '.agent'), { recursive: true });
+    fs.writeFileSync(path.join(mono, '.agent', 'config.json'), '{}');
+    fs.mkdirSync(path.join(repo, '.agent', 'artifacts'), { recursive: true });
+    paths.clearPathCache();
+    assert.equal(agentStateDir(repo), paths.stateDir(repo));
+    assert.equal(agentStateDir(repo), path.join(mono, '.agent', 'repo-1', 'state'));
+
+    fs.writeFileSync(path.join(repo, '.agent', 'config.json'), '{}');
+    paths.clearPathCache();
+    assert.equal(agentStateDir(repo), paths.stateDir(repo));
+    assert.equal(agentStateDir(repo), path.join(repo, '.agent', 'state'));
+  });
+
+  await t.test('a repo alone with only artifacts keeps its own', () => {
+    const repo = path.join(base, 'alone');
+    fs.mkdirSync(path.join(repo, '.agent', 'artifacts'), { recursive: true });
+    paths.clearPathCache();
+    assert.equal(agentStateDir(repo), paths.stateDir(repo));
+    assert.equal(agentStateDir(repo), path.join(repo, '.agent', 'state'));
+  });
+
   await t.test("the agent's own home is never adopted as a project root", () => {
     const fakeHome = path.join(base, 'home');
     const ws = path.join(fakeHome, 'code', 'app');

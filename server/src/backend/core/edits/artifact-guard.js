@@ -21,7 +21,7 @@ export function isAgentArtifact(workspace, candidate) {
   if (typeof candidate !== 'string' || !candidate) return false;
   try {
     const dir = paths.artifactsDir(workspace);
-    const abs = path.isAbsolute(candidate) ? candidate : path.resolve(workspace, candidate);
+    const abs = paths.resolveToolPath(workspace, candidate);
     const rel = path.relative(dir, abs);
     return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
   } catch {

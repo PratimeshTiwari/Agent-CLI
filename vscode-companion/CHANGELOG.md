@@ -1,5 +1,11 @@
 # Agent CLI Companion: version history
 
+## 1.8.15 — 2026-11-05
+
+**The chat finds the agent when a repo has a stray `.agent`.** The agent no longer takes a folder
+holding only `artifacts/` or `tmp/` for a root when a real one sits above it (#154), and the
+companion looks for the agent the same way, or it would have looked in the wrong place.
+
 ## 1.8.14 — 2026-11-05
 
 **Attach any file, not only this workspace's.** Asked for from the first look at 1.8.13: the

@@ -910,6 +910,16 @@ launch**: `--scope repo-1`, or just open the repo directly. Shown in the status 
 rooted at the workspace so cross-repo work is still possible — only state, sessions and config
 are scoped. `/scope` still answers, but only to say where you are and how to change it.
 
+**The prompt's `.agent/artifacts/…` and `.agent/tmp/…` are one literal for every repo (v8.9, #154).**
+Tools resolved it against the workspace, so under a scope `task.md` went to `<repo>/.agent/`, where
+nothing reads, and the next launch took that folder for a root and moved the repo's state. Every file
+tool now goes through `paths.resolveToolPath`, and `isAgentArtifact` too. `resolveState` skips a
+`.agent` holding only those two folders (`isStrayAgentDir`) when a real root is above it, and
+`migrateStrayAgentDir` moves its files, never overwriting. The companion's `agentStateDir` has the
+same rule. **A stray that a launch already filled is not recognised:** `config.json` and `sessions/`
+make it look deliberate, so it stays a root. A shell command (`cat .agent/artifacts/task.md`) is not
+mapped either. Pty: `task.md` in the scope, no `.agent` in the repo, 0 clears at 13 and 24 rows.
+
 **The landmine:** `homeDir()` is `~/.agent`. A naive upward walk from any project under `$HOME`
 finds it and would adopt the global home as a project root, pooling every project's state and
 leaking every project's rules into everyone else's prompt. `resolveState` excludes it and stops
@@ -1674,6 +1684,11 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
   one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
   and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
+- **ctrl+o answers (v8.9).** It reads the files on the press, because the panel's copy can trail a
+  list written moments ago, and with nothing to show it says so instead of flipping hidden state.
+  During a turn the list is charged to the turn (`midTurnTaskLayout`): it gives way first, so at 15
+  rows only the footer's `tasks 0/4` remains. Pty at 15, 17, 20, 24 and 32 rows: 0 clears. **A
+  screen sample can land mid-repaint and read as a cut frame: sample twice before believing it.**
 - **The spinner's token count climbs (v7.10, `frontend/transcript/token-count.js`).** Asked for: Claude Code's
   count rises, ours jumped. It counts the thread plus the reply being streamed (the tab sends it
   every 2 s; `streamRef` in `use-agent-callbacks.js`, a ref, never state), and that counts only

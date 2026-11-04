@@ -11,6 +11,7 @@ import { formatTokens } from '../transcript/token-count.js';
 import { hasClipboardImage } from '../input/clipboard-image.js';
 import { T } from '../theme.js';
 import { keyCell } from '../menus/keys-view.js';
+import { artifactBodyLines } from '../transcript/live-layout.js';
 
 /** First `n` non-empty lines of an artifact, for the one-glance summary. */
 /**
@@ -92,11 +93,7 @@ export function InputBar({
    * itself — the `… +N more` row could never appear, and a list cut to two
    * lines looked like a list with two items.
    */
-  const artifactBody = [artifacts?.task, artifacts?.review, artifacts?.walkthrough]
-    .filter(Boolean)
-    .join('\n')
-    .split('\n')
-    .filter((l) => l.trim());
+  const artifactBody = artifactBodyLines(artifacts);
   const shownArtifactLines = artifactBody.slice(0, artifactLines);
   const artifactOverflow = artifactBody.length - shownArtifactLines.length;
   const promptVisible = !diffRequest && !terminalOpen && !activeMenu;
@@ -265,7 +262,7 @@ export function InputBar({
             </Box>
           )}
 
-          {hasArtifacts && !isProcessing && (
+          {hasArtifacts && (!isProcessing || artifactLines > 0) && (
             <Box flexDirection="column" marginBottom={1}>
               <Text color={T.accent} wrap="truncate">
                 {artifactsOpen ? '▾ ' : '▸ '}

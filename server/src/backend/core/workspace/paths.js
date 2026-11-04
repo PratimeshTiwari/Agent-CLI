@@ -35,7 +35,7 @@
 
 import path from 'path';
 import os from 'os';
-import { existsSync, mkdirSync, realpathSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, realpathSync } from 'fs';
 import crypto from 'crypto';
 
 /** Name of the per-workspace agent directory. */
@@ -81,6 +81,30 @@ export function tempAgentDirs() {
   return dirs;
 }
 
+/*
+ * What the agent itself writes under `.agent/` from a path the prompt gave it.
+ * A folder holding nothing else was made by a tool following that path, not by
+ * a person or a launch, which leaves `config.json`, `sessions/` and the rest.
+ */
+const TOOL_WRITTEN = new Set(['artifacts', 'tmp']);
+
+/**
+ * Under a shared root, was this `.agent` left by a tool (#154)?
+ *
+ * The prompt says `.agent/artifacts/task.md`, and tools resolved that against
+ * the workspace, so a repo under a shared root grew a `.agent` of its own, which
+ * the next launch's walk found first and took for a root. An empty folder is
+ * not one: someone may have made it on purpose, and the first launch fills it.
+ */
+export function isStrayAgentDir(dir) {
+  try {
+    const entries = readdirSync(dir).filter((name) => name !== '.DS_Store');
+    return entries.length > 0 && entries.every((name) => TOOL_WRITTEN.has(name));
+  } catch {
+    return false;
+  }
+}
+
 // resolveState hits the filesystem, and the path helpers call it constantly.
 const resolveCache = new Map();
 
@@ -106,13 +130,20 @@ export function resolveState(workspace) {
   const forbidden = forbiddenRoots();
   const home = os.homedir();
   let answer = null;
+  // A stray is the root only if the walk finds nothing better above it, so an
+  // ordinary repo whose `.agent` holds only artifacts is exactly what it was.
+  let stray = null;
   let dir = ws;
 
   for (let i = 0; i < MAX_WALK; i++) {
     const candidate = path.join(dir, AGENT_DIR);
     if (!forbidden.has(candidate) && existsSync(candidate)) {
-      answer = { root: candidate, base: dir, scope: path.relative(dir, ws), discovered: true };
-      break;
+      const found = { root: candidate, base: dir, scope: path.relative(dir, ws), discovered: true };
+      if (!isStrayAgentDir(candidate)) {
+        answer = found;
+        break;
+      }
+      stray ??= found;
     }
     // Stop at $HOME. Above it lies ~/.agent's neighbourhood and then the
     // filesystem root, and adopting anything up there would capture every
@@ -122,6 +153,7 @@ export function resolveState(workspace) {
     dir = parent;
   }
 
+  answer ??= stray;
   if (!answer) {
     answer = { root: path.join(ws, AGENT_DIR), base: ws, scope: '', discovered: false };
   }
@@ -402,6 +434,25 @@ export const pendingReloadPath = () => path.join(homeDir(), 'pending-reload.json
  * genuine occurrence gets its own attempt rather than inheriting this one's.
  */
 export const depRecoveryPath = () => path.join(homeDir(), 'dep-recovery.json');
+
+/**
+ * Where a path a tool was given really is.
+ *
+ * The prompts name `.agent/artifacts/…` and `.agent/tmp/…`, one literal for every
+ * repo, and v1's text is frozen. The agent keeps those folders in `agentDir`, which
+ * under a shared root is `<root>/.agent/<scope>`, so the literal named a folder
+ * nothing reads: `task.md` was written where the checklist never looked, and an
+ * over-budget result could not be read back (#154). One place, so a tool cannot
+ * resolve it differently. Everything else, and an unscoped repo, is unchanged.
+ */
+export function resolveToolPath(workspace, filePath) {
+  const abs = path.isAbsolute(filePath) ? filePath : path.resolve(workspace, filePath);
+  const named = path.join(path.resolve(workspace), AGENT_DIR);
+  const rel = path.relative(named, abs);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return abs;
+  if (!TOOL_WRITTEN.has(rel.split(path.sep)[0])) return abs;
+  return path.join(agentDir(workspace), rel);
+}
 
 /**
  * Name a file the way the caller would recognise it.
