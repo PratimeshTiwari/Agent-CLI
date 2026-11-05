@@ -1017,10 +1017,14 @@ export async function handleSlashCommand(query, {
           ? `\n\n**By prompt version:** ${u.versions.map((v) => `${v.version} ${v.turns} turn${v.turns === 1 ? '' : 's'}`
             + (v.rounds ? ` · median ${v.rounds.median}, p90 ${v.rounds.p90}` : '')).join('  ·  ')}`
           : '';
+        // v9.4: the nudge's own test. Saved over asked says whether it is worth its line.
+        const nudges = u.nudges?.asked
+          ? `\n\n**Asked to save a fact:** ${u.nudges.asked} turn${u.nudges.asked === 1 ? '' : 's'} · saved in ${u.nudges.saved}`
+          : '';
         setHistory(prev => [...prev, { role: 'user', content: query, isLocal: true }, {
           role: 'assistant', isLocal: true,
           content: `**Tool usage**\n\n**${u.calls}** calls over **${u.turns}** turns`
-            + ` — ${quiet} of them used no tools at all.${rounds}${byVersion}\n\n${used}${never}`,
+            + ` — ${quiet} of them used no tools at all.${rounds}${byVersion}${nudges}\n\n${used}${never}`,
         }]);
         setIsProcessing(false);
         return;

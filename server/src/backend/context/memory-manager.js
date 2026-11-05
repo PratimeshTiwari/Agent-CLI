@@ -1,8 +1,12 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { memoryPath, ensureParent, configPath } from '../core/workspace/paths.js';
+import { readFileSync } from 'fs';
+import { configPath } from '../core/workspace/paths.js';
+import { MemoryStore } from './memory-store.js';
+
+export { parseMemory } from './memory-store.js';
 
 /**
- * What the agent has learned about this project, in `.agent/<scope>/memory.md`.
+ * What the agent has learned about this project, in `.agent/<scope>/memory/`.
+ * The on/off switch and the numbered view v1 uses; the files are `MemoryStore`'s.
  *
  * Two things were wrong with the version this replaces, and they compounded.
  *
@@ -26,7 +30,7 @@ import { memoryPath, ensureParent, configPath } from '../core/workspace/paths.js
 export class MemoryManager {
   constructor(workspacePath) {
     this.workspacePath = workspacePath;
-    this.memoryFile = memoryPath(workspacePath);
+    this.store = new MemoryStore(workspacePath);
     this.memoryEnabled = readMemoryEnabled(workspacePath);
   }
 
@@ -43,16 +47,9 @@ export class MemoryManager {
    * Add a fact, unless it is already there.
    * @returns {boolean} false when memory is off or the fact is a duplicate
    */
-  addMemory(fact) {
-    const clean = normalize(fact);
-    if (!this.memoryEnabled || !clean) return false;
-
-    const facts = this.getAllMemories();
-    if (facts.some((f) => f.toLowerCase() === clean.toLowerCase())) return false;
-
-    facts.push(clean);
-    this._save(facts);
-    return true;
+  addMemory(fact, stamp = {}) {
+    if (!this.memoryEnabled) return false;
+    return this.store.add({ fact, ...stamp }).ok;
   }
 
   /**
@@ -63,54 +60,21 @@ export class MemoryManager {
    * They are numbered in the prompt now, and these numbers are those.
    */
   removeMemory(position) {
-    const facts = this.getAllMemories();
+    const facts = this.store.list();
     const i = Number(position) - 1;
     if (!Number.isInteger(i) || i < 0 || i >= facts.length) return false;
-    facts.splice(i, 1);
-    this._save(facts);
-    return true;
+    return this.store.remove(facts[i].name, { force: true }).ok;
   }
 
   /** Every remembered fact, in the order they were learned. */
   getAllMemories() {
-    if (!existsSync(this.memoryFile)) return [];
-    try {
-      return parseMemory(readFileSync(this.memoryFile, 'utf8'));
-    } catch {
-      // An unreadable memory file must not take a turn down with it: the
-      // agent worked without any memory at all for its whole life so far.
-      return [];
-    }
+    return this.store.list().map((f) => f.fact);
   }
 
-  _save(facts) {
-    try {
-      writeFileSync(ensureParent(this.memoryFile), renderMemory(facts), 'utf8');
-    } catch {
-      /* a failed write costs one fact, not the turn */
-    }
+  /** The same, with who wrote each, when and why. */
+  getEntries() {
+    return this.store.list();
   }
-}
-
-/** Collapse a fact to the single line the file stores. */
-function normalize(fact) {
-  return String(fact ?? '').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Read the bullets back.
- *
- * Deliberately forgiving: this file is meant to be hand-edited, so `-`, `*`
- * and `1.` all count, and anything else — a heading, a note to self, a blank
- * line — is left alone rather than silently becoming a "fact".
- */
-export function parseMemory(text) {
-  return String(text ?? '')
-    .split('\n')
-    .map((line) => line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/))
-    .filter(Boolean)
-    .map((m) => m[1].trim())
-    .filter(Boolean);
 }
 
 /** The file as it is written: a header a human will understand, then bullets. */

@@ -142,6 +142,37 @@ export const PROMPT_VERSIONS = {
       customMcp: true,           // mcp_describe and mcp_tool, once a server is usable (v9.1)
     },
   },
+  /*
+   * v6 (v9.4): v5, plus memory the model actually uses. Measured first: 0
+   * `manage_memory` calls in this repo's usage log, and each call on v1 to v5
+   * re-teaches the chat (`resetPromptState`), so saving a fact cost a full turn 0.
+   * The folder itself is every version's; this is what the prompt does with it.
+   */
+  v6: {
+    id: 'v6',
+    summary: 'v5, plus memory: an index of saved facts, read when needed, and a nudge to save a correction',
+    hint: 'v5 + memory',
+    refreshEvery: 20,
+    dir: 'v2',
+    flags: {
+      trustEditResult: true,
+      gateReview: true,
+      walkthroughWithTask: true,
+      tickWithNextCall: true,
+      oneCopy: true,
+      answerDirectly: true,
+      symbolLanguages: true,
+      subagentEffortWords: true,
+      largeFileDigest: true,
+      logQuery: true,
+      projectCommands: true,
+      lookFirst: true,
+      jira: true,
+      customMcp: true,
+      memoryFolder: true,        // <memory> is an index; facts are named, read and updated (v9.4)
+      saveNudge: true,           // a message that sets a rule carries one line asking to save it (v9.4)
+    },
+  },
 };
 
 /**
@@ -164,6 +195,8 @@ export const FLAG_NOTES = {
   lookFirst: 'A question about the project is answered from files opened this turn',
   jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
   customMcp: 'mcp_tool calls the servers you added; /mcp sets each tool to ask, auto or block',
+  memoryFolder: 'The prompt lists saved facts by name; the model reads one when it needs it',
+  saveNudge: 'A message that corrects the agent or sets a rule asks it to save that',
 };
 
 /** What a version changes from v1, one line per switch that is on. */

@@ -135,7 +135,7 @@ test('memory reaches the model — the half that was missing', async (t) => {
     const block = memoryBlock(firstPrompt(ws));
     assert.ok(block.includes('1. fact number 0 about this project'));
     assert.doesNotMatch(block, /fact number 59/);
-    assert.match(block, /more in .*memory\.md/);
+    assert.match(block, /more in .*memory/);
     assert.ok(block.length < 4600, `bounded, got ${block.length}`);
   });
 });

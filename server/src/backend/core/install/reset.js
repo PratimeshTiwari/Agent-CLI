@@ -27,11 +27,11 @@ import { agentDir, homeDir, workspaceHomeDir, workspaceSlug } from '../workspace
 export const STATE_ENTRIES = [
   'artifacts', 'backups', 'context', 'logs', 'sessions', 'state', 'tmp',
   'github-reviews', 'github-pr-plans', 'memory.json',
-  'config.json', 'memory.md',
+  'config.json', 'memory.md', 'memory',
 ];
 
 /** What `--keep-settings` leaves: your choices and the agent's notes. */
-export const SETTINGS_ENTRIES = new Set(['config.json', 'memory.md']);
+export const SETTINGS_ENTRIES = new Set(['config.json', 'memory.md', 'memory']);
 
 /**
  * What a reset would move, without moving it.

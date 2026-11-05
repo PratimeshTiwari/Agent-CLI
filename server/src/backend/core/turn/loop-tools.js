@@ -172,6 +172,8 @@ async function askSubagent(loop, call) {
  * action would spend a full turn-0 payload to change nothing.
  */
 function manageMemory(loop, call) {
+  if (loop.promptBuilder?.usesMemoryFolder?.()) return manageMemoryFolder(loop, call);
+
   if (call.args.action === 'add') {
     let result;
     if (!loop.memoryManager.isMemoryEnabled()) {
@@ -197,4 +199,74 @@ function manageMemory(loop, call) {
   }
 
   return { error: 'Invalid action. Use "add" or "remove".' };
+}
+
+/** Longer is a document, not a fact. Refused, because cutting it would lose the end unsaid. */
+const FACT_MAX = 1000;
+
+/** Each refusal says what to do next, or the model repeats the call. */
+const MEMORY_REFUSALS = {
+  not_found: (name) => `No fact named ${name}. Use a name <memory> lists, or manage_memory list.`,
+  unread: (name) => `${name} was saved after this chat last saw memory. Read it first: manage_memory read.`,
+  changed: (name, r) => `${name} was changed by ${r.author} at ${r.written}, after you saw it. Read it again and decide what still holds.`,
+  busy: (name) => `Another agent is writing ${name} right now. Read it again before changing it.`,
+  empty: () => 'A fact needs text.',
+  write_failed: (_name, r) => `Could not save: ${r.detail}`,
+};
+
+const refused = (name, r) => ({ error: (MEMORY_REFUSALS[r.reason] || MEMORY_REFUSALS.write_failed)(name, r) });
+
+/**
+ * `manage_memory` on prompt v6 (v9.4): facts by name, stamped here.
+ *
+ * It leaves the prompt state alone. v1's calls `resetPromptState`, which spends a
+ * full turn 0 to tell the chat what it just said, and a nudge to save more would
+ * have made that the most expensive call in the catalog.
+ */
+function manageMemoryFolder(loop, call) {
+  const { action, fact, why, name } = call.args;
+  const memory = loop.memoryManager;
+  const { store } = memory;
+  const session = loop.sessionStore?.liveId?.() || '';
+
+  if (action === 'read') {
+    const found = store.read(name);
+    if (!found) return refused(name, { reason: 'not_found' });
+    return {
+      result: `${found.name}\n${found.fact}\n`
+        + `${found.why ? `Why: ${found.why}\n` : ''}Written by ${found.author}, ${found.written}`,
+    };
+  }
+
+  if (action === 'list') {
+    const facts = store.list();
+    return { result: facts.length ? facts.map((f) => `- ${f.name}: ${f.description}`).join('\n') : 'Nothing saved yet.' };
+  }
+
+  if (action === 'remove') {
+    const done = store.remove(name);
+    return done.ok ? { result: `Forgot ${done.name}.` } : refused(name, done);
+  }
+
+  if (action !== 'add' && action !== 'update') {
+    return { error: 'Invalid action. Use "add", "read", "update", "remove" or "list".' };
+  }
+
+  // Said plainly, because "failed" made the model retry the same call.
+  if (!memory.isMemoryEnabled()) {
+    return { result: 'Memory is turned off for this workspace (`/memory on` re-enables it). Nothing was stored.' };
+  }
+  if (String(fact ?? '').length > FACT_MAX) {
+    return { error: `A fact is at most ${FACT_MAX} characters. Say it shorter, and keep the detail in a file.` };
+  }
+
+  if (action === 'update') {
+    const done = store.update(name, { fact, why, session });
+    return done.ok ? { result: `Updated ${done.name}.` } : refused(name, done);
+  }
+
+  const done = store.add({ fact, why, session });
+  if (done.ok) return { result: `Remembered as ${done.name}.` };
+  if (done.reason === 'duplicate') return { result: `Already remembered as ${done.name}.` };
+  return refused(name, done);
 }

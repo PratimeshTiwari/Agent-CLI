@@ -61,14 +61,14 @@ export function describeInstructionSources(agentLoop) {
     }
   }
 
-  // ── memory.md ──────────────────────────────────────────────────────
-  const memFile = paths.memoryPath(workspace);
+  // ── memory/ ────────────────────────────────────────────────────────
+  const memFile = paths.memoryDir(workspace);
   const facts = safe(() => agentLoop.memoryManager?.getAllMemories?.() || [], []);
   const memoryOn = safe(() => agentLoop.memoryManager?.isMemoryEnabled?.() !== false, true);
   rows.push({
     group: 'memory',
     label: shorten(memFile, workspace),
-    state: !existsSync(memFile) ? 'absent' : (!memoryOn ? 'off' : (facts.length ? 'loaded' : 'empty')),
+    state: !memoryOn ? 'off' : (facts.length ? 'loaded' : (existsSync(memFile) ? 'empty' : 'absent')),
     detail: !memoryOn
       ? 'memory is off — nothing is recalled'
       : `${facts.length} fact${facts.length === 1 ? '' : 's'}`,

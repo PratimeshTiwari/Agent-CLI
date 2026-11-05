@@ -60,6 +60,14 @@ test('control: what a person wrote, and anything unknown, stays', () => {
   assert.ok(fs.existsSync(join(ws, '.agent', 'data')));
 });
 
+test('the memory folder moves with a reset, and --keep-settings keeps it', () => {
+  const ws = repo();
+  fs.mkdirSync(join(ws, '.agent', 'memory'));
+  fs.writeFileSync(join(ws, '.agent', 'memory', 'a-fact.md'), 'a fact');
+  assert.ok(planReset(ws).moves.some((m) => m.name === 'memory'));
+  assert.ok(!planReset(ws, { keepSettings: true }).moves.some((m) => m.name === 'memory'));
+});
+
 test('--keep-settings keeps config and memory', () => {
   const ws = repo();
   const plan = planReset(ws, { keepSettings: true });

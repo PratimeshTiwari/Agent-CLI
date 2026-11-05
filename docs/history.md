@@ -1465,6 +1465,20 @@ the real obstacle, and the second clause was never measured and is false.
 `/update pull` wait and `/update done` stays instant, which is what keeps the
 stranded row from returning through the new door.
 
+### Two things at once
+
+**Two things at once (v5.30).** Messages typed during a turn or the warm-up queue; local commands
+run beside the turn. Two gaps closed. Overlapping slow commands lowered each other's spinner, and a
+turn's: App counts them (`slowCommands`). And two `npm install`s could write one `node_modules`:
+`core/install/local-jobs.js` has one `install` slot, which `/doctor fix`, menu installs and `/update pull` take,
+and a second caller is told who holds it, not queued. **Ink 7.1.1 handles a key typed in its first
+200 ms twice**: kitty auto-detect adds a `data` listener beside Ink's reader and `unshift`s what it
+saw. A warm start at 13 rows (no intro) put the prompt in that window: `/` became `//`, "No such
+command: //help", on `main` too. `frontend/input/ink-probe-hold.js` holds keys until the window has closed and
+passes the probe's reply through. The palette also lost the spinner's two rows during a turn (4
+clears at 13 rows on `/`). Settings rows for Theme and Workspace now open with `returnTo`, so esc
+steps back to settings. Pty: 0 clears at 13 and 24 on every path.
+
 ### minifyJson
 
 **Nothing had ever called it from a test, and two things were wrong behind that.** Every
