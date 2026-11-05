@@ -91,7 +91,8 @@ not do that on purpose, it is clutter.
 │                          the MCP switches, and the Jira site (never its token)
 ├── atlassian-token.json   the Jira token, readable only by you — only where there is no
 │                          macOS Keychain; `agent atlassian logout` deletes it
-├── mcp.json               your MCP servers, in the format Claude Code uses (optional; you write it)
+├── mcp.json               your MCP servers, in the format Claude Code uses (`/mcp add` writes it, or you do)
+├── mcp-secrets.json       server tokens, 0600, where there is no Keychain (macOS uses the Keychain)
 ├── mcp-cache.json         the tools each server last listed, so `/mcp` has something to show
 ├── AGENT.md               instructions for every project (optional; you write it)
 ├── recent-workspaces.json what /set-workspace offers

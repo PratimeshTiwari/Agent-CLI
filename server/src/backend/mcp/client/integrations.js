@@ -39,6 +39,21 @@ function jiraRow() {
   };
 }
 
+/**
+ * Change the set of servers, and teach the chat if what it was told moved. The
+ * block rides on turn 0 only, so a server added to a running chat is one the
+ * model has never heard of. A rename of nothing costs no full prompt.
+ */
+export async function changeMcp(loop, change) {
+  const told = () => {
+    if (!loop.promptBuilder._toolFlags().customMcp) return '';
+    return loop.mcp.offered().map((s) => s.name).join();
+  };
+  const before = told();
+  await change();
+  if (told() !== before) loop.promptBuilder.resetPromptState();
+}
+
 /** @param {import('./servers.js').McpServers} mcp */
 export function listIntegrations(mcp) {
   const snapshot = mcp.snapshot();

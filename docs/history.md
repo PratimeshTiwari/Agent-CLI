@@ -1479,3 +1479,11 @@ dead turn. A replacer keeps what can be serialised and marks what cannot.
 Neither was reachable from a path traced today — every `ask_question` resolver passes a
 `result` — so this is a contract made true rather than a reported bug. The doc already promised
 a caller could "pass it anything a tool handler might have produced".
+
+- **The spinner's token count climbs (v7.10, `frontend/transcript/token-count.js`).** Asked for: Claude Code's
+  count rises, ours jumped. It counts the thread plus the reply being streamed (the tab sends it
+  every 2 s; `streamRef` in `use-agent-callbacks.js`, a ref, never state), and that counts only
+  until the loop adds the finished reply (`base`), so nothing is counted twice. The drawn number
+  closes 8% of the gap per 80 ms spinner tick, the tick App already draws, so it costs no
+  frames; a fall (`/compact`, `/new`) is drawn at once. Pty (`FAKE_STREAM_MS=2000`): 2.9k →
+  6.3k over a 9 s reply, 0 clears at 13 and 24 rows.

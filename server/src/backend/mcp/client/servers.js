@@ -225,6 +225,19 @@ export class McpServers {
     return Promise.all(this.config.servers.map((s) => this.connect(s.name)));
   }
 
+  /** The file changed under us (`/mcp add`, off, remove): stop only what it no longer describes. */
+  async configChanged() {
+    this.config = this.load();
+    this.cache = readCache(this.cachePath);
+    const stale = [...this.live].filter(([name, entry]) => {
+      const server = this._server(name);
+      return !server || !this.usable(name) || server.fingerprint !== entry.fingerprint;
+    });
+    for (const [name] of stale) this.live.delete(name);
+    await Promise.all(stale.map(([, entry]) => entry.connection?.close()));
+    this._changed();
+  }
+
   /** Read the file again and start over: what `/mcp reload` does. */
   async reload() {
     await this.closeAll();

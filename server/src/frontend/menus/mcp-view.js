@@ -15,7 +15,7 @@ export const shortPath = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir(
  */
 export function homeLine(list, { needsPrompt = false } = {}) {
   if (list.error) return 'Fix the file, then choose Reload.';
-  if (!list.exists) return 'The same format as Claude Code and Cursor.';
+  if (!list.exists) return `Or edit ${shortPath(list.path)}, the format Claude Code and Cursor use.`;
   return needsPrompt
     ? 'Enter shows what a server offers. The model calls these on prompt v5.'
     : 'Enter opens a server, to set what each of its tools may do.';
@@ -37,7 +37,7 @@ export function mcpHomeItems(list, { T = {}, needsPrompt = false } = {}) {
     ...tone(row, T),
   }));
   if (list.error) items.unshift({ label: 'mcp.json', detail: list.error, value: '', colour: T.danger });
-  else if (!list.exists) items.unshift({ label: 'No servers yet', detail: `add them to ${shortPath(list.path)}`, value: '' });
+  else items.unshift({ label: 'Add a server', detail: 'paste its command or JSON', value: 'add' });
   // Nothing moves on its own: the row offers it, and enter is the yes.
   if (needsPrompt && list.rows.some((r) => !r.builtin && r.state !== 'invalid' && r.state !== 'disabled')) {
     items.push({ label: 'Use prompt v5', detail: 'lets the model call these, and teaches the chat again', value: 'prompt' });
@@ -54,12 +54,18 @@ const firstLine = (text) => String(text || '').trim().split('\n')[0];
  * `switchOf`: a custom server's switches. Jira has none: its writes always ask.
  */
 export function serverToolItems(row, { said = false, switchOf = null } = {}) {
-  if (!row.tools.length) return [{ label: 'No tools', detail: said ? '' : statusLine(row), value: '' }];
+  // What a person can do to the server itself, before any list of tools.
+  const manage = row.builtin || !switchOf ? [] : [
+    ...(row.state === 'invalid' ? [] : [{ label: row.state === 'disabled' ? 'Turn on' : 'Turn off', value: '', key: 'toggle', action: 'toggle' }]),
+    { label: 'Remove', value: '', key: 'remove', action: 'remove' },
+  ];
+  if (!row.tools.length) return [{ label: 'No tools', detail: said ? '' : statusLine(row), value: '', key: 'none' }, ...manage];
   if (!switchOf || row.builtin) {
     return row.tools.map((t) => ({ label: t.name, detail: firstLine(t.description), value: '' }));
   }
   return [
     { label: 'New tools', detail: `${switchOf('')} · what a tool here starts on`, value: '*' },
+    ...manage,
     ...row.tools.map((t) => ({ label: t.name, detail: `${switchOf(t.name)} · ${firstLine(t.description)}`, value: t.name })),
   ];
 }

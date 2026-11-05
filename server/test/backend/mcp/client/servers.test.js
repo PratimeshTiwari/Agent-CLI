@@ -12,7 +12,7 @@ import { setSwitch } from '../../../../src/backend/mcp/client/switches.js';
 import { handleSlashCommand } from '../../../../src/backend/core/turn/slash-commands.js';
 import { McpConnection } from '../../../../src/backend/mcp/client/connection.js';
 import { loadMcpConfig } from '../../../../src/backend/mcp/client/config.js';
-import { listIntegrations, mcpReport, statusLine } from '../../../../src/backend/mcp/client/integrations.js';
+import { changeMcp, listIntegrations, mcpReport, statusLine } from '../../../../src/backend/mcp/client/integrations.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, '../../../fixtures/mcp-fixture-server.js');
@@ -146,6 +146,7 @@ test('/mcp reload teaches the chat only when the tools came or went', async () =
     const loop = {
       mcp: {
         reload: async () => { offered = after; },
+        offered: () => [{ name: 'a' }],
         snapshot: () => ({ path: 'p', exists: true, error: null, servers: [] }),
       },
       promptBuilder: {
@@ -185,4 +186,42 @@ test('offered: what the prompt names, and nothing started to find out', async (t
   setSwitch('a', null, 'block');
   assert.deepEqual(mcp.offered(), [], 'a server set to block is not named');
   setSwitch('a', null, 'ask');
+});
+
+test('configChanged leaves a running server alone and stops the one the file took away', async (t) => {
+  const path = join(mkdtempSync(join(tmpdir(), 'mcp-changed-')), 'mcp.json');
+  const entry = { command: process.execPath, args: [FIXTURE, 'ok'] };
+  writeFileSync(path, JSON.stringify({ mcpServers: { keep: entry, drop: entry } }));
+  const mcp = new McpServers({ load: () => loadMcpConfig({ path }), cachePath: `${path}.cache` });
+  t.after(() => mcp.dispose());
+  await mcp.connectAll();
+  const kept = mcp.live.get('keep').connection;
+  const dropped = mcp.live.get('drop').connection;
+  assert.ok(dropped.pid > 0);
+
+  writeFileSync(path, JSON.stringify({ mcpServers: { keep: entry, added: entry, drop: { ...entry, disabled: true } } }));
+  await mcp.configChanged();
+  assert.equal(mcp.live.get('keep').connection, kept, 'not restarted');
+  assert.equal(mcp.live.has('drop'), false);
+  assert.equal(dropped.pid ?? null, null, 'and its process stopped');
+  assert.equal(mcp.snapshot().servers.find((s) => s.name === 'added').state, 'idle', 'a new one waits to be asked for');
+  assert.equal(await mcp.connect('added'), true);
+  assert.equal(mcp.live.get('keep').connection, kept, 'control: starting one touches no other');
+});
+
+test('changeMcp teaches the chat only when the servers it was told about changed', async () => {
+  const run = async (customMcp, before, after) => {
+    let resets = 0;
+    let names = before;
+    const loop = {
+      mcp: { offered: () => names.map((name) => ({ name })) },
+      promptBuilder: { _toolFlags: () => ({ customMcp }), resetPromptState: () => { resets += 1; } },
+    };
+    await changeMcp(loop, async () => { names = after; });
+    return resets;
+  };
+  assert.equal(await run(true, ['a'], ['a', 'b']), 1, 'one added');
+  assert.equal(await run(true, ['a', 'b'], ['a']), 1, 'one removed');
+  assert.equal(await run(true, ['a'], ['a']), 0, 'control: nothing the chat knows moved');
+  assert.equal(await run(false, ['a'], ['a', 'b']), 0, 'on a prompt with no MCP block there is nothing to re-teach');
 });
