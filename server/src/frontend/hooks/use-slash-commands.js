@@ -909,6 +909,14 @@ export async function handleSlashCommand(query, {
 
     // A menu in the terminal, opened before anything answers: rows fill in as
     // servers do. `/mcp reload` and the panels go through the backend's arm.
+    if (command === 'chrome' && !args.length) {
+      // A turn is typing into one account: changing it mid-turn loses the reply.
+      if (agentLoop.isProcessing) {
+        setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: 'Change the Chrome profile when this turn ends.' }]);
+      } else setActiveMenu({ type: 'chrome' });
+      setIsProcessing(false);
+      return;
+    }
     if (command === 'mcp' && args[0] === 'add') {
       setActiveMenu({ type: 'mcp', view: 'add', text: args.slice(1).join(' ') });
       setIsProcessing(false);

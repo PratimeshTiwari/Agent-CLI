@@ -56,6 +56,7 @@ const SLASH_COMMANDS = [
   { name: 'history', desc: 'Past conversations — pick one to reopen it', group: 'chat' },
   { name: 'chat', desc: 'Continue in a Gemini chat you name · its link or id', group: 'chat' },
   { name: 'commands', desc: 'Every shell command the agent has run, by day', group: 'audit' },
+  { name: 'chrome', desc: 'Choose the Chrome profile that gets prompts, and so the Google account · `/chrome any` lifts it', group: 'config' },
   { name: 'jira', desc: 'Is Jira set up · sign in with `agent atlassian login` in a terminal', group: 'config' },
   { name: 'mcp', desc: 'MCP servers and Jira, in one list · `/mcp add` adds a server', group: 'config' },
   { name: 'theme', desc: 'Colours — dark, light, colour-blind, terminal, mono', group: 'config' },

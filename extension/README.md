@@ -31,7 +31,7 @@ floating window.
   and `⚠` when the tab is on another model. Bind `⌘⇧1` once at `chrome://extensions/shortcuts`
   (choose **Global**).
 - **Stays current.** The agent checks the version Chrome loaded, and from 1.58.0 on an extension
-  older than the checkout reloads itself between turns. Current version: **1.61.0**.
+  older than the checkout reloads itself between turns. Current version: **1.62.0**.
 
 ```
 agent  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content script  ──▶  gemini.google.com
@@ -43,6 +43,9 @@ agent  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content sc
 ```
 chrome://extensions  →  Developer mode  →  Load unpacked  →  select this folder
 ```
+
+Load it in the Chrome profile whose Google account you want the agent to use. With it in several profiles, run
+`/chrome` in the terminal to choose: only that profile gets prompts.
 
 A `git pull` updates nothing in the browser. This is the most common reason the agent goes quiet.
 

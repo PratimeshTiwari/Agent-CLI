@@ -64,7 +64,7 @@ export const MAX_AGENT_NAME = 20;
 export const AGENT_COMMANDS = new Set([
   'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
-  'workspace', 'startup', 'prompt', 'jira', 'chat', 'mcp',
+  'workspace', 'startup', 'prompt', 'jira', 'chat', 'mcp', 'chrome',
 ]);
 
 /**
@@ -175,6 +175,7 @@ export const COMMAND_OPTIONS = {
   context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
   new: [], restart: [], exit: [], jira: [],
   mcp: [['', 'servers and their tools'], ['add', 'add a server, step by step'], ['reload', 'read mcp.json again and restart every server']],
+  chrome: [['', 'choose the Chrome profile that gets prompts'], ['any', 'let the first profile connected take them']],
 };
 
 /** Words a command also takes that its list does not advertise. */
@@ -381,6 +382,20 @@ export async function handleSlashCommand(loop, command, args) {
 
     // The terminal opens a menu for the bare form, in `use-slash-commands.js`;
     // this is the panels' answer, and `reload` for both.
+    case 'chrome': {
+      const binding = loop.browserProfile;
+      const had = binding.current;
+      if (String(args?.[0] || '').toLowerCase() === 'any') {
+        binding.clear();
+        return { message: changed('Chrome profile', had?.name || 'any', 'any') };
+      }
+      return {
+        message: had
+          ? `Chrome profile · **${had.name}**${had.email ? ` · ${had.email}` : ''} · nothing else gets prompts`
+          : 'Chrome profile · any · choose one with `/chrome` in the terminal',
+      };
+    }
+
     case 'mcp': {
       if (String(args?.[0] || '').toLowerCase() === 'reload') {
         await changeMcp(loop, () => loop.mcp.reload());

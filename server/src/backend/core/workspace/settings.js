@@ -284,6 +284,14 @@ export function describeSettings(agentLoop) {
       hint: agentLoop?.browserTab ? 'cmd+click opens the chat · ctrl+b the tab' : 'as the extension reports it',
     },
     {
+      // v9.3: only this profile gets prompts.
+      group: 'Status',
+      label: 'Chrome profile',
+      value: agentLoop?.browserProfile?.current?.name || 'any',
+      hint: agentLoop?.browserProfile?.current?.email || 'enter chooses one',
+      run: '/chrome',
+    },
+    {
       group: 'Status',
       label: 'State directory',
       value: safe(() => paths.agentDir(agentLoop.workspace), ''),

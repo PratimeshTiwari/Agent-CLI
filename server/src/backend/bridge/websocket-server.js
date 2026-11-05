@@ -196,6 +196,7 @@ export class WebSocketServer {
      * never sends — and once a terminal prompt is drawn in the panel
      * (`user_turn`), its thinking row would outlive an esc in the terminal.
      */
+    this.agentLoop.browserProfile?.onChange(() => this._reviewExtensions());
     this.agentLoop.onIdle?.(() => this.broadcast('extension', {
       id: randomUUID(), type: 'turn_idle', payload: { state: this.agentLoop.panelState?.() || null }, timestamp: Date.now(),
     }));
@@ -347,7 +348,9 @@ export class WebSocketServer {
     });
 
     ws.on('close', (code, reason) => {
+      const wasExtension = clientInfo.type === 'extension';
       this.clients.delete(clientId);
+      if (wasExtension) this._reviewExtensions();
     });
 
     ws.on('error', (err) => {
@@ -425,6 +428,10 @@ export class WebSocketServer {
 
     if (!client) return;
 
+    // Refused (v9.3): it may answer a pairing and nothing else, or a side panel
+    // in the wrong profile could still start a turn.
+    if (client.type === 'refused' && type !== 'pair') return;
+
     // Identify client type from first message
     if (payload?.clientType && client.type === 'unknown') {
       client.type = payload.clientType;
@@ -433,6 +440,12 @@ export class WebSocketServer {
       // while it was gone. Done before the timing bookkeeping below so a
       // resumed turn is not waiting on it.
       if (client.type === 'extension') {
+        client.installId = payload.installId || null;
+        client.extensionVersion = payload.version || null;
+        if (!this._admitsExtension(client)) {
+          this._refuseExtension(client);
+          return;
+        }
         /*
          * Which build is actually in Chrome, said once, at the only moment it
          * is cheap to say it.
@@ -446,7 +459,6 @@ export class WebSocketServer {
          * the one looking at the screen, and silence here is what let a
          * pre-19-September build run for days claiming to be current.
          */
-        client.extensionVersion = payload.version || null;
         if (this.agentLoop) this.agentLoop.extensionVersion = client.extensionVersion;
         const unbound = shortcutNotice(payload.floatingShortcut);
         if (unbound) {
@@ -1021,6 +1033,10 @@ export class WebSocketServer {
         // Handled above to set client type, just break
         break;
 
+      case 'pair':
+        this._pairProfile(client, payload);
+        break;
+
       case 'tab_status':
         if (payload?.connectedModels && payload.connectedModels.length > 0) {
           if (!client.reportedModels || client.reportedModels.join() !== payload.connectedModels.join()) {
@@ -1113,6 +1129,72 @@ export class WebSocketServer {
    * already given up and typing it into Gemini would start a conversation
    * nobody is listening to — so stale entries are dropped rather than sent.
    */
+  /**
+   * One profile gets prompts (v9.3). Bound, that is the chosen one. Unbound it
+   * is the first to connect, because `broadcast` reaches every extension and
+   * two would each type every prompt into their own account. An older build
+   * sends no id and cannot be told apart, so it is admitted only while unbound.
+   */
+  _admitsExtension(client) {
+    const binding = this.agentLoop?.browserProfile;
+    if (binding?.current) return binding.admits(client.installId);
+    if (!client.installId) return true;
+    return ![...this.clients.values()].some((other) => other !== client
+      && other.type === 'extension' && other.installId && other.installId !== client.installId);
+  }
+
+  _refuseExtension(client, { quiet = false } = {}) {
+    client.type = 'refused';
+    const chosen = this.agentLoop?.browserProfile?.current;
+    const message = chosen
+      ? `This Chrome profile is not the one the agent uses (${chosen.name}). Change it with /chrome.`
+      : 'Another Chrome profile is connected, and prompts go to one. Choose with /chrome.';
+    this._send(client.ws, { id: randomUUID(), type: 'status', payload: { message }, timestamp: Date.now() });
+    // A build too old to send an id can never be admitted until it reloads.
+    const reload = client.installId ? null : selfReloadNotice(client.extensionVersion);
+    if (reload && !this.agentLoop?.isProcessing && this._reloadAsked !== reload.to) {
+      this._reloadAsked = reload.to;
+      this._send(client.ws, { id: randomUUID(), type: 'reload_extension', payload: {}, timestamp: Date.now() });
+    }
+    logNotice(this.agentLoop?.workspace, { flow: 'bridge', op: 'extension_refused', message });
+    // `quiet`: the person just chose this, so a warning would read as a fault.
+    const said = `${chosen?.install}:${client.installId}`;
+    if (!quiet && this._refusalSaid !== said) {
+      this._refusalSaid = said;
+      this.agentLoop?._notify?.(`⚠ ${message}`);
+    }
+  }
+
+  /** The profile the agent opened answered. The token proves which one this is. */
+  _pairProfile(client, payload) {
+    const binding = this.agentLoop?.browserProfile;
+    if (!binding || !client.installId) return;
+    const profile = binding.takePairing(payload?.token);
+    if (!profile) return;
+    const others = [...this.clients.values()].some((c) => c !== client && c.type === 'extension');
+    const moved = client.type === 'refused' || others;
+    binding.bind(profile, client.installId);
+    // A chat belongs to an account, so the old one cannot be opened from here.
+    if (moved) this.agentLoop.leaveChatForProfile?.();
+  }
+
+  /**
+   * The rules changed, or a connection went. A refused extension that would be
+   * admitted now is asked to come back, so it arrives through `identify` and
+   * gets everything an arrival does: held prompts, a resume, a warm start.
+   */
+  _reviewExtensions() {
+    for (const client of this.clients.values()) {
+      if (client.type === 'extension' && !this._admitsExtension(client)) this._refuseExtension(client, { quiet: true });
+    }
+    for (const client of this.clients.values()) {
+      if (client.type !== 'refused' || !this._admitsExtension(client)) continue;
+      this._send(client.ws, { id: randomUUID(), type: 'status', payload: { message: 'Reconnecting: this profile is in use now.' }, timestamp: Date.now() });
+      client.type = 'closing';
+      client.ws.close(4001, 'admitted');
+    }
+  }
+
   sendInjectPrompt(msg) {
     const message = {
       id: randomUUID(),

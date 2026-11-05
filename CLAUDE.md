@@ -753,6 +753,14 @@ the Keychain or a 0600 `mcp-secrets.json`, `mcp.json` holds `${secret:<server>/<
 its own. **A text field behind a menu needs its own `usePaste`:** the prompt's is inactive there, bracketed
 paste goes off, and a pasted JSON's first newline is an Enter. The pty must set `AGENT_MCP_NO_KEYCHAIN=1`.
 
+### One Chrome profile
+
+**Prompts go to one profile (v9.3, `/chrome`, `core/workspace/profile-binding.js`, extension 1.62.0).**
+`broadcast` reaches every extension, so a second profile typed every prompt into a second account. A profile
+cannot be named from inside, so it is proved: the agent opens it on a `#agent-pair=<token>` link and that
+extension answers with its `storage.local` id. Bound, nothing else is admitted and a closed profile makes prompts
+wait: **never a fallback.** Unbound, the first install connected wins. Harness: `run-two.sh`, `run-chrome.sh`.
+
 ### Workspace
 
 `core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
@@ -1700,11 +1708,6 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
   one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
   and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
-- **ctrl+o answers (v8.9).** It reads the files on the press, because the panel's copy can trail a
-  list written moments ago, and with nothing to show it says so instead of flipping hidden state.
-  During a turn the list is charged to the turn (`midTurnTaskLayout`): it gives way first, so at 15
-  rows only the footer's `tasks 0/4` remains. Pty at 15, 17, 20, 24 and 32 rows: 0 clears. **A
-  screen sample can land mid-repaint and read as a cut frame: sample twice before believing it.**
 - **The status bar is laid out in `frontend/screen/status-bar.js` (v6.13, Option A of
   `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
   coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest

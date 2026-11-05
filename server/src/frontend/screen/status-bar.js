@@ -47,6 +47,9 @@ export function contextText(pct, compactAtPct) {
   return `${pct}%`;
 }
 
+/** A profile's name is often its whole email. */
+const shortProfile = (name) => ([...name].length > 18 ? `${[...name].slice(0, 17).join('')}…` : name);
+
 function contextRole(pct) {
   if (pct > 80) return 'danger';
   if (pct > 50) return 'attention';
@@ -60,6 +63,7 @@ function contextRole(pct) {
  * @param {boolean} [o.hint]        show `shift+tab to cycle` (start of a chat, idle)
  * @param {string} [o.notice]       replaces the hint: the exit prompt or a flash
  * @param {string} [o.scope]        monorepo scope leaf
+ * @param {string} [o.profile]      the Chrome profile, only when one is chosen
  * @param {number} [o.pastes]
  * @param {number} [o.running]      background tasks
  * @param {{done:number,total:number}} [o.tasks]  only during a turn
@@ -84,7 +88,7 @@ export function statusBarLayout(o) {
   // null is "declined for this chat" (v7.5); only a missing value means the default.
   const compactAt = o.compactAtPct === null ? null : (o.compactAtPct ?? 80);
   // Each step gives one thing up, in the order the plan fixed; `build` reads them.
-  const shed = { hint: false, pastes: false, modeWord: false, scope: false, meter: false,
+  const shed = { hint: false, pastes: false, modeWord: false, profile: false, scope: false, meter: false,
     version: false, modelNumber: false, tasks: false, context: false };
 
   const build = () => {
@@ -96,6 +100,7 @@ export function statusBarLayout(o) {
     if (o.notice) left.push({ text: `${SEP}${o.notice}`, role: 'attention' });
     else if (o.hint && !shed.hint) left.push({ text: `${SEP}shift+tab to cycle`, role: 'dim' });
     if (o.scope && !shed.scope) left.push({ text: `${SEP}${o.scope}`, role: 'dim' });
+    if (o.profile && !shed.profile) left.push({ text: `${SEP}${shortProfile(o.profile)}`, role: 'dim' });
 
     const fields = [];
     if (o.pastes > 0 && !shed.pastes) fields.push([{ text: `${o.pastes} paste${o.pastes === 1 ? '' : 's'}`, role: 'dim' }]);

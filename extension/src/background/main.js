@@ -3,6 +3,7 @@ import { sendToServer } from './messaging.js';
 import { getState } from './state.js';
 import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, whoseTab, reportClosedTab, subagentAnswered, endSession, stopCompletionTicks, isSessionTab } from './content.js';
 import { handleCommand } from './floating.js';
+import { reportPairing } from './pairing.js';
 
 // Keyboard shortcuts from the manifest's `commands` — the global one included.
 chrome.commands?.onCommand.addListener((command) => { handleCommand(command); });
@@ -30,6 +31,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  reportPairing(changeInfo.url, isSocketOpen());
   if (changeInfo.status === 'complete' && tab.url && tab.url.includes('gemini.google.com')) {
     broadcastTabStatus();
   }
