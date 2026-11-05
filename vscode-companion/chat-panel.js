@@ -109,10 +109,45 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
         sub(statusItem);
     }
 
+    /**
+     * Focus the chat in whichever home this window registered (1.8.12).
+     *
+     * Reported with a screenshot: the status-bar entry answered "command
+     * 'agentCli.chatSecondary.focus' not found" in Antigravity IDE. A view's
+     * `.focus` command exists only once the window has registered the view,
+     * and 1.8.11 had been installed over 1.8.9, which has no secondary view,
+     * without a reload. So: the home this editor should use, else the other
+     * (with the context key flipped so it shows), else say what is wrong and
+     * offer the reload. Never a raw error.
+     */
+    let home = activeViewId;
+    async function focusChatView({ quiet = false } = {}) {
+        const other = home === SECONDARY_VIEW_ID ? VIEW_ID : SECONDARY_VIEW_ID;
+        for (const id of [home, other]) {
+            try {
+                if (id !== activeViewId) {
+                    await vscode.commands.executeCommand('setContext', 'agentCli:noSecondarySidebar', id === VIEW_ID);
+                }
+                await vscode.commands.executeCommand(`${id}.focus`);
+                home = id;
+                return true;
+            } catch { /* not registered in this window; try the other home */ }
+        }
+        await Promise.resolve(vscode.commands.executeCommand('setContext', 'agentCli:noSecondarySidebar', !secondary)).catch(() => {});
+        if (!quiet) {
+            const choice = await vscode.window.showWarningMessage(
+                'Agent CLI: this window has not loaded the chat view yet. Reload it to finish the update.',
+                'Reload Window',
+            );
+            if (choice) vscode.commands.executeCommand('workbench.action.reloadWindow');
+        }
+        return false;
+    }
+
     // Shown once after install, so the first look says where it lives.
     if (context.globalState && !context.globalState.get(OPENED_ONCE_KEY)) {
         context.globalState.update(OPENED_ONCE_KEY, true);
-        Promise.resolve(vscode.commands.executeCommand(`${activeViewId}.focus`)).catch(() => {});
+        focusChatView({ quiet: true }).catch(() => {});
     }
 
     // ── Requests from the page ────────────────────────────────────────
@@ -260,8 +295,7 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     sub(
         vscode.commands.registerCommand('agentCli.startAgent', startAgent),
         vscode.commands.registerCommand('agentCli.focusChat', async () => {
-            await vscode.commands.executeCommand(`${activeViewId}.focus`);
-            post({ type: 'focus_input' });
+            if (await focusChatView()) post({ type: 'focus_input' });
         }),
     );
 }

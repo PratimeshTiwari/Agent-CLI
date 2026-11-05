@@ -121,7 +121,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.11.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.12.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in

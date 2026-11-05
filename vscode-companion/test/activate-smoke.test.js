@@ -13,7 +13,12 @@ const os = require('os');
 const path = require('path');
 const Module = require('module');
 
-function stubVscode(root, version = '1.107.0') {
+/**
+ * `unregistered`: commands this "window" does not have, the way a view's
+ * `.focus` is missing until the window has registered that view. The real
+ * executeCommand rejects with exactly this message.
+ */
+function stubVscode(root, version = '1.107.0', { unregistered = [] } = {}) {
   const registered = { commands: new Map(), views: new Map(), providers: new Map() };
   const disposable = { dispose() {} };
   class EventEmitter { constructor() { this.event = () => disposable; } fire() {} }
@@ -62,7 +67,10 @@ function stubVscode(root, version = '1.107.0') {
     },
     commands: {
       registerCommand: (id, fn) => { registered.commands.set(id, fn); return disposable; },
-      executeCommand: async (...a) => { executed.push(a); },
+      executeCommand: async (...a) => {
+        if (unregistered.includes(a[0])) throw new Error(`command '${a[0]}' not found`);
+        executed.push(a);
+      },
     },
   };
   return { vscode, registered, shown, executed, statusItems };
@@ -77,8 +85,8 @@ function forgetCompanion() {
 }
 
 /** Activates the companion against a stub; returns the stub's records. */
-function activateWith(t, root, version, globalState) {
-  const stub = stubVscode(root, version);
+function activateWith(t, root, version, globalState, opts) {
+  const stub = stubVscode(root, version, opts);
   const realLoad = Module._load;
   Module._load = function (req, ...rest) { return req === 'vscode' ? stub.vscode : realLoad.call(this, req, ...rest); };
   t.after(() => { Module._load = realLoad; });
@@ -132,6 +140,29 @@ test('the chat lives in the secondary side bar where the editor has one', async 
       assert.ok(executed.some((a) => a[0] === `${view}.focus`));
     });
   }
+
+  // Reported: in Antigravity IDE the status-bar entry answered "command
+  // 'agentCli.chatSecondary.focus' not found" — 1.8.11 installed over 1.8.9
+  // without a reload, so the window had never registered the secondary view.
+  await t.test('the secondary view not registered: the activity-bar home, shown', async () => {
+    const { registered, executed, shown } = activateWith(t, root, '1.107.0',
+      memento({ 'agentCli.chatOpenedOnce': true }), { unregistered: ['agentCli.chatSecondary.focus'] });
+    executed.length = 0;
+    await registered.commands.get('agentCli.focusChat')();
+    assert.ok(executed.some((a) => a[0] === 'setContext' && a[2] === true), 'the activity-bar view is made visible');
+    assert.ok(executed.some((a) => a[0] === 'agentCli.chat.focus'));
+    assert.deepEqual(shown, [], 'no error, no warning');
+  });
+
+  await t.test('neither view registered: a reload is offered, not a raw error', async () => {
+    const { registered, executed, shown } = activateWith(t, root, '1.107.0',
+      memento({ 'agentCli.chatOpenedOnce': true }),
+      { unregistered: ['agentCli.chatSecondary.focus', 'agentCli.chat.focus'] });
+    executed.length = 0;
+    await assert.doesNotReject(registered.commands.get('agentCli.focusChat')());
+    assert.match(shown.at(-1), /Reload it to finish the update/);
+    assert.ok(executed.some((a) => a[0] === 'setContext' && a[2] === false), 'the context key is put back');
+  });
 
   await t.test('control: it is shown once, not on every start', () => {
     const { executed } = activateWith(t, root, '1.107.0', memento({ 'agentCli.chatOpenedOnce': true }));
