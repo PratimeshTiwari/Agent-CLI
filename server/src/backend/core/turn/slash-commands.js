@@ -28,6 +28,7 @@ import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVe
 import { summariseToolUsage } from '../logs/tool-usage.js';
 import { atlassianSite, atlassianCredentials } from '../../atlassian/config.js';
 import { createJiraClient } from '../../atlassian/jira-client.js';
+import { listIntegrations, mcpReport } from '../../mcp/client/integrations.js';
 
 /**
  * How long a name the banner can take.
@@ -63,7 +64,7 @@ export const MAX_AGENT_NAME = 20;
 export const AGENT_COMMANDS = new Set([
   'plan', 'strict', 'auto', 'diff', 'memory', 'mode', 'config', 'subagents', 'name', 'clear', 'context', 'new',
   'compact', 'undo', 'agent-dir', 'model', 'reasoning', 'effort', 'allowlist',
-  'workspace', 'startup', 'prompt', 'jira', 'chat',
+  'workspace', 'startup', 'prompt', 'jira', 'chat', 'mcp',
 ]);
 
 /**
@@ -173,6 +174,7 @@ export const COMMAND_OPTIONS = {
     ['large-files <subagent|direct>', 'who reads a large file']],
   context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
   new: [], restart: [], exit: [], jira: [],
+  mcp: [['', 'servers and their tools'], ['reload', 'read mcp.json again and restart every server']],
 };
 
 /** Words a command also takes that its list does not advertise. */
@@ -213,6 +215,7 @@ export function isSlowCommand(command, args = []) {
   if (command === 'update') return ['', 'pull', 'now'].includes((args[0] || '').toLowerCase());
   // `fix` runs `npm install` and `report` asks the registry (`npm outdated`,
   // ~1s); the menu opens on what is on disk and fills the registry in behind.
+  if (command === 'mcp') return (args[0] || '').toLowerCase() === 'reload';
   if (command === 'doctor' || command === 'health') return ['fix', 'report'].includes((args[0] || '').toLowerCase());
   return false;
 }
@@ -374,6 +377,14 @@ export async function handleSlashCommand(loop, command, args) {
       if (!offered) return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · \`/prompt v4\` offers it to the model` };
       loop.promptBuilder.requestToolRedeclaration?.();
       return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · the model is told with your next message; every write asks you` };
+    }
+
+    // The terminal opens a menu for the bare form, in `use-slash-commands.js`;
+    // this is the panels' answer, and `reload` for both.
+    case 'mcp': {
+      if (String(args?.[0] || '').toLowerCase() === 'reload') await loop.mcp.reload();
+      else loop.mcp.connectAll().catch(() => { /* a failure is the row's state */ });
+      return { message: mcpReport(listIntegrations(loop.mcp)) };
     }
 
     case 'chat': {

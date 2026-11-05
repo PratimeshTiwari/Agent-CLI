@@ -162,6 +162,12 @@ export const PACKAGES = {
     // which takes it out of package.json too. Held to the declared range by a test.
     restore: { workspace: 'server', range: '1.8.1' },
   },
+  '@modelcontextprotocol/sdk': {
+    tier: 'optional',
+    why: 'Talks to the MCP servers listed in ~/.agent/mcp.json. Loaded only when one starts.',
+    without: 'MCP servers cannot start, and /mcp says so. Everything else works.',
+    restore: { workspace: 'server', range: '1.32.2' },
+  },
   '@types/react': {
     tier: 'dev',
     why: 'Type hints for React in an editor. Nothing runs it.',

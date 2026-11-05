@@ -179,6 +179,7 @@ import { validateWorkspace } from '../workspace/workspaces.js';
 import { z } from 'zod';
 import { SessionStore } from '../../storage/session-store.js';
 import { ContextManager } from '../../context/context-manager.js';
+import { McpServers } from '../../mcp/client/servers.js';
 import { MemoryManager } from '../../context/memory-manager.js';
 import { ExtensionLock, mainLane, subLane } from '../../bridge/extension-lock.js';
 import { runBatchTask } from './turn-runner.js';
@@ -301,6 +302,16 @@ export class AgentLoop {
    * UI — so the edge is caught here, where all of them pass, rather than at
    * each one, where the next writer would be the one that forgets.
    */
+  /**
+   * The MCP servers (v9.0), built on first use. Not in the constructor: a loop
+   * with no servers must not read a config or hold a process hook, and the
+   * tests build hundreds of loops.
+   */
+  get mcp() {
+    this._mcp ??= new McpServers({ workspace: this.workspace });
+    return this._mcp;
+  }
+
   get isProcessing() {
     return this._isProcessing === true;
   }

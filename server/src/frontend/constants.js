@@ -57,6 +57,7 @@ const SLASH_COMMANDS = [
   { name: 'chat', desc: 'Continue in a Gemini chat you name · its link or id', group: 'chat' },
   { name: 'commands', desc: 'Every shell command the agent has run, by day', group: 'audit' },
   { name: 'jira', desc: 'Is Jira set up · sign in with `agent atlassian login` in a terminal', group: 'config' },
+  { name: 'mcp', desc: 'MCP servers and Jira, in one list · `/mcp reload` reads mcp.json again', group: 'config' },
   { name: 'theme', desc: 'Colours — dark, light, colour-blind, terminal, mono', group: 'config' },
   { name: 'name', desc: 'Name the agent — shown in the banner', group: 'config' },
   { name: 'update', desc: 'Pull the agent\'s own repo, and say what to reload', group: 'agent' },

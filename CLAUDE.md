@@ -731,6 +731,12 @@ file over 2 MB or a parse error. Pty: a scripted ranged read of a Ruby file put 
 `executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
 backoff and rewrites `errno` codes into LLM-readable instructions.
 
+**MCP client (v9.0, `mcp/client/`).** `~/.agent/mcp.json`, Claude Code's shape, stdio only. Started on
+the first `/mcp`, never at launch (`AgentLoop.mcp` is lazy), and the model reaches nothing until v9.1.
+`/mcp` lists servers and Jira together. `env` values are scrubbed from errors and descriptions;
+children die on `exit`. Tested against a real process (`test/fixtures/mcp-fixture-server.js`). Pty: 0
+clears at 13 and 24 rows × 60 and 90.
+
 ### Workspace
 
 `core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
@@ -1295,7 +1301,8 @@ them, and do not squash their history away.
   and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
   branch is named for what it does, never for the file it touches. **v8 opens with
   `v8.0/silent-retry-and-cleaner-rows`** (2026-10-31, after v7.10 #141), owner: "push and merge
-  uptil 7.10 and lets start v8". **v8.1 is Jira and Confluence**
+  uptil 7.10 and lets start v8". **v9 opens with `v9.0/mcp-client`** (2026-11-05,
+  `.agent/artifacts/plans/2026-11-05-custom-mcp.md`). **v8.1 is Jira and Confluence**
   (`.agent/artifacts/plans/2026-10-31-atlassian-tools.md`): built here, tested on the work laptop,
   and every write asks, in every mode.
   `/update` runs git in `server/`, and status names paths from the repo root — any path

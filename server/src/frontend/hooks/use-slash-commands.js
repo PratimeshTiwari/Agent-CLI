@@ -907,6 +907,15 @@ export async function handleSlashCommand(query, {
       return;
     }
 
+    // A menu in the terminal, opened before anything answers: rows fill in as
+    // servers do. `/mcp reload` and the panels go through the backend's arm.
+    if (command === 'mcp' && !args.length) {
+      agentLoop.mcp.connectAll().catch(() => { /* a failure is the row's state */ });
+      setActiveMenu({ type: 'mcp', view: 'home' });
+      setIsProcessing(false);
+      return;
+    }
+
     if (command === 'logs' || command === 'errors') {
       const arg = (args[0] || '').toLowerCase();
 

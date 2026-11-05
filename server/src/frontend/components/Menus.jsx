@@ -15,6 +15,8 @@ import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
+import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
+import { listIntegrations } from '../../backend/mcp/client/integrations.js';
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/models/effort.js';
@@ -154,6 +156,15 @@ export function Menus({
    * on the package page while the menu is open, and in the transcript if it
    * was closed before npm finished.
    */
+  // `/mcp`: a fresh object when a server changes, so the open menu redraws.
+  const mcpOpen = activeMenu?.type === 'mcp';
+  React.useEffect(() => {
+    if (!mcpOpen) return undefined;
+    return agentLoop.mcp.onChange(() => {
+      setActiveMenu((cur) => (cur?.type === 'mcp' ? { ...cur } : cur));
+    });
+  }, [mcpOpen, agentLoop, setActiveMenu]);
+
   const doctorOpen = React.useRef(false);
   const promptPage = React.useRef({ offset: 0, max: 0 }); // `/prompt`'s → page, as drawn
   doctorOpen.current = activeMenu?.type === 'doctor';
@@ -330,6 +341,11 @@ export function Menus({
     if (!key.escape) return;
     if (activeMenu?.type === 'prompt' && activeMenu.all) {
       setActiveMenu({ ...activeMenu, all: false });
+      return;
+    }
+    // `/mcp` (v9.0): from a server's tools back to the list.
+    if (activeMenu?.type === 'mcp' && activeMenu.view === 'server') {
+      setActiveMenu({ ...activeMenu, view: 'home', server: null });
       return;
     }
     // `/logs` (v5.35): from a flow list back to the picker.
@@ -1368,6 +1384,42 @@ export function Menus({
                   try {
                     exec(`"${agentLoop.editor || 'code'}" "${item.value}" || open "${item.value}" || xdg-open "${item.value}"`);
                   } catch { /* no editor on this machine */ }
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'mcp' && (() => {
+          // v9.0 (`frontend/menus/mcp-view.js`): one list for every integration,
+          // read at render so a server that answers redraws its own row.
+          const m = activeMenu;
+          const list = listIntegrations(agentLoop.mcp);
+          const chosen = m.view === 'server' ? list.rows.find((r) => r.name === m.server) : null;
+          if (chosen) {
+            const { sub, tight, room } = fit(serverLine(chosen));
+            return (
+              <Panel width={W} title={chosen.name} status={chosen.builtin ? 'built in' : 'mcp.json'}
+                sub={sub} tight={tight} keys="↑↓ move · esc back">
+                <Choices limit={room} items={serverToolItems(chosen, { said: sub.length > 0 })} onSelect={() => {}} />
+              </Panel>
+            );
+          }
+          const { sub, tight, room } = fit(homeLine(list));
+          return (
+            <Panel width={W} title="MCP" status={shortPath(list.path)}
+              sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
+              <Choices
+                limit={room}
+                items={mcpHomeItems(list, { T })}
+                onSelect={(item) => {
+                  if (item.value === 'reload') {
+                    setActiveMenu(null);
+                    setFocus(FOCUS_INPUT);
+                    handleSubmit('/mcp reload');
+                    return;
+                  }
+                  if (item.value) setActiveMenu({ ...m, view: 'server', server: item.value });
                 }}
               />
             </Panel>

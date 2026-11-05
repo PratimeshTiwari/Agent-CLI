@@ -44,7 +44,7 @@ describe('the table says why, and the code agrees', () => {
       const text = files.map((f) => readFileSync(join(SRC, '..', f), 'utf8')).join('\n');
       const esc = name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
       const isStatic = new RegExp(`from\\s+['"]${esc}(?:/[^'"]*)?['"]`).test(text);
-      const isLazy = new RegExp(`import\\s*\\(\\s*['"]${esc}['"]`).test(text);
+      const isLazy = new RegExp(`import\\s*\\(\\s*['"]${esc}(?:/[^'"]*)?['"]`).test(text);
       if (info.tier === 'required' && !isStatic) wrong.push(`${name}: required, but nothing imports it at startup`);
       if (info.tier === 'optional' && (isStatic || !isLazy)) wrong.push(`${name}: optional, but ${isStatic ? 'imported statically' : 'never imported'}`);
       if (info.tier === 'unused' && files.length) wrong.push(`${name}: unused, but ${files[0]} imports it`);

@@ -200,6 +200,7 @@ conversation.
 | `/theme` | Dark, Light, colour-blind, Terminal (the default) or Mono |
 | `/logs` | failures, speed, tool use and notices |
 | `/jira` | check the Jira sign-in |
+| `/mcp` | your MCP servers and Jira, in one list; `/mcp reload` reads `~/.agent/mcp.json` again. The model cannot call them yet |
 | `/reset` | start this repo fresh; its `.agent` state goes to `~/.agent/trash` |
 | `/help` | every key and command |
 
