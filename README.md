@@ -71,7 +71,8 @@ repo.
 
 ### The same conversation, outside the terminal
 
-**Chrome side panel**: docked beside the Gemini tab the agent types into.
+**Chrome side panel**: docked beside the Gemini tab the agent types into. It draws the conversation
+the way the terminal does, with the mode and effort as menus in the composer and `/` for commands.
 
 ![The Chrome side panel beside the Gemini tab the agent types into](docs/images/side-panel.png)
 
@@ -79,7 +80,8 @@ repo.
 
 ![Floating window over the terminal](docs/images/floating-window.png)
 
-**VS Code chat panel**, `⌥⌘J`, beside your code.
+**VS Code chat panel**, `⌥⌘J`, beside your code: the same page, in your editor's theme. Effort lists
+the model each level uses on your account.
 
 ![VS Code chat panel beside the code](docs/images/vscode-chat.png)
 
@@ -121,7 +123,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.12.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.14.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in

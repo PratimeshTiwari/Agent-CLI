@@ -50,6 +50,7 @@ function panel() {
     imageBlock: () => ({ used: [], block: '' }),
     fileBlock: () => ({ used: [], block: '' }),
     showThinking() {}, removeThinking() {}, clearStreamPartial() {}, scrollToBottom() {},
+    showAttachments() {}, showSentImages() {},
     markOrphaned() {}, explainDisconnected() {}, handleSlashCommand() {},
   };
   const body = `

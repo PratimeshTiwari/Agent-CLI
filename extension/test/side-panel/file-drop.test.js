@@ -41,7 +41,7 @@ function panel(value = '', caret = value.length) {
     let pastedImages = []; let pastedCount = 0; let droppedFiles = []; let droppedCount = 0;
     const imageTag = (n) => \`[Image #\${n}]\`;
     ${constant('DROP_INLINE_MAX')} ${constant('fileTag')} ${constant('baseName')}
-    ${take('insertAtCaret')} ${take('addImage')} ${take('droppedPaths')} ${take('addFileTag')}
+    ${take('insertAtCaret')} ${take('addImage')} ${take('addImageData')} ${take('droppedPaths')} ${take('addFileTag')}
     ${take('attachFiles')} ${take('onDropFiles')} ${take('backspaceTag')} ${take('fileBlock')}
     return { onDropFiles, backspaceTag, fileBlock, droppedPaths, images: () => pastedImages, files: () => droppedFiles };`)(
     commandInput, window.FileReader, window.Event, (t) => statuses.push(t));

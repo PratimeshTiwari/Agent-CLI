@@ -119,7 +119,7 @@ describe('the header controls', () => {
     resolve(dirname(fileURLToPath(import.meta.url)), '../../side-panel/panel.html'), 'utf8');
 
   test('a new-chat button and a history button both exist', () => {
-    assert.match(markup, /id="new-btn"[^>]*>\+</);
+    assert.match(markup, /id="new-btn"[^>]*>\s*<svg/);
     assert.match(markup, /id="sessions-btn"/);
   });
 

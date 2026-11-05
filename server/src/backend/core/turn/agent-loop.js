@@ -169,8 +169,9 @@ import { runDelegatedRead, shouldDelegateRead } from '../subagents/delegated-rea
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from '../subagents/subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS } from '../prompt/tool-catalog.js';
-import { resolveEffort, effortFromConfig, promptRung } from '../models/effort.js';
-import { planModelSwitch, browserModelPin, rungForModel } from '../models/model-match.js';
+import { resolveEffort, effortFromConfig, promptRung, EFFORT_LEVELS } from '../models/effort.js';
+import { planModelSwitch, browserModelPin, rungForModel, pickModelFor } from '../models/model-match.js';
+import { MODES, describeMode } from '../policy/modes.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
 import { stripImageData, stripImageHeaders, promptCharge } from '../prompt/prompt-builder.js';
@@ -2037,10 +2038,11 @@ export class AgentLoop {
     clearTimeout(this._modelOptionsWatchdog);
     this._modelOptionsWatchdog = null;
     this.modelOptions = models;
-    this._emitModels();
     // A fresh reading ends the suppression whether it agrees or not: from here
     // a disagreement is standing rather than in flight, and worth the row.
+    // Before the emit, which the panels' footer reads.
     this._switchInFlight = null;
+    this._emitModels();
 
     /*
      * A list with entries and none of them marked `selected` is a failed
@@ -2981,7 +2983,21 @@ export class AgentLoop {
       mode: this.mode,
       effort: resolveEffort(this.modelConfig?.effort).id,
       model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
+      // The tab has not answered yet, so a difference is not a mismatch.
+      switching: Boolean(this._switchInFlight),
       contextPct: limit > 0 ? Math.round((this.contextTokens / limit) * 100) : null,
+      // What the panels' two dropdowns offer (v8.8): each rung with the model
+      // it maps to on this account (the terminal's slider says the same), and
+      // each mode with the line the terminal's status row uses for it.
+      efforts: EFFORT_LEVELS.map((rung) => {
+        const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
+        if (options.length === 0) return { id: rung.id, name: rung.name, model: rung.browser, available: true };
+        const pick = pickModelFor(rung.id, options, browserModelPin(this.modelConfig, rung.id));
+        return pick
+          ? { id: rung.id, name: rung.name, model: pick.model.label, available: true }
+          : { id: rung.id, name: rung.name, model: rung.id === 'max' ? 'not on this account' : 'nothing suits it', available: false };
+      }),
+      modes: MODES.map((id) => ({ id, about: describeMode(id).replace(/^\w+ — /, '') })),
     };
   }
 

@@ -25,6 +25,8 @@ import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { exitWithFarewell } from './frontend/screen/farewell.js';
 import { WebSocketServer } from './backend/bridge/websocket-server.js';
+import { SLASH_COMMANDS } from './frontend/constants.js';
+import { AGENT_COMMANDS } from './backend/core/turn/slash-commands.js';
 import { MCPServer } from './backend/mcp/mcp-server.js';
 import { AgentLoop } from './backend/core/turn/agent-loop.js';
 import { PromptBuilder } from './backend/core/prompt/prompt-builder.js';
@@ -245,6 +247,8 @@ async function main() {
   const wsServer = new WebSocketServer({
     port: config.port,
     agentLoop,
+    // What a panel can run: the agent's own commands, as `/help` words them.
+    commands: SLASH_COMMANDS.filter((c) => AGENT_COMMANDS.has(c.name)).map(({ name, desc }) => ({ name, desc })),
   });
 
   // Start listening

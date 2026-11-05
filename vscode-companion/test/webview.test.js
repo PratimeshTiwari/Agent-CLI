@@ -126,8 +126,8 @@ test('the panel, through the shim, against the real bridge', async (t) => {
   v.fromHost({ type: 'bridge', payload: { port: info.port, token: info.token } });
 
   await t.test('it connects, identifies as an editor, and shows the history', async () => {
-    assert.ok(await until(() => doc.getElementById('connection-text').textContent === 'Connected'), 'never connected');
-    // "Connected" is drawn when the socket opens; the server learns it is an
+    assert.ok(await until(() => doc.getElementById('connection-dot').classList.contains('connected')), 'never connected');
+    // The dot turns when the socket opens; the server learns it is an
     // editor only when the identify frame lands, which on a slow CI runner
     // is after that check had already run.
     const isEditor = () => [...server.clients.values()].some((c) => c.type === 'editor');

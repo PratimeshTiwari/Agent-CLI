@@ -18,7 +18,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { buildWebviewHtml, readBridge, selectionMarker, selectionBody, agentStateDir } = require('./chat-panel-html.js');
+const { browseLabel, pickedFile, buildWebviewHtml, readBridge, selectionMarker, selectionBody, agentStateDir } = require('./chat-panel-html.js');
 
 /*
  * Two homes for one view (1.8.10), the way Claude Code's extension does it:
@@ -223,7 +223,14 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     async function pickAttachment() {
         const root = workspaceRoot();
         if (!root) return;
-        const items = [];
+        // First, and kept while the list is filtered: the list below can only
+        // ever offer this workspace.
+        const items = [{
+            label: `$(folder-opened) ${browseLabel()}`,
+            description: 'any file on this computer',
+            browse: true,
+            alwaysShow: true,
+        }];
 
         const editor = vscode.window.activeTextEditor;
         if (editor && !editor.selection.isEmpty && editor.document.uri.scheme === 'file') {
@@ -245,6 +252,16 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
             matchOnDescription: true,
         });
         if (!choice) return;
+
+        if (choice.browse) {
+            const uris = await vscode.window.showOpenDialog({
+                canSelectMany: true,
+                openLabel: 'Attach',
+                defaultUri: vscode.Uri.file(root),
+            });
+            if (uris?.length) post({ type: 'add_files', payload: { files: uris.map((u) => pickedFile(u.fsPath)) } });
+            return;
+        }
 
         let entry;
         if (choice.selection) {

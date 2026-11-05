@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveWorkspaceInput, validateWorkspace, listWorkspaceCandidates } from '../../../../src/backend/core/workspace/workspaces.js';
+import { projectName, resolveWorkspaceInput, validateWorkspace, listWorkspaceCandidates } from '../../../../src/backend/core/workspace/workspaces.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-test-'));
 const project = path.join(tmp, 'project');
@@ -80,4 +80,17 @@ test('listWorkspaceCandidates', async (t) => {
   await t.test('honours the limit', () => {
     assert.ok(listWorkspaceCandidates(project, { limit: 2 }).length <= 2);
   });
+});
+
+test('projectName: the manifest\'s name, a scope dropped, else the folder', () => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'Checkout-'));
+  assert.equal(projectName(dir), path.basename(dir), 'no manifest');
+  fs.writeFileSync(path.join(dir, 'package.json'), '{ not json');
+  assert.equal(projectName(dir), path.basename(dir), 'a manifest that does not parse');
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":""}');
+  assert.equal(projectName(dir), path.basename(dir), 'an empty name');
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"agent-cli"}');
+  assert.equal(projectName(dir), 'agent-cli');
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"@acme/billing"}');
+  assert.equal(projectName(dir), 'billing');
 });

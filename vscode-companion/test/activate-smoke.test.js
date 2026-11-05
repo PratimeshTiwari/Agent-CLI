@@ -231,6 +231,38 @@ test('the companion activates and the chat view answers its page', async (t) => 
     assert.equal(provider.provideTextDocumentContent({ path: '/a.js', query: 'd1' }), 'y');
   });
 
+  await t.test('the picker offers the whole computer, first and through the dialog', async (sub) => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-outside-'));
+    const pdf = path.join(outside, 'report.pdf');
+    const png = path.join(outside, 'shot.PNG');
+    fs.writeFileSync(pdf, '%PDF');
+    fs.writeFileSync(png, Buffer.from([1, 2, 3]));
+    const { showQuickPick } = vscode.window;
+    sub.after(() => { vscode.window.showQuickPick = showQuickPick; delete vscode.window.showOpenDialog; });
+    let offered = null;
+    let dialog = null;
+    vscode.window.showQuickPick = async (items) => { offered = items; return items[0]; };
+
+    vscode.window.showOpenDialog = async (o) => { dialog = o; return undefined; };
+    const before = posted.length;
+    onMessage({ type: 'pick_file' });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.match(offered[0].label, /Browse/);
+    assert.equal(offered[0].alwaysShow, true, 'still there while the list is filtered');
+    assert.equal(dialog.canSelectMany, true);
+    assert.equal(posted.length, before, 'cancelling the dialog attaches nothing');
+
+    vscode.window.showOpenDialog = async () => [vscode.Uri.file(pdf), vscode.Uri.file(png)];
+    onMessage({ type: 'pick_file' });
+    await new Promise((r) => setTimeout(r, 20));
+    const { type, payload } = posted.at(-1);
+    assert.equal(type, 'add_files');
+    assert.deepEqual(payload.files[0], { path: pdf }, 'a PDF goes by path: nothing here can read it');
+    assert.equal(payload.files[1].path, png);
+    assert.equal(payload.files[1].mime, 'image/png', 'the extension is matched in any case');
+    assert.equal(payload.files[1].dataUrl, 'data:image/png;base64,AQID');
+  });
+
   await t.test('@ attaches a file as a marker plus its text', async () => {
     onMessage({ type: 'pick_file' });
     await new Promise((r) => setTimeout(r, 20));

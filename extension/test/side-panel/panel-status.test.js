@@ -236,7 +236,7 @@ describe('block statuses are left-aligned and keep their shape', () => {
     assert.match(text, /^ {6}Terse prompt\.$/m, 'the six-space indent was collapsed');
   });
 
-  test('a one-line status is still a pill, not a block', () => {
+  test('a one-line status is a row, not a block', () => {
     const { api, dom } = lift(['appendStatus', 'escapeHtml', 'renderMarkdownish'],
       { scrollToBottom() {} }, 'let lastStatusText = "";');
     api.appendStatus('Workspace unchanged.');

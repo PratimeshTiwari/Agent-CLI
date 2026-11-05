@@ -125,6 +125,15 @@
     window.__agentPickFiles = () => vscode.postMessage({ type: 'pick_file' });
 
     /** Replace the `@` that opened the picker with the marker, and remember what it means. */
+    /** The `@` that opened the picker, which the tags replace. */
+    function dropTypedAt() {
+        const input = document.getElementById('command-input');
+        const caret = input?.selectionStart ?? 0;
+        if (!input || caret === 0 || input.value[caret - 1] !== '@') return;
+        input.value = input.value.slice(0, caret - 1) + input.value.slice(caret);
+        input.setSelectionRange(caret - 1, caret - 1);
+    }
+
     function insertAttachment({ marker, body }) {
         const input = document.getElementById('command-input');
         if (!input || !marker) return;
@@ -161,6 +170,9 @@
             }
         } else if (m.type === 'insert') {
             insertAttachment(m.payload || {});
+        } else if (m.type === 'add_files') {
+            dropTypedAt();
+            if (typeof window.__agentAddFiles === 'function') window.__agentAddFiles(m.payload?.files || []);
         } else if (m.type === 'diff_decision') {
             if (typeof window.respondToDiff === 'function') window.respondToDiff(m.payload.diffId, m.payload.action);
         } else if (m.type === 'focus_input') {
