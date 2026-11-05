@@ -333,9 +333,17 @@ export class MemoryStore {
     if (!found) return 0;
     let added = 0;
     const facts = parseMemory(found.text);
+    /*
+     * After everything already here, whatever the file's time says: `/memory
+     * forget 3` and v1's numbers are positions, and a late import must not shift
+     * them. The time alone is not enough: Linux's are coarser than the clock, so a
+     * file written after a fact can carry an earlier stamp (CI, Ubuntu).
+     */
+    const last = Math.max(0, ...this._scan().map((f) => Date.parse(f.written)));
+    const start = Math.max(found.mtime, last + 1);
     for (const [i, fact] of facts.entries()) {
       // Each its own millisecond, so the old file's order is still the order.
-      const written = new Date(found.mtime + i).toISOString();
+      const written = new Date(start + i).toISOString();
       const done = this._add({ fact, author: 'imported', written });
       if (!done.ok && done.reason !== 'duplicate') return added;
       if (done.ok) added += 1;

@@ -273,6 +273,18 @@ describe('memory.md comes in', () => {
     assert.deepEqual(s.list().map((f) => f.fact), ['first', 'by habit']);
   });
 
+  test('a late import goes after what is there, so no number shifts', () => {
+    const ws = workspace();
+    const s = new MemoryStore(ws);
+    s.add({ fact: 'saved first' });
+    const legacy = path.join(ws, '.agent', 'memory.md');
+    fs.writeFileSync(legacy, '- found later\n');
+    // Older than the fact, as a coarse file clock can make it.
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(legacy, old, old);
+    assert.deepEqual(s.list().map((f) => f.fact), ['saved first', 'found later']);
+  });
+
   test('add on a workspace with a memory.md imports it first', () => {
     const ws = workspace();
     fs.writeFileSync(path.join(ws, '.agent', 'memory.md'), '- old fact\n');
