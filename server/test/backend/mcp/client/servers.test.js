@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { McpServers } from '../../../../src/backend/mcp/client/servers.js';
+import { MAX_CALLS_AT_ONCE, McpServers } from '../../../../src/backend/mcp/client/servers.js';
+import { setSwitch } from '../../../../src/backend/mcp/client/switches.js';
+import { handleSlashCommand } from '../../../../src/backend/core/turn/slash-commands.js';
 import { McpConnection } from '../../../../src/backend/mcp/client/connection.js';
 import { loadMcpConfig } from '../../../../src/backend/mcp/client/config.js';
 import { listIntegrations, mcpReport, statusLine } from '../../../../src/backend/mcp/client/integrations.js';
@@ -135,4 +137,52 @@ test('one list: custom servers and Jira', async (t) => {
   assert.equal(statusLine(list.rows[0]), 'connected · 2 tools');
   assert.match(statusLine(list.rows[1]), /built in/);
   assert.match(mcpReport(list), /- a · connected · 2 tools/);
+});
+
+test('/mcp reload teaches the chat only when the tools came or went', async () => {
+  const run = async (before, after) => {
+    let resets = 0;
+    let offered = before;
+    const loop = {
+      mcp: {
+        reload: async () => { offered = after; },
+        snapshot: () => ({ path: 'p', exists: true, error: null, servers: [] }),
+      },
+      promptBuilder: {
+        _toolFlags: () => ({ customMcp: offered }),
+        resetPromptState: () => { resets += 1; },
+      },
+    };
+    await handleSlashCommand(loop, 'mcp', ['reload']);
+    return resets;
+  };
+  assert.equal(await run(false, true), 1, 'the first server');
+  assert.equal(await run(true, false), 1, 'the last one gone');
+  assert.equal(await run(true, true), 0, 'a full prompt is not spent to change nothing');
+  assert.equal(await run(false, false), 0);
+});
+
+test('a call waits for a free slot, and a slot is never lost', async (t) => {
+  const { mcp } = rig({}, t);
+  const entry = {};
+  const held = await Promise.all(Array.from({ length: MAX_CALLS_AT_ONCE }, () => mcp._slot(entry)));
+  assert.equal(held.length, MAX_CALLS_AT_ONCE);
+  let got = false;
+  const waiting = mcp._slot(entry).then(() => { got = true; });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(got, false, 'the cap holds');
+  mcp._free(entry);
+  await waiting;
+  assert.equal(entry.running, MAX_CALLS_AT_ONCE, 'handed over, not counted twice');
+  for (let i = 0; i < MAX_CALLS_AT_ONCE; i += 1) mcp._free(entry);
+  assert.equal(entry.running, 0);
+});
+
+test('offered: what the prompt names, and nothing started to find out', async (t) => {
+  const { mcp, started } = rig({ a: fixture('ok'), off: { ...fixture('ok'), disabled: true }, bad: {} }, t);
+  assert.deepEqual(mcp.offered(), [{ name: 'a', tools: [] }]);
+  assert.deepEqual(started, []);
+  setSwitch('a', null, 'block');
+  assert.deepEqual(mcp.offered(), [], 'a server set to block is not named');
+  setSwitch('a', null, 'ask');
 });

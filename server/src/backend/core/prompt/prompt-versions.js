@@ -114,6 +114,34 @@ export const PROMPT_VERSIONS = {
       jira: true,                // jira_issue is offered once a site is set up (v8.1)
     },
   },
+  /*
+   * v5 (v9.1): v4, plus `mcp_describe` and `mcp_tool` — once a server in
+   * `~/.agent/mcp.json` is usable. With none the prompt is v4's byte for byte
+   * (`PromptBuilder._toolFlags`), the way v4 is v3's without a Jira site.
+   */
+  v5: {
+    id: 'v5',
+    summary: 'v4, plus the MCP servers you added: each tool asks, runs or is blocked as you set it in /mcp',
+    hint: 'v4 + MCP',
+    refreshEvery: 20,
+    dir: 'v2',
+    flags: {
+      trustEditResult: true,
+      gateReview: true,
+      walkthroughWithTask: true,
+      tickWithNextCall: true,
+      oneCopy: true,
+      answerDirectly: true,
+      symbolLanguages: true,
+      subagentEffortWords: true,
+      largeFileDigest: true,
+      logQuery: true,
+      projectCommands: true,
+      lookFirst: true,
+      jira: true,
+      customMcp: true,           // mcp_describe and mcp_tool, once a server is usable (v9.1)
+    },
+  },
 };
 
 /**
@@ -135,6 +163,7 @@ export const FLAG_NOTES = {
   projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
   lookFirst: 'A question about the project is answered from files opened this turn',
   jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
+  customMcp: 'mcp_tool calls the servers you added; /mcp sets each tool to ask, auto or block',
 };
 
 /** What a version changes from v1, one line per switch that is on. */

@@ -168,7 +168,7 @@ import { tabUnreachableMessage, tabClosedMessage, TAB_CLOSED_MID_TURN } from '..
 import { runDelegatedRead, shouldDelegateRead } from '../subagents/delegated-read.js';
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from '../subagents/subagent-session.js';
-import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS } from '../prompt/tool-catalog.js';
+import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS, MCP_TOOLS } from '../prompt/tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung, EFFORT_LEVELS } from '../models/effort.js';
 import { planModelSwitch, browserModelPin, rungForModel, pickModelFor } from '../models/model-match.js';
 import { MODES, describeMode } from '../policy/modes.js';
@@ -185,6 +185,7 @@ import { ExtensionLock, mainLane, subLane } from '../../bridge/extension-lock.js
 import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from '../policy/tool-policy.js';
 import { runExternalTool } from '../policy/external-approval.js';
+import { runMcpTool, runsTogether } from '../policy/mcp-approval.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from '../edits/diff-approval.js';
 import { createOutputTail } from '../commands/output-tail.js';
@@ -363,6 +364,7 @@ export class AgentLoop {
     this.workspace = workspace;
     this.mcpServer = mcpServer;
     this.promptBuilder = promptBuilder;
+    if (promptBuilder) promptBuilder.mcpServers = () => this.mcp.offered();
     this.diffEngine = diffEngine;
     this.riskClassifier = riskClassifier;
     this.editor = editor;
@@ -1767,7 +1769,12 @@ export class AgentLoop {
         // An external write (v8.1) is never remembered either way: "always"
         // from a panel that offers it counts as this once, and nothing is
         // added to the allow or block list.
-        this.pendingCommandResolve({ approved: ['allow_once', 'allow_always', 'accept', 'send'].includes(action) });
+        // MCP (v9.1) asks in the same box and may offer "always", which sets its
+        // switch: `always` is read only there.
+        this.pendingCommandResolve({
+          approved: ['allow_once', 'allow_always', 'accept', 'send'].includes(action),
+          always: action === 'allow_always',
+        });
         this._pendingExternal = false;
       } else if (action === 'allow_always') {
         this.commandRules.allow.push(command);
@@ -3002,6 +3009,8 @@ export class AgentLoop {
     this._userStoppedAt = Date.now();
     // Stopping means stopping: a steer must not come back as the next message.
     this._steers = [];
+    // An MCP call in flight gets the protocol's cancel, and the rest never start.
+    this._mcpAbort?.abort();
   }
 
   /**
@@ -3413,6 +3422,12 @@ export class AgentLoop {
   async _executeToolCalls(toolCalls) {
     const toolResults = new Array(toolCalls.length);
     const executionPromises = [];
+    // MCP calls running together (v9.1). Anything that does not run together
+    // waits for them, so the written order holds around every box. Kept apart
+    // from `executionPromises`: a subagent's long run must not start holding
+    // up the calls after it.
+    let mcpInFlight = [];
+    this._mcpAbort = new AbortController();
 
     for (let i = 0; i < toolCalls.length; i++) {
       const call = toolCalls[i];
@@ -3430,7 +3445,12 @@ export class AgentLoop {
         subagentsEnabled: this.subagentsEnabled,
         largeFiles: this.modelConfig?.largeFiles,
       });
-      const isParallel = call.name === 'ask_subagent' || Boolean(delegate);
+      const mcpTogether = runsTogether(this, call);
+      const isParallel = call.name === 'ask_subagent' || Boolean(delegate) || mcpTogether;
+      if (!isParallel && mcpInFlight.length) {
+        await Promise.all(mcpInFlight);
+        mcpInFlight = [];
+      }
 
       // Counted where they are dispatched, not where they succeed: "I ran the
       // tests and they failed" is a true claim, and a tally that only counted
@@ -3570,6 +3590,9 @@ export class AgentLoop {
         // Jira (v8.1): a write is shown and sent only on the person's yes, in
         // every mode — core/policy/external-approval.js.
         result = await runExternalTool(this, call, { editor: this.editor, taskManager: this.taskManager });
+      } else if (MCP_TOOLS.has(call.name)) {
+        // The switch, the box and the log: core/policy/mcp-approval.js.
+        result = await runMcpTool(this, call);
       } else if (LOOP_TOOLS.has(call.name)) {
         // The three the loop answers itself — `backend/core/turn/loop-tools.js`. Which three
         // is the catalog's `dispatch: 'loop'`, not a list repeated here.
@@ -3690,6 +3713,7 @@ export class AgentLoop {
 
       if (isParallel) {
         executionPromises.push(executePromise);
+        if (mcpTogether) mcpInFlight.push(executePromise);
       } else {
         await executePromise;
       }

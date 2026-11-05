@@ -42,8 +42,24 @@ test('a fault or a missing file is a row: the line above is shed on a short term
   assert.ok(!mcpHomeItems(list([row()]), { T }).some((i) => i.label === 'mcp.json'), 'control: a good file has no such row');
 });
 
-test('the line says the model has none of this yet', () => {
-  assert.match(homeLine(list([row()])), /cannot call these yet/);
+test('off v5 the line says so, and a row offers the switch', () => {
+  assert.match(homeLine(list([row()]), { needsPrompt: true }), /prompt v5/);
+  assert.doesNotMatch(homeLine(list([row()])), /prompt v5/);
+  const offer = (rows, needsPrompt) => mcpHomeItems(list(rows), { needsPrompt }).some((i) => i.value === 'prompt');
+  assert.equal(offer([row()], true), true);
+  assert.equal(offer([row()], false), false, 'control: already on it');
+  assert.equal(offer([row({ state: 'disabled' })], true), false, 'nothing usable to offer');
+  assert.equal(offer([row({ builtin: true })], true), false, 'Jira alone is not a reason');
+});
+
+test('a custom server has switches, and a built-in has none', () => {
+  const switchOf = (tool) => (tool === 'echo' ? 'auto' : 'ask');
+  const items = serverToolItems(row(), { switchOf });
+  assert.deepEqual(items.map((i) => [i.label, i.value]), [['New tools', '*'], ['echo', 'echo']]);
+  assert.equal(items[0].detail.split(' · ')[0], 'ask');
+  assert.equal(items[1].detail, 'auto · one');
+  const jira = serverToolItems(row({ builtin: true }), { switchOf });
+  assert.ok(jira.every((i) => i.value === ''), 'its writes always ask');
 });
 
 test('a status is drawn once, wherever it had room', () => {

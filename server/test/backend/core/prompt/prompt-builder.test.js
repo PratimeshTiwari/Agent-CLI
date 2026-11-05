@@ -594,12 +594,14 @@ describe('PromptBuilder — a dispatchable tool the prompt never mentions is unr
     const missing = registered.filter((name) => !gated.has(name) && !prompt.includes(name));
     assert.deepEqual(missing, [], `dispatchable but never mentioned: ${missing.join(', ')}`);
 
-    // Every newer version, with Jira set up (v8.1: jira_issue is offered only then).
+    // Every newer version, with Jira set up (v8.1: jira_issue is offered only then)
+    // and a server to offer (v9.1, the same for the MCP tools).
     const { PROMPT_VERSION_IDS } = await import('../../../../src/backend/core/prompt/prompt-versions.js');
     const later = PROMPT_VERSION_IDS.filter((id) => id !== 'v1').map((id) => {
       const pb2 = new PromptBuilder(ws, ws);
       pb2.promptVersion = id;
       pb2.jiraAvailable = true;
+      pb2.mcpServers = () => [{ name: 'fixture', tools: [] }];
       return build(pb2, { modelConfig: { effort: 'standard', main: 'gemini' } });
     });
     for (const name of gated) {

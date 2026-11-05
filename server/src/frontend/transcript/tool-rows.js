@@ -59,6 +59,11 @@ export function subjectOf(toolName, args, max = 44) {
     case 'grep_search':
       raw = pick('pattern', 'patterns', 'query');
       break;
+    case 'mcp_tool':
+    case 'mcp_describe':
+      // `github search_issues`: which server, and which of its tools.
+      raw = [pick('server'), pick('tool')].filter(Boolean).join(' ');
+      break;
     case 'jira_issue':
       // `comment PROJ-12`, `search project = X`: the action and what it is on.
       raw = [pick('action'), pick('key', 'project', 'jql')].filter(Boolean).join(' ');
@@ -192,6 +197,11 @@ export function summarizeResult(toolName, result) {
         }
         break;
       }
+      case 'mcp_tool':
+      case 'mcp_describe':
+        // v9.1: the first line inside the `<mcp_result>` label, not the label.
+        if (typeof r === 'string') return oneLine(r.split('\n')[1] || '');
+        break;
       case 'jira_issue':
         // v8.1: the first line is the answer (`Created PROJ-45 · …`); a hand-off
         // says whose step it is now.

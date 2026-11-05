@@ -116,7 +116,7 @@ export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } 
   const TITLE = 1;
   // An external write (v8.1) offers Send and Don't send: no "always" either way.
   const external = payload.kind === 'external';
-  const OPTIONS = external ? 2 : 4;
+  const OPTIONS = external ? (payload.choices?.length ?? 2) : 4;
   const inner = Math.max(10, width - 2);                       // the panel's one-column indent
   const all = [];
   const source = external ? (payload.lines || String(payload.command ?? '').split('\n')) : String(payload.command ?? '').split('\n');

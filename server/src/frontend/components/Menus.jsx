@@ -17,6 +17,8 @@ import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
 import { listIntegrations } from '../../backend/mcp/client/integrations.js';
+import { resolvePromptVersion } from '../../backend/core/prompt/prompt-versions.js';
+import { nextSwitch, setSwitch, switchFor } from '../../backend/mcp/client/switches.js';
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/models/effort.js';
@@ -497,6 +499,8 @@ export function Menus({
             by `approvalLayout`, as for a command.
           */
           const p = activeMenu.payload;
+          // An MCP call (v9.1) brings its own: Run, Always for this tool, Don't run.
+          const choices = p.choices || [{ label: 'Send', value: 'send' }, { label: "Don't send", value: 'reject' }];
           return (
             <Panel tight ruled={approval?.ruled !== false} tone="attention" width={W}
               title={p.title || 'Send this?'}
@@ -511,16 +515,13 @@ export function Menus({
               {/* The cursor starts on Don't send: an Enter typed ahead, meant for
                   the prompt, must not post to Jira. Sending is ↑ then enter. */}
               <Choices
-                limit={2}
-                initialIndex={1}
-                items={[
-                  { label: 'Send', value: 'send' },
-                  { label: "Don't send", value: 'reject' },
-                ]}
+                limit={choices.length}
+                initialIndex={choices.length - 1}
+                items={choices}
                 onSelect={(item) => {
                   setActiveMenu(null);
                   agentLoop.answerCommandApproval(item.value, null);
-                  setHistory(prev => [...prev, { role: 'system', content: `[System: ${item.value === 'send' ? 'You sent it' : 'You did not send it'}]` }]);
+                  setHistory(prev => [...prev, { role: 'system', content: `[System: ${item.value === 'reject' ? `You did not ${p.choices ? 'run' : 'send'} it` : `You ${p.choices ? 'ran' : 'sent'} it`}]` }]);
                   setFocus(FOCUS_INPUT);
                 }}
               />
@@ -1398,25 +1399,37 @@ export function Menus({
           const chosen = m.view === 'server' ? list.rows.find((r) => r.name === m.server) : null;
           if (chosen) {
             const { sub, tight, room } = fit(serverLine(chosen));
+            const switchOf = (tool) => switchFor(chosen.name, tool);
+            const items = serverToolItems(chosen, { said: sub.length > 0, switchOf });
             return (
               <Panel width={W} title={chosen.name} status={chosen.builtin ? 'built in' : 'mcp.json'}
-                sub={sub} tight={tight} keys="↑↓ move · esc back">
-                <Choices limit={room} items={serverToolItems(chosen, { said: sub.length > 0 })} onSelect={() => {}} />
+                sub={sub} tight={tight} keys={`↑↓ move · ${items.some((i) => i.value) ? 'enter change · ' : ''}esc back`}>
+                <Choices
+                  limit={room}
+                  items={items}
+                  onSelect={(item) => {
+                    if (!item.value) return;
+                    const tool = item.value === '*' ? null : item.value;
+                    setSwitch(chosen.name, tool, nextSwitch(switchOf(tool ?? ''), { alwaysAsk: chosen.alwaysAsk }));
+                    setActiveMenu((cur) => ({ ...cur })); // settings are not state: draw it again
+                  }}
+                />
               </Panel>
             );
           }
-          const { sub, tight, room } = fit(homeLine(list));
+          const needsPrompt = !resolvePromptVersion(agentLoop.promptVersion).flags?.customMcp;
+          const { sub, tight, room } = fit(homeLine(list, { needsPrompt }));
           return (
             <Panel width={W} title="MCP" status={shortPath(list.path)}
               sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
               <Choices
                 limit={room}
-                items={mcpHomeItems(list, { T })}
+                items={mcpHomeItems(list, { T, needsPrompt })}
                 onSelect={(item) => {
-                  if (item.value === 'reload') {
+                  if (item.value === 'reload' || item.value === 'prompt') {
                     setActiveMenu(null);
                     setFocus(FOCUS_INPUT);
-                    handleSubmit('/mcp reload');
+                    handleSubmit(item.value === 'reload' ? '/mcp reload' : '/prompt v5');
                     return;
                   }
                   if (item.value) setActiveMenu({ ...m, view: 'server', server: item.value });

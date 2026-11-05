@@ -88,7 +88,7 @@ not do that on purpose, it is clutter.
 ```
 ~/.agent/
 ├── settings.json          yours, not the project's: theme, name, prompt version, startup,
-│                          and the Jira site (never its token)
+│                          the MCP switches, and the Jira site (never its token)
 ├── atlassian-token.json   the Jira token, readable only by you — only where there is no
 │                          macOS Keychain; `agent atlassian logout` deletes it
 ├── mcp.json               your MCP servers, in the format Claude Code uses (optional; you write it)
