@@ -16,7 +16,9 @@ import { Panel, Choices } from './Panel.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
-import { listIntegrations } from '../../backend/mcp/client/integrations.js';
+import { changeMcp, listIntegrations } from '../../backend/mcp/client/integrations.js';
+import { removeServer, setServerDisabled } from '../../backend/mcp/client/edit-config.js';
+import { McpAdd } from './McpAdd.jsx';
 import { resolvePromptVersion } from '../../backend/core/prompt/prompt-versions.js';
 import { nextSwitch, setSwitch, switchFor } from '../../backend/mcp/client/switches.js';
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
@@ -346,6 +348,11 @@ export function Menus({
       return;
     }
     // `/mcp` (v9.0): from a server's tools back to the list.
+    if (activeMenu?.type === 'mcp' && activeMenu.view === 'add') return; // its own steps: McpAdd
+    if (activeMenu?.type === 'mcp' && activeMenu.view === 'remove') {
+      setActiveMenu({ ...activeMenu, view: 'server' });
+      return;
+    }
     if (activeMenu?.type === 'mcp' && activeMenu.view === 'server') {
       setActiveMenu({ ...activeMenu, view: 'home', server: null });
       return;
@@ -1396,7 +1403,45 @@ export function Menus({
           // read at render so a server that answers redraws its own row.
           const m = activeMenu;
           const list = listIntegrations(agentLoop.mcp);
-          const chosen = m.view === 'server' ? list.rows.find((r) => r.name === m.server) : null;
+          if (m.view === 'add') {
+            return (
+              <McpAdd
+                agentLoop={agentLoop}
+                width={W}
+                rows={menuRows}
+                text={m.text}
+                onSaved={() => setActiveMenu({ type: 'mcp', view: 'home' })}
+                onLeave={() => setActiveMenu({ type: 'mcp', view: 'home' })}
+              />
+            );
+          }
+          // After a change the file is the truth: back to the list on a failure.
+          const edit = async (change, then = null) => {
+            try {
+              change();
+              await changeMcp(agentLoop, () => agentLoop.mcp.configChanged());
+              then?.();
+              setActiveMenu((cur) => ({ ...cur, problem: null }));
+            } catch (err) {
+              setActiveMenu((cur) => ({ ...cur, view: 'home', problem: err.message }));
+            }
+          };
+          const chosen = m.view === 'server' || m.view === 'remove' ? list.rows.find((r) => r.name === m.server) : null;
+          if (chosen && m.view === 'remove') {
+            return (
+              <Panel width={W} title={`Remove ${chosen.name}?`} tight tone="attention" keys="enter choose · esc back">
+                <Choices
+                  limit={2}
+                  items={[{ label: 'Keep it', value: 'keep' }, { label: 'Remove', detail: 'and its saved values', value: 'remove' }]}
+                  onSelect={(item) => {
+                    if (item.value === 'keep') { setActiveMenu({ ...m, view: 'server' }); return; }
+                    setActiveMenu({ ...m, view: 'home', server: null });
+                    edit(() => removeServer(chosen.name));
+                  }}
+                />
+              </Panel>
+            );
+          }
           if (chosen) {
             const { sub, tight, room } = fit(serverLine(chosen));
             const switchOf = (tool) => switchFor(chosen.name, tool);
@@ -1408,6 +1453,12 @@ export function Menus({
                   limit={room}
                   items={items}
                   onSelect={(item) => {
+                    if (item.action === 'remove') { setActiveMenu({ ...m, view: 'remove' }); return; }
+                    if (item.action === 'toggle') {
+                      const on = chosen.state === 'disabled';
+                      edit(() => setServerDisabled(chosen.name, !on), on ? () => agentLoop.mcp.connect(chosen.name).catch(() => {}) : null);
+                      return;
+                    }
                     if (!item.value) return;
                     const tool = item.value === '*' ? null : item.value;
                     setSwitch(chosen.name, tool, nextSwitch(switchOf(tool ?? ''), { alwaysAsk: chosen.alwaysAsk }));
@@ -1418,7 +1469,7 @@ export function Menus({
             );
           }
           const needsPrompt = !resolvePromptVersion(agentLoop.promptVersion).flags?.customMcp;
-          const { sub, tight, room } = fit(homeLine(list, { needsPrompt }));
+          const { sub, tight, room } = fit(m.problem || homeLine(list, { needsPrompt }));
           return (
             <Panel width={W} title="MCP" status={shortPath(list.path)}
               sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
@@ -1426,13 +1477,15 @@ export function Menus({
                 limit={room}
                 items={mcpHomeItems(list, { T, needsPrompt })}
                 onSelect={(item) => {
+                  if (item.value === 'add') { setActiveMenu({ ...m, view: 'add', text: '' }); return; }
+                  if (!item.value) return;
                   if (item.value === 'reload' || item.value === 'prompt') {
                     setActiveMenu(null);
                     setFocus(FOCUS_INPUT);
                     handleSubmit(item.value === 'reload' ? '/mcp reload' : '/prompt v5');
                     return;
                   }
-                  if (item.value) setActiveMenu({ ...m, view: 'server', server: item.value });
+                  setActiveMenu({ ...m, view: 'server', server: item.value });
                 }}
               />
             </Panel>

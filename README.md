@@ -200,7 +200,7 @@ conversation.
 | `/theme` | Dark, Light, colour-blind, Terminal (the default) or Mono |
 | `/logs` | failures, speed, tool use and notices |
 | `/jira` | check the Jira sign-in |
-| `/mcp` | your MCP servers and Jira, in one list; enter opens a server to set each tool to ask, auto or block; `/mcp reload` reads `~/.agent/mcp.json` again |
+| `/mcp` | your MCP servers and Jira, in one list; enter opens a server to set each tool to ask, auto or block, turn it off or remove it; `/mcp add` adds a server; `/mcp reload` reads `~/.agent/mcp.json` again |
 | `/reset` | start this repo fresh; its `.agent` state goes to `~/.agent/trash` |
 | `/help` | every key and command |
 
@@ -217,7 +217,8 @@ the model, which reads what it needs.
   Grafana, Loki and Datadog exports of any size (200 MB in about 4 s, prompt v2).
 - **Handle big files.** With subagents on, a file over 1,200 lines comes back as a digest; a ranged
   read always gets the exact text.
-- **Use your MCP servers** (prompt v5). Add them to `~/.agent/mcp.json`, in the format Claude Code uses. Each
+- **Use your MCP servers** (prompt v5). Run `/mcp add` and paste the server's command or the JSON from its README;
+  tokens go in your Keychain, not the config. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses. Each
   tool asks first, runs on its own or is blocked, as you set it in `/mcp`; strict mode always asks.
 - **Work with Jira** (prompt v4). Read, search, create, update, comment, move and attach, on Cloud and
   Server/DC. Every write is shown first as a Send / Don't send box, in every mode.

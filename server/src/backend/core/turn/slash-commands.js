@@ -28,7 +28,7 @@ import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVe
 import { summariseToolUsage } from '../logs/tool-usage.js';
 import { atlassianSite, atlassianCredentials } from '../../atlassian/config.js';
 import { createJiraClient } from '../../atlassian/jira-client.js';
-import { listIntegrations, mcpReport } from '../../mcp/client/integrations.js';
+import { changeMcp, listIntegrations, mcpReport } from '../../mcp/client/integrations.js';
 
 /**
  * How long a name the banner can take.
@@ -174,7 +174,7 @@ export const COMMAND_OPTIONS = {
     ['large-files <subagent|direct>', 'who reads a large file']],
   context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
   new: [], restart: [], exit: [], jira: [],
-  mcp: [['', 'servers and their tools'], ['reload', 'read mcp.json again and restart every server']],
+  mcp: [['', 'servers and their tools'], ['add', 'add a server, step by step'], ['reload', 'read mcp.json again and restart every server']],
 };
 
 /** Words a command also takes that its list does not advertise. */
@@ -383,11 +383,10 @@ export async function handleSlashCommand(loop, command, args) {
     // this is the panels' answer, and `reload` for both.
     case 'mcp': {
       if (String(args?.[0] || '').toLowerCase() === 'reload') {
-        const offered = () => Boolean(loop.promptBuilder._toolFlags().customMcp);
-        const before = offered();
-        await loop.mcp.reload();
-        // The first server added, or the last taken away: the tools came or went.
-        if (offered() !== before) loop.promptBuilder.resetPromptState();
+        await changeMcp(loop, () => loop.mcp.reload());
+      } else if (String(args?.[0] || '').toLowerCase() === 'add') {
+        // A panel has no such screen, and a page cannot paste a token safely.
+        return { message: 'Add a server in the terminal, with `/mcp add`.' };
       } else {
         loop.mcp.connectAll().catch(() => { /* a failure is the row's state */ });
       }

@@ -17,11 +17,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homeDir } from '../../core/workspace/paths.js';
+import { readSecret } from './secrets.js';
 
 export const mcpConfigPath = () => join(homeDir(), 'mcp.json');
 
 /** A name the prompt and a tool call can carry unquoted (v9.1). */
-const NAME = /^[A-Za-z0-9_-]{1,40}$/;
+export const SERVER_NAME = /^[A-Za-z0-9_-]{1,40}$/;
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;
 
 /** Expand one string. Unset variables with no default are collected, not guessed. */
@@ -34,17 +35,30 @@ export function expand(text, env, missing) {
   });
 }
 
+/**
+ * `${secret:<server>/<VAR>}`, from `secrets.js`: what `/mcp add` writes in place
+ * of a value. Only a server's own: a config pasted from a web page must not be
+ * able to name another server's token and be handed it.
+ */
+function unseal(text, server, secret, missing) {
+  return text.replace(/\$\{secret:([^}]+)\}/g, (_, key) => {
+    const value = key.startsWith(`${server}/`) ? secret(key) : '';
+    if (!value) missing.add(`the saved ${key}`);
+    return value;
+  });
+}
+
 /** Changes when the config does, and never holds an expanded value. */
 function fingerprint(raw) {
   return createHash('sha256').update(JSON.stringify(raw)).digest('hex').slice(0, 16);
 }
 
 /** One entry, checked. A bad entry is a row saying why, never a failed launch. */
-function readServer(name, raw, env) {
+export function readServer(name, raw, env, secret = readSecret) {
   const entry = {
     name, source: 'user', fingerprint: fingerprint(raw), disabled: Boolean(raw?.disabled), alwaysAsk: raw?.alwaysAsk === true,
   };
-  if (!NAME.test(name)) return { ...entry, problem: 'the name may use letters, digits, - and _' };
+  if (!SERVER_NAME.test(name)) return { ...entry, problem: 'the name may use letters, digits, - and _' };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...entry, problem: 'not an object' };
   if (raw.url || raw.type === 'http' || raw.type === 'sse') {
     return { ...entry, transport: 'http', problem: 'HTTP servers are not supported yet' };
@@ -61,7 +75,8 @@ function readServer(name, raw, env) {
   const expanded = {
     command: expand(raw.command, env, missing),
     args: (raw.args || []).map((a) => expand(a, env, missing)),
-    env: Object.fromEntries(Object.entries(raw.env || {}).map(([k, v]) => [k, expand(v, env, missing)])),
+    // `${secret:…}` after `${VAR}`, so a saved value is never read as a pattern.
+    env: Object.fromEntries(Object.entries(raw.env || {}).map(([k, v]) => [k, unseal(expand(v, env, missing), name, secret, missing)])),
   };
   if (missing.size) {
     return { ...entry, problem: `${[...missing].join(', ')} ${missing.size === 1 ? 'is' : 'are'} not set` };
@@ -74,7 +89,7 @@ function readServer(name, raw, env) {
  *
  * @returns {{path: string, exists: boolean, error: string|null, servers: object[]}}
  */
-export function loadMcpConfig({ path = mcpConfigPath(), env = process.env } = {}) {
+export function loadMcpConfig({ path = mcpConfigPath(), env = process.env, secret = readSecret } = {}) {
   if (!existsSync(path)) return { path, exists: false, error: null, servers: [] };
   let parsed;
   try {
@@ -87,7 +102,7 @@ export function loadMcpConfig({ path = mcpConfigPath(), env = process.env } = {}
   if (typeof table !== 'object' || table === null || Array.isArray(table)) {
     return { path, exists: true, error: '`mcpServers` must be an object', servers: [] };
   }
-  return { path, exists: true, error: null, servers: Object.entries(table).map(([n, raw]) => readServer(n, raw, env)) };
+  return { path, exists: true, error: null, servers: Object.entries(table).map(([n, raw]) => readServer(n, raw, env, secret)) };
 }
 
 /** Every value that came from `env`, longest first, for `scrub`. */

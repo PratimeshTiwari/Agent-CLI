@@ -13,11 +13,12 @@ test('each row says its state, and a failure says why', () => {
     row({ name: 'down', state: 'failed', error: 'bad token', tools: [] }),
     row({ name: 'wait', state: 'connecting', tools: [] }),
   ]), { T });
-  assert.equal(items[0].detail, 'connected · 1 tool');
-  assert.equal(items[1].detail, 'failed · bad token');
-  assert.equal(items[1].colour, 'red');
-  assert.equal(items[2].detail, 'starting');
-  assert.equal(items[2].colour, 'yellow');
+  assert.equal(items[0].value, 'add');
+  assert.equal(items[1].detail, 'connected · 1 tool');
+  assert.equal(items[2].detail, 'failed · bad token');
+  assert.equal(items[2].colour, 'red');
+  assert.equal(items[3].detail, 'starting');
+  assert.equal(items[3].colour, 'yellow');
 });
 
 test('Reload only when there is a file to read', () => {
@@ -37,8 +38,8 @@ test('a fault or a missing file is a row: the line above is shed on a short term
   const broken = mcpHomeItems(list([], { error: 'not valid JSON' }), { T })[0];
   assert.deepEqual([broken.detail, broken.value, broken.colour], ['not valid JSON', '', 'red']);
   const none = mcpHomeItems(list([], { exists: false }))[0];
-  assert.match(`${none.label} ${none.detail}`, /No servers yet add them to .*mcp\.json/);
-  assert.equal(none.value, '', 'nothing to open');
+  assert.equal(none.value, 'add', 'no file yet: adding is the first thing on offer');
+  assert.ok(!mcpHomeItems(list([], { error: 'x' }), { T }).some((i) => i.value === 'add'), 'a file that cannot be read cannot be added to');
   assert.ok(!mcpHomeItems(list([row()]), { T }).some((i) => i.label === 'mcp.json'), 'control: a good file has no such row');
 });
 
@@ -55,9 +56,14 @@ test('off v5 the line says so, and a row offers the switch', () => {
 test('a custom server has switches, and a built-in has none', () => {
   const switchOf = (tool) => (tool === 'echo' ? 'auto' : 'ask');
   const items = serverToolItems(row(), { switchOf });
-  assert.deepEqual(items.map((i) => [i.label, i.value]), [['New tools', '*'], ['echo', 'echo']]);
+  assert.deepEqual(items.map((i) => [i.label, i.value, i.action]), [
+    ['New tools', '*', undefined], ['Turn off', '', 'toggle'], ['Remove', '', 'remove'], ['echo', 'echo', undefined],
+  ]);
+  assert.equal(new Set(items.map((i) => i.key ?? i.value)).size, items.length, 'every row its own React key');
   assert.equal(items[0].detail.split(' · ')[0], 'ask');
-  assert.equal(items[1].detail, 'auto · one');
+  assert.equal(items[3].detail, 'auto · one');
+  assert.equal(serverToolItems(row({ state: 'disabled', tools: [] }), { switchOf })[1].label, 'Turn on');
+  assert.deepEqual(serverToolItems(row({ state: 'invalid', tools: [] }), { switchOf }).map((i) => i.label), ['No tools', 'Remove'], 'a broken entry can still be removed');
   const jira = serverToolItems(row({ builtin: true }), { switchOf });
   assert.ok(jira.every((i) => i.value === ''), 'its writes always ask');
 });
