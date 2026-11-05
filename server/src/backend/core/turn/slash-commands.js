@@ -289,15 +289,16 @@ export async function handleSlashCommand(loop, command, args) {
         return { message: ok ? `Forgot #${which}.` : `Nothing at #${which}.` };
       }
 
-      const facts = loop.memoryManager.getAllMemories();
-      const where = paths.memoryPath(loop.workspace);
+      const facts = loop.memoryManager.getEntries();
+      const where = paths.memoryDir(loop.workspace);
       if (facts.length === 0) {
         return { message: `Nothing remembered yet · facts land in \`${where}\`` };
       }
       return {
         message: `**Memory**  ${facts.length} fact${facts.length === 1 ? '' : 's'}`
           + `${loop.memoryManager.isMemoryEnabled() ? '' : ' · off, not recalled'}\n\n`
-          + facts.map((f, i) => `${i + 1}. ${f}`).join('\n')
+          + facts.map((f, i) => `${i + 1}. ${f.fact}\n   _${f.author} · ${f.written.slice(0, 10)}`
+            + `${f.why ? ` · ${f.why}` : ''}_`).join('\n')
           + `\n\n_\`${where}\` · \`/memory forget <n>\` · \`/memory off\`_`,
       };
     }

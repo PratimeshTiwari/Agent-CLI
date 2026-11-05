@@ -34,7 +34,7 @@ const usagePath = (workspace) => path.join(paths.logsDir(workspace), 'tool-usage
  * @param {string} workspace
  * @param {Map<string, number>|Record<string, number>} counts name -> times called
  */
-export function logToolUsage(workspace, counts, { rounds, promptVersion } = {}) {
+export function logToolUsage(workspace, counts, { rounds, promptVersion, memoryNudged } = {}) {
   try {
     const entries = counts instanceof Map ? [...counts.entries()] : Object.entries(counts || {});
     const tools = {};
@@ -58,6 +58,8 @@ export function logToolUsage(workspace, counts, { rounds, promptVersion } = {}) 
     if (Number.isFinite(rounds) && rounds >= 0) row.rounds = Math.round(rounds);
     // Which prompt version the turn ran on (v5.32), so versions can be compared.
     if (typeof promptVersion === 'string' && promptVersion) row.promptVersion = promptVersion;
+    // Whether the turn asked to save a fact (v9.4): the nudge is judged by what follows it.
+    if (memoryNudged) row.memoryNudged = true;
     fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
   } catch {
     /* never fail a turn for a counter */
@@ -82,13 +84,14 @@ export function summariseToolUsage(workspace, catalog = []) {
     // Sorted here too: the empty case is the one a fresh workspace hits, and a
     // list that changes order depending on whether anything was logged is a
     // list somebody will eventually diff.
-    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort(), rounds: null, versions: [] };
+    return { turns: 0, calls: 0, turnsWithNoTools: 0, rows: [], neverCalled: [...catalog].sort(), rounds: null, versions: [], nudges: { asked: 0, saved: 0 } };
   }
 
   const totals = new Map();
   let turns = 0;
   let calls = 0;
   let turnsWithNoTools = 0;
+  const nudges = { asked: 0, saved: 0 };
   const roundSamples = [];
   // Per prompt version (v5.32). Rows written before it existed ran on what is
   // now v1 — the frozen baseline is v5.31's prompt — so they count as v1.
@@ -107,6 +110,10 @@ export function summariseToolUsage(workspace, catalog = []) {
     const tools = row.tools && typeof row.tools === 'object' ? row.tools : {};
     const names = Object.keys(tools);
     if (names.length === 0) turnsWithNoTools += 1;
+    if (row.memoryNudged) {
+      nudges.asked += 1;
+      if (tools.manage_memory) nudges.saved += 1;
+    }
     for (const name of names) {
       const n = Number(tools[name]) || 0;
       calls += n;
@@ -124,6 +131,7 @@ export function summariseToolUsage(workspace, catalog = []) {
     turnsWithNoTools,
     rows,
     neverCalled: catalog.filter((name) => !totals.has(name)).sort(),
+    nudges,
     // Only over rows that recorded it — older rows are unknown, not zero.
     rounds: roundSamples.length
       ? { samples: roundSamples.length, median: percentile(roundSamples, 50), p90: percentile(roundSamples, 90) }

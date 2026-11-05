@@ -14,7 +14,7 @@ Nothing is ever sent anywhere: both are plain files on your machine.
 ```
 .agent/
 ├── config.json        settings for this project
-├── memory.md          what the agent learned here
+├── memory/            what the agent learned here, one fact per file
 ├── artifacts/         files written for you to read
 │   ├── task.md  implementation_plan.md  walkthrough.md  review.md
 │   └── plans/         plans and handovers kept for later
@@ -47,7 +47,7 @@ Nothing is ever sent anywhere: both are plain files on your machine.
 | whether it got slower | `/logs speed` (`logs/traces.jsonl`) |
 | what commands it ran on your machine | `/commands`, or `logs/commands/` |
 | which settings this project overrides | `config.json`; `/settings` shows them |
-| what it remembers about the project | `memory.md`; `/memory` |
+| what it remembers about the project | `memory/`; `/memory` |
 
 ### What is safe to delete
 
@@ -58,7 +58,7 @@ Nothing is ever sent anywhere: both are plain files on your machine.
 | `logs/` | yes | `/logs` and `/commands` history |
 | `artifacts/plans/` | yes | old plans |
 | `sessions/` | only with `~/.agent/workspaces/<repo>-<hash>/` too | conversations. Delete just one copy and the next start rebuilds it from the other. |
-| `config.json`, `memory.md` | yes, if you mean it | this project's settings and what it learned |
+| `config.json`, `memory/` | yes, if you mean it | this project's settings and what it learned. A file you add to `memory/` is a fact too. An old `memory.md` is imported, and kept there as a dot file. |
 | the whole folder | use `/reset` | `/reset` moves it to `~/.agent/trash/` rather than deleting it |
 
 ### Monorepos

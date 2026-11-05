@@ -27,7 +27,9 @@ import { atlassianSite } from '../../atlassian/config.js';
 import { prompt } from './prompt-loader.js';
 import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
 import { mcpServersBlock } from '../../mcp/client/prompt-block.js';
-import { parseMemory, readMemoryEnabled } from '../../context/memory-manager.js';
+import { readMemoryEnabled } from '../../context/memory-manager.js';
+import { MemoryStore } from '../../context/memory-store.js';
+import { looksLikeStandingRule, MEMORY_NUDGE } from './standing-rule.js';
 
 /**
  * Look before answering (v3, `lookFirst`). One rule in two shapes: rule 9 of
@@ -305,6 +307,11 @@ export class PromptBuilder {
     // Current user message. Nothing follows it: the last thing the model reads
     // should be what the user asked, not a formatting rule it has already been
     // given twice.
+    // Prompt v6: the moment a fact is worth saving, not a standing instruction.
+    this.memoryNudged = this._flag('saveNudge') && readMemoryEnabled(this.workspace)
+      && looksLikeStandingRule(userMessage);
+    if (this.memoryNudged) parts.push(MEMORY_NUDGE);
+
     parts.push(`<user_message>\n${userMessage}\n</user_message>`);
 
     this.messagesSinceRefresh++;
@@ -1471,12 +1478,10 @@ ${tier === 'pro' ? this._reminderLineForLevel(resolveEffort(modelConfig.effort).
 
     if (!readMemoryEnabled(this.workspace)) return '';
 
-    let facts;
-    try {
-      facts = parseMemory(readFileSync(paths.memoryPath(this.workspace), 'utf8'));
-    } catch {
-      return ''; // no memory file yet, or an unreadable one
-    }
+    const store = new MemoryStore(this.workspace);
+    if (this._flag('memoryFolder')) return this._memoryIndex(store);
+
+    const facts = store.list().map((f) => f.fact);
     if (facts.length === 0) return '';
 
     const lines = [];
@@ -1484,8 +1489,8 @@ ${tier === 'pro' ? this._reminderLineForLevel(resolveEffort(modelConfig.effort).
     for (const [i, fact] of facts.entries()) {
       if (i >= MAX_FACTS || total + fact.length > MAX_CHARS) {
         lines.push(
-          `_${facts.length - i} more in ${paths.memoryPath(this.workspace)} — `
-          + 'read_file it if this task needs them._',
+          `_${facts.length - i} more in ${paths.memoryDir(this.workspace)} — `
+          + 'list_directory it if this task needs them._',
         );
         break;
       }
@@ -1493,6 +1498,26 @@ ${tier === 'pro' ? this._reminderLineForLevel(resolveEffort(modelConfig.effort).
       lines.push(`${i + 1}. ${fact}`);
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Prompt v6: an index, not the facts. A fact is fetched when a task needs it,
+   * so a year of memory costs what the index costs. Empty is no block at all.
+   */
+  _memoryIndex(store) {
+    const { rows, more } = store.index();
+    if (!rows.length) return '';
+    return [
+      'Saved in earlier sessions, newest first. A line ending in … is cut, and manage_memory read gives'
+        + ' any fact whole, with why it was saved.',
+      ...rows,
+      ...(more ? [`_${more} older: manage_memory list._`] : []),
+    ].join('\n');
+  }
+
+  /** Whether facts are named rather than numbered in this prompt version. */
+  usesMemoryFolder() {
+    return this._flag('memoryFolder');
   }
 
   /**

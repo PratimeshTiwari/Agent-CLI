@@ -1355,6 +1355,7 @@ export class AgentLoop {
      */
     logToolUsage(this.workspace, this._turnEvidence || new Map(), {
       rounds: this._roundsThisTurn || 0, promptVersion: this.promptVersion,
+      memoryNudged: Boolean(this.promptBuilder?.memoryNudged),
     });
 
     /*

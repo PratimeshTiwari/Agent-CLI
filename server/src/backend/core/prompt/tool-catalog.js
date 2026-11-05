@@ -359,9 +359,27 @@ Parameters:
     name: 'manage_memory',
     dispatch: 'loop',
     verb: 'Memory',
-    flash: ` — Remember/forget a durable fact. Args: action ("add"|"remove"), fact? (string), index? (number, the number shown in <memory>)
-`,
-    pro: `
+    // v1 to v5 keep the numbered list; v6 names facts (`memoryFolder`).
+    flash: (_config, flags = {}) => (flags.memoryFolder
+      ? ` — Keep a fact for later sessions. Save a correction or a rule that will still hold. Args: action ("add"|"read"|"update"|"remove"|"list"), fact? (string), why? (string), name? (string, as <memory> lists it)
+`
+      : ` — Remember/forget a durable fact. Args: action ("add"|"remove"), fact? (string), index? (number, the number shown in <memory>)
+`),
+    pro: (_config, flags = {}) => (flags.memoryFolder ? `
+Keep a fact for later sessions. Save it when the user corrects you or sets a rule that will still
+hold next session, and when you had to *work something out* that you would work out again. Never a
+file's contents or anything about this one task. Verify it first: a wrong memory is worse than
+none, because it will be believed. When you have another call to make, put this in the same reply.
+Parameters:
+  - action (string, required): "add", "read" (one fact whole), "update", "remove" or "list"
+  - fact (string): one or two sentences, for "add" and "update"
+  - why (string): what showed this, such as the user's correction. Keep it with the fact.
+  - name (string): as \`<memory>\` lists it, for "read", "update" and "remove"
+
+Another agent may share this memory. "update" or "remove" of a fact changed since you saw it is
+refused: read it again and decide, and do not just repeat the call.
+
+` : `
 Remember a durable fact about this project, or forget one. Store what you had to *work out* and
 would work out again — that the tests run with pnpm, that a directory is generated — never a
 file's contents or anything about this one task. Verify it first: a wrong memory is worse than
@@ -371,7 +389,7 @@ Parameters:
   - fact (string): one sentence, for "add"
   - index (number): which fact to forget, numbered as \`<memory>\` shows them
 
-`,
+`),
   },
   {
     name: 'run_background',

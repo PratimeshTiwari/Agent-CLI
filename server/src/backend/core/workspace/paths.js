@@ -241,6 +241,9 @@ export const sharedConfigPath = (workspace) => path.join(sharedAgentDir(workspac
  */
 export const memoryPath = (workspace) => path.join(agentDir(workspace), 'memory.md');
 
+/** One fact per file since v9.4; `memory.md` is imported into it (context/memory-store.js). */
+export const memoryDir = (workspace) => path.join(agentDir(workspace), 'memory');
+
 /** Documents written for the user to read: task.md, plan.md, walkthrough.md. */
 export const artifactsDir = (workspace) => path.join(agentDir(workspace), 'artifacts');
 export const artifactPath = (workspace, name) => path.join(artifactsDir(workspace), name);

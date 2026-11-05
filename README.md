@@ -235,7 +235,7 @@ the model, which reads what it needs.
   `~/.agent/AGENT.md` applies everywhere.
 - **Skills**: Markdown files in `.agent/skills/` that it opens only when their one-line description
   matches the task. `/skills` lists and creates them.
-- **Memory**: facts it learns along the way, in `.agent/memory.md`. `/memory` shows them.
+- **Memory**: facts it learns along the way, one file each in `.agent/memory/`, with who wrote it, when and why. `/memory` shows them.
 
 ## Where it keeps things
 
