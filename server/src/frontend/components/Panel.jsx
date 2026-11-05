@@ -74,6 +74,7 @@ export function Choices({
   items,
   onSelect,
   onHighlight,
+  onToggle,
   initialIndex = 0,
   limit = 10,
   numbered = false,
@@ -104,6 +105,7 @@ export function Choices({
     if (key.upArrow) { move(at === 0 ? count - 1 : at - 1); return; }
     if (key.downArrow) { move(at === count - 1 ? 0 : at + 1); return; }
     if (key.return) { onSelect?.(items[at]); return; }
+    if (onToggle && input === ' ') { onToggle(items[at]); return; }
     if (numbered && /^[1-9]$/.test(input)) {
       const n = Number(input) - 1;
       if (n < count) { move(n); onSelect?.(items[n]); }

@@ -58,7 +58,7 @@ import { summariseTraces, formatMs } from '../../backend/core/logs/trace-log.js'
 import { channelHealth, formatRate, MIN_TURNS_FOR_RATE } from '../../backend/core/turn/channel-health.js';
 import { summariseToolUsage } from '../../backend/core/logs/tool-usage.js';
 import { TOOL_CATALOG } from '../../backend/core/prompt/tool-catalog.js';
-import { checkForUpdate, treeState, nameFiles, pullUpdate, savePendingReload, readPendingReload, clearPendingReload, updateLine, pulledLine } from '../../backend/core/install/update.js';
+import { pullUpdate, savePendingReload, updateLine, pulledLine } from '../../backend/core/install/update.js';
 import { installRoot, installDependencies } from '../../backend/core/install/dep-recovery.js';
 import { claim, exclusive, INSTALL_SLOT } from '../../backend/core/install/local-jobs.js';
 import {
@@ -304,60 +304,11 @@ export async function handleSlashCommand(query, {
         setIsProcessing(false);
       };
 
-      if (args[0] === 'done') {
-        const had = readPendingReload();
-        clearPendingReload();
-        say(had ? '✔ Cleared. Nothing left to reload.' : 'Nothing was waiting to be reloaded.');
-        return;
-      }
-
-      /**
-       * Bare `/update` reports; `/update pull` acts.
-       *
-       * It used to pull straight away, and it checked the working tree *first*
-       * — so on a repo with uncommitted work it refused with a complaint about
-       * your changes even when there was nothing to pull. Reported from use,
-       * and the order was the whole bug: whether the tree is dirty only matters
-       * once there is something to apply.
-       *
-       * Splitting it also means "is there an update?" is answerable without
-       * committing to taking one, which is the question people actually type
-       * this to ask.
-       */
+      // Bare `/update` reports and offers (v9.5); `/update pull` acts. A menu, so
+      // "is there an update?" still commits to nothing.
       if (args[0] !== 'pull' && args[0] !== 'now') {
-        const state = await checkForUpdate(agentLoop.agentSourceDir);
-        if (state.reason?.startsWith('git could not run')) {
-          say(`Could not run \`git\` to check for updates — ${state.reason.replace('git could not run ', '')}. `
-            + (state.reason.includes('EBADF')
-              ? 'That means the agent process holds too many open files, not that git is broken — '
-                + 'restart the agent, and run `/logs` if it comes back.'
-              : 'Check that git is installed and on the PATH.'));
-          return;
-        }
-        if (state.reason === 'not a git checkout' || state.reason === 'no source directory') {
-          say('The agent is not running from a git checkout, so there is nothing to update from.');
-          return;
-        }
-        if (state.reason && state.reason.startsWith('no origin/')) {
-          say(`There is no \`${state.reason.slice(3)}\` to compare against — `
-            + 'this checkout has no remote, or has never fetched it.');
-          return;
-        }
-        // Which branch it compared, and how far ahead yours is, is not what
-        // was asked. "Is there an update?" has a one-word answer.
-        // One line (owner's pick, "Compact"): `✔ Up to date · v6.0`, or
-        // `⬆ v6.0 → v6.2 · 2 releases · /update pull`.
-        if (!state.available) { say(updateLine(state)); return; }
-        const lines = [updateLine(state)];
-        // Said now rather than when the pull is refused: it is the one thing
-        // that would stop it. Untracked files and a lockfile npm rewrote do
-        // not (issue #90, #102); anything else is named, to act on.
-        const tree = await treeState(agentLoop.agentSourceDir);
-        if (tree?.blocking.length) {
-          lines.push(`! Uncommitted changes in the agent's own repo: ${nameFiles(tree.blocking)}. `
-            + 'Commit or stash them first — `/update` will not pull over your work.');
-        }
-        say(lines.join('\n'));
+        setActiveMenu({ type: 'update' });
+        setIsProcessing(false);
         return;
       }
 
@@ -398,8 +349,7 @@ export async function handleSlashCommand(query, {
        * answers instantly". The second clause was never measured and is false —
        * bare `/update` runs `git fetch origin`, 1,086 ms warm and up to
        * `FETCH_TIMEOUT_MS`, which is what "no loading animation" was reported
-       * about. `isSlowCommand` takes the args now, so both are true at once:
-       * `/update` and `/update pull` raise a spinner, `/update done` does not.
+       * about. `isSlowCommand` takes the args now: `/update pull` raises a spinner.
        *
        * The committed row stays regardless, and is not redundant with it: a
        * spinner lives in the live frame and is gone the moment the frame
@@ -429,7 +379,7 @@ export async function handleSlashCommand(query, {
       slot.release();
       // Saved before the restart, and kept until acknowledged: the failure
       // this prevents is silent, so a notice that scrolls past once and is
-      // gone would reproduce it. The startup row repeats it until `/update done`.
+      // gone would reproduce it. The row stays until the editors are current.
       if (outcome.steps.length) savePendingReload(outcome.steps, { to: outcome.to });
       // Restart unless an install was needed and failed — going back into a
       // tree we know is out of sync is how the reported crash happened.

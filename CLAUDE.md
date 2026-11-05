@@ -623,6 +623,19 @@ put the files back, `npm install` ran, and the next start said `↶ ink 7.1.1 �
 with the clone's tree clean and no record left. The run's one fault was order: npm's output came
 before the line saying why it was running, so that line is now printed first.
 
+**Update all (v9.5, `updatesAvailable`, `updatePackages`).** A `/doctor` row, then a choice: inside
+their ranges, or all to latest, which names what leaves its range. One `npm install` per workspace
+and save style, so a pin stays a pin; what landed is read from disk, not from npm's exit. Run with
+real npm in a **full copy** (`run-deps.sh`; a symlinked `node_modules` is written through): all 11
+moved and `ink` 8 started, and `marked-terminal` 8 fails two tests with raw bold codes in rows. The
+guard undoes a crash, nothing else. Below 12 rows a subtitle is shed, so a job takes the title row.
+
+**`/update` is a menu (v9.5, `components/UpdateMenu.jsx`, `core/install/editors.js`).** Update, Editor
+companion, Dismiss. `/update done` is gone: Chrome's extension reloads itself (since 1.58.0), so only
+the companion is ever waited on. Editors are multi-select, read back after install, and Other shows
+the command. **Anything that can reach a real app needs an allow-list:** one harness run really
+installed into an editor found on PATH. `AGENT_EDITOR_APPS` fixes the search; `setup-home.js` sets it.
+
 **Jira (v8.1, `jira_issue`, prompt v4).** Owner: every write asks, as a mandatory step. Reads (`get`,
 `search`) answer in Markdown; every other action, an unknown one included, is a write. Three locks,
 each tested with a negative control: `requiresApproval`'s **first** statement returns
@@ -1003,15 +1016,6 @@ which writes `thread: null, leftThread: previous`; `planResume` turns `left` int
 note said "the next bug" for a while after it was fixed — check the code before believing a
 paragraph here that says something is still open.
 
-**A session with no user turn is not filed.** `watcher/file-watcher.js` appends
-`[System Event] File X was modified` turns whenever anything on disk changes, so leaving
-the agent open while editing in another window manufactures history containing no prompt.
-Filing those put **6 of 19** rows into a real `/history` picker, every one reading
-`Untitled` with a turn count and nothing to tell them apart — a third of the list was
-watcher noise, in a picker whose only job is choosing. Dropped rather than titled better,
-because a better title is still a row offering to restore a transcript of file
-notifications.
-
 **`/reset` starts a repo fresh, and moves rather than deletes (v5.6).** Both copies go — the
 repo's `.agent/` and `~/.agent/workspaces/<slug>/`, or the reconcile on the next start brings the
 history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/install/reset.js`'s
@@ -1193,12 +1197,6 @@ editor sees it. In Chrome, `open-floating-panel` is a **global** command (`Ctrl+
 `⌘⇧1`): it fires while Chrome is in the background and focuses the floating window rather than
 opening a second. Chrome's Gemini panel itself (`chrome://glic`) is browser UI with no
 extension API — it cannot be the bridge, and nothing here tries to reach it.
-
-**And the Chrome side panel's diff buttons had never worked.** `appendDiff` wrote
-`onclick="respondToDiff(…)"`, and MV3's default CSP for extension pages refuses inline
-handlers — so Accept and Reject did nothing and a diff could not be answered from the panel.
-The tool-row expander had the same fault. Listeners now, and `diff-buttons.test.js` runs in
-jsdom without `runScripts`, which models the CSP honestly: the old markup fails it.
 
 ### Failure logging
 
@@ -1520,9 +1518,8 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   (`core/turn/slash-commands.js`) is the gate. A set beside the commands rather than
   a literal at the call site, because the literal is what drifts.
 
-  **`isSlowCommand(command, args)` takes the args**, because one name can be two commands: bare
-  `/update` is a `git fetch` (about 1 s warm, up to 10 s cold) and gets the spinner; `/update done`
-  reads a file and stays instant.
+  **`isSlowCommand(command, args)` takes the args**, because one name can be two commands: `/update
+  pull` is slow and gets the spinner; bare `/update` opens a menu and stays instant.
 
   **Prompt length is not what a turn costs.** Measured over 265 real turns:
   `type` — the synthetic paste, where length is paid — is **23ms median, 410ms

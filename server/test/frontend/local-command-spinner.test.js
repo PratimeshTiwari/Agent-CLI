@@ -63,11 +63,10 @@ describe('the spinner is gated', () => {
    * stranded row this whole file exists for comes back through the new door.
    */
   test('/update waits, except when it does not', () => {
-    assert.equal(isSlowCommand('update', []), true, 'bare /update runs git fetch');
+    assert.equal(isSlowCommand('update', []), false, 'a menu, which fetches behind itself');
     assert.equal(isSlowCommand('update', ['pull']), true);
     assert.equal(isSlowCommand('update', ['now']), true);
-    assert.equal(isSlowCommand('update', ['done']), false, 'it reads a file; a spinner would strand');
-    assert.equal(isSlowCommand('update', ['DONE']), false, 'the args are lower-cased too');
+    assert.equal(isSlowCommand('update', ['PULL']), true, 'the args are lower-cased too');
   });
 
   // Every slow command must be a real one, or the gate is checking a typo.

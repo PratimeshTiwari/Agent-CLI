@@ -5,14 +5,11 @@
  * from one repo and *pulling only updates one of them*:
  *
  * - `server/` is live as soon as the process restarts.
- * - `extension/service-worker.js` is a **committed bundle**, which Chrome picks
- *   up only when the extension is reloaded.
- * - `extension/content-scripts/*.js` need the model tab hard-refreshed.
- * - `vscode-companion/*.vsix` has to be reinstalled by hand.
- *
- * So `git pull` leaves new server code talking to an old bridge, and the
- * symptom is the agent going quiet rather than an error. Anyone can lose an
- * afternoon to that once.
+ * - `extension/` reloads itself: since 1.58.0 the server asks it to on connect
+ *   (`selfReloadNotice`), and every worker start re-injects the open tabs
+ *   (`reinjectModelTabs`). An older build gets `extensionVersionNotice`.
+ * - `vscode-companion/*.vsix` has to be installed into each editor, which is the
+ *   one step left for a person, and `/update` does it (`install/editors.js`).
  *
  * The version check and the pull are the easy parts. The part worth building is
  * `reloadSteps()`: after a pull, the changed file list says exactly which of
@@ -122,6 +119,22 @@ export async function releaseAt(dir, ref = 'HEAD') {
   return null;
 }
 
+/**
+ * Why a check could not answer, in words to act on. The title row says only
+ * that it failed, because this can be a sentence.
+ */
+export function checkFailure({ reason = '' } = {}) {
+  if (reason.startsWith('git could not run')) {
+    const why = reason.replace('git could not run ', '');
+    return reason.includes('EBADF')
+      ? `git could not run ${why}: the agent holds too many open files. Restart it, and run /logs if it comes back.`
+      : `git could not run ${why}. Check that it is installed and on the PATH.`;
+  }
+  if (reason === 'not a git checkout' || reason === 'no source directory') return 'The agent is not running from a git checkout.';
+  if (reason.startsWith('no origin/')) return `There is no ${reason.slice(3)} to compare against: no remote, or never fetched.`;
+  return reason;
+}
+
 /** How many releases `to` has that `from` does not. */
 async function releasesBetween(dir, from, to) {
   const log = await git(dir, ['log', '--merges', '--first-parent', '--format=%s', `${from}..${to}`]);
@@ -136,16 +149,16 @@ async function releasesBetween(dir, from, to) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Bare `/update`: `✔ Up to date · v6.0`, or `⬆ v6.0 → v6.2 · 2 releases · /update pull`. */
+/** The startup row: `✔ Up to date · v6.0`, or `⬆ v6.0 → v6.2 · 2 releases · /update`. */
 export function updateLine(state = {}) {
   if (!state.available) return `✔ Up to date${state.version ? ` · ${state.version}` : '.'}`;
   const span = state.version && state.latest && state.version !== state.latest
     ? `${state.version} → ${state.latest}` : null;
   const count = state.releases > 0 ? plural(state.releases, 'release') : plural(state.behind || 0, 'update');
-  return `⬆ ${span ? `${span} · ` : ''}${count} · \`/update pull\``;
+  return `⬆ ${span ? `${span} · ` : ''}${count} · \`/update\``;
 }
 
-/** After a pull: `✔ Updated v6.0 → v6.2 · 14 files · reload the Chrome extension`. */
+/** After a pull: `✔ Updated v6.0 → v6.2 · 14 files · update the editor companion`. */
 export function pulledLine(outcome = {}, { then = '' } = {}) {
   const span = outcome.fromVersion && outcome.toVersion && outcome.fromVersion !== outcome.toVersion
     ? ` ${outcome.fromVersion} → ${outcome.toVersion}` : '';
@@ -312,8 +325,8 @@ export function nameFiles(files, max = 5) {
  * Which surfaces a set of changed files touches.
  *
  * The whole value of the feature. A pull that only moved `server/` needs
- * nothing from the user beyond the restart that already happened; one that
- * touched the extension needs two specific actions in a specific order.
+ * nothing from the user beyond the restart that already happened. The extension
+ * and its tabs used to be steps here; both look after themselves now.
  *
  * @param {string[]} files - paths relative to the repo root
  * @returns {Array<{id: string, what: string, how: string}>}
@@ -322,31 +335,11 @@ export function reloadSteps(files = []) {
   const steps = [];
   const touched = (re) => files.some((f) => re.test(f));
 
-  // The bundle Chrome actually runs. Reloading the extension is what picks it
-  // up; nothing else does.
-  if (touched(/^extension\/(service-worker\.js|src\/|manifest\.json)/)) {
-    steps.push({
-      id: 'extension',
-      what: 'Reload the Chrome extension',
-      how: 'chrome://extensions → Agent CLI → the reload icon',
-    });
-  }
-
-  // Content scripts are not bundled and are not re-injected into a page that
-  // already has one. The tab keeps the old copy until it is refreshed.
-  if (touched(/^extension\/content-scripts\//)) {
-    steps.push({
-      id: 'tabs',
-      what: 'Hard-refresh the model tab',
-      how: 'Cmd+Shift+R on gemini.google.com — the page keeps the old content script until you do',
-    });
-  }
-
   if (touched(/^vscode-companion\/.*\.vsix$/)) {
     steps.push({
       id: 'companion',
-      what: 'Reinstall the VS Code companion',
-      how: 'Extensions → ... → Install from VSIX, and pick the newest .vsix',
+      what: 'Update the editor companion',
+      how: '/update → Editor companion',
     });
   }
 
@@ -433,7 +426,7 @@ export async function pullUpdate(dir) {
  * **Not read-once**, unlike the workspace handover it sits beside. The whole
  * failure this prevents is silent — an old bridge answering new server code —
  * so a reminder that scrolls past once and is gone would reproduce it. It stays
- * until the user says they have done it.
+ * until the editors are current (`companionSettled`), or it is dismissed in `/update`.
  *
  * In the home directory, because the browser extension and the editor companion
  * are yours rather than any one project's.
@@ -456,13 +449,16 @@ export function savePendingReload(steps, meta = {}) {
 export function readPendingReload() {
   try {
     const parsed = JSON.parse(readFileSync(pendingReloadPath(), 'utf8'));
-    return Array.isArray(parsed?.steps) && parsed.steps.length ? parsed : null;
+    // Steps saved before v9.5 can name the extension or a tab, which no one has
+    // to do any more, and `/update done` has gone.
+    const steps = Array.isArray(parsed?.steps) ? parsed.steps.filter((s) => s?.id === 'companion') : [];
+    return steps.length ? { ...parsed, steps } : null;
   } catch {
     return null;
   }
 }
 
-/** The user says they have done it. */
+/** Done, or dismissed. */
 export function clearPendingReload() {
   try {
     rmSync(pendingReloadPath(), { force: true });

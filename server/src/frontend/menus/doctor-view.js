@@ -13,7 +13,7 @@
  * terminal's own scroll and copy), so "click" is ↑↓ and enter.
  */
 
-import { TIERS, withoutBeyondTier, firstSentence, compareVersions, satisfies, newerCount, problems, clip } from '../../backend/core/install/doctor.js';
+import { TIERS, withoutBeyondTier, firstSentence, compareVersions, satisfies, newerCount, problems, clip, updatesAvailable } from '../../backend/core/install/doctor.js';
 import { wrapLines } from './panel.js';
 
 const MARK = { ok: '✔', missing: '✗', mismatch: '✗', 'n/a': '·', removed: '·' };
@@ -85,6 +85,16 @@ export function homeItems(report, { T = {}, tab = 'all', job = null } = {}) {
   if (problems(report.groups).length && tab !== 'tools') {
     items.push({
       key: 'fix', label: 'Install what is missing', detail: 'npm install', value: { kind: 'fix' }, colour: T.attention,
+    });
+  }
+  // Owner, 2026-11-06: "update all deps to latest". A choice next, never one keypress.
+  const behind = tab === 'tools' ? [] : updatesAvailable(report);
+  if (behind.length) {
+    const outside = behind.filter((p) => p.outside).length;
+    items.push({
+      key: 'update-all', label: 'Update all',
+      detail: `${behind.length} newer${outside ? ` · ${outside} outside their range` : ''}`,
+      value: { kind: 'update-all' },
     });
   }
   // Owner, 2026-10-28: "remove the unused packages" — all of them, one choice per workspace.
@@ -258,9 +268,33 @@ export function versionCursor(versions, entry) {
 }
 
 /** The line under the package page while an install runs, and after. */
+/** The rows behind Update all: the safer half first, and the rest by name. */
+export function updateAllItems(report) {
+  const all = updatesAvailable(report);
+  const inside = all.filter((p) => !p.outside);
+  const outside = all.filter((p) => p.outside);
+  const plural = (n) => `${n} package${n === 1 ? '' : 's'}`;
+  const items = [];
+  if (inside.length) {
+    items.push({ key: 'inside', label: 'Inside their ranges', detail: `${plural(inside.length)} · ${inside.map((p) => p.name).join(', ')}`, value: { kind: 'update-run', list: inside } });
+  }
+  if (outside.length) {
+    items.push({
+      key: 'latest', label: 'All to latest', tone: 'attention',
+      detail: `${plural(all.length)} · ${outside.map((p) => `${p.name} ${p.latest}`).join(', ')}`,
+      value: { kind: 'update-run', list: all },
+    });
+  }
+  return items;
+}
+
+export const UPDATE_ALL_NOTE = 'A crash on the next start is undone. A change that only misbehaves is not.'
+  + ' package.json changes, so commit it before the next /update.';
+
 export function jobLine(job) {
   if (!job) return null;
   if (job.state === 'running') {
+    if (job.bulk) return `◌ Updating ${job.name} — npm install, this can take a few minutes`;
     if (job.removing) return `◌ Removing ${job.name} — npm uninstall`;
     return job.cmd ? `◌ Installing ${job.name} — ${job.cmd}, this can take a few minutes`
       : job.version ? `◌ Installing ${job.name}@${job.version} — npm install, this can take a minute`
@@ -273,6 +307,15 @@ export function jobLine(job) {
   const first = String(job.error || 'it failed').split('\n').map((l) => l.trim()).filter(Boolean);
   const why = first[first.length - 1] || 'it failed';
   return job.name === 'npm install' ? `✗ npm install failed: ${why}` : `✗ ${job.name} did not install: ${why}`;
+}
+
+/**
+ * The job, for the title row, once the subtitle is shed. Below 12 rows `panelRoom`
+ * keeps no subtitle, so an update of several minutes drew nothing at all, and a
+ * failure said nothing either. The tabs give way for it: they still work.
+ */
+export function titleJobLine(job, sub = []) {
+  return job && !sub.length ? jobLine(job) : null;
 }
 
 /**

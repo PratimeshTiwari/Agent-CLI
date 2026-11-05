@@ -32,7 +32,8 @@ import { drainChatQueue } from './input/chat-queue.js';
 import { useKeyBindings } from './hooks/use-key-bindings.js';
 import { useHotkeys } from './hooks/use-hotkeys.js';
 import { hotkeys, EXIT_WINDOW_MS, chordGate } from './input/hotkeys.js';
-import { checkForUpdate, updateLine, readPendingReload } from '../backend/core/install/update.js';
+import { checkForUpdate, updateLine, readPendingReload, clearPendingReload } from '../backend/core/install/update.js';
+import { companionSettled, companionVsix, readEditors } from '../backend/core/install/editors.js';
 import { checkInstalled, startupWarning } from '../backend/core/install/doctor.js';
 import { confirmChange, takeRevertNotice, CONFIRM_AFTER_MS } from '../backend/core/install/doctor-guard.js';
 import { handleSlashCommand } from './hooks/use-slash-commands.js';
@@ -1000,12 +1001,29 @@ export function App({ agentLoop, wsServer, closing = false }) {
     if (healthNote) setHealthNote(startupWarning(checkInstalled()));
   }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // `/update done` clears the file; this notices and the row goes away.
+  // The menu clears the file; this notices and the row goes away.
   useEffect(() => {
     if (!pendingReload) return undefined;
     const id = setInterval(() => setPendingReload(readPendingReload()), 2000);
     return () => clearInterval(id);
   }, [pendingReload]);
+
+  // A reminder ends on its own once it is true. Installed from the editor, say:
+  // no one should have to come back here to report it.
+  useEffect(() => {
+    if (!pendingReload) return undefined;
+    const vsix = companionVsix();
+    if (!vsix) return undefined;
+    let cancelled = false;
+    const id = setTimeout(() => {
+      readEditors().then((found) => {
+        if (cancelled || !companionSettled(found, vsix.version)) return;
+        clearPendingReload();
+        setPendingReload(null);
+      }).catch(() => {});
+    }, 1500);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;
@@ -1662,7 +1680,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
             <Text color={T.attention} wrap="truncate">
               {'⟳ '}
               {pendingReload.steps.map((s) => s.what).join(' · ')}
-              <Text dimColor>{'  —  /update done when finished'}</Text>
+              <Text dimColor>{'  —  /update'}</Text>
             </Text>
           )}
           {healthNote && (
