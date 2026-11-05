@@ -164,7 +164,7 @@ import { logToolUsage } from '../logs/tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from '../edits/edit-diagnostics.js';
 import { compactHistory, countTurns, tabLink } from './compaction.js';
-import { tabUnreachableMessage } from '../../bridge/tab-failure.js';
+import { tabUnreachableMessage, tabClosedMessage, TAB_CLOSED_MID_TURN } from '../../bridge/tab-failure.js';
 import { runDelegatedRead, shouldDelegateRead } from '../subagents/delegated-read.js';
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from '../subagents/subagent-session.js';
@@ -2831,6 +2831,50 @@ export class AgentLoop {
     if (String(this._lastMainPrompt || '').includes('<system_state')) {
       this.promptBuilder.resetPromptState?.();
     }
+  }
+
+  /**
+   * The main tab was closed (v8.10, extension 1.61.0).
+   *
+   * Reported with screenshots: the tab was closed during a turn, the spinner
+   * went on, and only the two-minute silence clock ever acted on it. Owner's
+   * decision: a reply that is owed ends the turn at once and says so. It is
+   * not reopened and resent, because closing the tab is the one thing a person
+   * did here on purpose.
+   *
+   * With no reply owed there is nothing to end. Between rounds of tools the
+   * next prompt reopens the same chat with nothing lost, where ending the turn
+   * would throw away the results the model has not seen.
+   *
+   * The message is carried to the next one when the turn had no reply: the tab
+   * may have died before Gemini kept it, and resending by hand is what the
+   * carry saves. `tabId` is compared because the worker can report one close
+   * from both the listener and a failed send.
+   */
+  noteTabClosed({ tabId } = {}) {
+    if (tabId !== undefined && tabId === this._closedTabId) return;
+    this._closedTabId = tabId;
+    // The lane, not `pendingGeminiResponse`, which no reply ever clears: the
+    // lane is held from the send to the reply and released between rounds.
+    const owed = this.isProcessing && this.extensionLock.isBusy(mainLane(this.mainModel));
+    logNotice(this.workspace, {
+      flow: 'extension', op: 'tab_closed',
+      message: owed ? 'The Gemini tab was closed with a reply owed; the turn was ended' : 'The Gemini tab was closed',
+    });
+    if (!owed) {
+      this._noticeRow(this.isProcessing ? TAB_CLOSED_MID_TURN : tabClosedMessage());
+      return;
+    }
+    const message = tabClosedMessage(tabLink(this));
+    this.noteUndelivered();
+    this.isProcessing = false;
+    this.abortExtensionWork();
+    this.callbacks?.sendToPanel?.({
+      id: randomUUID(),
+      type: 'error',
+      payload: { message, op: 'tab_closed' },
+      timestamp: Date.now(),
+    });
   }
 
   /** Start (or restart) the two-minute wait for the first reply text (v8.0). */

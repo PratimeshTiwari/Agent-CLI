@@ -1013,6 +1013,10 @@ export class WebSocketServer {
         }
         break;
 
+      case 'tab_closed':
+        this.agentLoop.noteTabClosed?.(payload);
+        break;
+
       case 'identify':
         // Handled above to set client type, just break
         break;

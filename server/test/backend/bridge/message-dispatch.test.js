@@ -254,6 +254,13 @@ test("a subagent's tab failing settles that request, and leaves the user's turn 
   assert.ok(main.calls.some(([c]) => c === 'abortExtensionWork'));
 });
 
+test('a closed tab goes to the loop, which knows whether a reply is owed', async () => {
+  const closed = [];
+  const loop = fakeLoop({ noteTabClosed(p) { closed.push(p); } });
+  await deliver(loop, { type: 'tab_closed', payload: { tabId: 7 } });
+  assert.deepEqual(closed, [{ tabId: 7 }]);
+});
+
 test('a session tab outlives its turn: the worker asks its own map, not the reply', () => {
   const src = readFileSync(new URL('../../../../extension/src/background/main.js', import.meta.url), 'utf8');
   assert.match(src, /if \(!isSessionTab\(sender\.tab\.id\)\) \{\s*\n\s*forgetTab\(sender\.tab\.id\);\s*\n\s*chrome\.tabs\.remove/);

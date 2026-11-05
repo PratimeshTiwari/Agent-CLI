@@ -2,7 +2,7 @@ import { floatingShortcut } from './floating.js';
 import { getState, setState } from './state.js';
 import { retryDelay, resolvePort, socketUrlFor } from './policy.js';
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
-import { injectPromptIntoModel, triggerNewChatInModel, broadcastTabStatus, sendToModelTab, endSession, openThread, focusModelTab, takeTabFailure, ensureModelTab } from './content.js';
+import { injectPromptIntoModel, reportInjectFailure, triggerNewChatInModel, broadcastTabStatus, sendToModelTab, endSession, openThread, focusModelTab, takeTabFailure, ensureModelTab } from './content.js';
 
 /**
  * The socket to the local agent, and the retry policy around it.
@@ -181,10 +181,19 @@ export async function connectWebSocket() {
   };
 
   sock.onmessage = async (event) => {
+    let message;
     try {
-      await handleServerMessage(JSON.parse(event.data));
+      message = JSON.parse(event.data);
     } catch (err) {
       console.warn('[socket] unparseable server message:', err?.message);
+      return;
+    }
+    // Apart from the parse (1.61.0): a handler that threw was logged as a
+    // message that could not be read, which hid the closed-window failure.
+    try {
+      await handleServerMessage(message);
+    } catch (err) {
+      console.warn(`[socket] ${message?.type} failed:`, err?.message);
     }
   };
 
@@ -346,7 +355,7 @@ async function handleServerMessage(message) {
       broadcastToSidePanel(message);
       break;
     case 'inject_prompt':
-      await injectPromptIntoModel(payload);
+      await injectPromptIntoModel(payload).catch((err) => reportInjectFailure(payload, err));
       break;
     case 'new_chat': {
       // Acked, like `open_thread` below. `/compact` is a handover and cannot

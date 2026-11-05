@@ -18,6 +18,26 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.61.0 — 2026-11-05
+
+**A closed tab is noticed, and a tab that cannot open says so.** Reported with screenshots: the
+Gemini tab was closed during a turn, nothing noticed, and "Reopening gemini in a new tab" then
+failed without a word.
+
+- `tab_closed`: `chrome.tabs.onRemoved` asks `whoseTab` before `forgetTab`, so the server hears when
+  the main tab closes. A close the extension makes itself (`reopenInFreshTab`, `endSession`, a
+  finished subagent) has already let go of the tab, and a person's own Gemini tab is nobody's.
+- A subagent waiting on a tab that closes fails that request only, at once.
+- A tab closed under a send is not reopened: the server has ended that turn.
+- **The silent failure:** on macOS Chrome keeps running after its last window closes, and
+  `tabs.create` then rejects with `No current window`. Nothing caught it, so the server was told
+  nothing. `openTab` opens a window instead, and every prompt that throws is reported
+  (`reportInjectFailure`).
+- That rejection was logged as `unparseable server message`. The label now belongs to the parse.
+- `ensureModelTab` records the tab when it opens, not after the load, so a tab closed while loading
+  counts. `waitForTabLoad` also asks, because a page that had already finished sent no event.
+- `🌐 Reopening…` and `❌ Failed to open…` are plain words.
+
 ### 1.60.0 — 2026-11-05
 
 **The side panel is rebuilt on the terminal's design** (VS Code's chat is the same page, companion

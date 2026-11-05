@@ -197,6 +197,9 @@
         if (id === tabId && info.status === "complete") finish();
       }
       chrome.tabs.onUpdated.addListener(listener);
+      chrome.tabs.get(tabId).then((tab) => {
+        if (tab?.status === "complete") finish();
+      }, finish);
     });
   }
   var lastTabFailure = null;
@@ -219,6 +222,7 @@
   }
   var mainTabs = /* @__PURE__ */ new Map();
   var subagentTabs = /* @__PURE__ */ new Set();
+  var subagentRequests = /* @__PURE__ */ new Map();
   var OWNED_KEY = "agentOwnedTabs";
   async function ownedTabIds() {
     try {
@@ -244,6 +248,9 @@
       await chrome.storage.session.set({ [OWNED_KEY]: [...ids] });
     } catch {
     }
+  }
+  async function isOwnedTab(tabId) {
+    return (await ownedTabIds()).has(tabId);
   }
   var sessionTabs = /* @__PURE__ */ new Map();
   function claimSubagentTab(tabId, sessionId = null) {
@@ -307,7 +314,9 @@
     await forgetSessionTab(sessionId);
     if (tabId === void 0) return;
     subagentTabs.delete(tabId);
+    subagentRequests.delete(tabId);
     focusTakenFrom.delete(tabId);
+    await releaseOwnedTab(tabId);
     try {
       await chrome.tabs.remove(tabId);
     } catch {
@@ -317,9 +326,48 @@
     for (const id of sessionTabs.values()) if (id === tabId) return true;
     return false;
   }
+  function subagentAnswered(tabId) {
+    subagentRequests.delete(tabId);
+  }
+  async function whoseTab(tabId) {
+    const requestId = subagentRequests.get(tabId);
+    if (requestId) return { subagent: requestId };
+    if (subagentTabs.has(tabId)) return null;
+    for (const [model, id] of mainTabs) if (id === tabId) return { main: model };
+    if (mainTabs.size > 0 || !await isOwnedTab(tabId)) return null;
+    if (Object.values(await storedSessions()).includes(tabId)) return null;
+    return { main: "gemini" };
+  }
+  function reportClosedTab(tabId, whose) {
+    if (whose?.main) {
+      sendToServer({ type: "tab_closed", payload: { tabId, targetModel: whose.main } });
+    } else if (whose?.subagent) {
+      sendToServer({
+        type: "error",
+        payload: {
+          op: "tab_unreachable",
+          stage: "closed",
+          targetModel: "gemini",
+          isSubagent: true,
+          requestId: whose.subagent,
+          detail: "the tab was closed",
+          message: "A subagent's gemini tab failed \xB7 your turn goes on without it"
+        }
+      });
+    }
+  }
+  async function openTab(url, active = true) {
+    try {
+      return await chrome.tabs.create({ url, active });
+    } catch {
+      const win = await chrome.windows.create({ url, focused: active });
+      return win.tabs[0];
+    }
+  }
   function forgetTab(tabId) {
     stopCompletionTicks(tabId);
     subagentTabs.delete(tabId);
+    subagentRequests.delete(tabId);
     focusTakenFrom.delete(tabId);
     for (const [session, id] of sessionTabs) {
       if (id === tabId) sessionTabs.delete(session);
@@ -545,31 +593,11 @@
     if (existing) return existing;
     console.log(`[Agent CLI] No ${targetModel} tab found. Auto-reopening in a new tab...`);
     const openUrl = targetModel === "gemini" ? chatPath(opts?.url || "")?.thread ? opts.url : freshChatUrl(opts?.url || "") : targetUrl.replace("/*", "");
-    const newTab = await chrome.tabs.create({ url: openUrl, active: true });
-    await new Promise((resolve) => {
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          chrome.tabs.onUpdated.removeListener(listener);
-          resolve();
-        }
-      }, 8e3);
-      function listener(tabId, changeInfo) {
-        if (tabId === newTab.id && changeInfo.status === "complete") {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          }
-        }
-      }
-      chrome.tabs.onUpdated.addListener(listener);
-    });
-    await waitForBridge(newTab.id, 5e3);
+    const newTab = await openTab(openUrl);
     mainTabs.set(targetModel, newTab.id);
     await claimOwnedTab(newTab.id);
+    await waitForTabLoad(newTab.id, 8e3);
+    await waitForBridge(newTab.id, 5e3);
     broadcastTabStatus();
     chrome.tabs.sendMessage(newTab.id, { type: "discover_models" }).catch(() => {
     });
@@ -623,9 +651,11 @@
         return;
       }
       if (existing) {
+        if (payload.requestId) subagentRequests.set(existing.id, payload.requestId);
         success = await trySendToTab(existing, message, targetModel);
       } else {
-        const newTab = await chrome.tabs.create({ url: targetUrl.replace("/*", ""), active: false });
+        const newTab = await openTab(targetUrl.replace("/*", ""), false);
+        if (payload.requestId) subagentRequests.set(newTab.id, payload.requestId);
         claimSubagentTab(newTab.id, payload.sessionId);
         await waitForBridge(newTab.id, 1e4);
         if (payload.model) await selectModelInTab(newTab.id, payload.model, 5e3);
@@ -634,13 +664,17 @@
     } else {
       const mine = await pickMainTab(targetModel);
       let tabs = mine ? [mine] : [];
+      let openFailure;
       if (tabs.length === 0) {
         console.log(`[Agent CLI] No active ${targetModel} tab found. Auto-reopening...`);
         sendToServer({
           type: "status",
-          payload: { message: `\u{1F310} Reopening ${targetModel} in a new tab...` }
+          payload: { message: "Opening Gemini in a new tab" }
         });
-        const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl });
+        const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl }).catch((err) => {
+          openFailure = err?.message;
+          return null;
+        });
         if (newTab) {
           tabs = [newTab];
         }
@@ -653,7 +687,8 @@
             stage: "open_tab",
             targetModel,
             url: targetUrl,
-            message: `\u274C Failed to open ${targetModel} tab automatically. Please open https://gemini.google.com/app manually.`
+            detail: openFailure,
+            message: "Could not open a Gemini tab \xB7 open a Chrome window and send again"
           }
         };
         broadcastToSidePanel(errorMsg);
@@ -682,6 +717,7 @@
         return;
       }
       success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
+      if (!success && await tabGone(tabs[0].id)) return;
       if (!success && targetModel === "gemini") {
         const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
         if (fresh) success = await trySendToTab(fresh, message, targetModel, { repairs: false });
@@ -708,6 +744,22 @@
       broadcastToSidePanel(errorMsg);
       sendToServer(errorMsg);
     }
+  }
+  var tabGone = (tabId) => chrome.tabs.get(tabId).then(() => false, () => true);
+  function reportInjectFailure(payload, err) {
+    const errorMsg = {
+      type: "error",
+      payload: {
+        op: payload?.isSubagent ? "tab_unreachable" : "no_tab",
+        stage: "open_tab",
+        targetModel: payload?.targetModel || "gemini",
+        detail: err?.message,
+        message: payload?.isSubagent ? "A subagent's gemini tab failed \xB7 your turn goes on without it" : "Could not open a Gemini tab \xB7 open a Chrome window and send again",
+        ...payload?.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}
+      }
+    };
+    broadcastToSidePanel(errorMsg);
+    sendToServer(errorMsg);
   }
   async function ensureOnChat(tab, threadUrl) {
     let current;
@@ -762,7 +814,7 @@
     const url = `https://gemini.google.com/app/${id}`;
     try {
       const existing = await pickMainTab(model);
-      const tab = existing ? await chrome.tabs.update(existing.id, { url, active: true }) : await chrome.tabs.create({ url, active: true });
+      const tab = existing ? await chrome.tabs.update(existing.id, { url, active: true }) : await openTab(url);
       mainTabs.set(model, tab.id);
       await claimOwnedTab(tab.id);
       await waitForTabLoad(tab.id, 8e3);
@@ -890,10 +942,17 @@
       broadcastToSidePanel({ type: "connection_status", payload: { connected: true } });
     };
     sock.onmessage = async (event) => {
+      let message;
       try {
-        await handleServerMessage(JSON.parse(event.data));
+        message = JSON.parse(event.data);
       } catch (err) {
         console.warn("[socket] unparseable server message:", err?.message);
+        return;
+      }
+      try {
+        await handleServerMessage(message);
+      } catch (err) {
+        console.warn(`[socket] ${message?.type} failed:`, err?.message);
       }
     };
     sock.onclose = async (event) => {
@@ -987,7 +1046,7 @@
         broadcastToSidePanel(message);
         break;
       case "inject_prompt":
-        await injectPromptIntoModel(payload);
+        await injectPromptIntoModel(payload).catch((err) => reportInjectFailure(payload, err));
         break;
       case "new_chat": {
         const started = await triggerNewChatInModel(payload || {});
@@ -1049,8 +1108,10 @@
   chrome.commands?.onCommand.addListener((command) => {
     handleCommand(command);
   });
-  chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.tabs.onRemoved.addListener(async (tabId) => {
+    const whose = await whoseTab(tabId);
     forgetTab(tabId);
+    reportClosedTab(tabId, whose);
     broadcastTabStatus();
   });
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -1072,6 +1133,7 @@
             const finished = payload.complete || payload.timedOut;
             if (finished) {
               stopCompletionTicks(sender.tab.id);
+              subagentAnswered(sender.tab.id);
               await restoreFocusFrom(sender.tab.id);
             }
             if (finished && payload.isSubagent) {
