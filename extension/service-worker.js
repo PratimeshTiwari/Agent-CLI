@@ -91,6 +91,30 @@
     }
   }
 
+  // src/background/pairing.js
+  var TOKEN = /#agent-pair=([0-9a-f]{32})$/;
+  var reported = /* @__PURE__ */ new Set();
+  var pairTokenOf = (url) => String(url || "").match(TOKEN)?.[1] || null;
+  async function installId() {
+    const { installId: saved } = await chrome.storage.local.get("installId");
+    if (saved) return saved;
+    const id = crypto.randomUUID();
+    await chrome.storage.local.set({ installId: id });
+    return id;
+  }
+  function report(token) {
+    if (!token || reported.has(token)) return;
+    reported.add(token);
+    sendToServer({ type: "pair", payload: { token } });
+  }
+  function reportPairing(url, connected) {
+    if (connected) report(pairTokenOf(url));
+  }
+  async function reportOpenPairings() {
+    const tabs = await chrome.tabs.query({ url: "https://gemini.google.com/*" }).catch(() => []);
+    for (const tab of tabs) report(pairTokenOf(tab.url));
+  }
+
   // src/background/chat-url.js
   var CHAT_PATH = /^(\/u\/\d+)?\/app(?:\/([^/?#]+))?\/?$/;
   function chatPath(url) {
@@ -908,6 +932,7 @@
       ensureWatchdogAlarm();
       await setState({ connected: true, reconnectAttempts: 0, lastError: null });
       const shortcut = await floatingShortcut();
+      const install = await installId();
       if (ws !== sock || sock.readyState !== WebSocket.OPEN) return;
       sock.send(JSON.stringify({
         id: crypto.randomUUID(),
@@ -933,11 +958,14 @@
           // so a reloaded unpacked extension gains the command with no key, and
           // the shortcut silently does nothing. Only the browser knows; the
           // server says so in words. See floating.js.
-          floatingShortcut: shortcut
+          floatingShortcut: shortcut,
+          // Per Chrome profile (v9.3), so the server can keep to the one chosen.
+          installId: install
         },
         timestamp: Date.now()
       }));
       broadcastTabStatus();
+      reportOpenPairings();
       startHeartbeat();
       broadcastToSidePanel({ type: "connection_status", payload: { connected: true } });
     };
@@ -1115,6 +1143,7 @@
     broadcastTabStatus();
   });
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    reportPairing(changeInfo.url, isSocketOpen());
     if (changeInfo.status === "complete" && tab.url && tab.url.includes("gemini.google.com")) {
       broadcastTabStatus();
     }

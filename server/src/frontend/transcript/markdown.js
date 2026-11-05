@@ -46,6 +46,21 @@ marked.use(markedTerminal({
  * text; returning false would hand the source back to the one-tilde rule.
  */
 const DOUBLE_TILDE_DEL = /^~~(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))~~(?=[^~]|$)/;
+/**
+ * An email stays text (v9.3). GFM makes a bare address a `mailto:` link, drawn
+ * as the address twice, or as an OSC 8 link on a TTY, and in bold the rest of
+ * the row went missing: a Chrome profile named by its email lost its whole
+ * confirmation. `false` hands anything else back to marked's own `url`.
+ */
+const EMAIL_AHEAD = /^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+\.[A-Za-z]/;
+marked.use({
+  tokenizer: {
+    url(src) {
+      return EMAIL_AHEAD.test(src) ? undefined : false;
+    },
+  },
+});
+
 marked.use({
   tokenizer: {
     del(src) {

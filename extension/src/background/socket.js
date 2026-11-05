@@ -2,6 +2,7 @@ import { floatingShortcut } from './floating.js';
 import { getState, setState } from './state.js';
 import { retryDelay, resolvePort, socketUrlFor } from './policy.js';
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
+import { installId, reportOpenPairings } from './pairing.js';
 import { injectPromptIntoModel, reportInjectFailure, triggerNewChatInModel, broadcastTabStatus, sendToModelTab, endSession, openThread, focusModelTab, takeTabFailure, ensureModelTab } from './content.js';
 
 /**
@@ -143,6 +144,7 @@ export async function connectWebSocket() {
     ensureWatchdogAlarm();        // but the worker can still be evicted; see above
     await setState({ connected: true, reconnectAttempts: 0, lastError: null });
     const shortcut = await floatingShortcut();
+    const install = await installId();
     // Superseded or closed while we waited: the newer socket identifies itself.
     if (ws !== sock || sock.readyState !== WebSocket.OPEN) return;
 
@@ -171,11 +173,14 @@ export async function connectWebSocket() {
         // the shortcut silently does nothing. Only the browser knows; the
         // server says so in words. See floating.js.
         floatingShortcut: shortcut,
+        // Per Chrome profile (v9.3), so the server can keep to the one chosen.
+        installId: install,
       },
       timestamp: Date.now(),
     }));
 
     broadcastTabStatus();
+    reportOpenPairings();
     startHeartbeat();
     broadcastToSidePanel({ type: 'connection_status', payload: { connected: true } });
   };

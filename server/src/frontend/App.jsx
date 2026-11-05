@@ -1564,6 +1564,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     hint: !chatStarted && !isProcessing,
     notice: exitArmed ? 'Press Ctrl+C again to exit' : flash || null,
     scope: activeScope,
+    profile: agentLoop.browserProfile?.current?.name || null,
     pastes: attachedCount,
     running: runningTasks,
     tasks: isProcessing && tasksDone ? tasksDone : null,

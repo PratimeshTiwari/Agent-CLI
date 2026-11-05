@@ -27,7 +27,7 @@ globalThis.WebSocket = FakeWebSocket;
 globalThis.chrome = {
   alarms: { get: async () => ({ name: 'reconnect' }), create() {}, clear: async () => true, onAlarm: { addListener() {} } },
   storage: {
-    local: { get: async () => ({}) },
+    local: { get: async () => ({}), set: async () => {} },
     session: {
       get: async () => ({}),
       // The await `onopen` sits in. Held open until the test lets it go.

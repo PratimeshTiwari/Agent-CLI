@@ -25,6 +25,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { exitWithFarewell } from './frontend/screen/farewell.js';
 import { WebSocketServer } from './backend/bridge/websocket-server.js';
+import { openChromeProfile } from './backend/core/workspace/chrome-profiles.js';
 import { SLASH_COMMANDS } from './frontend/constants.js';
 import { AGENT_COMMANDS } from './backend/core/turn/slash-commands.js';
 import { MCPServer } from './backend/mcp/mcp-server.js';
@@ -358,7 +359,11 @@ async function main() {
     try {
       const { exec } = await import('child_process');
 
-      if (process.platform === 'darwin') {
+      // v9.3: the plain `open` below lands in Chrome's last used profile, which
+      // is the account a chosen profile exists to avoid.
+      const chosen = agentLoop.browserProfile.current;
+      if (chosen) openChromeProfile(chosen.dir, startUrl);
+      else if (process.platform === 'darwin') {
         exec(`open "${startUrl}"`);
       } else if (process.platform === 'win32') {
         exec(`start "" "${startUrl}"`);

@@ -13,6 +13,7 @@ import { panelRoom, wrapLines, cutStart } from '../menus/panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view.js';
 import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
+import { ChromeProfiles } from './ChromeProfiles.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
@@ -259,6 +260,7 @@ export function Menus({
   // the arrows and Enter. So escape lands here, and only here — one step back
   // where a menu has steps, closed otherwise.
   useInput((_char, key) => {
+    if (activeMenu?.type === 'chrome') return; // its own steps: ChromeProfiles
     // Tab cycles the settings tabs. Not ←/→, which the filter field needs for
     // its cursor, and not shift+tab alone, which is the global mode toggle
     // everywhere else — inside a menu the agent's own bindings are inert, so
@@ -1397,6 +1399,19 @@ export function Menus({
             </Panel>
           );
         })()}
+
+        {activeMenu?.type === 'chrome' && (
+          <ChromeProfiles
+            agentLoop={agentLoop}
+            width={W}
+            rows={menuRows}
+            onDone={(message) => {
+              setActiveMenu(null);
+              setFocus(FOCUS_INPUT);
+              if (message) setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: message }]);
+            }}
+          />
+        )}
 
         {activeMenu?.type === 'mcp' && (() => {
           // v9.0 (`frontend/menus/mcp-view.js`): one list for every integration,

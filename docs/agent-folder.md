@@ -87,7 +87,7 @@ not do that on purpose, it is clutter.
 
 ```
 ~/.agent/
-├── settings.json          yours, not the project's: theme, name, prompt version, startup,
+├── settings.json          yours, not the project's: theme, name, prompt version, startup, Chrome profile,
 │                          the MCP switches, and the Jira site (never its token)
 ├── atlassian-token.json   the Jira token, readable only by you — only where there is no
 │                          macOS Keychain; `agent atlassian logout` deletes it

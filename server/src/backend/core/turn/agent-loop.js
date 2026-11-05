@@ -190,6 +190,7 @@ import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from '../edits/diff-approval.js';
 import { createOutputTail } from '../commands/output-tail.js';
 import { startupMode, loadUserSettings, saveUserSettings } from '../workspace/user-settings.js';
+import { ProfileBinding } from '../workspace/profile-binding.js';
 import { resolvePromptVersion, isPromptVersion } from '../prompt/prompt-versions.js';
 import { describeMismatch, ensureRung, describeFailedSwitch, lowerRung, mismatchPolicy } from '../models/model-fallback.js';
 
@@ -483,6 +484,7 @@ export class AgentLoop {
      * `_startFreshChatIfOwed` before the first prompt, and by `startNewChat`.
      */
     this._freshChatOwed = !this._resumeOnConnect;
+    this.browserProfile = new ProfileBinding();
     // Warm start (v5.27): `~/.agent/settings.json`, per person. Read once; the
     // first extension to identify spends it (`warmUpOnConnect`).
     this.startupMode = startupMode();
@@ -3235,6 +3237,20 @@ export class AgentLoop {
     this._freshChatOwed = true;
     if (this.promptBuilder) this.promptBuilder.pendingRecap = this.conversationHistory;
     return 'recap';
+  }
+
+  /**
+   * Another Chrome profile took over (v9.3). A chat belongs to an account, so
+   * the one in the tab cannot be opened from there: the next message starts a
+   * new chat and carries a recap. A reopened thread or a recap, never neither.
+   */
+  leaveChatForProfile() {
+    const previous = this.chatThread;
+    this.chatThread = null;
+    this.sessionStore?.clearThread?.(previous);
+    this._freshChatOwed = true;
+    this.promptBuilder?.resetPromptState?.();
+    if (this.conversationHistory?.length && this.promptBuilder) this.promptBuilder.pendingRecap = this.conversationHistory;
   }
 
   /**

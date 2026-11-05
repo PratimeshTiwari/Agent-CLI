@@ -18,6 +18,11 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.62.0 — 2026-11-05
+
+**One Chrome profile gets prompts.** Each install keeps an id in `storage.local`, sent on `identify`,
+and answers a `#agent-pair=<token>` link the agent opened (`pairing.js`). No new permission.
+
 ### 1.61.0 — 2026-11-05
 
 **A closed tab is noticed, and a tab that cannot open says so.** Reported with screenshots: the

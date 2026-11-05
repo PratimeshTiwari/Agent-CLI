@@ -1487,3 +1487,9 @@ a caller could "pass it anything a tool handler might have produced".
   closes 8% of the gap per 80 ms spinner tick, the tick App already draws, so it costs no
   frames; a fall (`/compact`, `/new`) is drawn at once. Pty (`FAKE_STREAM_MS=2000`): 2.9k →
   6.3k over a 9 s reply, 0 clears at 13 and 24 rows.
+
+- **ctrl+o answers (v8.9).** It reads the files on the press, because the panel's copy can trail a
+  list written moments ago, and with nothing to show it says so instead of flipping hidden state.
+  During a turn the list is charged to the turn (`midTurnTaskLayout`): it gives way first, so at 15
+  rows only the footer's `tasks 0/4` remains. Pty at 15, 17, 20, 24 and 32 rows: 0 clears. **A
+  screen sample can land mid-repaint and read as a cut frame: sample twice before believing it.**
