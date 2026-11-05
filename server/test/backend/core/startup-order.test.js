@@ -113,3 +113,11 @@ describe('startup order', () => {
     );
   });
 });
+
+test('no MCP server is read or started at launch: the loop builds the set on first use', () => {
+  const loop = readFileSync(new URL('../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
+  assert.equal(loop.match(/new McpServers\(/g).length, 1, 'control: the loop does build it');
+  assert.match(loop, /get mcp\(\) \{\s*this\._mcp \?\?= new McpServers\(/);
+  const main = readFileSync(new URL('../../../src/main.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(main, /\.mcp\b/);
+});

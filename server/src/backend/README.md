@@ -15,6 +15,7 @@ the browser, and what is kept on disk. Nothing here imports from `frontend/`.
 | `storage/` | conversation history, written to the repo and to `~/.agent` | `session-store.js` |
 | `watcher/` | reports files changed outside the agent | `file-watcher.js` |
 | `atlassian/` | Jira: client, sign-in, ADF and wiki markup | `jira-client.js` |
+| `mcp/client/` | MCP servers: `~/.agent/mcp.json`, one process per server, `/mcp`'s list | `servers.js` |
 
 Inside `core/`, one folder per job:
 
