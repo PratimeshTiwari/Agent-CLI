@@ -14,11 +14,11 @@ Internals and the reasoning behind each change live in [`CLAUDE.md`](../CLAUDE.m
 Every pull request, newest first, grouped by series — generated from GitHub. Two were closed
 without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is an issue.
 
-### v9 — 2026-11-05 …
+### v9 — 2026-11-05 … · PRs [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
-| v9.0 | 2026-11-05 | `v9.0/mcp-client` | pending | The MCP client, with no model access yet: stdio servers from `~/.agent/mcp.json` in Claude Code's format, started on the first `/mcp` and never at launch. `/mcp` lists every server and Jira in one list, with each server's tools; a server that fails is a row saying why, and a config that cannot be read costs a row, not a launch. Values from a server's `env` are hidden in errors and descriptions. `@modelcontextprotocol/sdk` is an optional package in `/doctor`. |
+| v9.0 | 2026-11-05 | `v9.0/mcp-client` | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158) | The MCP client, with no model access yet: stdio servers from `~/.agent/mcp.json` in Claude Code's format, started on the first `/mcp` and never at launch. `/mcp` lists every server and Jira in one list, with each server's tools; a server that fails is a row saying why, and a config that cannot be read costs a row, not a launch. Values from a server's `env` are hidden in errors and descriptions. `@modelcontextprotocol/sdk` is an optional package in `/doctor`. |
 
 ### v8 — 2026-10-31 … · PRs [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#151](https://github.com/PratimeshTiwari/Agent-CLI/pull/151)
 
