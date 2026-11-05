@@ -17,6 +17,7 @@
 import { MUTATING_TOOLS, SHELL_TOOLS, DETACHED_TOOLS, EXTERNAL_TOOLS } from '../prompt/tool-catalog.js';
 import { isJiraWrite } from '../../mcp/tools/jira-issue.js';
 import { isAgentArtifact } from '../edits/artifact-guard.js';
+import { mcpDecision } from '../../mcp/client/switches.js';
 import { asksForEdits, isProjectMarkdown } from './modes.js';
 
 /**
@@ -26,10 +27,14 @@ import { asksForEdits, isProjectMarkdown } from './modes.js';
  * mutation resolved to somewhere outside the workspace, where the diff engine's
  * backups and `/undo` do not reach.
  *
+ * And an MCP tool the person set to block (v9.1), in every mode.
+ *
  * @param {{name: string}} call
  * @param {{level: string}} risk
+ * @param {{mcpSwitch?: string}} [ctx]
  */
-export function isBlockedOutright(call, risk) {
+export function isBlockedOutright(call, risk, { mcpSwitch } = {}) {
+  if (call?.name === 'mcp_tool') return mcpSwitch === 'block';
   return SHELL_TOOLS.has(call?.name) && risk?.level === 'critical';
 }
 
@@ -37,9 +42,9 @@ export function isBlockedOutright(call, risk) {
  * Must the user be asked before this runs?
  *
  * @param {{name: string, args?: object}} call
- * @param {{mode: string, risk: {level: string}, workspace: string}} ctx
+ * @param {{mode: string, risk: {level: string}, workspace: string, mcpSwitch?: string, alwaysAsk?: boolean}} ctx
  */
-export function requiresApproval(call, { mode, risk, workspace } = {}) {
+export function requiresApproval(call, { mode, risk, workspace, mcpSwitch, alwaysAsk } = {}) {
   const name = call?.name;
 
   /*
@@ -51,6 +56,15 @@ export function requiresApproval(call, { mode, risk, workspace } = {}) {
    * mode branch reads as tidying and would let auto mode post unasked.
    */
   if (EXTERNAL_TOOLS.has(name)) return isExternalWrite(call);
+
+  /*
+   * Second, for the same reason (v9.1). A custom tool's switch wins over plan
+   * and auto, and strict still asks; the table is `mcpDecision`'s. Below the
+   * mode branch, auto mode would ask the risk classifier about a call it has no
+   * way to read. With no switch to go on it asks: fail closed.
+   */
+  if (name === 'mcp_describe') return false;
+  if (name === 'mcp_tool') return mcpDecision(mcpSwitch ?? 'ask', mode, { alwaysAsk }) !== 'run';
 
   if (!asksForEdits(mode)) {
     // Auto mode asks only about what the classifier is unsure of. `safe` runs

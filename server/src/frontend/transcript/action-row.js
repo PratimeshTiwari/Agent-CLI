@@ -79,6 +79,7 @@ export function actionOutcome(act) {
   const r = act.result;
   if (state === 'rejected') {
     if (act.toolName === 'jira_issue') return 'not sent';
+    if (act.toolName === 'mcp_tool') return 'not run';
     return /^(edit_file|create_file)$/.test(act.toolName) ? 'rejected — nothing written' : 'rejected';
   }
   if (isShellResult(r)) {

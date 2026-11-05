@@ -28,6 +28,8 @@ import { MCPServer } from '../../../src/backend/mcp/mcp-server.js';
 import { TaskManager } from '../../../src/backend/core/commands/task-manager.js';
 import { DiffEngine } from '../../../src/backend/core/edits/diff-engine.js';
 import { startFakeJira, useFakeJira } from '../atlassian/fake-jira.js';
+import { McpServers } from '../../../src/backend/mcp/client/servers.js';
+import { setSwitch } from '../../../src/backend/mcp/client/switches.js';
 
 let ws;
 let server;
@@ -35,6 +37,7 @@ let taskManager;
 let ctx;
 let jira;
 let restoreJira;
+let mcp;
 
 before(async () => {
   // jira_issue's happy path is a read from a fake Jira; nothing here writes to one.
@@ -53,10 +56,21 @@ before(async () => {
   // reach it through `this.diffEngine`, not through the per-call context.
   server = new MCPServer(ws, new DiffEngine(ws));
   taskManager = new TaskManager(ws);
-  ctx = { workspace: ws, taskManager, editor: null };
+  // The MCP tools reach a real fixture process, as they would a person's server.
+  mcp = new McpServers({
+    workspace: ws,
+    cachePath: join(ws, 'mcp-cache.json'),
+    load: () => ({ path: '', exists: true, error: null, servers: [{
+      name: 'smoke', source: 'user', fingerprint: 'f', transport: 'stdio', command: process.execPath, env: {},
+      args: [new URL('../../fixtures/mcp-fixture-server.js', import.meta.url).pathname, 'ok'],
+    }] }),
+  });
+  setSwitch('smoke', 'echo', 'auto');
+  ctx = { workspace: ws, taskManager, editor: null, mcp, mode: 'auto' };
 });
 
 after(async () => {
+  await mcp?.dispose();
   restoreJira?.();
   await jira?.close();
   try { taskManager?.killAll?.(); } catch { /* best effort */ }
@@ -81,6 +95,8 @@ const HAPPY_PATH = {
   find_references: { name: 'hello' },
   query_log: { path: 'app.ndjson', where: ['level=error'] },
   jira_issue: { action: 'get', key: 'PROJ-12' },
+  mcp_describe: { server: 'smoke' },
+  mcp_tool: { server: 'smoke', tool: 'echo', args: { q: 'hi' } },
   run_command: { command: 'echo ok' },
   run_background: { command: 'sh -c "sleep 5"' },
   manage_task: { action: 'list' },

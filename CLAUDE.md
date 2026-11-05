@@ -733,9 +733,19 @@ backoff and rewrites `errno` codes into LLM-readable instructions.
 
 **MCP client (v9.0, `mcp/client/`).** `~/.agent/mcp.json`, Claude Code's shape, stdio only. Started on
 the first `/mcp`, never at launch (`AgentLoop.mcp` is lazy), and the model reaches nothing until v9.1.
-`/mcp` lists servers and Jira together. `env` values are scrubbed from errors and descriptions;
-children die on `exit`. Tested against a real process (`test/fixtures/mcp-fixture-server.js`). Pty: 0
-clears at 13 and 24 rows × 60 and 90.
+`/mcp` lists servers and Jira together. `env` values are scrubbed from errors, descriptions and
+results; children die on `exit`. Tested against a real process (`test/fixtures/mcp-fixture-server.js`).
+
+**The model reaches them through two tools (v9.1, prompt v5).** `mcp_describe` and `mcp_tool`; servers
+are data behind them, so a schema is typed into the tab only when asked for. With no usable server v5
+is v4 byte for byte, and v1–v4 never read a config. Turn 0 gets `<mcp_servers>`, capped: +2,445
+(low) / +3,146 (high) characters at 40 tools. **The switch** (`mcp/client/switches.js`, per person):
+`ask`, `auto`, `block`; new tools ask; `auto` runs in plan and auto and asks in strict; `alwaysAsk` in
+`mcp.json` beats it. Three locks as for Jira: `requiresApproval`'s second statement (a source assertion
+pins it), the box (`core/policy/mcp-approval.js`, starts on Don't run), and a handler that refuses
+without a one-use token unless the switch says run. **In one reply:** `mcp_describe` and calls needing
+no box run together, 4 at once per server; anything else waits for them (`mcpInFlight`) and calls after
+a box wait for it. A call is never repeated. A result is labelled data and cannot close its own label.
 
 ### Workspace
 
@@ -803,14 +813,6 @@ parties have to be told the same thing about that, and each has been the odd one
 (told `pending_approval` about a file already written), the screen (a rejected edit drawn in
 green), and the disk (the only one never wrong). Keeping them in one function is the reason it
 is one.
-
-**A mechanical extraction tried to drop a line and the comments are why it did not.**
-`manage_memory` computes its result and *then* calls `resetPromptState()` — the facts ride
-inside `<memory>` in the system prompt, so a changed set is invisible until that prompt is
-rebuilt. A regex turning `result = x` into `return x` deletes the call silently, and the tool
-goes on reporting "Remembered:" for facts the model will never see. Written by hand instead,
-and `loop-tools.test.js` asserts the reset on both paths and its *absence* on a rejected action,
-which would otherwise spend a full turn-0 payload to change nothing.
 
 **Three modes since v5.11 (`core/policy/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24,
 because building a document section by section in plan mode asked for every section. `strict` is
@@ -1004,13 +1006,6 @@ history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/instal
 `.agent/` held a stray `server/` scope, so an unknown entry is listed and left. `skills/` stays
 (a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
 because the loop would write the old conversation back.
-
-**Issue #68, "output clearing in new subsequent prompts", was this (reproduced 10-24).** Filed
-against v5.4: prompts drawn, replies never. Under the pty on v5.4, auto-compaction rewrote the
-history at the start of a prompt and every reply after it was answered, saved, and never drawn
-— the screen measures what it has drawn by position, and the front had moved. Same scenario on
-v5.16: every reply drawn. `test/frontend/reply-after-compaction.test.js` pins it, with the v5.4
-behaviour as its control.
 
 **Compaction never handed anything over, and ran beside the turn (fixed v5.9).** Found under
 the pty by logging every prompt the fake extension received: the first prompt in the fresh chat
@@ -1301,7 +1296,7 @@ them, and do not squash their history away.
   and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
   branch is named for what it does, never for the file it touches. **v8 opens with
   `v8.0/silent-retry-and-cleaner-rows`** (2026-10-31, after v7.10 #141), owner: "push and merge
-  uptil 7.10 and lets start v8". **v9 opens with `v9.0/mcp-client`** (2026-11-05,
+  uptil 7.10 and lets start v8". **v9 opens with `v9.0/mcp-client`** (2026-11-05, #158,
   `.agent/artifacts/plans/2026-11-05-custom-mcp.md`). **v8.1 is Jira and Confluence**
   (`.agent/artifacts/plans/2026-10-31-atlassian-tools.md`): built here, tested on the work laptop,
   and every write asks, in every mode.

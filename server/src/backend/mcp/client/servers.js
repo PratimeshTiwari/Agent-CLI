@@ -18,10 +18,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import { homeDir } from '../../core/workspace/paths.js';
 import { logError } from '../../core/logs/error-log.js';
-import { loadMcpConfig } from './config.js';
+import { loadMcpConfig, scrub } from './config.js';
 import { McpConnection, McpSdkMissing } from './connection.js';
+import { switchFor } from './switches.js';
 
 export const mcpCachePath = () => join(homeDir(), 'mcp-cache.json');
+
+/** At once, per server: a batch must not flood a small local process. */
+export const MAX_CALLS_AT_ONCE = 4;
 
 function readCache(path) {
   try {
@@ -91,6 +95,7 @@ export class McpServers {
         sdkMissing: state === 'failed' && Boolean(live?.sdkMissing),
         tools: (state === 'ready' ? live.tools : cached?.tools) || [],
         toolsStale: state !== 'ready' && Boolean(cached),
+        alwaysAsk: Boolean(server.alwaysAsk),
       };
     });
     return {
@@ -99,6 +104,73 @@ export class McpServers {
       error: this.config.error,
       servers,
     };
+  }
+
+  _server(name) {
+    return this.config.servers.find((s) => s.name === name);
+  }
+
+  /** Valid and switched on: what a tool may name. */
+  usable(name) {
+    const server = this._server(name);
+    return Boolean(server && !server.problem && !server.disabled);
+  }
+
+  alwaysAsks(name) {
+    return Boolean(this._server(name)?.alwaysAsk);
+  }
+
+  scrub(name, text) {
+    const server = this._server(name);
+    return server ? scrub(text, server) : text;
+  }
+
+  /** What the prompt names: usable servers with their last-seen tools, blocked ones left out. Starts nothing. */
+  offered() {
+    return this.snapshot().servers
+      .filter((s) => this.usable(s.name))
+      .map((s) => ({ name: s.name, tools: s.tools.filter((t) => switchFor(s.name, t.name) !== 'block') }))
+      .filter((s) => s.tools.length || switchFor(s.name, '') !== 'block');
+  }
+
+  async _ready(name) {
+    if (await this.connect(name)) return this.live.get(name);
+    throw new Error(`${name} did not start: ${this.live.get(name)?.error || 'it is not usable'}`);
+  }
+
+  async toolsOf(name) {
+    return (await this._ready(name)).tools;
+  }
+
+  /**
+   * One tool call. A stopped server gets one fresh start here, and past that the
+   * failure is the answer: the call itself is never repeated.
+   */
+  async call(name, tool, args, { signal } = {}) {
+    const entry = await this._ready(name);
+    await this._slot(entry);
+    try {
+      return await entry.connection.callTool(tool, args, { signal });
+    } finally {
+      this._free(entry);
+    }
+  }
+
+  _slot(entry) {
+    entry.running ??= 0;
+    entry.waiting ??= [];
+    if (entry.running < MAX_CALLS_AT_ONCE) {
+      entry.running += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => entry.waiting.push(resolve));
+  }
+
+  /** The slot passes straight to the next in line, so `running` stays right. */
+  _free(entry) {
+    const next = entry.waiting.shift();
+    if (next) next();
+    else entry.running -= 1;
   }
 
   /** Start one server and list its tools. Safe to call twice: the first call is the one that runs. */

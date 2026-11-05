@@ -41,7 +41,9 @@ function fingerprint(raw) {
 
 /** One entry, checked. A bad entry is a row saying why, never a failed launch. */
 function readServer(name, raw, env) {
-  const entry = { name, source: 'user', fingerprint: fingerprint(raw), disabled: Boolean(raw?.disabled) };
+  const entry = {
+    name, source: 'user', fingerprint: fingerprint(raw), disabled: Boolean(raw?.disabled), alwaysAsk: raw?.alwaysAsk === true,
+  };
   if (!NAME.test(name)) return { ...entry, problem: 'the name may use letters, digits, - and _' };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...entry, problem: 'not an object' };
   if (raw.url || raw.type === 'http' || raw.type === 'sse') {

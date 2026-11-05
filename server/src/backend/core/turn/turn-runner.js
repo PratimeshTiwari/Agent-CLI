@@ -47,7 +47,7 @@
 
 import { randomUUID } from 'crypto';
 import { looksLikeProviderError, looksLikeQuotaReached } from './drift-detector.js';
-import { EXTERNAL_TOOLS } from '../prompt/tool-catalog.js';
+import { EXTERNAL_TOOLS, MCP_TOOLS } from '../prompt/tool-catalog.js';
 
 /** Turns before a batch task gives up and returns what it has. */
 export const MAX_BATCH_TURNS = 10;
@@ -187,8 +187,8 @@ export async function runBatchTask({
         const risk = classifyRisk ? classifyRisk(call.name, call.args) : null;
         if (call.name === 'run_command' && risk && risk.level !== 'safe') {
           result = { success: false, error: `Command blocked in background agent for security: ${risk.reason}` };
-        } else if (EXTERNAL_TOOLS.has(call.name)) {
-          // Jira (v8.1) writes need the person's yes, and nobody is here to give
+        } else if (EXTERNAL_TOOLS.has(call.name) || MCP_TOOLS.has(call.name)) {
+          // Jira (v8.1) and MCP (v9.1): writes need the person's yes, and nobody is here to give
           // it. Reads too: a subagent has no reason to reach another service.
           result = { success: false, error: `${call.name} is not available to subagents; leave it to the main conversation.` };
         } else {

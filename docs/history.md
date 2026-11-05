@@ -1237,6 +1237,23 @@ bet on it, ask — which is the part that changes what the agent *does*.
 
 ## Moved from CLAUDE.md in v8.7
 
+**A mechanical extraction tried to drop a line and the comments are why it did not.**
+`manage_memory` computes its result and *then* calls `resetPromptState()` — the facts ride
+inside `<memory>` in the system prompt, so a changed set is invisible until that prompt is
+rebuilt. A regex turning `result = x` into `return x` deletes the call silently, and the tool
+goes on reporting "Remembered:" for facts the model will never see. Written by hand instead,
+and `loop-tools.test.js` asserts the reset on both paths and its *absence* on a rejected action,
+which would otherwise spend a full turn-0 payload to change nothing.
+
+
+**Issue #68, "output clearing in new subsequent prompts", was this (reproduced 10-24).** Filed
+against v5.4: prompts drawn, replies never. Under the pty on v5.4, auto-compaction rewrote the
+history at the start of a prompt and every reply after it was answered, saved, and never drawn
+— the screen measures what it has drawn by position, and the front had moved. Same scenario on
+v5.16: every reply drawn. `test/frontend/reply-after-compaction.test.js` pins it, with the v5.4
+behaviour as its control.
+
+
 Cut on 2026-11-02 to keep CLAUDE.md under the 150,000 characters Claude Code loads
 (`server/test/docs-size.test.js`). Each section is verbatim; CLAUDE.md keeps the rule it led to.
 

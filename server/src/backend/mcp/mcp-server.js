@@ -11,6 +11,7 @@ import { grepSearch } from './tools/grep-search.js';
 import { findSymbol, findReferences } from './tools/find-symbol.js';
 import { queryLog } from './tools/query-log.js';
 import { jiraIssue } from './tools/jira-issue.js';
+import { mcpDescribe, mcpTool } from './tools/mcp-tool.js';
 import { readFile } from './tools/read-file.js';
 import { editFile } from './tools/edit-file.js';
 import { createFile } from './tools/create-file.js';
@@ -105,6 +106,27 @@ const TOOL_DEFINITIONS = [
       format: { type: 'string', description: 'json | ndjson | csv | tsv | text, when detection is wrong', required: false },
     },
     handler: queryLog,
+  },
+  {
+    // v9.1: offered by prompt versions with `customMcp` (v5). Who may run what
+    // is core/policy/mcp-approval.js; the handler refuses without it.
+    name: 'mcp_describe',
+    description: 'List the tools of an MCP server the user added, or the arguments of one of them.',
+    parameters: {
+      server: { type: 'string', description: 'A name from <mcp_servers>', required: true },
+      tool: { type: 'string', description: 'One tool, for its full description and arguments', required: false },
+    },
+    handler: mcpDescribe,
+  },
+  {
+    name: 'mcp_tool',
+    description: 'Call a tool on an MCP server the user added. The user decides whether it asks first, runs or is blocked.',
+    parameters: {
+      server: { type: 'string', description: 'A name from <mcp_servers>', required: true },
+      tool: { type: 'string', description: 'The tool\'s name', required: true },
+      args: { type: 'object', description: 'Its arguments', required: false },
+    },
+    handler: mcpTool,
   },
   {
     // v8.1: offered by prompt versions with `jira` (v4), and only once a site

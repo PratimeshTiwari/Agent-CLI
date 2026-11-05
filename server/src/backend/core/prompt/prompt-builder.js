@@ -26,6 +26,7 @@ import { renderToolDefinitions } from './tool-catalog.js';
 import { atlassianSite } from '../../atlassian/config.js';
 import { prompt } from './prompt-loader.js';
 import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
+import { mcpServersBlock } from '../../mcp/client/prompt-block.js';
 import { parseMemory, readMemoryEnabled } from '../../context/memory-manager.js';
 
 /**
@@ -339,6 +340,10 @@ export class PromptBuilder {
       const line = describeCommands(detectProjectCommands(this.workspace, { agentMd: this.agentMdContent }));
       if (line) parts.push(`<project_commands>\n${line}\n(detected from the project; a line in AGENT.md overrides)\n</project_commands>`);
     }
+
+    // The servers a person added (v9.1): names and short lines, capped, from
+    // what is cached. `_toolFlags` keeps this off with none, so v5 is then v4.
+    if (this._toolFlags().customMcp) parts.push(mcpServersBlock(this._offeredMcp()));
 
     // What the agent learned here on earlier runs. This is the half that was
     // missing: `manage_memory` wrote facts to disk and no prompt ever carried
@@ -1257,9 +1262,16 @@ ${firstCheck}
    */
   _toolFlags() {
     const flags = resolvePromptVersion(this.promptVersion).flags || {};
-    if (!flags.jira) return flags;
-    const ready = this.jiraAvailable ?? Boolean(atlassianSite());
-    return ready ? flags : { ...flags, jira: false };
+    const off = {};
+    if (flags.jira && !(this.jiraAvailable ?? Boolean(atlassianSite()))) off.jira = false;
+    // v9.1, the same rule. `mcpServers` is set by the loop, and only a version
+    // with the flag calls it, so v1–v4 never read a server's config.
+    if (flags.customMcp && !this._offeredMcp().length) off.customMcp = false;
+    return Object.keys(off).length ? { ...flags, ...off } : flags;
+  }
+
+  _offeredMcp() {
+    return this.mcpServers?.() || [];
   }
 
   /**
@@ -1329,7 +1341,8 @@ ${firstCheck}
    */
   _buildToolAnchor(subagents = true, modelConfig = {}) {
     // The version and Jira's availability change the list too (v8.1).
-    const key = `${Boolean(subagents)}|${this.promptVersion}|${Boolean(this._toolFlags().jira)}`;
+    const { jira, customMcp } = this._toolFlags();
+    const key = `${Boolean(subagents)}|${this.promptVersion}|${Boolean(jira)}|${Boolean(customMcp)}`;
     if (this._anchorCache?.key === key) return this._anchorCache.value;
 
     const defs = this._buildToolDefinitions(subagents, modelConfig);

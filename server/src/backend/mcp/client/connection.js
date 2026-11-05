@@ -16,6 +16,7 @@
 import { scrub } from './config.js';
 
 export const CONNECT_TIMEOUT_MS = 60_000; // `npx -y` may have a package to fetch
+export const CALL_TIMEOUT_MS = 120_000;
 const MAX_TOOLS = 500;
 const STDERR_KEPT = 2000;
 
@@ -108,6 +109,14 @@ export class McpConnection {
       description: scrub(t.description || '', this.server),
       inputSchema: t.inputSchema || null,
     }));
+  }
+
+  /**
+   * One call. The SDK's timeout and an aborted signal both send the protocol's
+   * cancel. A call is never repeated here: it may have done its work.
+   */
+  async callTool(name, args, { signal, timeoutMs = CALL_TIMEOUT_MS } = {}) {
+    return this.client.callTool({ name, arguments: args }, undefined, { signal, timeout: timeoutMs });
   }
 
   async close() {

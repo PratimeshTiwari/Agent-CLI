@@ -382,8 +382,15 @@ export async function handleSlashCommand(loop, command, args) {
     // The terminal opens a menu for the bare form, in `use-slash-commands.js`;
     // this is the panels' answer, and `reload` for both.
     case 'mcp': {
-      if (String(args?.[0] || '').toLowerCase() === 'reload') await loop.mcp.reload();
-      else loop.mcp.connectAll().catch(() => { /* a failure is the row's state */ });
+      if (String(args?.[0] || '').toLowerCase() === 'reload') {
+        const offered = () => Boolean(loop.promptBuilder._toolFlags().customMcp);
+        const before = offered();
+        await loop.mcp.reload();
+        // The first server added, or the last taken away: the tools came or went.
+        if (offered() !== before) loop.promptBuilder.resetPromptState();
+      } else {
+        loop.mcp.connectAll().catch(() => { /* a failure is the row's state */ });
+      }
       return { message: mcpReport(listIntegrations(loop.mcp)) };
     }
 

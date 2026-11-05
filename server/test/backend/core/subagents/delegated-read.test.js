@@ -133,7 +133,7 @@ test('the digest is capped by whole lines and a tool call is not a digest', () =
 test('dispatch: a delegated read runs beside the batch, and only from the main loop', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../../../../src/backend/core/turn/agent-loop.js', import.meta.url), 'utf8');
-  assert.match(src, /const isParallel = call\.name === 'ask_subagent' \|\| Boolean\(delegate\);/);
+  assert.match(src, /const isParallel = call\.name === 'ask_subagent' \|\| Boolean\(delegate\)/);
   assert.match(src, /\} else if \(delegate\) \{\s*result = await runDelegatedRead\(/);
   // A subagent's reads go straight to the MCP server, never through
   // `_executeToolCalls`, so delegation cannot recurse.
