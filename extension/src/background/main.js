@@ -1,7 +1,7 @@
 import { connectWebSocket, isSocketOpen, ensureWatchdogAlarm } from './socket.js';
 import { sendToServer } from './messaging.js';
 import { getState } from './state.js';
-import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, endSession, stopCompletionTicks, isSessionTab } from './content.js';
+import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, whoseTab, reportClosedTab, subagentAnswered, endSession, stopCompletionTicks, isSessionTab } from './content.js';
 import { handleCommand } from './floating.js';
 
 // Keyboard shortcuts from the manifest's `commands` — the global one included.
@@ -18,11 +18,14 @@ chrome.commands?.onCommand.addListener((command) => { handleCommand(command); })
 // the popup is the doorway and the panel or the window is where you stay.
 
 // Listen for tab removals / updates to keep server informed of active tabs
-chrome.tabs.onRemoved.addListener((tabId) => {
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const whose = await whoseTab(tabId);
   // Any tab, not just ones we opened: a main tab the user closes by hand must
   // stop being remembered, or the next turn sends into a tab that is gone and
   // reports the site as unreachable.
   forgetTab(tabId);
+  // Before the status, which clears the tab the server links to.
+  reportClosedTab(tabId, whose);
   broadcastTabStatus();
 });
 
@@ -59,6 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (finished) {
             // Nothing left to check in that tab.
             stopCompletionTicks(sender.tab.id);
+            subagentAnswered(sender.tab.id);
             // Before the close, not after: once the tab is gone Chrome has
             // already picked a new active tab, and the "do we still hold focus"
             // check can no longer tell whether the user had moved on.

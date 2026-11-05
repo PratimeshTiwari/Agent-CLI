@@ -115,6 +115,9 @@ function waitForTabLoad(tabId, budgetMs) {
       if (id === tabId && info.status === 'complete') finish();
     }
     chrome.tabs.onUpdated.addListener(listener);
+    // Asked as well as watched (1.61.0): a page that finished before the
+    // listener was attached sends no event, and the wait ran its whole budget.
+    chrome.tabs.get(tabId).then((tab) => { if (tab?.status === 'complete') finish(); }, finish);
   });
 }
 
@@ -199,6 +202,15 @@ export function forgetFocusFrom(modelTabId) {
  */
 const mainTabs = new Map();
 const subagentTabs = new Set();
+
+/**
+ * The subagent prompt each tab is answering (1.61.0), so a tab closed by hand
+ * fails that request and no other. Only while a reply is owed: a session's tab
+ * sits idle between rounds, and closing it then costs a resend, not a failure.
+ *
+ * @type {Map<number, string>} tabId -> requestId
+ */
+const subagentRequests = new Map();
 
 /**
  * Tabs this extension opened, and therefore may type into.
@@ -383,7 +395,10 @@ export async function endSession(sessionId) {
   await forgetSessionTab(sessionId);
   if (tabId === undefined) return;
   subagentTabs.delete(tabId);
+  subagentRequests.delete(tabId);
   focusTakenFrom.delete(tabId);
+  // Before the close, or `whoseTab` reads our own close as a person's.
+  await releaseOwnedTab(tabId);
   try {
     await chrome.tabs.remove(tabId);
   } catch {
@@ -407,9 +422,79 @@ export function isSessionTab(tabId) {
   return false;
 }
 
+/** A subagent's reply landed, so its tab closing no longer fails anything. */
+export function subagentAnswered(tabId) {
+  subagentRequests.delete(tabId);
+}
+
+/**
+ * Whose tab just closed (1.61.0). Asked before `forgetTab`, which erases the
+ * answer.
+ *
+ * Reported: the Gemini tab was closed during a turn, nothing noticed, and the
+ * spinner ran until the two-minute silence clock fired. Every close the
+ * extension makes itself has already let go of the tab by now (`reopenInFreshTab`,
+ * `endSession`, a finished subagent), so what reaches here as the main tab or a
+ * waiting subagent's was closed by something else, which means a person.
+ *
+ * `mainTabs` is module state and empty after a worker restart, so with nothing
+ * remembered an owned tab that no session holds is the main tab: the storage
+ * `pickMainTab` falls back on answers the same way.
+ *
+ * @returns {Promise<{main: string}|{subagent: string}|null>}
+ */
+export async function whoseTab(tabId) {
+  const requestId = subagentRequests.get(tabId);
+  if (requestId) return { subagent: requestId };
+  if (subagentTabs.has(tabId)) return null;
+  for (const [model, id] of mainTabs) if (id === tabId) return { main: model };
+  if (mainTabs.size > 0 || !(await isOwnedTab(tabId))) return null;
+  if (Object.values(await storedSessions()).includes(tabId)) return null;
+  return { main: 'gemini' };
+}
+
+/**
+ * Tell the server a tab has gone. The main tab's meaning depends on whether a
+ * reply is pending, which only the server knows; a subagent's is that request
+ * failing, the path every other failure of its tab takes.
+ */
+export function reportClosedTab(tabId, whose) {
+  if (whose?.main) {
+    sendToServer({ type: 'tab_closed', payload: { tabId, targetModel: whose.main } });
+  } else if (whose?.subagent) {
+    sendToServer({
+      type: 'error',
+      payload: {
+        op: 'tab_unreachable', stage: 'closed', targetModel: 'gemini',
+        isSubagent: true, requestId: whose.subagent,
+        detail: 'the tab was closed',
+        message: 'A subagent\'s gemini tab failed · your turn goes on without it',
+      },
+    });
+  }
+}
+
+/**
+ * Open a tab, in a new window if there is none to open it in (1.61.0).
+ *
+ * On macOS Chrome keeps running after its last window closes, and then
+ * `tabs.create` rejects with "No current window". That rejection was the whole
+ * of "it failed to reopen the Gemini tab": nothing caught it, the server was
+ * told nothing, and the turn waited out both silence clocks.
+ */
+async function openTab(url, active = true) {
+  try {
+    return await chrome.tabs.create({ url, active });
+  } catch {
+    const win = await chrome.windows.create({ url, focused: active });
+    return win.tabs[0];
+  }
+}
+
 export function forgetTab(tabId) {
   stopCompletionTicks(tabId);
   subagentTabs.delete(tabId);
+  subagentRequests.delete(tabId);
   focusTakenFrom.delete(tabId);
   for (const [session, id] of sessionTabs) {
     if (id === tabId) sessionTabs.delete(session);
@@ -915,37 +1000,17 @@ export async function ensureModelTab(targetModel = 'gemini', opts) {
     ? (chatPath(opts?.url || '')?.thread ? opts.url : freshChatUrl(opts?.url || ''))
     : targetUrl.replace('/*', '');
 
-  const newTab = await chrome.tabs.create({ url: openUrl, active: true });
+  const newTab = await openTab(openUrl);
+  // Recorded now, not after the load: a tab closed while it loads is still
+  // this lane's tab closing, and `whoseTab` has to be able to say so.
+  mainTabs.set(targetModel, newTab.id);
+  await claimOwnedTab(newTab.id);
 
-  // Wait for the new tab to complete loading
-  await new Promise((resolve) => {
-    let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    }, 8000);
-
-    function listener(tabId, changeInfo) {
-      if (tabId === newTab.id && changeInfo.status === 'complete') {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          chrome.tabs.onUpdated.removeListener(listener);
-          resolve();
-        }
-      }
-    }
-    chrome.tabs.onUpdated.addListener(listener);
-  });
+  await waitForTabLoad(newTab.id, 8000);
 
   // The bridge mounts at document_idle, which is not the same moment as
   // `status === 'complete'`. Ask it rather than guess at the gap.
   await waitForBridge(newTab.id, 5000);
-  mainTabs.set(targetModel, newTab.id);
-  await claimOwnedTab(newTab.id);
   broadcastTabStatus();
 
   /*
@@ -1057,10 +1122,12 @@ export async function injectPromptIntoModel(payload) {
     }
 
     if (existing) {
+      if (payload.requestId) subagentRequests.set(existing.id, payload.requestId);
       success = await trySendToTab(existing, message, targetModel);
     } else {
       // Tab Pooling: Create a fresh isolated tab for this subagent
-      const newTab = await chrome.tabs.create({ url: targetUrl.replace('/*', ''), active: false });
+      const newTab = await openTab(targetUrl.replace('/*', ''), false);
+      if (payload.requestId) subagentRequests.set(newTab.id, payload.requestId);
       // Claimed before the wait, not after: the user's own turn can be
       // dispatched during those four seconds, and an unclaimed tab is one the
       // main lane will happily pick as "the newest matching tab".
@@ -1079,16 +1146,18 @@ export async function injectPromptIntoModel(payload) {
     // drop the user's prompt into a subagent's conversation.
     const mine = await pickMainTab(targetModel);
     let tabs = mine ? [mine] : [];
+    let openFailure;
     if (tabs.length === 0) {
       console.log(`[Agent CLI] No active ${targetModel} tab found. Auto-reopening...`);
       sendToServer({
         type: 'status',
-        payload: { message: `🌐 Reopening ${targetModel} in a new tab...` }
+        payload: { message: 'Opening Gemini in a new tab' },
       });
       // Back into this session's conversation when the server named one
       // (v7.9): a blank chat has never seen the task, and the next prompt is
       // the short turn that assumes it has.
-      const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl });
+      const newTab = await ensureModelTab(targetModel, { url: payload.threadUrl })
+        .catch((err) => { openFailure = err?.message; return null; });
       if (newTab) {
         tabs = [newTab];
       }
@@ -1102,7 +1171,8 @@ export async function injectPromptIntoModel(payload) {
           stage: 'open_tab',
           targetModel,
           url: targetUrl,
-          message: `❌ Failed to open ${targetModel} tab automatically. Please open https://gemini.google.com/app manually.`,
+          detail: openFailure,
+          message: 'Could not open a Gemini tab · open a Chrome window and send again',
         },
       };
       broadcastToSidePanel(errorMsg);
@@ -1142,6 +1212,10 @@ export async function injectPromptIntoModel(payload) {
     // Simplified (1.56.0, owner: "why add complexity"): send once; if that
     // fails, the same chat in a fresh tab, once. Then the error.
     success = await trySendToTab(tabs[0], message, targetModel, { repairs: false });
+    // Closed under the send. `tab_closed` has gone to the server, which ends
+    // the turn; reopening here would type the prompt into a chat the person
+    // just walked away from, for a turn that is already over.
+    if (!success && await tabGone(tabs[0].id)) return;
     if (!success && targetModel === 'gemini') {
       const fresh = await reopenInFreshTab(tabs[0], targetModel, payload.threadUrl);
       if (fresh) success = await trySendToTab(fresh, message, targetModel, { repairs: false });
@@ -1171,6 +1245,31 @@ export async function injectPromptIntoModel(payload) {
     broadcastToSidePanel(errorMsg);
     sendToServer(errorMsg);
   }
+}
+
+const tabGone = (tabId) => chrome.tabs.get(tabId).then(() => false, () => true);
+
+/**
+ * A prompt that threw instead of failing (1.61.0). Every one is reported: a
+ * prompt the worker drops without a word is a turn the server waits four
+ * minutes on.
+ */
+export function reportInjectFailure(payload, err) {
+  const errorMsg = {
+    type: 'error',
+    payload: {
+      op: payload?.isSubagent ? 'tab_unreachable' : 'no_tab',
+      stage: 'open_tab',
+      targetModel: payload?.targetModel || 'gemini',
+      detail: err?.message,
+      message: payload?.isSubagent
+        ? 'A subagent\'s gemini tab failed · your turn goes on without it'
+        : 'Could not open a Gemini tab · open a Chrome window and send again',
+      ...(payload?.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}),
+    },
+  };
+  broadcastToSidePanel(errorMsg);
+  sendToServer(errorMsg);
 }
 
 /**
@@ -1304,7 +1403,7 @@ export async function openThread(thread) {
     const existing = await pickMainTab(model);
     const tab = existing
       ? await chrome.tabs.update(existing.id, { url, active: true })
-      : await chrome.tabs.create({ url, active: true });
+      : await openTab(url);
 
     mainTabs.set(model, tab.id);
     await claimOwnedTab(tab.id);

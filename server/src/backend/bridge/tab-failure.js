@@ -31,6 +31,17 @@ export function subagentTabFailure(detail) {
   return `its Gemini tab failed${detail ? ` (${String(detail).replace(/\.$/, '')})` : ''}`;
 }
 
+/**
+ * The main tab was closed (v8.10). Owner: end the turn and say so, do not
+ * reopen and resend. Idle, the same words are a row of their own.
+ */
+export function tabClosedMessage(url) {
+  return `The Gemini tab was closed · your next message reopens it${url ? `\n${url}` : ''}`;
+}
+
+/** Closed between rounds: the turn is still going, and its next step reopens the chat. */
+export const TAB_CLOSED_MID_TURN = 'The Gemini tab was closed · the next step reopens it';
+
 export function tabUnreachableMessage(url) {
   return `Communication with the Gemini tab failed · check the browser${url ? `\n${url}` : ''}`;
 }

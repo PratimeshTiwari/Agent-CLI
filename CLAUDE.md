@@ -96,8 +96,9 @@ call, tool result, next prompt — runs with no browser and no Gemini account. I
   `{type:'identify', payload:{clientType:'extension'}}` (`clientType`, not `client`), and
   answers each `inject_prompt` from a scripted list. It logs every prompt it is given, which
   is where the per-turn character counts come from.
-- **`ext-cadence.js`** — the real extension in headless Chrome against a server whose
-  `verifyClient` **refuses every handshake**, so each retry becomes an observable timestamp.
+- **`tabrig/`** — the real CLI and the real extension in headless Chrome against a Gemini-shaped
+  page. Branded Chrome ignores `--load-extension`: CDP pipe, `Extensions.loadUnpacked`,
+  `--host-resolver-rules`, the port patched in a scratch copy, a fresh profile per run.
 - **`scrape-test.mjs`** — the scrape lifted verbatim out of the bridge and run against a
   Gemini-shaped DOM in jsdom.
 
@@ -233,6 +234,13 @@ entry before changing the mechanism it describes.
   `/app/<id>`, then closes the stuck tab, which ends the silent generation so it cannot answer
   late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
   over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
+- **A closed tab is noticed (v8.10, `noteTabClosed`, extension 1.61.0 `tab_closed`, `whoseTab`).**
+  Owner: end the turn and say so, never reopen and resend. Decided by the **lane**, not
+  `pendingGeminiResponse`, which no reply clears: a reply owed ends the turn and carries the message;
+  idle is a row; between rounds of tools the turn goes on and the next prompt reopens the chat. Every
+  close the extension makes must let go of the tab first. With no window left, `tabs.create` rejects
+  (`No current window`, the silent "failed to reopen"), so `openTab` opens a window. Chrome quitting
+  is not covered: nothing watches the socket, so it waits for the two-minute clock.
 - **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
   Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
   again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`
