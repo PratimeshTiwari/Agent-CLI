@@ -93,18 +93,33 @@ function agentStateDir(workspace, { home = os.homedir(), agentHome = process.env
         forbidden.add(path.join(tmp, AGENT_DIR));
         try { forbidden.add(path.join(fs.realpathSync(tmp), AGENT_DIR)); } catch { /* no such dir */ }
     }
+    const stateIn = (candidate, base) => {
+        const scope = path.relative(base, ws);
+        return path.join(scope ? path.join(candidate, scope) : candidate, 'state');
+    };
+    let stray = null;
     let dir = ws;
     for (let i = 0; i < 64; i++) {
         const candidate = path.join(dir, AGENT_DIR);
         if (!forbidden.has(candidate) && fs.existsSync(candidate)) {
-            const scope = path.relative(dir, ws);
-            return path.join(scope ? path.join(candidate, scope) : candidate, 'state');
+            if (!isStrayAgentDir(candidate)) return stateIn(candidate, dir);
+            stray = stray || stateIn(candidate, dir);
         }
         const parent = path.dirname(dir);
         if (parent === dir || dir === home) break;
         dir = parent;
     }
-    return path.join(ws, AGENT_DIR, 'state');
+    return stray || path.join(ws, AGENT_DIR, 'state');
+}
+
+/** As paths.js's isStrayAgentDir: a `.agent` holding only what a tool wrote. */
+function isStrayAgentDir(dir) {
+    try {
+        const entries = fs.readdirSync(dir).filter((name) => name !== '.DS_Store');
+        return entries.length > 0 && entries.every((name) => name === 'artifacts' || name === 'tmp');
+    } catch {
+        return false;
+    }
 }
 
 /**

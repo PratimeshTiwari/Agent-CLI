@@ -7,8 +7,8 @@
  */
 
 import { readFileSync, statSync, existsSync } from 'fs';
-import { resolve, extname } from 'path';
-import { displayPath } from '../../core/workspace/paths.js';
+import { extname } from 'path';
+import { displayPath, resolveToolPath } from '../../core/workspace/paths.js';
 import { documentKind, extractDocument, looksBinary } from './documents.js';
 import { PARSEABLE, loadJsParser, definitionsIn } from '../../context/symbol-index.js';
 import { RUBY, rubyDefinitionsIn } from '../../context/ruby-symbols.js';
@@ -51,7 +51,7 @@ export async function readFile(args, context) {
   const { path: filePath, startLine, endLine } = args;
   const { workspace } = context;
 
-  const absPath = filePath.startsWith('/') ? filePath : resolve(workspace, filePath);
+  const absPath = resolveToolPath(workspace, filePath);
   // Relative inside the workspace, absolute outside it. These tools accept
   // absolute paths, and a bare `relative()` turns one into `../../../tmp/x`
   // in the error the model then reads — a path it never used.

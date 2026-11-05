@@ -6,14 +6,13 @@
  */
 
 import { existsSync } from 'fs';
-import { resolve } from 'path';
-import { displayPath } from '../../core/workspace/paths.js';
+import { displayPath, resolveToolPath } from '../../core/workspace/paths.js';
 
 export async function editFile(args, context) {
   const { path: filePath, edits, append } = args;
   const { workspace, diffEngine } = context;
 
-  const absPath = filePath.startsWith('/') ? filePath : resolve(workspace, filePath);
+  const absPath = resolveToolPath(workspace, filePath);
   // Relative inside the workspace, absolute outside it. These tools accept
   // absolute paths, and a bare `relative()` turns one into `../../../tmp/x`
   // in the error the model then reads — a path it never used.

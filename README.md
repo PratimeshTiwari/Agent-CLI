@@ -123,7 +123,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.14.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.15.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in
@@ -175,7 +175,7 @@ conversation.
 | `↑` | with an empty prompt, take back a queued message |
 | `ctrl+x` `ctrl+s` | steer the last queued message into the running turn |
 | `ctrl+e` | expand or collapse every step |
-| `ctrl+o` | show or hide the task list |
+| `ctrl+o` | show or hide the task list, during a turn too |
 | `ctrl+b` | bring the Gemini tab to the front |
 | `shift+enter` · `ctrl+n` | a newline without sending (`shift+enter` where the terminal reports it, and in editors with the companion) |
 | `ctrl+v` | attach an image from the clipboard as `[Image #1]` |

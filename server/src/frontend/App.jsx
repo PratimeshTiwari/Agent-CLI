@@ -12,7 +12,7 @@ import { InputBar } from './components/InputBar.jsx';
 import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImageBlock } from './input/image-attach.js';
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './input/file-drop.js';
 import { actionHead } from './transcript/action-row.js';
-import { approvalLayout, runningLayout } from './transcript/live-layout.js';
+import { approvalLayout, artifactBodyLines, midTurnTaskLayout, runningLayout } from './transcript/live-layout.js';
 import { contextMeter, disconnectedHint, elapsedLabel, taskProgress } from './transcript/status-rows.js';
 import { workBreakdown } from './transcript/tool-rows.js';
 import { easeCount, streamTokens } from './transcript/token-count.js';
@@ -68,6 +68,37 @@ import { T } from './theme.js';
  * conversation's task list" from "the last one's, still on disk".
  */
 const SESSION_STARTED_AT = Date.now();
+
+/**
+ * An artifact belongs to a conversation, and the files outlive it.
+ *
+ * On a brand-new chat the panel was drawing the *last* session's
+ * `review.md` — reported that way, and it is a lie in the one place
+ * that is supposed to say what the agent is working on now. The files
+ * are deliberately durable (they are written for the user to read and
+ * survive a restart), so the panel has to be the thing that decides.
+ *
+ * The rule is just the mtime: **written during this session, or not
+ * shown**. Two looser rules were tried and both leaked the same lie a
+ * beat later — `history.length > 0` is true within seconds of launch
+ * because the file watcher appends a turn whenever anything on disk
+ * moves, and "has a user turn" brings the stale file back the moment
+ * you say anything at all.
+ *
+ * The file is not hidden, only unclaimed: it is on disk, `/plans` lists
+ * it, and the moment the agent writes to it this session the panel
+ * picks it up. What the panel must not do is present the last
+ * conversation's checklist as this one's.
+ */
+function sessionArtifacts(workspace) {
+  const read = (name) => {
+    const at = paths.artifactPath(workspace, name);
+    if (!fs.existsSync(at)) return null;
+    if (fs.statSync(at).mtimeMs < SESSION_STARTED_AT) return null;
+    return fs.readFileSync(at, 'utf8');
+  };
+  return { task: read('task.md'), review: read('review.md'), walkthrough: read('walkthrough.md') };
+}
 
 export function App({ agentLoop, wsServer, closing = false }) {
   const [input, setInput] = useState('');
@@ -823,7 +854,13 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const running = runningLayout(activeToolCalls, liveBudget, { compact });
   const runningCalls = running.calls;
   const runningRows = running.rows;
-  const turnBudget = Math.max(1, liveBudget - runningRows);
+  const midTurnTasks = midTurnTaskLayout({
+    open: isProcessing && artifactsOpen && !approval && !diffRequest && !activeMenu,
+    lines: artifactBodyLines(artifacts).length,
+    budget: liveBudget - runningRows,
+    compact,
+  });
+  const turnBudget = Math.max(1, liveBudget - runningRows - midTurnTasks.rows);
 
   /**
    * How many lines the expanded artifact panel may draw.
@@ -835,13 +872,13 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * expanded `task.md` plus `walkthrough.md` asked for 9 + 14 rows of a
    * 13-row terminal.
    *
-   * Budgeted against the terminal rather than `liveBudget`, because the two
-   * never coexist: the panel draws only when `!isProcessing`, and the live
-   * turn only when processing. Capped at 12 so a tall terminal does not turn
+   * Budgeted against the terminal rather than `liveBudget` when idle, because
+   * the live turn is not there then. During a turn it is the turn's rows that
+   * pay (`midTurnTaskLayout`), and zero lines means no panel. Capped at 12 so a tall terminal does not turn
    * the prompt area into a document viewer — the file is on disk, and the
    * row names it.
    */
-  const artifactLines = Math.max(
+  const artifactLines = isProcessing ? midTurnTasks.lines : Math.max(
     1,
     Math.min(12, terminalHeight - reservedRows(terminalHeight) - 2),
   );
@@ -915,34 +952,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
      * changes nothing returns the previous object and React can skip it.
      */
     try {
-      /**
-       * An artifact belongs to a conversation, and the files outlive it.
-       *
-       * On a brand-new chat the panel was drawing the *last* session's
-       * `review.md` — reported that way, and it is a lie in the one place
-       * that is supposed to say what the agent is working on now. The files
-       * are deliberately durable (they are written for the user to read and
-       * survive a restart), so the panel has to be the thing that decides.
-       *
-       * The rule is just the mtime: **written during this session, or not
-       * shown**. Two looser rules were tried and both leaked the same lie a
-       * beat later — `history.length > 0` is true within seconds of launch
-       * because the file watcher appends a turn whenever anything on disk
-       * moves, and "has a user turn" brings the stale file back the moment
-       * you say anything at all.
-       *
-       * The file is not hidden, only unclaimed: it is on disk, `/plans` lists
-       * it, and the moment the agent writes to it this session the panel
-       * picks it up. What the panel must not do is present the last
-       * conversation's checklist as this one's.
-       */
-      const read = (name) => {
-        const at = paths.artifactPath(agentLoop.workspace, name);
-        if (!fs.existsSync(at)) return null;
-        if (fs.statSync(at).mtimeMs < SESSION_STARTED_AT) return null;
-        return fs.readFileSync(at, 'utf8');
-      };
-      const next = { task: read('task.md'), review: read('review.md'), walkthrough: read('walkthrough.md') };
+      const next = sessionArtifacts(agentLoop.workspace);
       setArtifacts((prev) => (
         prev.task === next.task && prev.review === next.review && prev.walkthrough === next.walkthrough
           ? prev
@@ -953,7 +963,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // `history.length`: a finished tool now joins the transcript as it lands,
     // so this re-reads the checklist after every step — the status bar's
     // `tasks 3/5` would otherwise sit at its value from the start of the turn.
-  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length, idleTick]);
+  }, [isProcessing, planReviewReady, walkthroughReady, agentLoop.workspace, history.length, activeToolCalls.length, idleTick]);
 
   // The thinking line. One row, rewritten on a calm cadence — the old 75ms
   // typewriter plus a 10ms per-character reveal of the whole reply is what made
@@ -1372,7 +1382,25 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // answered yet.
   useHotkeys({
     expand: toggleVerbose,
-    artifacts: () => setArtifactsOpen((open) => !open),
+    /*
+     * Nothing to show says so. It used to flip the state with nothing drawn, so
+     * the key looked dead and the next list appeared already expanded. Read from
+     * disk, because the press can land before the panel's copy has caught up
+     * with a list written moments ago, and the answer would be a false no.
+     */
+    artifacts: () => {
+      let now = artifacts;
+      try { now = sessionArtifacts(agentLoop.workspace); } catch { /* the copy we have */ }
+      if (now.task || now.review || now.walkthrough) {
+        setArtifacts(now);
+        setArtifactsOpen((open) => !open);
+        return;
+      }
+      setHistory((prev) => [...prev, {
+        role: 'assistant', isLocal: true, timestamp: Date.now(),
+        content: 'No task list in this conversation yet.',
+      }]);
+    },
     // ctrl+t and ctrl+y became `/shell` and `/copy code` (2026-10-26). The
     // bytes are still taken off stdin — an unhandled chord types its letter
     // into the prompt — and say where the thing went, once per press.

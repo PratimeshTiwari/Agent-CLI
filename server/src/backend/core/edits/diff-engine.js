@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, copyFileSync, readdirSync, unlinkSync } from 'fs';
 import { noteOwnWrite } from './own-writes.js';
-import { backupsDir } from '../workspace/paths.js';
+import { backupsDir, resolveToolPath } from '../workspace/paths.js';
 import { planBackupPruning } from './backup-pruner.js';
 import { resolve, dirname, relative, isAbsolute, join } from 'path';
 import { createPatch, applyPatch, structuredPatch } from 'diff';
@@ -422,8 +422,7 @@ export class DiffEngine {
   }
 
   _resolvePath(filePath) {
-    if (filePath.startsWith('/')) return filePath;
-    return resolve(this.workspace, filePath);
+    return resolveToolPath(this.workspace, filePath);
   }
 
   _createBackup(absPath, content) {

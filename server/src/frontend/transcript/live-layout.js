@@ -141,3 +141,42 @@ export function approvalLayout(payload = {}, { width = 80, maxRows = Infinity } 
   const rows = (ruled ? RULE : 0) + TITLE + shown + (cwd ? 1 : 0) + (reason ? 1 : 0) + (padded ? 1 : 0) + OPTIONS;
   return { command: all.slice(0, shown), hidden: all.length - shown, ruled, cwd, reason, padded, rows };
 }
+
+/** Rows a turn always keeps; the task list gives way before these. */
+const TURN_FLOOR = 3;
+/** Short, because this shares the frame with the reply being written. */
+const MID_TURN_TASK_LINES = 6;
+
+/**
+ * The task list during a turn (v8.9).
+ *
+ * ctrl+o used to do nothing mid-turn, when the list is most worth a look: the
+ * row was drawn only while idle, because the idle panel is budgeted against the
+ * terminal and a turn's rows were not in that sum. Here it is charged to the
+ * turn: a header and a margin, then as many lines as leave the turn its floor.
+ * It gives way first, so a short terminal draws nothing and keeps the status
+ * bar's count. Below `compact` the margin is what has already been shed, so
+ * nothing is drawn there at all.
+ *
+ * @param {{open: boolean, lines: number, budget: number, compact?: boolean}} o
+ *   `budget` is what the turn would otherwise have.
+ * @returns {{rows: number, lines: number}} rows to charge, list lines to draw
+ */
+export function midTurnTaskLayout({ open, lines, budget, compact = false }) {
+  if (!open || lines < 1 || compact) return { rows: 0, lines: 0 };
+  const fit = Math.min(budget - TURN_FLOOR - 2, MID_TURN_TASK_LINES);
+  if (fit < 1) return { rows: 0, lines: 0 };
+  if (lines <= fit) return { rows: lines + 2, lines };
+  // A cut list says so on a row of its own, or two lines read as a list of two.
+  if (fit < 2) return { rows: 0, lines: 0 };
+  return { rows: fit + 2, lines: fit - 1 };
+}
+
+/** The panel's text, one drawn line each: the count a layout needs, before anything is cut. */
+export function artifactBodyLines(artifacts) {
+  return [artifacts?.task, artifacts?.review, artifacts?.walkthrough]
+    .filter(Boolean)
+    .join('\n')
+    .split('\n')
+    .filter((l) => l.trim());
+}

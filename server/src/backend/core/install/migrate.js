@@ -327,6 +327,40 @@ export function retiredInstructionFiles(workspace) {
   return [...new Set(candidates)].filter((f) => fs.existsSync(f));
 }
 
+/** Move what is under `from` to the same place under `to`, file by file; an existing file stays. */
+function moveInto(from, to, moved) {
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const source = path.join(from, entry.name);
+    const target = path.join(to, entry.name);
+    if (entry.isDirectory()) moveInto(source, target, moved);
+    else if (move(source, target)) moved.push(target);
+  }
+  // Only ever an empty folder: a file the move would not overwrite keeps its own.
+  try { fs.rmdirSync(from); } catch { /* still holds something */ }
+}
+
+/**
+ * A `<repo>/.agent` a tool made under a shared root (#154).
+ *
+ * The walk already skips it, so nothing is lost if this never ran; it is here so
+ * the plans and checklists in it come back to where the agent reads them. A file
+ * already at the destination is newer state, and the stray's copy stays beside
+ * it rather than replacing it.
+ */
+export function migrateStrayAgentDir(workspace) {
+  const stray = path.join(path.resolve(workspace), paths.AGENT_DIR);
+  if (stray === paths.resolveState(workspace).root || !paths.isStrayAgentDir(stray)) return [];
+  const moved = [];
+  for (const [name, to] of [['artifacts', paths.artifactsDir(workspace)], ['tmp', paths.tmpDir(workspace)]]) {
+    const from = path.join(stray, name);
+    if (fs.existsSync(from)) moveInto(from, to, moved);
+  }
+  fs.rmSync(path.join(stray, '.DS_Store'), { force: true });
+  try { fs.rmdirSync(stray); } catch { /* a file stayed, and the walk still skips it */ }
+  paths.clearPathCache();
+  return moved;
+}
+
 /** Run both migrations and print a single summary line. */
 export function runMigrations(workspace) {
   const { migrated, items } = migrateWorkspace(workspace);
@@ -340,6 +374,12 @@ export function runMigrations(workspace) {
       `📦 Migrated ${all.length} item${all.length === 1 ? '' : 's'} into ${paths.AGENT_DIR}/ ` +
         `(was .gemini, .gemini-agent, .agent-github-plans)`,
     );
+  }
+
+  const stray = migrateStrayAgentDir(workspace);
+  if (stray.length > 0) {
+    console.log(`📦 Moved ${stray.length} file${stray.length === 1 ? '' : 's'} from this repo's own `
+      + `${paths.AGENT_DIR}/ to ${paths.artifactsDir(workspace)}`);
   }
 
   const retired = retiredInstructionFiles(workspace);

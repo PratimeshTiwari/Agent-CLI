@@ -72,6 +72,13 @@ of a monorepo, each repo gets a folder inside it:
 /base/.agent/repo-2/
 ```
 
+A repo inside a monorepo should have no `.agent` of its own, and the agent no longer makes one: a
+path like `.agent/artifacts/task.md` goes to `/base/.agent/repo-1/artifacts/`. If an older version
+left one holding only `artifacts/` or `tmp/`, the next start moves its files there. If one has
+`config.json` or `sessions/` in it, an earlier launch took it for a root and kept that repo's state
+in it. The agent cannot tell that from a folder you made on purpose, so it stays. To go back to the
+shared folder, move what you want to keep into `/base/.agent/repo-1/` and delete `repo-1/.agent`.
+
 **A folder named after a subdirectory** (for example `.agent/server/` in this repo) means
 something ran with that subdirectory as its workspace and filed its state under it. If you did
 not do that on purpose, it is clutter.
