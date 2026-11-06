@@ -18,6 +18,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v9.6 | 2026-11-06 | `v9.6/repo-mcp-and-http` | [#164](https://github.com/PratimeshTiwari/Agent-CLI/pull/164) | A repo's `.mcp.json` runs nothing until you allow it, per folder and per entry. MCP servers can be HTTP, with headers |
 | v9.5 | 2026-11-06 | `v9.5/update-menu` | [#163](https://github.com/PratimeshTiwari/Agent-CLI/pull/163) | `/update` is a menu: pull, and the companion in the editors you pick. `/doctor` can update everything, inside ranges or to latest |
 | v9.4 | 2026-11-05 | `v9.4/memory-folder` | [#162](https://github.com/PratimeshTiwari/Agent-CLI/pull/162) | Memory is a folder: one fact per file, with who wrote it, when and why, and writes that cannot overwrite another agent's. `memory.md` is imported. Prompt v6 lists an index, saves without re-teaching the chat, and asks to save a correction; `/logs tools` counts the result. |
 | v9.3 | 2026-11-05 | `v9.3/chrome-profile` | [#161](https://github.com/PratimeshTiwari/Agent-CLI/pull/161) | `/chrome`: one Chrome profile gets prompts. Every extension used to get every prompt, so two profiles meant two accounts. The agent opens the chosen profile on a one-use link and pairs with it; nothing else is admitted, and a closed profile makes prompts wait. Extension 1.62.0. An email in the transcript stays text. |
