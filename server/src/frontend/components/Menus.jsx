@@ -14,6 +14,7 @@ import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view
 import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { ChromeProfiles } from './ChromeProfiles.jsx';
+import { UpdateMenu } from './UpdateMenu.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
@@ -38,14 +39,14 @@ import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../backend/core/workspace/user-settings.js';
 import {
   REPO_ROOT, checkInstalled, checkTools, applyLatest, installPackage, installTool, listVersions, findImporters,
-  errorOutput, uninstallPackage,
+  errorOutput, uninstallPackage, updatePackages,
 } from '../../backend/core/install/doctor.js';
 import { installRoot, installDependencies } from '../../backend/core/install/dep-recovery.js';
 import { exclusive, INSTALL_SLOT } from '../../backend/core/install/local-jobs.js';
 import { snapshotBeforeChange } from '../../backend/core/install/doctor-guard.js';
 import {
   homeItems, homeCursor, homeStatus, findEntry, HEALTH_TABS, nextHealthTab, tabCounts, packageLines, packageActions, versionItems,
-  versionCursor, jobLine, errorLines,
+  versionCursor, jobLine, titleJobLine, errorLines, updateAllItems, UPDATE_ALL_NOTE,
 } from '../menus/doctor-view.js';
 
 /**
@@ -225,8 +226,34 @@ export function Menus({
     }
   }, [updateDoctor, setHistory]);
 
+  // Update all (v9.5). The same slot and the same guard as one package.
+  const runDoctorUpdates = React.useCallback(async (list) => {
+    const name = `${list.length} package${list.length === 1 ? '' : 's'}`;
+    updateDoctor((cur) => ({ ...cur, view: 'home', job: { state: 'running', name, bulk: true } }));
+    const result = await exclusive(INSTALL_SLOT, `update ${name}`, async () => {
+      snapshotBeforeChange({
+        root: REPO_ROOT,
+        change: `update all: ${list.map((p) => `${p.name} ${p.installed} → ${p.latest}`).join(', ')}`,
+      });
+      return updatePackages(list);
+    });
+    const job = result.busy ? { state: 'busy', name, holder: result.busy }
+      : result.ok ? { state: 'done', name, text: `✔ ${name} updated · /restart to load them` }
+        : {
+          state: 'failed', name, error: result.error, output: result.output || [],
+          text: `✗ ${result.updated.length} of ${list.length} updated · ${result.failed.join(', ')} did not · ${result.error}`,
+        };
+    const groups = checkInstalled();
+    updateDoctor((cur) => ({ ...cur, job, report: applyLatest({ ...cur.report, groups }, cur.report.registry) }));
+    if (!doctorOpen.current) {
+      setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: jobLine(job) }]);
+    }
+  }, [updateDoctor, setHistory]);
+
   const doctorPick = React.useCallback((menu, value, at) => {
     const entry = findEntry(menu.report, menu.target);
+    if (value.kind === 'update-all') { setActiveMenu({ ...menu, view: 'update-all', at }); return; }
+    if (value.kind === 'update-run') { runDoctorUpdates(value.list); return; }
     if (value.kind === 'package' || value.kind === 'tool') {
       setActiveMenu({
         ...menu, view: 'package', target: value, at,
@@ -249,7 +276,7 @@ export function Menus({
       runDoctorInstall({ name: value.names, workspace: value.workspace }, null, { remove: true });
     }
     if (value.kind === 'error') setActiveMenu({ ...menu, view: 'error', from: menu.view || 'home' });
-  }, [setActiveMenu, runDoctorInstall, updateDoctor]);
+  }, [setActiveMenu, runDoctorInstall, runDoctorUpdates, updateDoctor]);
 
   // Every menu is a `Panel` (`frontend/menus/panel.js`): what it can afford at this height.
   const W = terminalWidth;
@@ -261,6 +288,7 @@ export function Menus({
   // where a menu has steps, closed otherwise.
   useInput((_char, key) => {
     if (activeMenu?.type === 'chrome') return; // its own steps: ChromeProfiles
+    if (activeMenu?.type === 'update') return; // and UpdateMenu's
     // Tab cycles the settings tabs. Not ←/→, which the filter field needs for
     // its cursor, and not shift+tab alone, which is the global mode toggle
     // everywhere else — inside a menu the agent's own bindings are inert, so
@@ -1413,6 +1441,24 @@ export function Menus({
           />
         )}
 
+        {activeMenu?.type === 'update' && (
+          <UpdateMenu
+            agentLoop={agentLoop}
+            width={W}
+            rows={menuRows}
+            onDone={(message) => {
+              setActiveMenu(null);
+              setFocus(FOCUS_INPUT);
+              if (message) setHistory((prev) => [...prev, { role: 'assistant', isLocal: true, content: message }]);
+            }}
+            onPull={() => {
+              setActiveMenu(null);
+              setFocus(FOCUS_INPUT);
+              handleSubmit('/update pull');
+            }}
+          />
+        )}
+
         {activeMenu?.type === 'mcp' && (() => {
           // v9.0 (`frontend/menus/mcp-view.js`): one list for every integration,
           // read at render so a server that answers redraws its own row.
@@ -1569,11 +1615,21 @@ export function Menus({
             );
             // The verdict, or the install running behind the list.
             const { sub, tight, room } = fit(jobLine(m.job) || homeStatus(report));
+            const short = titleJobLine(m.job, sub);
             return (
-              <Panel width={W} head={head} sub={sub} tight={tight}
+              <Panel width={W} head={short ? <Text wrap="truncate">{` ${short}`}</Text> : head} sub={sub} tight={tight}
                 keys={W >= 70 ? '↑↓ move · enter open · tab or ←/→ tabs · esc close' : '↑↓ · enter · tab · esc'}>
                 <Choices key={tab} limit={room} items={items} initialIndex={m.at ?? homeCursor(items)}
                   onSelect={(item) => doctorPick(m, item.value, items.indexOf(item))} />
+              </Panel>
+            );
+          }
+          if (m.view === 'update-all') {
+            const items = updateAllItems(report);
+            const { sub, tight, room } = fit(UPDATE_ALL_NOTE);
+            return (
+              <Panel width={W} title="Update all" status={sub.length ? null : 'a crash is undone, misbehaving is not'} sub={sub} tight={tight} keys="↑↓ move · enter update · esc back">
+                <Choices limit={room} items={items} onSelect={(item) => doctorPick(m, item.value)} />
               </Panel>
             );
           }

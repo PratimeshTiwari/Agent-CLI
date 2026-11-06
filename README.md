@@ -189,7 +189,8 @@ conversation.
 | `/settings` | everything that is set, on one page |
 | `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v5` (adds your MCP servers); bare `/prompt` compares them |
 | `/chat <link or id>` | continue this session in another Gemini chat |
-| `/doctor` | packages and tools: install, update, pick a version, remove unused |
+| `/doctor` | packages and tools: install, update one or all, pick a version, remove unused |
+| `/update` | pull the latest version, and install the editor companion in VS Code, Cursor or Antigravity |
 | `/diff` · `/undo` | the last edit, and reverting it |
 | `/copy` | the last reply as Markdown · `/copy code` for the last code block |
 | `/shell` | one shell command, then back to the prompt |
@@ -257,7 +258,7 @@ the model, which reads what it needs.
 | A feature fails on a new machine | `agent doctor` lists what is missing; `/doctor fix` installs it; `agent doctor --test` runs the tests |
 | `latest` is blank in `/doctor` | npm could not reach your registry, and the reason is printed; on a work laptop check `npm config get registry` |
 | A dropped PDF or image does nothing in Antigravity | Its agent panel takes those drops. Right-click the file → **Attach to Agent CLI**, or paste the path |
-| After `git pull` | `/update` says what to reload, usually the extension and a restart |
+| After `git pull` | `/update` says what is left; the Chrome extension reloads itself |
 
 ## Release history
 

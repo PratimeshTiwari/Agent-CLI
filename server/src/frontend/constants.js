@@ -61,7 +61,7 @@ const SLASH_COMMANDS = [
   { name: 'mcp', desc: 'MCP servers and Jira, in one list · `/mcp add` adds a server', group: 'config' },
   { name: 'theme', desc: 'Colours — dark, light, colour-blind, terminal, mono', group: 'config' },
   { name: 'name', desc: 'Name the agent — shown in the banner', group: 'config' },
-  { name: 'update', desc: 'Pull the agent\'s own repo, and say what to reload', group: 'agent' },
+  { name: 'update', desc: 'Update the agent and the editor companion', group: 'agent' },
   { name: 'doctor', desc: 'Packages and tools: installed, missing, latest · enter on one says why, updates or picks a version', group: 'agent' },
   { name: 'logs', desc: 'Failures, speed, tool use and notices — each with its answer', group: 'audit' },
   { name: 'restart', desc: 'Restart the server', group: 'agent' },

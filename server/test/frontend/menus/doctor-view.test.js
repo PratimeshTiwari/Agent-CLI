@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   homeItems, homeCursor, homeStatus, findEntry, packageLines, packageActions, versionItems, versionCursor, jobLine,
-  errorLines,
+  errorLines, updateAllItems, titleJobLine,
 } from '../../../src/frontend/menus/doctor-view.js';
 
 const pkg = (over) => ({
@@ -164,4 +164,51 @@ test('optional: Uninstall when installed, Install when removed; Remove unused ga
   assert.match(gone.detail, /removed .*enter to install it/);
   assert.equal(gone.tone, undefined, 'removed is not drawn as a fault');
   assert.ok(!homeItems(report()).some((i) => i.value.kind === 'remove-unused'), 'control: nothing unused, no row');
+});
+
+/* ---------------------------------------------------- Update all (v9.5) */
+
+const behindReport = (packages, registry = { ok: true }) => ({
+  groups: [{ workspace: 'server', dir: '/x/server', packages }], tools: [], registry,
+});
+const newer = (over) => pkg({ latest: '7.2.0', ...over });
+
+test('Update all says how many are newer and how many leave their range', () => {
+  const r = behindReport([newer({ name: 'a' }), newer({ name: 'ink', latest: '8.0.0' })]);
+  const row = homeItems(r).find((i) => i.key === 'update-all');
+  assert.equal(row.detail, '2 newer · 1 outside their range');
+  assert.deepEqual(row.value, { kind: 'update-all' });
+});
+
+test('Update all is not offered with nothing newer, before the registry answers, or on the tools tab', () => {
+  assert.equal(homeItems(behindReport([pkg({ latest: '7.1.1' })])).some((i) => i.key === 'update-all'), false);
+  assert.equal(homeItems(behindReport([pkg()])).some((i) => i.key === 'update-all'), false, 'no latest known yet');
+  const r = behindReport([newer()]);
+  assert.equal(homeItems(r, { tab: 'tools' }).some((i) => i.key === 'update-all'), false);
+  assert.equal(homeItems(r, { tab: 'required' }).some((i) => i.key === 'update-all'), true, 'negative control');
+});
+
+test('the safe half is first, and the risky half names what moves', () => {
+  const items = updateAllItems(behindReport([newer({ name: 'a' }), newer({ name: 'ink', latest: '8.0.0' })]));
+  assert.deepEqual(items.map((i) => i.key), ['inside', 'latest']);
+  assert.deepEqual(items[0].value.list.map((p) => p.name), ['a']);
+  assert.deepEqual(items[1].value.list.map((p) => p.name), ['a', 'ink'], 'all to latest is every package');
+  assert.match(items[1].detail, /ink 8\.0\.0/);
+  assert.equal(items[1].tone, 'attention');
+});
+
+test('a side with nothing in it is not offered', () => {
+  assert.deepEqual(updateAllItems(behindReport([newer()])).map((i) => i.key), ['inside']);
+  assert.deepEqual(updateAllItems(behindReport([newer({ latest: '8.0.0' })])).map((i) => i.key), ['latest']);
+});
+
+test('a job takes the title row only when the subtitle cannot say it', () => {
+  const job = { state: 'running', name: '6 packages', bulk: true };
+  assert.match(titleJobLine(job, []), /Updating 6 packages/);
+  assert.equal(titleJobLine(job, ['◌ Updating 6 packages']), null, 'the subtitle already says it');
+  assert.equal(titleJobLine(null, []), null, 'no job, the tabs stay');
+});
+
+test('a running update says it is several', () => {
+  assert.match(jobLine({ state: 'running', name: '6 packages', bulk: true }), /Updating 6 packages/);
 });

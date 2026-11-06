@@ -1507,3 +1507,20 @@ a caller could "pass it anything a tool handler might have produced".
   During a turn the list is charged to the turn (`midTurnTaskLayout`): it gives way first, so at 15
   rows only the footer's `tasks 0/4` remains. Pty at 15, 17, 20, 24 and 32 rows: 0 clears. **A
   screen sample can land mid-repaint and read as a cut frame: sample twice before believing it.**
+
+## Moved from CLAUDE.md in v9.5
+
+**A session with no user turn is not filed.** `watcher/file-watcher.js` appends
+`[System Event] File X was modified` turns whenever anything on disk changes, so leaving
+the agent open while editing in another window manufactures history containing no prompt.
+Filing those put **6 of 19** rows into a real `/history` picker, every one reading
+`Untitled` with a turn count and nothing to tell them apart — a third of the list was
+watcher noise, in a picker whose only job is choosing. Dropped rather than titled better,
+because a better title is still a row offering to restore a transcript of file
+notifications.
+
+**And the Chrome side panel's diff buttons had never worked.** `appendDiff` wrote
+`onclick="respondToDiff(…)"`, and MV3's default CSP for extension pages refuses inline
+handlers — so Accept and Reject did nothing and a diff could not be answered from the panel.
+The tool-row expander had the same fault. Listeners now, and `diff-buttons.test.js` runs in
+jsdom without `runScripts`, which models the CSP honestly: the old markup fails it.

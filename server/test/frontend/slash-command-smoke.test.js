@@ -278,17 +278,18 @@ describe('a word a command does not take', () => {
     assert.deepEqual(silent, [], `answered as if the word were not there: ${silent.join(', ')}`);
   });
 
-  test('/update lists check, pull and done, and does not wait on the network', () => {
+  test('/update lists the menu and pull, and does not wait on the network', () => {
     const msg = invalidOption('update', ['ayz']);
     assert.match(msg, /`\/update ayz` — no option `ayz`/);
-    for (const form of ['`/update`', '`/update pull`', '`/update done`']) assert.ok(msg.includes(form), form);
+    for (const form of ['`/update`', '`/update pull`']) assert.ok(msg.includes(form), form);
+    assert.match(invalidOption('update', ['done']), /no option `done`/);
     assert.equal(isSlowCommand('update', ['ayz']), false);
     assert.equal(isSlowCommand('update', ['pull']), true);
   });
 
   // Controls: every real form, aliases and free text after a known word pass.
   test('real forms pass', () => {
-    for (const [cmd, args] of [['update', []], ['update', ['pull']], ['update', ['now']], ['update', ['done']],
+    for (const [cmd, args] of [['update', []], ['update', ['pull']], ['update', ['now']],
       ['plan', ['show']], ['copy', ['code']], ['reset', ['--keep-settings']], ['startup', ['warm']],
       ['memory', ['forget', '2']], ['allowlist', ['add', 'npm', 'test']], ['subagents', ['large-files', 'direct']],
       ['subagents', ['solo']], ['auto', []], ['effort', ['whatever']]]) {

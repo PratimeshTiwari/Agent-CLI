@@ -594,6 +594,40 @@ export function newerCount(report) {
   return new Set(behind.map((p) => p.name)).size;
 }
 
+/**
+ * What "Update all" would change, per workspace.
+ *
+ * `outside` is what leaves its range: a major, a 0.x minor, or an exact pin. The
+ * start guard undoes a crash and nothing else, and on 2026-11-06 this list held
+ * `ink` 7 → 8, which this project's frame budget reads the internals of. So the
+ * menu keeps the two apart and names the risky ones (owner's ask, v9.5).
+ *
+ * @returns {Array<{name: string, workspace: string, installed: string, latest: string,
+ *                  range: string, outside: boolean}>}
+ */
+export function updatesAvailable(report) {
+  return report.groups.flatMap((g) => g.packages.map((p) => ({ ...p, workspace: g.workspace, dir: g.dir })))
+    // The companion is not a workspace: `npm install` here would land in the root.
+    .filter((p) => p.workspace !== 'vscode-companion' && p.status === 'ok' && p.installed && p.latest
+      && compareVersions(p.installed, p.latest) < 0)
+    .map(({ name, workspace, dir, installed, latest, range }) => ({
+      name, workspace, dir, installed, latest, range, outside: satisfies(latest, range) === false,
+    }));
+}
+
+/** One `npm install` per workspace and save style, so a pin stays a pin. */
+export function updateCommands(list) {
+  const groups = new Map();
+  for (const p of list) {
+    const args = installArgs({ name: p.name, version: p.latest, workspace: p.workspace, range: p.range });
+    const flags = args.slice(2).join(' ');
+    const key = `${p.workspace}|${flags}`;
+    if (!groups.has(key)) groups.set(key, { specs: [], flags: args.slice(2) });
+    groups.get(key).specs.push(args[1]);
+  }
+  return [...groups.values()].map((g) => ['install', ...g.specs, ...g.flags]);
+}
+
 /** Cut to `width` columns with an ellipsis; a no-op without a width. */
 export function clip(text, width = Infinity) {
   const s = String(text ?? '');
@@ -818,6 +852,38 @@ export function installArgs({ name, version, workspace = 'server', range = '' })
   if (style.startsWith('~')) args.push('--save-prefix=~');
   else if (!style.startsWith('^') && /^\d/.test(style)) args.push('--save-exact');
   return args;
+}
+
+/**
+ * Update several at once, in one `npm install` where it can be: packages that
+ * depend on each other (react and its types) resolve together that way, where
+ * one at a time can hit a peer conflict halfway.
+ *
+ * What is true afterwards is read from disk, because an earlier command may have
+ * landed before a later one failed.
+ *
+ * @returns {Promise<{ok: boolean, updated: string[], failed: string[], error?: string, output?: string[]}>}
+ */
+export async function updatePackages(list, { root = REPO_ROOT, runner = run, timeout = 600_000 } = {}) {
+  let failure = null;
+  for (const args of updateCommands(list)) {
+    const r = await runner('npm', args, { cwd: root, timeout });
+    if (r.error) { failure = r; break; }
+  }
+  const landed = (p) => installedVersion(p.name, p.dir, root)?.version === p.latest;
+  const updated = list.filter(landed).map((p) => p.name);
+  const failed = list.filter((p) => !landed(p)).map((p) => p.name);
+  const ok = !failure && failed.length === 0;
+  if (ok) return { ok, updated, failed };
+  const line = failure && (failure.stderr || failure.error.message || '').split('\n').map((l) => l.trim()).filter(Boolean)
+    .find((l) => /error|ERR!/i.test(l));
+  return {
+    ok,
+    updated,
+    failed,
+    error: failure ? String(line || failure.error.message).replace(/^npm (ERR!|error)\s*/i, '') : `npm finished, and ${failed.join(', ')} did not move`,
+    output: failure ? errorOutput(failure) : [],
+  };
 }
 
 /**

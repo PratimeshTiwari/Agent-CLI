@@ -34,6 +34,8 @@ const home = mkdtempSync(join(tmpdir(), 'agent-test-home-'));
 process.env.AGENT_CLI_HOME = home;
 // `/mcp add`'s secrets: a test must never write to the login Keychain.
 process.env.AGENT_MCP_NO_KEYCHAIN = '1';
+// `/update`'s editors: a test must never find, let alone install into, a real one.
+process.env.AGENT_EDITOR_APPS = '';
 
 process.on('exit', () => {
   try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }

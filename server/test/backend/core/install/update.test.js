@@ -14,7 +14,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -30,16 +30,17 @@ describe('reloadSteps — only what actually moved', () => {
     assert.deepEqual(ids(['server/src/main.js', 'server/test/core/x.test.js']), []);
   });
 
-  test('the bundle Chrome runs means reload the extension', () => {
-    assert.deepEqual(ids(['extension/service-worker.js']), ['extension']);
-    assert.deepEqual(ids(['extension/src/background/content.js']), ['extension']);
-    assert.deepEqual(ids(['extension/manifest.json']), ['extension']);
+  test('the extension asks for nothing: it reloads itself, and its tabs', () => {
+    assert.deepEqual(ids(['extension/service-worker.js', 'extension/src/background/content.js',
+      'extension/manifest.json', 'extension/content-scripts/gemini-bridge.js']), []);
   });
 
-  test('content scripts mean hard-refresh the tab, which is a different step', () => {
-    // They are not bundled and are not re-injected into a page that already has
-    // one, so reloading the extension alone does not reach them.
-    assert.deepEqual(ids(['extension/content-scripts/gemini-bridge.js']), ['tabs']);
+  // Those two reminders went because of these. If one goes, they are owed back.
+  test('what makes that true is still there', () => {
+    const read = (p) => readFileSync(new URL(`../../../../../${p}`, import.meta.url), 'utf8');
+    assert.match(read('extension/src/background/socket.js'), /case 'reload_extension':\s+chrome\.runtime\.reload\(\)/);
+    assert.match(read('extension/src/background/main.js'), /^reinjectModelTabs\(\);$/m);
+    assert.match(read('server/src/backend/bridge/websocket-server.js'), /selfReloadNotice\(client\.extensionVersion\)/);
   });
 
   test('a new .vsix means reinstall the companion', () => {
@@ -51,17 +52,17 @@ describe('reloadSteps — only what actually moved', () => {
     assert.deepEqual(ids(['vscode-companion/extension.js']), []);
   });
 
-  test('everything at once, in the order you would do it', () => {
+  test('everything at once leaves the one step a person has to take', () => {
     assert.deepEqual(ids([
       'server/src/main.js',
       'extension/src/background/socket.js',
       'extension/content-scripts/gemini-bridge.js',
       'vscode-companion/a.vsix',
-    ]), ['extension', 'tabs', 'companion']);
+    ]), ['companion']);
   });
 
   test('each step says how, not just what', () => {
-    for (const step of reloadSteps(['extension/service-worker.js', 'extension/content-scripts/a.js'])) {
+    for (const step of reloadSteps(['vscode-companion/a.vsix'])) {
       assert.ok(step.what && step.how, `${step.id} has no instruction`);
       assert.ok(step.how.length > 10, `${step.id}'s "how" is not actionable`);
     }
@@ -273,7 +274,7 @@ describe('the reminder survives a restart', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  const STEPS = [{ id: 'extension', what: 'Reload the Chrome extension', how: 'chrome://extensions' }];
+  const STEPS = [{ id: 'companion', what: 'Update the editor companion', how: '/update' }];
 
   test('saved, then read back after what would be a restart', () => {
     assert.equal(readPendingReload(), null);
@@ -290,6 +291,13 @@ describe('the reminder survives a restart', () => {
     assert.ok(readPendingReload());
     assert.ok(readPendingReload(), 'reading it consumed it');
     assert.ok(readPendingReload());
+  });
+
+  test('a step saved by an older agent, which no one has to do now, is not shown', () => {
+    savePendingReload([{ id: 'extension', what: 'Reload the Chrome extension', how: 'x' }, ...STEPS]);
+    assert.deepEqual(readPendingReload().steps.map((s) => s.id), ['companion']);
+    savePendingReload([{ id: 'tabs', what: 'Hard-refresh the model tab', how: 'x' }]);
+    assert.equal(readPendingReload(), null);
   });
 
   test('cleared only when the user says so', () => {
@@ -451,19 +459,19 @@ describe('what /update says, one line each', () => {
 
   test('updates waiting: from → to, how many releases, the command', () => {
     assert.equal(updateLine({ available: true, version: 'v6.0', latest: 'v6.2', releases: 2, behind: 7 }),
-      '⬆ v6.0 → v6.2 · 2 releases · `/update pull`');
+      '⬆ v6.0 → v6.2 · 2 releases · `/update`');
     assert.equal(updateLine({ available: true, version: 'v6.0', latest: 'v6.1', releases: 1 }),
-      '⬆ v6.0 → v6.1 · 1 release · `/update pull`');
+      '⬆ v6.0 → v6.1 · 1 release · `/update`');
   });
 
   test('no versions to name: commits, still one line', () => {
-    assert.equal(updateLine({ available: true, behind: 30 }), '⬆ 30 updates · `/update pull`');
+    assert.equal(updateLine({ available: true, behind: 30 }), '⬆ 30 updates · `/update`');
   });
 
   test('after a pull: versions, files, what to reload, what happens next', () => {
-    const steps = reloadSteps(['extension/service-worker.js']);
+    const steps = reloadSteps(['vscode-companion/a.vsix']);
     assert.equal(pulledLine({ fromVersion: 'v6.0', toVersion: 'v6.2', files: Array(14).fill('f'), steps }, { then: 'restarting…' }),
-      '✔ Updated v6.0 → v6.2 · 14 files · reload the Chrome extension · restarting…');
+      '✔ Updated v6.0 → v6.2 · 14 files · update the editor companion · restarting…');
     assert.equal(pulledLine({ files: ['a'] }), '✔ Updated · 1 file');
   });
 });

@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import {
   PACKAGES, TOOLS, REPO_ROOT, packageInfo, satisfies, compareVersions, readManifests, checkInstalled,
   problems, startupWarning, lookupLatest, checkHealth, formatReport, summaryLine, describePackage,
-  findImporters, runDoctorCli, installArgs, installPackage, listVersions, applyLatest, clip, newerCount, installTool, errorOutput, checkTools,
+  findImporters, runDoctorCli, installArgs, installPackage, listVersions, applyLatest, clip, newerCount, installTool, errorOutput, checkTools, updatesAvailable, updateCommands, updatePackages,
 } from '../../../../src/backend/core/install/doctor.js';
 
 const SRC = new URL('../../../../src/', import.meta.url).pathname;
@@ -142,12 +142,15 @@ describe('an optional package uninstalled from the menu', () => {
     done();
   });
 
-  test('restore ranges match what the real manifest declares', () => {
+  // The same major, not the same string: `/doctor` rewrites package.json on every
+  // update, and the stale range only ever installs a slightly older version.
+  test('restore ranges are on the major the real manifest declares', () => {
     const declared = Object.fromEntries(readManifests(REPO_ROOT).flatMap((m) => m.declared.map((d) => [`${m.workspace}:${d.name}`, d.range])));
+    const major = (range) => /\d+/.exec(range)?.[0];
     for (const [name, info] of Object.entries(PACKAGES)) {
       if (!info.restore) continue;
       const range = declared[`${info.restore.workspace}:${name}`];
-      if (range) assert.equal(info.restore.range, range, `${name}: restore.range drifted from package.json`);
+      if (range) assert.equal(major(info.restore.range), major(range), `${name}: restore.range drifted from package.json`);
     }
   });
 });
@@ -358,4 +361,123 @@ test('agent doctor --test runs the suite in the checkout and passes its verdict 
   lines.length = 0;
   assert.equal(await runDoctorCli(['--test'], { out, root: '/x/agent', runTests: async () => 1 }), 1);
   assert.match(lines.join(''), /✗ Some tests failed/);
+});
+
+/* ---------------------------------------------------- Update all (v9.5) */
+
+describe('updating everything at once', () => {
+  const entry = (name, installed, latest, range, over = {}) => ({ name, installed, latest, range, status: 'ok', ...over });
+  const reportOf = (workspace, packages) => ({ groups: [{ workspace, dir: `/x/${workspace}`, packages }] });
+
+  test('a range is left by a major, a 0.x minor or a pin, and stayed in otherwise', () => {
+    const found = updatesAvailable(reportOf('server', [
+      entry('patch', '1.2.3', '1.2.4', '^1.2.3'),
+      entry('major', '7.1.1', '8.0.0', '^7.1.1'),
+      entry('zero', '0.23.1', '0.28.2', '^0.23.1'),
+      entry('pinned', '1.8.1', '1.8.2', '1.8.1'),
+      entry('tilde', '2.1.0', '2.2.0', '~2.1.0'),
+    ]));
+    assert.deepEqual(Object.fromEntries(found.map((p) => [p.name, p.outside])),
+      { patch: false, major: true, zero: true, pinned: true, tilde: true });
+  });
+
+  test('only what is installed, fine and behind', () => {
+    assert.deepEqual(updatesAvailable(reportOf('server', [
+      entry('same', '1.0.0', '1.0.0', '^1.0.0'),
+      entry('ahead', '2.0.0', '1.0.0', '^1.0.0'),
+      entry('none', '1.0.0', null, '^1.0.0'),
+      entry('gone', null, '1.0.0', '^1.0.0', { status: 'missing' }),
+      entry('wrong', '1.0.0', '2.0.0', '^2.0.0', { status: 'mismatch' }),
+    ])), []);
+    assert.equal(updatesAvailable(reportOf('server', [entry('real', '1.0.0', '1.0.1', '^1.0.0')])).length, 1, 'negative control');
+  });
+
+  test('the companion is left out, or its packages would land in the root', () => {
+    assert.deepEqual(updatesAvailable(reportOf('vscode-companion', [entry('x', '1.0.0', '2.0.0', '^1.0.0')])), []);
+  });
+
+  test('one npm install per workspace and save style, so a pin stays a pin', () => {
+    const list = updatesAvailable({ groups: [
+      { workspace: 'server', dir: '/x/server', packages: [
+        entry('react', '19.2.8', '19.3.1', '^19.2.8'),
+        entry('ws', '8.21.3', '8.22.1', '^8.21.3'),
+        entry('unpdf', '1.8.1', '1.9.0', '1.8.1'),
+      ] },
+      { workspace: 'root', dir: '/x', packages: [entry('jsdom', '26.0.0', '26.1.0', '^26.0.0')] },
+    ] });
+    assert.deepEqual(updateCommands(list), [
+      ['install', 'react@19.3.1', 'ws@8.22.1', '--workspace=server'],
+      ['install', 'unpdf@1.9.0', '--workspace=server', '--save-exact'],
+      ['install', 'jsdom@26.1.0'],
+    ]);
+  });
+
+  /** A root whose `node_modules` an npm stand-in can move. */
+  function fakeRoot() {
+    const root = mkdtempSync(join(tmpdir(), 'update-all-'));
+    const put = (name, version) => {
+      mkdirSync(join(root, 'node_modules', name), { recursive: true });
+      writeFileSync(join(root, 'node_modules', name, 'package.json'), JSON.stringify({ name, version }));
+    };
+    return { root, put };
+  }
+  const item = (root, name, latest, workspace = 'root') => ({
+    name, latest, installed: '1.0.0', range: '^1.0.0', workspace, dir: root,
+  });
+
+  test('what landed is read from disk, and npm being happy is not enough', async () => {
+    const { root, put } = fakeRoot();
+    put('a', '1.0.0'); put('b', '1.0.0');
+    const calls = [];
+    const r = await updatePackages([item(root, 'a', '1.1.0'), item(root, 'b', '1.1.0')], {
+      root, runner: async (cmd, args) => { calls.push([cmd, ...args]); put('a', '1.1.0'); return {}; },
+    });
+    assert.deepEqual(calls, [['npm', 'install', 'a@1.1.0', 'b@1.1.0']]);
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.updated, ['a']);
+    assert.deepEqual(r.failed, ['b']);
+    assert.match(r.error, /b did not move/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('all landed is ok', async () => {
+    const { root, put } = fakeRoot();
+    put('a', '1.0.0');
+    const r = await updatePackages([item(root, 'a', '1.1.0')], { root, runner: async () => { put('a', '1.1.0'); return {}; } });
+    assert.deepEqual(r, { ok: true, updated: ['a'], failed: [] });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('a refusal stops the commands after it', async () => {
+    const { root, put } = fakeRoot();
+    for (const n of ['a', 'b', 'c']) put(n, '1.0.0');
+    const calls = [];
+    await updatePackages([item(root, 'a', '1.1.0', 'root'), item(root, 'b', '1.1.0', 'server'), item(root, 'c', '1.1.0', 'extension')], {
+      root, runner: async (_cmd, args) => { calls.push(args[1]); return args[1].startsWith('b') ? { error: new Error('no') } : {}; },
+    });
+    assert.deepEqual(calls, ['a@1.1.0', 'b@1.1.0']);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('a refusal stops the rest and says npm\'s reason, keeping what already landed', async () => {
+    const { root, put } = fakeRoot();
+    put('a', '1.0.0'); put('b', '1.0.0');
+    const list = [item(root, 'a', '1.1.0', 'root'), { ...item(root, 'b', '1.1.0', 'server') }];
+    let n = 0;
+    const r = await updatePackages(list, {
+      root,
+      runner: async () => {
+        n += 1;
+        if (n === 1) { put('a', '1.1.0'); return {}; }
+        return { error: new Error('Command failed'), stdout: '', stderr: 'npm error code ERESOLVE\nnpm error peer react@18\n' };
+      },
+    });
+    assert.equal(n, 2);
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.updated, ['a']);
+    assert.deepEqual(r.failed, ['b']);
+    assert.equal(r.error, 'code ERESOLVE');
+    assert.ok(r.output.length, 'the error page has something to show');
+    rmSync(root, { recursive: true, force: true });
+  });
 });

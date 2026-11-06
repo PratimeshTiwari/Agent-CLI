@@ -131,10 +131,8 @@ export const SLOW_COMMANDS = new Set(['compact', 'jira']);
  * Whether *this invocation* is worth a spinner.
  *
  * A set could only answer for a whole command, and `/update` is two commands
- * wearing one name. Bare `/update` runs `checkForUpdate`, which is
- * `git fetch origin` — measured at **1,086 ms** on a warm connection and
- * bounded by `FETCH_TIMEOUT_MS` at **10 s** on a cold one. `/update done` reads
- * a file and answers instantly.
+ * wearing one name. `/update pull` fetches, merges and may `npm install`; bare
+ * `/update` opens a menu at once and runs its `git fetch` behind it (v9.5).
  *
  * Reported from use as *"/update seems glitched out, its loading is a bit late
  * and no loading animation"*, which is exactly what a second to ten seconds of
@@ -162,7 +160,7 @@ export const SLOW_COMMANDS = new Set(['compact', 'jira']);
  * its own words already (`/effort`, `/logs`, `/theme`, `/prompt`, `/doctor`).
  */
 export const COMMAND_OPTIONS = {
-  update: [['', 'check for a newer version'], ['pull', 'pull it and install'], ['done', 'clear the reload notice']],
+  update: [['', 'open the menu: update, editor companion'], ['pull', 'pull it and install']],
   plan: [['', 'switch to plan mode'], ['show', 'preview the current plan']],
   copy: [['', 'copy the last reply'], ['code', 'copy its last code block']],
   reset: [['', 'move this repo\'s agent state to the trash'], ['--keep-settings', 'keep config.json and memory.md']],
@@ -209,11 +207,9 @@ export function invalidOption(command, args = []) {
 
 export function isSlowCommand(command, args = []) {
   if (SLOW_COMMANDS.has(command)) return true;
-  // Every form but `done` reaches the network: bare reports, `pull`/`now` also
-  // merge and may `npm install`.
   // A word it does not take is answered at once (`invalidOption`), so only
   // the forms that reach the network wait.
-  if (command === 'update') return ['', 'pull', 'now'].includes((args[0] || '').toLowerCase());
+  if (command === 'update') return ['pull', 'now'].includes((args[0] || '').toLowerCase());
   // `fix` runs `npm install` and `report` asks the registry (`npm outdated`,
   // ~1s); the menu opens on what is on disk and fills the registry in behind.
   if (command === 'mcp') return (args[0] || '').toLowerCase() === 'reload';
