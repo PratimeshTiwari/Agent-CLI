@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import {
-  envLine, nameProblem, parseServerInput, planEnv, shellSplit, suggestName, tryServer,
+  envLine, headerValue, nameProblem, parseServerInput, planEnv, shellSplit, suggestName, tryServer, valuesLine, withValues,
 } from '../../../../src/backend/mcp/client/add-server.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../fixtures/mcp-fixture-server.js', import.meta.url));
@@ -44,13 +44,21 @@ test('claude mcp add', () => {
   const out = parseServerInput('claude mcp add -s user -e A=1 --transport stdio gh -- npx -y foo');
   assert.equal(out.name, 'gh');
   assert.deepEqual(out.entry, { command: 'npx', args: ['-y', 'foo'], env: { A: '1' } });
-  assert.match(parseServerInput('claude mcp add --transport http x https://a.b').problem, /remote/);
+  const remote = parseServerInput('claude mcp add --transport http -H "X-Api-Key: abc" -s user x https://a.b/mcp');
+  assert.equal(remote.name, 'x');
+  assert.equal(remote.problem, undefined);
+  assert.deepEqual(remote.entry, { type: 'http', url: 'https://a.b/mcp', headers: { 'X-Api-Key': 'abc' } });
+  assert.match(parseServerInput('claude mcp add --transport sse x https://a.b').problem, /SSE/);
+  assert.match(parseServerInput('claude mcp add --transport http x').problem, /no address/);
+  assert.match(parseServerInput('claude mcp add --transport http x http://a.b').problem, /only for this machine/);
 });
 
 test('what cannot be used says why, and nothing guesses', () => {
   assert.match(parseServerInput('').problem, /Paste/);
-  assert.match(parseServerInput('https://mcp.example.com/sse').problem, /not supported yet/);
-  assert.match(parseServerInput('{ "x": { "url": "https://a.b" } }').problem, /not supported yet/);
+  assert.match(parseServerInput('http://mcp.example.com/mcp').problem, /only for this machine/);
+  assert.match(parseServerInput('{ "x": { "type": "sse", "url": "https://a.b" } }').problem, /SSE/);
+  assert.match(parseServerInput('{ "x": { "url": "https://a.b", "headers": [] } }').problem, /headers/);
+  assert.match(parseServerInput('{ "x": { "url": "https://a.b", "headers": { "a b": "c" } } }').problem, /header name/);
   assert.match(parseServerInput('{ "a": { "command": "x" }, "b": { "command": "y" } }').problem, /2 servers .*a, b/);
   assert.match(parseServerInput('{ "a": { "args": [] } }').problem, /command/);
   assert.match(parseServerInput('{ "a": { "command": "x", "args": "y" } }').problem, /args/);
@@ -122,4 +130,38 @@ test('a command that does not exist is an answer, not a throw', async () => {
   const out = await tryServer('t', { command: 'no-such-command-here-x' }, {}).result;
   assert.equal(out.ok, false);
   assert.ok(out.error);
+});
+
+test('an address, bare or in JSON, is a server', () => {
+  assert.deepEqual(parseServerInput('https://mcp.example.com/mcp').entry, { type: 'http', url: 'https://mcp.example.com/mcp' });
+  assert.equal(parseServerInput('https://mcp.example.com/mcp').problem, undefined);
+  const out = parseServerInput('{ "x": { "url": "https://a.b/mcp", "headers": { "Authorization": "Bearer ${T}" } } }');
+  assert.equal(out.problem, undefined);
+  assert.equal(out.name, 'x');
+  assert.equal(suggestName({ url: 'https://mcp.linear.app/mcp' }), 'linear');
+  assert.equal(suggestName({ url: 'http://localhost:3000/mcp' }), 'localhost');
+  assert.equal(suggestName({ url: 'http://127.0.0.1:3000/mcp' }), 'local', 'never the last digit of an address');
+  assert.equal(suggestName({ url: 'https://mcp.linear.app/mcp' }, ['linear']), 'linear-2');
+});
+
+test('a header placeholder is asked for, and the scheme stays out of the question', () => {
+  const entry = { url: 'https://a.b', headers: { Authorization: 'Bearer <your-token>', 'X-Team': 'core', 'X-Api-Key': 'abc123', Other: 'Bearer ${UNSET_ONE}' } };
+  const { ask, keep } = planEnv(entry, {});
+  assert.deepEqual(ask.map((a) => a.key), ['Authorization', 'Other']);
+  assert.equal(ask[0].hidden, true);
+  assert.deepEqual(keep, ['X-Api-Key']);
+});
+
+test('typed values land in the header, keeping the scheme it had', () => {
+  assert.equal(headerValue('Bearer <token>', 'abc'), 'Bearer abc');
+  assert.equal(headerValue('Bearer <token>', 'Bearer abc'), 'Bearer abc', 'pasted whole');
+  assert.equal(headerValue('<token>', 'abc'), 'abc');
+  assert.equal(headerValue('kept'), 'kept');
+  assert.deepEqual(withValues({ url: 'u', headers: { A: 'Bearer <t>', B: 'x' } }, { A: 'tok' }).headers, { A: 'Bearer tok', B: 'x' });
+  assert.deepEqual(withValues({ command: 'c', env: { A: '' } }, { A: 'v' }).env, { A: 'v' }, 'control: a command keeps env');
+});
+
+test('the check step names a header and shows where a reference reads from', () => {
+  assert.equal(valuesLine({ url: 'u', headers: { 'X-Team': 'core', Authorization: 'Bearer abc' } }), 'X-Team=core Authorization');
+  assert.equal(valuesLine({ url: 'u', headers: { Authorization: 'Bearer ${AWS_SECRET}' } }), 'Authorization=Bearer ${AWS_SECRET}');
 });

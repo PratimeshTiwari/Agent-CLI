@@ -50,8 +50,8 @@ export function stepBack(state) {
   return { ...state, step: 'check', result: null, error: null };
 }
 
-/** The command as the check step shows it. A value is never drawn, only its name. */
-export const commandLine = (entry) => [entry.command, ...(entry.args || [])].join(' ');
+/** The command or address as the check step shows it. A value is never drawn, only its name. */
+export const commandLine = (entry) => entry.url || [entry.command, ...(entry.args || [])].join(' ');
 
 /**
  * The check step exists to show what will run, so the command wraps instead of

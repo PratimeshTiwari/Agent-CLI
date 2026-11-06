@@ -12,6 +12,11 @@
  * A server sees only the SDK's short list of inherited variables (PATH, HOME…)
  * plus its own `env`, so a token in the agent's environment does not reach it
  * unless the config says so.
+ *
+ * **A redirect to another origin is refused, and that is the SDK's default**
+ * (`redirectPolicy: 'same-origin'`). fetch alone would carry `X-Api-Key` along,
+ * since it drops only `Authorization`. Do not pass `'follow'`: a test holds this,
+ * and also that a redirect within the address still works.
  */
 import { scrub } from './config.js';
 
@@ -24,11 +29,12 @@ export class McpSdkMissing extends Error {}
 
 async function loadSdk() {
   try {
-    const [{ Client }, { StdioClientTransport }] = await Promise.all([
+    const [{ Client }, { StdioClientTransport }, { StreamableHTTPClientTransport }] = await Promise.all([
       import('@modelcontextprotocol/sdk/client/index.js'),
       import('@modelcontextprotocol/sdk/client/stdio.js'),
+      import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
     ]);
-    return { Client, StdioClientTransport };
+    return { Client, StdioClientTransport, StreamableHTTPClientTransport };
   } catch (err) {
     throw new McpSdkMissing(`@modelcontextprotocol/sdk is not installed (${err.code || err.message})`);
   }
@@ -65,10 +71,19 @@ export class McpConnection {
     return this.transport?.pid ?? null;
   }
 
+  /** The way this server is reached. Stdio has a child; HTTP has only an address. */
+  _transport(sdk) {
+    const { command, args, env, url, headers, transport } = this.server;
+    if (transport === 'http') {
+      return new sdk.StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } });
+    }
+    return new sdk.StdioClientTransport({ command, args, env, cwd: this.cwd, stderr: 'pipe' });
+  }
+
   async connect() {
-    const { Client, StdioClientTransport } = await this.sdk();
-    const { command, args, env } = this.server;
-    this.transport = new StdioClientTransport({ command, args, env, cwd: this.cwd, stderr: 'pipe' });
+    const sdk = await this.sdk();
+    const { Client } = sdk;
+    this.transport = this._transport(sdk);
     this.client = new Client({ name: 'agent-cli', version: '1' });
     this.client.onclose = () => this.onClose?.();
     // Exists from the constructor with `stderr: 'pipe'`, before the child does.
@@ -85,8 +100,13 @@ export class McpConnection {
 
   /** One line: what went wrong, with what the server said about it if anything. */
   describeFailure(err) {
+    if (err?.code === 401) {
+      return 'the server wants a sign-in: put a token in `headers` (OAuth is not supported yet)';
+    }
     const said = this.stderrTail.trim().split('\n').pop() || '';
-    const message = String(err?.message ?? 'it failed');
+    // fetch's own words are in `cause`: "fetch failed" alone says nothing.
+    const cause = err?.cause?.message ? ` (${err.cause.message})` : '';
+    const message = `${String(err?.message ?? 'it failed')}${cause}`;
     // The server's own words go first: this is a row, cut from the right. The
     // SDK's "Connection closed" says only that the process went.
     const raw = /Connection closed/.test(message) ? said || 'it stopped before answering'
@@ -117,6 +137,15 @@ export class McpConnection {
    */
   async callTool(name, args, { signal, timeoutMs = CALL_TIMEOUT_MS } = {}) {
     return this.client.callTool({ name, arguments: args }, undefined, { signal, timeout: timeoutMs });
+  }
+
+  /**
+   * An HTTP server does not end the way a child does: nothing tells us. A session
+   * it has forgotten (404) or an address that stopped answering shows up as a
+   * failed call, and the next call needs a fresh start.
+   */
+  isGone(err) {
+    return this.server.transport === 'http' && (err?.code === 404 || err instanceof TypeError);
   }
 
   async close() {

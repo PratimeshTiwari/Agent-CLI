@@ -25,7 +25,7 @@ export const serverLine = (row) => statusLine(row);
 
 const tone = (row, T) => {
   if (row.state === 'failed' || row.state === 'invalid') return { colour: T.danger };
-  if (row.state === 'connecting') return { colour: T.attention };
+  if (row.state === 'connecting' || row.state === 'unapproved') return { colour: T.attention };
   return {};
 };
 
@@ -37,12 +37,17 @@ export function mcpHomeItems(list, { T = {}, needsPrompt = false } = {}) {
     ...tone(row, T),
   }));
   if (list.error) items.unshift({ label: 'mcp.json', detail: list.error, value: '', colour: T.danger });
-  else items.unshift({ label: 'Add a server', detail: 'paste its command or JSON', value: 'add' });
+  else items.unshift({ label: 'Add a server', detail: 'paste its command, address or JSON', value: 'add' });
   // Nothing moves on its own: the row offers it, and enter is the yes.
-  if (needsPrompt && list.rows.some((r) => !r.builtin && r.state !== 'invalid' && r.state !== 'disabled')) {
+  if (needsPrompt && list.rows.some((r) => !r.builtin && !['invalid', 'disabled', 'unapproved'].includes(r.state))) {
     items.push({ label: 'Use prompt v5', detail: 'lets the model call these, and teaches the chat again', value: 'prompt' });
   }
-  if (list.exists) items.push({ label: 'Reload', detail: 'read mcp.json again and restart every server', value: 'reload' });
+  // A row, not the line under the title: a short terminal sheds that one.
+  if (list.repo?.error) items.push({ label: '.mcp.json', detail: list.repo.error, value: '', colour: T.danger });
+  for (const name of list.repo?.shadowed || []) {
+    items.push({ label: name, detail: `.mcp.json has this name too · yours is the one used`, value: '' });
+  }
+  if (list.exists || list.repo?.exists) items.push({ label: 'Reload', detail: 'read the files again and restart every server', value: 'reload' });
   return items;
 }
 
@@ -55,7 +60,8 @@ const firstLine = (text) => String(text || '').trim().split('\n')[0];
  */
 export function serverToolItems(row, { said = false, switchOf = null } = {}) {
   // What a person can do to the server itself, before any list of tools.
-  const manage = row.builtin || !switchOf ? [] : [
+  const inMcpJson = row.source !== 'repo';
+  const manage = row.builtin || !switchOf ? [] : !inMcpJson ? [{ label: 'Stop allowing', detail: 'it will ask again', value: '', key: 'forget', action: 'forget' }] : [
     ...(row.state === 'invalid' ? [] : [{ label: row.state === 'disabled' ? 'Turn on' : 'Turn off', value: '', key: 'toggle', action: 'toggle' }]),
     { label: 'Remove', value: '', key: 'remove', action: 'remove' },
   ];
@@ -69,3 +75,12 @@ export function serverToolItems(row, { said = false, switchOf = null } = {}) {
     ...row.tools.map((t) => ({ label: t.name, detail: `${switchOf(t.name)} · ${firstLine(t.description)}`, value: t.name })),
   ];
 }
+
+/** The choices a repo's server is met with. No starts it: a stray enter must not. */
+export const ALLOW_ITEMS = [
+  { label: 'Don\'t allow', detail: 'nothing runs', value: 'no' },
+  { label: 'Allow', detail: 'for this folder, until the entry changes', value: 'yes' },
+];
+
+/** Where a server's page says it came from. */
+export const serverOrigin = (row) => (row.builtin ? 'built in' : row.source === 'repo' ? '.mcp.json · this repo' : 'mcp.json');

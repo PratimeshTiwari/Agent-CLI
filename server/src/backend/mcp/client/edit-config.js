@@ -6,7 +6,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { mcpConfigPath } from './config.js';
-import { isSecretName } from './add-server.js';
+import { headerValue, isSecretName } from './add-server.js';
 import { removeSecret, secretKey, secretRef, storeSecret } from './secrets.js';
 
 function readRaw(path) {
@@ -29,6 +29,24 @@ function writeRaw(path, raw) {
 }
 
 /**
+ * A header's token goes to the store with the scheme left in the file, so the
+ * Keychain holds a plain token and `Bearer ${secret:…}` reads as what it is.
+ */
+function sealHeaders(name, headers, values) {
+  const out = {};
+  for (const [key, pasted] of Object.entries(headers)) {
+    const value = headerValue(pasted, values[key]);
+    const scheme = value.match(/^bearer\s+/i)?.[0] ?? '';
+    const token = value.slice(scheme.length);
+    if (!isSecretName(key) || token.startsWith('${')) { out[key] = value; continue; }
+    const variable = key.replace(/-/g, '_');
+    storeSecret(secretKey(name, variable), token);
+    out[key] = `${scheme}${secretRef(name, variable)}`;
+  }
+  return out;
+}
+
+/**
  * @param {string} name
  * @param {object} entry - as parsed
  * @param {Object<string, string>} values - what was typed
@@ -36,6 +54,16 @@ function writeRaw(path, raw) {
  */
 export function saveServer(name, entry, values = {}, { path = mcpConfigPath() } = {}) {
   const raw = readRaw(path);
+  if (entry.url) {
+    raw.mcpServers[name] = {
+      type: 'http',
+      url: entry.url,
+      ...(entry.headers ? { headers: sealHeaders(name, entry.headers, values) } : {}),
+      ...(entry.alwaysAsk === true ? { alwaysAsk: true } : {}),
+    };
+    writeRaw(path, raw);
+    return;
+  }
   const env = {};
   for (const [key, value] of Object.entries({ ...entry.env, ...values })) {
     const literal = String(value);
@@ -69,8 +97,8 @@ export function removeServer(name, { path = mcpConfigPath() } = {}) {
   if (!entry) throw new Error(`mcp.json has no server called ${name}.`);
   delete raw.mcpServers[name];
   writeRaw(path, raw);
-  for (const value of Object.values(entry.env || {})) {
-    const key = String(value).match(/^\$\{secret:([^}]+)\}$/)?.[1];
+  for (const value of [...Object.values(entry.env || {}), ...Object.values(entry.headers || {})]) {
+    const key = String(value).match(/\$\{secret:([^}]+)\}/)?.[1];
     if (key) removeSecret(key);
   }
 }

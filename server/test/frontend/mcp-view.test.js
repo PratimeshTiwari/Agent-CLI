@@ -1,7 +1,9 @@
 /** `/mcp`'s rows (v9.0). */
+import { statusLine } from '../../src/backend/mcp/client/integrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mcpHomeItems, serverToolItems, homeLine } from '../../src/frontend/menus/mcp-view.js';
+import { mcpHomeItems, serverToolItems, homeLine, ALLOW_ITEMS, serverOrigin,
+} from '../../src/frontend/menus/mcp-view.js';
 
 const T = { danger: 'red', attention: 'yellow' };
 const row = (over) => ({ name: 's', state: 'ready', tools: [{ name: 'echo', description: 'one\ntwo' }], ...over });
@@ -72,4 +74,28 @@ test('a status is drawn once, wherever it had room', () => {
   const failed = row({ tools: [], state: 'failed', error: 'x' });
   assert.equal(serverToolItems(failed, { said: true })[0].detail, '');
   assert.equal(serverToolItems(failed, { said: false })[0].detail, 'failed · x');
+});
+
+test('a repo\'s server waits, the first answer runs nothing, and it has no mcp.json actions', () => {
+  const row = { name: 's', source: 'repo', state: 'unapproved', tools: [], error: null, changed: false };
+  const items = mcpHomeItems({ rows: [row], exists: false, repo: { exists: true, error: null, shadowed: [] } }, { T: { attention: 'A' }, needsPrompt: true });
+  const found = items.find((i) => i.label === 's');
+  assert.match(found.detail, /needs your ok/);
+  assert.equal(found.colour, 'A');
+  assert.ok(!items.some((i) => i.value === 'prompt'), 'nothing to teach the chat yet');
+  assert.ok(items.some((i) => i.value === 'reload'), 'a repo file alone can be reloaded');
+  assert.match(statusLine({ ...row, changed: true }), /changed/);
+  assert.equal(ALLOW_ITEMS[0].value, 'no');
+  const page = serverToolItems({ ...row, state: 'ready', tools: [{ name: 't' }] }, { switchOf: () => 'ask' });
+  assert.ok(page.some((i) => i.action === 'forget'));
+  assert.ok(!page.some((i) => i.action === 'remove' || i.action === 'toggle'));
+  const mine = serverToolItems({ name: 'm', source: 'user', state: 'ready', tools: [{ name: 't' }] }, { switchOf: () => 'ask' });
+  assert.ok(mine.some((i) => i.action === 'remove'), 'control');
+  assert.equal(serverOrigin(row), '.mcp.json · this repo');
+});
+
+test('a broken .mcp.json and a shadowed name are rows', () => {
+  const items = mcpHomeItems({ rows: [], exists: true, repo: { exists: true, error: 'not valid JSON', shadowed: ['gh'] } }, { T: { danger: 'D' } });
+  assert.equal(items.find((i) => i.label === '.mcp.json').colour, 'D');
+  assert.match(items.find((i) => i.label === 'gh').detail, /yours is the one used/);
 });

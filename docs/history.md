@@ -1524,3 +1524,11 @@ notifications.
 handlers — so Accept and Reject did nothing and a diff could not be answered from the panel.
 The tool-row expander had the same fault. Listeners now, and `diff-buttons.test.js` runs in
 jsdom without `runScripts`, which models the CSP honestly: the old markup fails it.
+
+**Two shortcuts reach the panels (v5.3).** `cmd+alt+j` in the editor focuses the chat view —
+next to `cmd+alt+l` (Add to Agent Chat), and deliberately not `cmd+esc`, which the Claude Code
+extension owns, nor `Ctrl+G`, which Chrome grabs globally for its own Gemini panel before the
+editor sees it. In Chrome, `open-floating-panel` is a **global** command (`Ctrl+Shift+1`,
+`⌘⇧1`): it fires while Chrome is in the background and focuses the floating window rather than
+opening a second. Chrome's Gemini panel itself (`chrome://glic`) is browser UI with no
+extension API — it cannot be the bridge, and nothing here tries to reach it.
