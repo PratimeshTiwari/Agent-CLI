@@ -30,7 +30,7 @@ export async function mcpDescribe({ server, tool } = {}, ctx = {}) {
   const mcp = servers(ctx, 'mcp_describe');
   knownServer(mcp, server);
   const tools = await mcp.toolsOf(server);
-  const open = tools.filter((t) => switchFor(server, t.name) !== 'block');
+  const open = tools.filter((t) => switchFor(mcp.switchKey(server), t.name) !== 'block');
   if (tool) {
     const found = open.find((t) => t.name === tool);
     if (!found) throw new Error(`${server} has no tool "${tool}". Its tools: ${open.map((t) => t.name).join(', ')}.`);
@@ -44,7 +44,7 @@ export async function mcpDescribe({ server, tool } = {}, ctx = {}) {
 export async function mcpTool({ server, tool, args = {} } = {}, ctx = {}) {
   const mcp = servers(ctx, 'mcp_tool');
   knownServer(mcp, server);
-  const value = switchFor(server, tool);
+  const value = switchFor(mcp.switchKey(server), tool);
   const decision = mcpDecision(value, ctx.mode, { alwaysAsk: mcp.alwaysAsks(server) });
   if (decision === 'refuse') throw new Error(`${server} · ${tool} is blocked by the user. Do not retry it.`);
   if (!consumeApproval(ctx.approval) && decision !== 'run') {

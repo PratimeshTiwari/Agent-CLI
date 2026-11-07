@@ -21,7 +21,7 @@ const offered = (loop) => Boolean(resolvePromptVersion(loop.promptVersion).flags
 
 function decide(loop, call) {
   const { server, tool } = call.args || {};
-  const mcpSwitch = switchFor(server, tool);
+  const mcpSwitch = switchFor(loop.mcp.switchKey(server), tool);
   const alwaysAsk = loop.mcp.alwaysAsks(server);
   return {
     alwaysAsk,
@@ -99,7 +99,7 @@ export async function runMcpTool(loop, call, context = {}) {
       logCommand(loop.workspace, { ...audit, outcome: 'rejected' });
       return { success: false, error: 'User rejected: nothing was run. Do not retry it; ask what they want changed.' };
     }
-    if (answer.always && !decision.alwaysAsk) setSwitch(server, tool, 'auto');
+    if (answer.always && !decision.alwaysAsk) setSwitch(loop.mcp.switchKey(server), tool, 'auto');
     approval = issueApproval();
   }
 

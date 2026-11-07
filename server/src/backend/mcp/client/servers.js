@@ -10,6 +10,9 @@
  * edited entry does not show the old one's tools. It holds names and
  * descriptions, never the env.
  *
+ * Nothing from a repo's `.mcp.json` starts until it is allowed (`allow`). `connect`
+ * is the one way in, and it refuses; the prompt, the tools and `/mcp` all go through it.
+ *
  * Children die with us. stdin closing ends a well-behaved server, but `exit` is
  * the one hook every way out reaches and a child left running is a process the
  * person never asked to keep, so each pid is killed there too.
@@ -18,8 +21,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import { homeDir } from '../../core/workspace/paths.js';
 import { logError } from '../../core/logs/error-log.js';
-import { loadMcpConfig, scrub } from './config.js';
+import { loadServers, scrub } from './config.js';
 import { McpConnection, McpSdkMissing } from './connection.js';
+import { reviewOf } from './add-server.js';
+import { allowRepoServer, forgetRepoServer } from './repo-approval.js';
 import { switchFor } from './switches.js';
 
 export const mcpCachePath = () => join(homeDir(), 'mcp-cache.json');
@@ -50,17 +55,17 @@ export class McpServers {
    */
   constructor({
     workspace,
-    load = loadMcpConfig,
+    load = null,
     connection = (server, opts) => new McpConnection(server, opts),
     cachePath = mcpCachePath(),
   } = {}) {
     this.workspace = workspace;
-    this.load = load;
+    this.load = load || (() => loadServers({ workspace: this.workspace }));
     this.connection = connection;
     this.cachePath = cachePath;
     this.live = new Map();      // name -> { state, connection, tools, error, fingerprint }
     this.listeners = new Set();
-    this.config = load();
+    this.config = this.load();
     this.cache = readCache(cachePath);
     this._killOnExit = () => this.killAll();
     process.on('exit', this._killOnExit);
@@ -85,12 +90,17 @@ export class McpServers {
       const cached = this.cache[server.name]?.fingerprint === server.fingerprint ? this.cache[server.name] : null;
       const state = server.problem ? 'invalid'
         : server.disabled ? 'disabled'
-          : live?.fingerprint === server.fingerprint ? live.state : 'idle';
+          : server.unapproved ? 'unapproved'
+            : live?.fingerprint === server.fingerprint ? live.state : 'idle';
       return {
         name: server.name,
         source: server.source,
         transport: server.transport || null,
+        host: server.host || null,
         state,
+        changed: Boolean(server.changed),
+        // What the person is asked about: as written, never expanded.
+        review: server.source === 'repo' ? reviewOf(server.raw) : null,
         error: server.problem || (state === 'failed' ? live?.error : null) || null,
         sdkMissing: state === 'failed' && Boolean(live?.sdkMissing),
         tools: (state === 'ready' ? live.tools : cached?.tools) || [],
@@ -102,6 +112,7 @@ export class McpServers {
       path: this.config.path,
       exists: this.config.exists,
       error: this.config.error,
+      repo: this.config.repo || null,
       servers,
     };
   }
@@ -113,7 +124,28 @@ export class McpServers {
   /** Valid and switched on: what a tool may name. */
   usable(name) {
     const server = this._server(name);
-    return Boolean(server && !server.problem && !server.disabled);
+    return Boolean(server && !server.problem && !server.disabled && !server.unapproved);
+  }
+
+  /** Whose ask/auto/block this is. A repo's server has its own, per entry. */
+  switchKey(name) {
+    return this._server(name)?.switchKey || name;
+  }
+
+  /** The person said yes to this entry, as it stands. */
+  async allow(name) {
+    const server = this._server(name);
+    if (server?.source !== 'repo') return false;
+    allowRepoServer(this.workspace, name, server.fingerprint);
+    await this.configChanged();
+    return this.usable(name);
+  }
+
+  async forget(name) {
+    if (this._server(name)?.source !== 'repo') return false;
+    forgetRepoServer(this.workspace, name);
+    await this.configChanged();
+    return true;
   }
 
   alwaysAsks(name) {
@@ -129,8 +161,8 @@ export class McpServers {
   offered() {
     return this.snapshot().servers
       .filter((s) => this.usable(s.name))
-      .map((s) => ({ name: s.name, tools: s.tools.filter((t) => switchFor(s.name, t.name) !== 'block') }))
-      .filter((s) => s.tools.length || switchFor(s.name, '') !== 'block');
+      .map((s) => ({ name: s.name, tools: s.tools.filter((t) => switchFor(this.switchKey(s.name), t.name) !== 'block') }))
+      .filter((s) => s.tools.length || switchFor(this.switchKey(s.name), '') !== 'block');
   }
 
   async _ready(name) {
@@ -151,6 +183,15 @@ export class McpServers {
     await this._slot(entry);
     try {
       return await entry.connection.callTool(tool, args, { signal });
+    } catch (err) {
+      if (entry.connection.isGone?.(err) && entry.state === 'ready') {
+        entry.state = 'failed';
+        entry.error = entry.connection.describeFailure(err);
+        this._changed();
+      }
+      // An HTTP error can quote the URL it was sent to, query and all.
+      err.message = this.scrub(name, err.message);
+      throw err;
     } finally {
       this._free(entry);
     }
@@ -176,7 +217,7 @@ export class McpServers {
   /** Start one server and list its tools. Safe to call twice: the first call is the one that runs. */
   connect(name) {
     const server = this.config.servers.find((s) => s.name === name);
-    if (!server || server.problem || server.disabled) return Promise.resolve(false);
+    if (!server || server.problem || server.disabled || server.unapproved) return Promise.resolve(false);
     const live = this.live.get(name);
     if (live?.fingerprint === server.fingerprint && live.starting) return live.starting;
     if (live?.fingerprint === server.fingerprint && live.state === 'ready') return Promise.resolve(true);

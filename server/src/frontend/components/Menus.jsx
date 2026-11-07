@@ -17,7 +17,8 @@ import { ChromeProfiles } from './ChromeProfiles.jsx';
 import { UpdateMenu } from './UpdateMenu.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
-import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath } from '../menus/mcp-view.js';
+import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath, ALLOW_ITEMS, serverOrigin } from '../menus/mcp-view.js';
+import { fitCommand } from '../menus/mcp-add.js';
 import { changeMcp, listIntegrations } from '../../backend/mcp/client/integrations.js';
 import { removeServer, setServerDisabled } from '../../backend/mcp/client/edit-config.js';
 import { McpAdd } from './McpAdd.jsx';
@@ -1503,18 +1504,48 @@ export function Menus({
               </Panel>
             );
           }
+          // A repo's server (v9.6): what would run, as written, before anything does.
+          // Asked in full: the command is never the part that gives way.
+          if (chosen?.state === 'unapproved') {
+            const values = chosen.review.values;
+            const lines = fitCommand(chosen.review.target, W, Math.max(1, menuRows - (values ? 6 : 5)));
+            return (
+              <Panel width={W} title={`Allow ${chosen.name}?`} status={chosen.changed ? 'changed since you allowed it' : 'from this repo\'s .mcp.json'}
+                tone="attention" tight keys="enter choose · esc back">
+                {lines.map((line, i) => <Text key={i} wrap="truncate"> {line}</Text>)}
+                {values ? <Text wrap="truncate" dimColor> with {values}</Text> : null}
+                <Choices
+                  limit={2}
+                  items={ALLOW_ITEMS}
+                  onSelect={(item) => {
+                    setActiveMenu({ ...m, view: 'home', server: null });
+                    if (item.value !== 'yes') return;
+                    changeMcp(agentLoop, () => agentLoop.mcp.allow(chosen.name))
+                      .then(() => agentLoop.mcp.connect(chosen.name))
+                      .catch((err) => setActiveMenu((cur) => ({ ...cur, problem: err.message })));
+                  }}
+                />
+              </Panel>
+            );
+          }
           if (chosen) {
             const { sub, tight, room } = fit(serverLine(chosen));
-            const switchOf = (tool) => switchFor(chosen.name, tool);
+            const switchKey = agentLoop.mcp.switchKey(chosen.name);
+            const switchOf = (tool) => switchFor(switchKey, tool);
             const items = serverToolItems(chosen, { said: sub.length > 0, switchOf });
             return (
-              <Panel width={W} title={chosen.name} status={chosen.builtin ? 'built in' : 'mcp.json'}
+              <Panel width={W} title={chosen.name} status={serverOrigin(chosen)}
                 sub={sub} tight={tight} keys={`↑↓ move · ${items.some((i) => i.value) ? 'enter change · ' : ''}esc back`}>
                 <Choices
                   limit={room}
                   items={items}
                   onSelect={(item) => {
                     if (item.action === 'remove') { setActiveMenu({ ...m, view: 'remove' }); return; }
+                    if (item.action === 'forget') {
+                      setActiveMenu({ ...m, view: 'home', server: null });
+                      changeMcp(agentLoop, () => agentLoop.mcp.forget(chosen.name)).catch(() => {});
+                      return;
+                    }
                     if (item.action === 'toggle') {
                       const on = chosen.state === 'disabled';
                       edit(() => setServerDisabled(chosen.name, !on), on ? () => agentLoop.mcp.connect(chosen.name).catch(() => {}) : null);
@@ -1522,7 +1553,7 @@ export function Menus({
                     }
                     if (!item.value) return;
                     const tool = item.value === '*' ? null : item.value;
-                    setSwitch(chosen.name, tool, nextSwitch(switchOf(tool ?? ''), { alwaysAsk: chosen.alwaysAsk }));
+                    setSwitch(switchKey, tool, nextSwitch(switchOf(tool ?? ''), { alwaysAsk: chosen.alwaysAsk }));
                     setActiveMenu((cur) => ({ ...cur })); // settings are not state: draw it again
                   }}
                 />

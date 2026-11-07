@@ -17,6 +17,7 @@ export function statusLine(row) {
   if (row.builtin) return row.detail;
   const count = row.tools.length;
   const tools = `${count} tool${count === 1 ? '' : 's'}`;
+  if (row.state === 'unapproved') return row.changed ? 'from this repo · changed, needs your ok again' : 'from this repo · needs your ok';
   if (row.state === 'ready') return `connected · ${tools}`;
   if (row.error) return `${stateWords[row.state]} · ${row.error}`;
   if (row.toolsStale && count) return `${stateWords[row.state]} · ${tools} last seen`;

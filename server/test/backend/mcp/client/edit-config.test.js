@@ -98,3 +98,28 @@ test('remove takes the secrets with it, and only its own', () => {
 test('the suite never touches the login Keychain', () => {
   assert.ok(process.env.AGENT_MCP_NO_KEYCHAIN, 'set by test/setup-home.js');
 });
+
+test('an http server: the token goes to the store, the scheme stays in the file', () => {
+  const path = file();
+  saveServer('remote', { type: 'http', url: 'https://a.b/mcp', headers: { Authorization: 'Bearer <t>', 'X-Api-Key': 'pasted-key', 'X-Team': 'core' } }, { Authorization: 'typed-token' }, { path });
+  const text = readFileSync(path, 'utf8');
+  assert.ok(!text.includes('typed-token') && !text.includes('pasted-key'), 'neither is in mcp.json');
+  const { headers, type, url } = raw(path).mcpServers.remote;
+  assert.equal(type, 'http');
+  assert.equal(url, 'https://a.b/mcp');
+  assert.equal(headers.Authorization, `Bearer ${secretRef('remote', 'Authorization')}`);
+  assert.equal(headers['X-Api-Key'], secretRef('remote', 'X_Api_Key'));
+  assert.equal(headers['X-Team'], 'core', 'control: an ordinary header stays readable');
+  const [server] = loadMcpConfig({ path, env: {} }).servers;
+  assert.equal(server.problem, undefined);
+  assert.equal(server.headers.Authorization, 'Bearer typed-token', 'and it comes back on load');
+  removeServer('remote', { path });
+  assert.equal(readSecret(secretKey('remote', 'Authorization')), '', 'removing it removes the saved token');
+  assert.equal(readSecret(secretKey('remote', 'X_Api_Key')), '');
+});
+
+test('a reference stays a reference in a header', () => {
+  const path = file();
+  saveServer('r', { url: 'https://a.b', headers: { Authorization: 'Bearer ${MY_TOKEN}' } }, {}, { path });
+  assert.equal(raw(path).mcpServers.r.headers.Authorization, 'Bearer ${MY_TOKEN}');
+});

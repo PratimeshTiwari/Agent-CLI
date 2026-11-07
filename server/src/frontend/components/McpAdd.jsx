@@ -5,7 +5,7 @@ import { T } from '../theme.js';
 import {
   commandLine, fitCommand, startAdd, stepBack, submitName, submitPaste, submitValue, testedLine,
 } from '../menus/mcp-add.js';
-import { envLine, tryServer } from '../../backend/mcp/client/add-server.js';
+import { tryServer, valuesLine } from '../../backend/mcp/client/add-server.js';
 import { saveServer } from '../../backend/mcp/client/edit-config.js';
 import { secretPlace } from '../../backend/mcp/client/secrets.js';
 import { changeMcp } from '../../backend/mcp/client/integrations.js';
@@ -99,7 +99,7 @@ export function McpAdd({ agentLoop, width, rows, text, onSaved, onLeave }) {
   if (state.step === 'paste' || state.step === 'name' || state.step === 'value') {
     // On the title's row: the line under a title is the first thing a short terminal sheds.
     const head = {
-      paste: ['Add a server', 'paste its command, or the JSON from its README'],
+      paste: ['Add a server', 'paste its command, its address, or the JSON from its README'],
       name: ['Name it', 'how you and the model refer to this server'],
       value: [ask?.key, ask?.hidden ? `hidden · saved in ${secretPlace()}, not mcp.json` : 'what the server needs for this'],
     }[state.step];
@@ -127,14 +127,14 @@ export function McpAdd({ agentLoop, width, rows, text, onSaved, onLeave }) {
 
   if (state.step === 'testing') {
     return (
-      <Panel width={width} title={`Starting ${state.name}`} tight keys="esc stop">
+      <Panel width={width} title={`${state.entry.url ? 'Connecting to' : 'Starting'} ${state.name}`} tight keys="esc stop">
         <Text wrap="truncate" dimColor> {commandLine(state.entry)}</Text>
       </Panel>
     );
   }
 
   if (state.step === 'check') {
-    const env = envLine(state.entry, state.values);
+    const env = valuesLine(state.entry, state.values);
     return (
       <Panel width={width} title={`Add ${state.name}?`} tight keys="enter choose · esc back">
         {fitCommand(commandLine(state.entry), width, Math.max(1, rows - (env ? 6 : 5) - (state.error ? 1 : 0)))
@@ -144,7 +144,7 @@ export function McpAdd({ agentLoop, width, rows, text, onSaved, onLeave }) {
         <Choices
           limit={2}
           items={[
-            { label: 'Test it', detail: 'runs this command once', value: 'test' },
+            { label: 'Test it', detail: state.entry.url ? 'connects to it once' : 'runs this command once', value: 'test' },
             { label: 'Save without testing', value: 'save' },
           ]}
           onSelect={(item) => (item.value === 'test' ? test() : save())}

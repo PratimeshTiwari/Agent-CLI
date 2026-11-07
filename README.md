@@ -221,8 +221,9 @@ the model, which reads what it needs.
   read always gets the exact text.
 - **Keep to one Google account.** `/chrome` lists your Chrome profiles, opens the one you choose and pairs with its
   extension. No other profile gets a prompt, and if the chosen one is closed, prompts wait for it.
-- **Use your MCP servers** (prompt v5). Run `/mcp add` and paste the server's command or the JSON from its README;
-  tokens go in your Keychain, not the config. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses. Each
+- **Use your MCP servers** (prompt v5). Run `/mcp add` and paste the server's command, its address or the JSON from its
+  README; tokens go in your Keychain, not the config. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses.
+  A repo's own `.mcp.json` is read too, and nothing in it runs until you allow it in `/mcp`. Each
   tool asks first, runs on its own or is blocked, as you set it in `/mcp`; strict mode always asks.
 - **Work with Jira** (prompt v4). Read, search, create, update, comment, move and attach, on Cloud and
   Server/DC. Every write is shown first as a Send / Don't send box, in every mode.

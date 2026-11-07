@@ -732,7 +732,7 @@ file over 2 MB or a parse error. Pty: a scripted ranged read of a Ruby file put 
 `executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
 backoff and rewrites `errno` codes into LLM-readable instructions.
 
-**MCP client (v9.0, `mcp/client/`).** `~/.agent/mcp.json`, Claude Code's shape, stdio only. Started on
+**MCP client (v9.0, `mcp/client/`).** `~/.agent/mcp.json`, Claude Code's shape. Started on
 the first `/mcp`, never at launch (`AgentLoop.mcp` is lazy), and the model reaches nothing until v9.1.
 `/mcp` lists servers and Jira together. `env` values are scrubbed from errors, descriptions and
 results; children die on `exit`. Tested against a real process (`test/fixtures/mcp-fixture-server.js`).
@@ -753,6 +753,14 @@ check step always shows the command before anything runs, and the model can neve
 the Keychain or a 0600 `mcp-secrets.json`, `mcp.json` holds `${secret:<server>/<VAR>}`, and a server reads only
 its own. **A text field behind a menu needs its own `usePaste`:** the prompt's is inactive there, bracketed
 paste goes off, and a pasted JSON's first newline is an Enter. The pty must set `AGENT_MCP_NO_KEYCHAIN=1`.
+
+**A repo's `.mcp.json` and HTTP servers (v9.6, `mcp/client/repo-approval.js`, `config.js`).** A cloned
+folder writes that file, so nothing in it runs until the person allows it in `/mcp`, per folder and per whole entry:
+any edit asks again. It cannot use `${secret:}`, because secrets go by server name and a repo picks its names. Your
+`mcp.json` wins a shared name. **`switchKey`** ties a repo server's ask/auto/block to the entry, or it could arrive on
+`auto` by reusing a name. HTTP is `https`, or `http` to this machine only, with `headers`; no OAuth or SSE. Cross-origin
+redirects are refused by the SDK's default: do not pass `redirectPolicy: 'follow'`. A lost session fails that call
+and the next one reconnects. Pty: `run-repo.sh`, no process before the yes.
 
 ### One Chrome profile
 
@@ -1189,14 +1197,6 @@ unmounted the app and left the process alive behind a frozen prompt, measured un
 The second press is decided in cli-ui on the raw stream (`interruptGate`), below React, so a
 broken render cannot trap anyone; App only clears the prompt and shows the hint where `/help`
 sits.
-
-**Two shortcuts reach the panels (v5.3).** `cmd+alt+j` in the editor focuses the chat view —
-next to `cmd+alt+l` (Add to Agent Chat), and deliberately not `cmd+esc`, which the Claude Code
-extension owns, nor `Ctrl+G`, which Chrome grabs globally for its own Gemini panel before the
-editor sees it. In Chrome, `open-floating-panel` is a **global** command (`Ctrl+Shift+1`,
-`⌘⇧1`): it fires while Chrome is in the background and focuses the floating window rather than
-opening a second. Chrome's Gemini panel itself (`chrome://glic`) is browser UI with no
-extension API — it cannot be the bridge, and nothing here tries to reach it.
 
 ### Failure logging
 

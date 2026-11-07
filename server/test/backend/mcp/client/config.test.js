@@ -42,7 +42,7 @@ test('one bad entry does not cost the good one', () => {
       'bad name': { command: 'x' },
       args: { command: 'x', args: 'not-a-list' },
       env: { command: 'x', env: [] },
-      hosted: { url: 'https://example.com/mcp' },
+      hosted: { url: 'http://example.com/mcp' },
     } }),
     env: {},
   });
@@ -52,7 +52,7 @@ test('one bad entry does not cost the good one', () => {
   assert.match(byName['bad name'], /letters, digits/);
   assert.match(byName.args, /list of strings/);
   assert.match(byName.env, /must be an object/);
-  assert.match(byName.hosted, /HTTP servers are not supported/);
+  assert.match(byName.hosted, /only for this machine/);
 });
 
 test('${VAR} and ${VAR:-default} come from the environment', () => {
