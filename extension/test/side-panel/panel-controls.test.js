@@ -224,6 +224,34 @@ test('the footer follows the tab after a switch, with no command to carry it', (
   assert.match($('.tab-differs').textContent, /⚠ 3\.1 Pro/, 'control: a standing difference still shows');
 });
 
+test('the terminal\'s amoled theme turns the panel black, and any other lets go', (t) => {
+  const { doc, deliver } = page(t);
+  const root = doc.documentElement;
+  assert.equal(root.dataset.theme, undefined, 'control: no theme until the agent names one');
+  deliver('panel_state', { state: { ...STATE, theme: 'amoled' } });
+  assert.equal(root.dataset.theme, 'amoled');
+  deliver('panel_state', { state: { ...STATE } });
+  assert.equal(root.dataset.theme, 'amoled', 'an agent older than v9.9.1 sends no theme: keep what is set');
+  deliver('panel_state', { state: { ...STATE, theme: 'dark' } });
+  assert.equal(root.dataset.theme, undefined, 'dark follows the system or the editor, as before');
+  deliver('panel_state', { state: { ...STATE, theme: null } });
+  assert.equal(root.dataset.theme, undefined);
+});
+
+test('amoled\'s block outranks both :root blocks and the editor\'s bridge', () => {
+  const block = CSS.match(/:root\[data-theme="amoled"\]\s*\{([^}]*)\}/);
+  assert.ok(block, 'no amoled block in panel.css');
+  assert.match(block[1], /--bg:\s*#000000;/);
+  // Colours only: a font here would override the editor's in VS Code.
+  assert.doesNotMatch(block[1], /--font-/);
+  // Every role the base block sets, amoled sets too, or it would show dark's surface.
+  const base = CSS.match(/^:root\s*\{([^}]*)\}/m)[1];
+  const colours = (src) => [...src.matchAll(/(--[a-z-]+):\s*#/g)].map((m) => m[1]);
+  for (const name of colours(base)) assert.match(block[1], new RegExp(`${name}:`), `${name} missing`);
+  const bridge = readFileSync(resolve(DIR, '../../vscode-companion/chat-panel-html.js'), 'utf8');
+  assert.doesNotMatch(bridge, /data-theme/, 'the bridge must stay a plain :root, below the attribute');
+});
+
 test('the header says what the project calls itself', (t) => {
   const { $, deliver } = page(t);
   assert.equal($('#workspace-name').textContent, 'repo', 'an older agent: the folder');

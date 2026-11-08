@@ -1,5 +1,5 @@
 import React from 'react';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
@@ -11,12 +11,13 @@ import { oneLine } from '../text.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../menus/help.js';
 import { panelRoom, wrapLines, cutStart } from '../menus/panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view.js';
-import { sliderLayout, stopModel, tabDiffers } from '../menus/effort-slider.js';
+import { sliderLayout, stopModel, tabDiffers, onlyModel, onlyModelLine } from '../menus/effort-slider.js';
 import { Panel, Choices } from './Panel.jsx';
 import { ChromeProfiles } from './ChromeProfiles.jsx';
 import { UpdateMenu } from './UpdateMenu.jsx';
 import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
+import { fileRows, rowDetail, rowLink, revealCommand, fileBrowserName, revealedLine } from '../menus/files-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath, ALLOW_ITEMS, serverOrigin } from '../menus/mcp-view.js';
 import { fitCommand } from '../menus/mcp-add.js';
 import { openBrowser } from '../../backend/atlassian/cli.js';
@@ -707,6 +708,9 @@ export function Menus({
           // Each stop names the model it maps to on this account (C2).
           const stops = EFFORT_LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
           const model = stops[at];
+          // One model on the account (v9.9.1): say so, rather than "Auto" under every stop.
+          const only = onlyModel(agentLoop.modelOptions);
+          const modelText = only ? onlyModelLine(only) : model.text;
           const tick = marked.id === current ? '  ✔ current' : '';
           const differs = tabDiffers(model, agentLoop.modelOptions);
           const warn = differs ? `  ⚠ browser ${differs}` : '';
@@ -743,7 +747,7 @@ export function Menus({
               </Text>
               {airy ? <Text> </Text> : null}
               <Text wrap="truncate" dimColor={!model.available}>
-                {lead(model.text + tick + warn)}{model.text}
+                {lead(modelText + tick + warn)}{modelText}
                 {tick ? <Text color={T.success}>{tick}</Text> : null}
                 {warn ? <Text color={T.attention}>{warn}</Text> : null}
               </Text>
@@ -780,6 +784,7 @@ export function Menus({
                 onSelect={(item) => {
                   setTheme(item.value);
                   const saved = saveUserSettings({ theme: item.value });
+                  agentLoop.notifyPanelChange?.();
                   if (item.value !== activeMenu.original) resetScreen?.();
                   // From settings, the row is the confirmation (`applyAndReturn`'s rule).
                   if (activeMenu.returnTo && saved) { setActiveMenu(activeMenu.returnTo); return; }
@@ -1394,6 +1399,38 @@ export function Menus({
                   // Back through the command, not into the loop from here: the
                   // slash-command path already owns restoring the transcript.
                   handleSubmit(`/history ${item.value}`);
+                }}
+              />
+            </Panel>
+          );
+        })()}
+
+        {activeMenu?.type === 'files' && (() => {
+          const rows = fileRows(activeMenu.workspace);
+          const { sub, tight, room } = fit('Where this project keeps things. Cmd+click a path opens it.');
+          return (
+            <Panel width={W} title="Files" status={activeMenu.opened} sub={sub} tight={tight}
+              keys={`↑↓ move · enter show in ${fileBrowserName()} · esc ${activeMenu.returnTo ? 'back' : 'close'}`}>
+              <Choices
+                numbered
+                limit={room}
+                items={rows.map((row) => ({
+                  label: row.label,
+                  detail: rowDetail(row),
+                  link: rowLink(row),
+                  value: row.label,
+                  key: row.label,
+                }))}
+                onSelect={(item) => {
+                  const row = rows.find((r) => r.label === item.value);
+                  if (!row) return;
+                  const [cmd, argv] = revealCommand(row);
+                  // execFile, not a shell string: paths here have spaces. The
+                  // menu stays open, so several can be opened in a row.
+                  execFile(cmd, argv, (err) => {
+                    setActiveMenu((m) => (m?.type === 'files'
+                      ? { ...m, opened: err ? `could not run ${cmd}` : revealedLine(row) } : m));
+                  });
                 }}
               />
             </Panel>

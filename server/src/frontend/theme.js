@@ -68,6 +68,20 @@ export const PALETTES = {
     userFg: '#e6e6e6', userBg: '#2a2f45', addBg: '#132a1f', delBg: '#2d1a1d',
   },
 
+  /**
+   * Dark's inks on true black, for an OLED screen where black is a pixel that is
+   * off. Only the tints change: the prompt bar and diff rows are near-black, not
+   * the slate and green of `dark`, so nothing but text lights up. It assumes the
+   * terminal's own background is black too; the app never paints the page.
+   */
+  amoled: {
+    text: '#e6e6e6', muted: '#8b93b0',
+    accent: '#7aa2f7', attention: '#ff9e64', success: '#9ece6a', danger: '#f7768e',
+    plan: '#e0af68', auto: '#73daca', strict: '#bb9af7',
+    menu: '#7aa2f7', link: '#7dcfff', review: '#bb9af7', shell: '#9ece6a', diffHeader: '#7dcfff',
+    userFg: '#e6e6e6', userBg: '#1a1a1a', addBg: '#0b1f12', delBg: '#220d10',
+  },
+
   /** The same roles with darker inks, for a light background. */
   light: {
     text: '#1f2328', muted: '#57606a',
@@ -120,6 +134,8 @@ export const PALETTES = {
 export const PALETTE_INFO = {
   terminal: { label: 'Match terminal', blurb: 'your terminal\'s own colours', background: null },
   dark: { label: 'Dark', blurb: 'fixed colours for a dark background', background: '#1e1e1e' },
+  // `paint`: the terminal's own background is set to it (`screen/terminal-bg.js`), since Ink paints only text.
+  amoled: { label: 'AMOLED black', blurb: 'true black, the terminal\'s background too', background: '#000000', paint: '#000000' },
   light: { label: 'Light', blurb: 'fixed colours for a light background', background: '#ffffff' },
   'dark-colorblind': { label: 'Dark, colour-blind', blurb: 'blue and orange for green and red', background: '#1e1e1e' },
   'light-colorblind': { label: 'Light, colour-blind', blurb: 'the same, for a light background', background: '#ffffff' },
@@ -148,7 +164,18 @@ export function setTheme(name) {
   if (!palette) return false;
   Object.assign(T, palette);
   current = name;
+  for (const fn of listeners) {
+    try { fn(name); } catch { /* a listener must not stop the switch */ }
+  }
   return true;
+}
+
+const listeners = new Set();
+
+/** Told on every switch, previews included (`terminal-bg.js` paints the page for amoled). */
+export function onThemeChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 export const themeName = () => current;

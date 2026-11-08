@@ -43,6 +43,28 @@ export function stopModel(rung, models = [], modelConfig = {}) {
 }
 
 /**
+ * One model to choose from, and why (v9.9.1). Owner, with a screenshot of an
+ * Auto account where every stop read "Auto": "just show the slider, say auto
+ * mode is available, with others locked". The slider stays, because effort still
+ * picks the prompt; the line under it says the model cannot follow.
+ *
+ * @returns {{label: string, locked: string[]} | null} null when the picker is
+ *          unread or there is a real choice
+ */
+export function onlyModel(models = []) {
+  const options = (models || []).filter((m) => m && m.label && !m.isMode);
+  const open = options.filter((m) => !m.locked);
+  if (open.length !== 1 || options.length < 2) return null;
+  return { label: open[0].label, locked: options.filter((m) => m.locked).map((m) => m.label) };
+}
+
+/** The line under the bar on such an account. */
+export function onlyModelLine(only) {
+  const locked = only.locked.length ? ` · ${only.locked.join(', ')} locked` : '';
+  return `${only.label} is the only model here${locked}`;
+}
+
+/**
  * The tab's model when it is not the one this stop maps to, else null (v7.9).
  *
  * The slider said `3.1 Pro ✔ current` while the tab ran 3.8 Flash, which reads

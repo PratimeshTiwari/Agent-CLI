@@ -590,6 +590,7 @@ export async function handleSlashCommand(query, {
       } else {
         setTheme(wanted);
         const saved = saveUserSettings({ theme: wanted });
+        agentLoop.notifyPanelChange?.();
         reply = `🎨 Theme: **${PALETTE_INFO[wanted].label}**`
           + (saved ? '' : ' — for this session only; ~/.agent/settings.json could not be written');
         resetScreen();
@@ -774,6 +775,14 @@ export async function handleSlashCommand(query, {
           content: 'No plan yet. In plan mode the agent writes one to '
             + '`.agent/artifacts/implementation_plan.md` before a large change.',
         }]);
+      setIsProcessing(false);
+      return;
+    }
+
+    // Where this project's things are (v9.9.1). Read when opened, so a file
+    // written since the last look is there; `frontend/menus/files-view.js`.
+    if (command === 'files') {
+      setActiveMenu({ type: 'files', workspace: agentLoop.workspace, opened: null });
       setIsProcessing(false);
       return;
     }

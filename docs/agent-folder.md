@@ -13,6 +13,7 @@ Nothing is ever sent anywhere: both are plain files on your machine.
 
 ```
 .agent/
+├── README.md          this table, short, kept current by the agent; delete its first line to keep your edits
 ├── config.json        settings for this project
 ├── memory/            what the agent learned here, one fact per file
 ├── artifacts/         files written for you to read

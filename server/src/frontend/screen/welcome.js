@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PALETTES } from '../theme.js';
 
 export const STEPS = ['theme', 'name', 'chrome'];
 
@@ -106,9 +107,12 @@ export function onboardingLayout(rows = 24) {
   const compact = room < 16;
   // Fixed rows per screen, with and without the blank spacers.
   // The splash always fits (6 rows compact, 8 spaced) and has nothing to drop.
-  // theme: header, title, six palettes, blurb, hint (+ four spacers).
+  // theme: header, title, a row per palette, blurb, hint (+ four spacers).
   // name: header, title, default, the ruled field (3), count, hint (+ three).
-  const fixed = compact ? { theme: 10, name: 8 } : { theme: 13, name: 11 };
+  // Counted, not written down: `amoled` (v9.9.1) made it seven, and a literal
+  // six would have charged the screen a row less than it draws.
+  const palettes = Object.keys(PALETTES).length;
+  const fixed = compact ? { theme: 4 + palettes, name: 8 } : { theme: 7 + palettes, name: 11 };
   const themePreview = room >= fixed.theme + (compact ? 7 : 8);
   return {
     compact,

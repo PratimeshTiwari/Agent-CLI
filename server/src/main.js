@@ -18,6 +18,7 @@
 import { resolve, dirname } from 'path';
 import { homeDir, ensureDir, setActiveScope, resolveState, codeDir } from './backend/core/workspace/paths.js';
 import { runMigrations } from './backend/core/install/migrate.js';
+import { writeAgentReadme } from './backend/core/workspace/agent-readme.js';
 import { HELP_TEXT } from './backend/core/install/cli-help.js';
 import { hostEditor } from './backend/core/workspace/host-editor.js';
 import { rememberWorkspace } from './backend/core/workspace/workspaces.js';
@@ -241,6 +242,9 @@ async function main() {
     agentSourceDir,
     taskManager,
   });
+  // The folder's own README (v9.9.1). After the loop, which has made `.agent`;
+  // it never creates one itself, and it never throws.
+  writeAgentReadme(config.workspace);
 
   const fileWatcher = new FileWatcher(codeDir(config.workspace), agentLoop);
   fileWatcher.start();
