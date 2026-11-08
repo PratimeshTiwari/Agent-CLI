@@ -293,6 +293,8 @@ details folded, and which extension and companion each release needs.
 | **v1** | 2026-09-16 | [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13)–[#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16) | The first stable release |
 | **Betas** | 2026-08-26 … 2026-09-06 | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1)–[#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) | Context management, subagents, the CLI |
 
+**v9 is the last series.** No v10 is planned; fixes, if any, land as v9.9.x.
+
 ## More
 
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): every release
