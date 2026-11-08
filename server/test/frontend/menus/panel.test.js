@@ -128,3 +128,36 @@ test('the mismatch ask has two answers: match the agent, match the browser (v7.9
   assert.equal((block.match(/label: 'Match the (agent|browser)'/g) || []).length, 2);
   assert.doesNotMatch(block, /label: `Send on /, 'the third, one-off answer is gone');
 });
+
+test('rowKeys: never two alike, so React never warns into the frame (v9.8)', async () => {
+  const { rowKeys } = await import('../../../src/frontend/menus/panel.js');
+  // Jira's page in `/mcp`: two tool rows, both `value: ''`.
+  const { serverToolItems } = await import('../../../src/frontend/menus/mcp-view.js');
+  const jira = serverToolItems({
+    name: 'jira', builtin: true, state: 'idle',
+    tools: [{ name: 'get, search', description: 'r' }, { name: 'create', description: 'w' }],
+  });
+  const keys = rowKeys(jira);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(!keys.includes(''));
+  // A repeated value and a missing one too; an own key is kept.
+  const mixed = rowKeys([{ value: 'a' }, { value: 'a' }, {}, { key: 'k', value: 'a' }, { value: '' }]);
+  assert.equal(new Set(mixed).size, 5);
+  assert.equal(mixed[0], 'a');
+  assert.equal(mixed[3], 'k');
+});
+
+test('Choices keys its rows through rowKeys, not key ?? value', () => {
+  const src = readFileSync(new URL('../../../src/frontend/components/Panel.jsx', import.meta.url), 'utf8');
+  assert.match(src, /key=\{keys\[i\]\}/);
+  assert.doesNotMatch(src, /key=\{item\.key \?\? item\.value/);
+});
+
+test('Choices moves from the live cursor, so a fast double key moves two rows (v9.8)', () => {
+  // Under the pty, two ↓ in one write moved one row on 9.7: both presses read
+  // the render's `at`. Observing it needs Ink and a pty, so the shape is pinned.
+  const src = readFileSync(new URL('../../../src/frontend/components/Panel.jsx', import.meta.url), 'utf8');
+  const handler = src.slice(src.indexOf('useInput((input, key) => {'), src.indexOf('}, { isActive });'));
+  assert.match(handler, /const at = clamp\(live\.current\)/);
+  assert.match(src, /const move = \(to\) => \{\n\s+live\.current = to;/);
+});

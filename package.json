@@ -14,7 +14,7 @@
     "test:companion": "node vscode-companion/scripts/sync-panel.js && node --import ./server/test/setup-home.js --test --test-timeout=120000 \"vscode-companion/test/*.test.js\""
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "eslintConfig": {
     "env": {

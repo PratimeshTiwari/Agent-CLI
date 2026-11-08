@@ -478,6 +478,7 @@
           return;
         }
         if (res && res.confirmSoon && completionTickers.has(tabId)) {
+          clearTimeout(completionConfirms.get(tabId));
           const soon = setTimeout(tick, Math.min(COMPLETION_CONFIRM_MS, everyMs / 4));
           soon.unref?.();
           completionConfirms.set(tabId, soon);

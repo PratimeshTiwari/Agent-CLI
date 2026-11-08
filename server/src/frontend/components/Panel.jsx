@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import { T } from '../theme.js';
-import { listWindow } from '../menus/panel.js';
+import { listWindow, rowKeys } from '../menus/panel.js';
 
 /**
  * Every menu's frame, drawn the way `/help` is (`head` replaces the title row
@@ -94,14 +94,22 @@ export function Choices({
     if (next !== index) setIndex(next);
   }
   const at = clamp(index);
+  // Where the cursor is now, ahead of the render (v9.8). Two ↓ in one stdin
+  // read run this handler twice before React draws again, and both read the
+  // render's `at`: a fast double press moved one row. The same stale-closure
+  // shape as the prompt's `live` (v5.24).
+  const live = React.useRef(at);
+  live.current = at;
 
   const move = (to) => {
+    live.current = to;
     setIndex(to);
     if (items[to]) onHighlight?.(items[to]);
   };
 
   useInput((input, key) => {
     if (!count) return;
+    const at = clamp(live.current);
     if (key.upArrow) { move(at === 0 ? count - 1 : at - 1); return; }
     if (key.downArrow) { move(at === count - 1 ? 0 : at + 1); return; }
     if (key.return) { onSelect?.(items[at]); return; }
@@ -120,6 +128,7 @@ export function Choices({
   const numWidth = String(Math.min(count, 9)).length + 2;
   const glyphs = items.some((it) => it.glyph);
   const showNumbers = numbered && !glyphs;
+  const keys = rowKeys(items);
 
   return (
     <>
@@ -131,7 +140,7 @@ export function Choices({
         // its own detail a column right of the others (v7.9, "a bit left/right").
         const label = hasDetail ? fitLabel(String(item.label), labelWidth) : String(item.label);
         return (
-          <Text key={item.key ?? item.value ?? i} wrap="truncate">
+          <Text key={keys[i]} wrap="truncate">
             <Text color={T.accent}>{sel ? ' ❯ ' : '   '}</Text>
             {showNumbers ? <Text color={sel ? T.accent : undefined} dimColor={!sel}>{(i < 9 ? `${i + 1}.` : '').padEnd(numWidth)}</Text> : null}
             {glyphs ? <Text color={item.glyphTone ? T[item.glyphTone] ?? undefined : undefined}>{`${item.glyph || ' '} `}</Text> : null}
