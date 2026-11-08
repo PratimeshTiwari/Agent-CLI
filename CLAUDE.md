@@ -1,15 +1,21 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository. It says **what this is, how to work on
+it, and what must not break**. Each area ends with a link to its design file in
+[`docs/design/`](docs/design/), which keeps how that part came to be: the reports, the wrong
+theories, the measurements. Read the design file before changing the mechanism it describes.
+Decisions and removals are in [`docs/history.md`](docs/history.md); the whole of this file as it
+was before 2026-11-09 is [`docs/old-claude.md`](docs/old-claude.md): a code comment that cites
+CLAUDE.md for a passage not found here means that file.
 
 ## What this is
 
-A local coding agent that has **no LLM API client**. Inference happens by driving a real
-browser tab: the Node server sends a prompt over WebSocket to a Chrome extension, a content
-script types it into gemini.google.com, scrapes the streamed reply,
-and sends the text back. Every architectural oddity below follows from that.
+A local coding agent with **no LLM API client**. The Node server sends a prompt over WebSocket to
+a Chrome extension, a content script types it into gemini.google.com, scrapes the streamed reply
+and sends the text back. Tool calls are parsed out of that text. Every architectural oddity below
+follows from that.
 
-npm workspaces: `server/` (brain + CLI UI), `extension/` (MV3 bridge), plus a standalone
+npm workspaces: `server/` (brain and terminal UI), `extension/` (MV3 bridge), plus a standalone
 `vscode-companion/` (not a workspace).
 
 ## Commands
@@ -25,115 +31,105 @@ cd server && npm start -- --workspace /path/to/project   # run against another p
 npm run build --workspace=extension   # esbuild src/background/main.js -> service-worker.js
 cd vscode-companion && vsce package --allow-missing-repository --skip-license
                                   # prepublish copies extension/side-panel/ into media/panel/
-npm run test:companion            # the companion's tests (also part of `npm test`)
+npm test                          # server, extension and companion suites
+node --import ./test/setup-home.js --test <file>   # one server file (run from server/)
 ```
 
-`extension/service-worker.js` is a **committed build artifact**. Editing anything under
-`extension/src/background/` without re-running the build ships stale code — Chrome loads the
-bundle, not the sources. `extension/content-scripts/*.js` are loaded directly and are not bundled.
-Likewise `vscode-companion/*.vsix` is committed and must be repackaged after editing
-`vscode-companion/extension.js`.
+**Committed builds.** `extension/service-worker.js` is the esbuild bundle of
+`extension/src/background/`, and `vscode-companion/*.vsix` is the packaged companion. Chrome and
+VS Code load those, not the sources: after editing either source, rebuild and commit the output.
+`extension/content-scripts/*.js` are loaded directly and are not bundled. Tests fail when a bundle
+or the `.vsix` is stale.
 
-### Tests
+There is no lint script; `package.json` holds `eslintConfig` (eslint:recommended) and `prettier`
+(100 columns, single quotes, trailing commas) for editors.
 
-```bash
-npm test                                       # -> server: node --test "test/**/*.test.js"
-node --test server/test/backend/core/commands/risk-classifier.test.js   # single file
-```
+## Tests
 
-Tests live in `server/test/`, mirroring `server/src/` directory for directory. They used to sit
-beside their subjects, which made a missing test visible in an `ls` — that is how `diff-engine.js`
-was found with none, and it turned out to be 358 lines that overwrite files, containing a bug
-that wrote backups outside the backup directory.
+- Tests live in `server/test/`, mirroring `server/src/` directory for directory
+  (`src/backend/core/workspace/paths.js` → `test/backend/core/workspace/paths.test.js`). A test
+  that needs a path into the source tree computes it relative to `src/`, not to itself.
+- **The suite runs against a throwaway home.** `test/setup-home.js` is preloaded by `npm test` and
+  points `AGENT_CLI_HOME` and `TMPDIR` at temp dirs. Bare `node --test <file>` skips it and writes
+  into the real `~/.agent` — always pass `--import ./test/setup-home.js`. A test that sets its own
+  home **restores** the previous value on teardown, never `delete`s it. A test workspace is a
+  `mkdtemp`, never a literal path like `/tmp`; an unwritable one is a path under a regular file,
+  never `/proc/…`. Nothing writes into the repo either: a test that changes prompt files copies
+  them to a temp dir first.
+- **Expected state: every test passes.** A failure is a real regression.
+- **CI** (`.github/workflows/ci.yml`) runs on every push: macOS and Linux, Node 22 and 24, after
+  `agent --help` and `agent doctor --offline`. `main` requires the four jobs.
+- **Guards worth knowing:** `bundle-fresh.test.js` and `vsix-fresh.test.js` (committed builds),
+  `docs-size.test.js` (this file's size cap), `prompt-v1-golden.test.js` (prompt v1 is frozen),
+  `toolCatalogDrift()` (registry and catalog agree), `tool-smoke.test.js` (every tool called once
+  on its happy path, plus a membership check so a new tool cannot skip it),
+  `slash-command-smoke.test.js` (every slash command, bare and with arguments).
+- **A passing test can lie.** Give a new check a negative control: break the thing and watch it go
+  red. Use real collaborators (`MemoryManager`, `DiffEngine`, …) in a temp workspace, not stubs.
+- **Editing by script:** a Python `str.replace(old, new)` with no count replaces every occurrence,
+  and a string anchor hits the first match. Assert the match count before writing.
 
-Moving them bought one thing back: `node --test src/` used to be a landmine, because given a
-directory Node runs *every* `.js` file under it as a test — including `main.js`, which starts the
-WebSocket server and hangs forever. Nothing under `test/` starts anything, so the trap is gone.
-The quoted glob is still what makes the script work under `sh`, which has no globstar.
+Details: [`docs/design/testing.md`](docs/design/testing.md).
 
-A test that needs a path into the source tree must compute it relative to `src/`, not to itself
-(`prompt-loader.test.js` reads `../../../../src/backend/prompts`).
+## Verifying anything a person sees: the pty harness
 
-**The suite runs against a throwaway home.** `test/setup-home.js` is preloaded by the `test`
-script and points `AGENT_CLI_HOME` at a temp dir. Without it every test that built an
-`AgentLoop` against a temp workspace wrote that workspace's durable history into the real
-`~/.agent/workspaces/` — 3,238 folders by 2026-10-19, twelve more per run, failing nothing. A
-test that sets its own home must **restore** the previous value on teardown, never `delete`
-it, or every later test in that file falls back to the real one; `test-home.test.js` names
-any file that does. Running a single file with bare `node --test` skips the preload — use
-`node --import ./test/setup-home.js --test <file>` for anything that touches sessions.
-**Nor does it write into the repo (v9.9.4).** The v1-golden negative control edited a shipped
-prompt file in place, and a running agent's watcher showed it as "modified externally". It copies
-`SHIPPED_PROMPTS_DIR` to a temp dir and points `usePromptsDir` there, restoring it on teardown.
+Anything visible on screen is checked by driving the **real CLI under a pty** with a fake
+extension answering from a script, so a full turn runs with no browser and no Gemini account. The
+harness lives in `.agent/artifacts/harness/`, not in the repo; use it, do not rebuild it.
 
-**Expected state: all tests pass.** They used to be 34/10/24 red: the tests described designs
-the code had replaced — `plan-generator` writes one file per comment under `PR-<n>/` rather than
-one `PR-<n>.md` per PR, and `comment-classifier` stopped categorising by keyword once the AI
-took that over. Both test files were rewritten against the shipped behaviour, so a failure now is
-a real regression.
+- `drive.py` forks the CLI under a pty, runs JSON steps (type, key, resize, paste, write a file)
+  and counts per step the bytes, `ESC[2J` (full clears), `ESC[3J` and erase-lines. Use its
+  `{"screen": file}` (pyte's rendered viewport) for anything about layout; `snap` is the raw
+  stream and invents blank rows.
+- `fake-extension.js` identifies as `{type:'identify', payload:{clientType:'extension'}}` with a
+  `chrome-extension://` origin and logs every prompt it is sent: that log is where prompt sizes
+  and "the secret never reached the prompt" come from.
+- `tabrig/` runs the real CLI and the real extension in headless Chrome against a Gemini-shaped
+  page; `scrape-test.mjs` runs the bridge's scrape against a Gemini-shaped DOM in jsdom.
+- **The standard check** for a UI change is "0 clears at 13 and 24 rows" (more sizes when the
+  layout depends on width). Count frames only with a driver that waits on output, never on sleeps.
+- **The harness has lied at least six times.** Check it before believing a result, positive or
+  negative.
 
-**CI runs the suite on every push (v8.7, `.github/workflows/ci.yml`)**: macOS and Linux, Node 22
-and 24, after `agent --help` and `agent doctor --offline`. Three tests guard what used to ship stale:
-`extension/test/bundle-fresh.test.js` (the committed `service-worker.js` is the build of its sources),
-`vscode-companion/test/vsix-fresh.test.js` (the one committed `.vsix` holds the current companion and
-side panel) and `server/test/docs-size.test.js` (this file stays under 145,000 characters).
+Harness safety, every run:
+- **Never port 7777** — the real extension dials it and would receive the harness's prompts.
+  Always a random port.
+- **Live Gemini tests only on account `/u/3`.** `/u/0` and `/u/1` are the owner's own accounts.
+- **Nothing installs into a real app.** Anything that can reach one needs an allow-list
+  (`AGENT_EDITOR_APPS`, set by `setup-home.js`); real `npm` runs only in a full repo copy.
+- MCP runs set `AGENT_MCP_NO_KEYCHAIN=1`. **An empty `AGENT_ATLASSIAN_MCP_URL` means the real
+  Atlassian server** — always pass the fixture's URL.
+- **Never `npx -y` a real third-party server.**
 
-There is no lint script; `package.json` holds `eslintConfig` (eslint:recommended) and
-`prettier` (100 cols, single quotes, trailing commas) for editors.
+Details: [`docs/design/testing.md`](docs/design/testing.md).
 
-### The pty harness — how anything user-visible gets measured
+## Rules that must not break
 
-Most of the numbers in this file came from a harness that drives the **real CLI under a pty**
-with a fake extension answering prompts from a script, so a full turn — inject, reply, tool
-call, tool result, next prompt — runs with no browser and no Gemini account. It lives in
-`.agent/artifacts/harness/`, not the repo. Rebuild it from this:
+The short list. Each is explained in its area below.
 
-- **`drive.py`** — `pty.fork()` the CLI with `--workspace <scratch> --port <p> --editor <shim>`.
-  `PATH` is prefixed with a `bin/` of shims for `open`, `code`, `xdg-open` and
-  `cursor` that log their argv instead of launching anything, which is how "did it open the
-  editor" became checkable. Steps are a JSON list: type text, send a key, resize the window
-  (`{"resize": [rows, cols]}`), or write a file into `.agent/state/` to stand in for the VS
-  Code companion. It counts bytes, `ESC[2J`, `ESC[3J` and erase-lines per step — which is what
-  makes a frame regression visible at all.
-- **`fake-extension.js`** — connects with a `chrome-extension://` origin, sends
-  `{type:'identify', payload:{clientType:'extension'}}` (`clientType`, not `client`), and
-  answers each `inject_prompt` from a scripted list. It logs every prompt it is given, which
-  is where the per-turn character counts come from.
-- **`tabrig/`** — the real CLI and the real extension in headless Chrome against a Gemini-shaped
-  page. Branded Chrome ignores `--load-extension`: CDP pipe, `Extensions.loadUnpacked`,
-  `--host-resolver-rules`, the port patched in a scratch copy, a fresh profile per run.
-- **`scrape-test.mjs`** — the scrape lifted verbatim out of the bridge and run against a
-  Gemini-shaped DOM in jsdom.
-
-**Check the harness before believing anything, positive or negative.** It has lied at least
-six times, and most of those looked like product bugs first: a port the extension never dials;
-a file-seeding step that also typed its content into the prompt; an extractor that dropped an
-`async` keyword; a fake extension that answered subagent requests without `isSubagent`, so
-compaction hung; a `ClipboardEvent` probe that silently did nothing, making an empty composer
-look like proof the send button was unfindable; and a `ws` import that was wrong, so a "resize
-during a live turn" measurement had no live turn in it.
-
-**A passing test lies the same way.** `toolCatalogDrift()` compared an empty registry to an
-empty catalog and went green — it needed a negative control per branch before the pass meant
-anything.
-
-**And a tool with no test at all is worse.** `find_symbol` had 1,474 green tests around it and
-not one that called it, so a stray edit that left `isMethod` referenced in `findSymbol` — where
-it is never defined — made **every** `find_symbol` call return `Tool find_symbol failed:
-isMethod is not defined`, and shipped. Its sibling `find_references` was covered in detail;
-the tool beside it was covered not at all.
-
-The cause is a class, not an accident: **a Python `str.replace(old, new)` with no count
-replaces every occurrence**, and the tail of `findSymbol` was byte-identical to the tail of
-`findReferences`. This file already said "a string anchor hits the first match"; replacing
-without a count is the same trap with the opposite failure. When editing by script, assert the
-match count before writing.
-
-`test/backend/mcp/tool-smoke.test.js` is the answer that generalises: every registered tool called once
-on its happy path, plus a membership assertion so a tool added later cannot slip past by simply
-not being in the map. It asserts almost nothing about *what* comes back — the per-tool suites
-do that — only that the call the agent makes does not throw. A tool that cannot run at all is
-the failure that costs a whole turn, and the model has been told by the prompt that it exists.
+1. **Never commit or push to `main`.** A branch, a PR into `main`, the owner merges.
+2. **Rebuild committed builds** (`service-worker.js`, the `.vsix`) after editing their sources.
+3. **Prompt v1 is frozen.** A prompt change goes in v7 as a flag or a feature, never in v1 and
+   never as a new version.
+4. **A new tool is three edits:** handler in `mcp/tools/`, an entry in `TOOL_DEFINITIONS`
+   (`mcp/mcp-server.js`), an entry in `core/prompt/tool-catalog.js`. The description is the
+   contract with the model. Add it to `tool-smoke.test.js`.
+5. **Anything that writes outside the repo or runs something new asks, through three locks:**
+   `requiresApproval` (or the runner) shows a box, `issueApproval` gives a one-use token, and the
+   handler refuses without `consumeApproval`. Subagents never get these tools.
+6. **Secrets never pass through the model**: not in a prompt, an argument, a result, a log or a
+   settings file. They live in the Keychain or a 0600 file; errors are scrubbed.
+7. **The live frame never outgrows the terminal.** A row you draw is a row you budget, and a row
+   that wraps is two.
+8. **No mouse tracking.** New ctrl+ chords go in `HOTKEYS`, never `useKeyBindings`, and never a
+   chord another app owns system-wide.
+9. **`frontend/` imports `backend/`, never the reverse.**
+10. **Nothing the user waits for goes before the first frame** (`startup-order.test.js`).
+11. **An undelivered prompt is held, never dropped; a delivered one is never resent** if that
+    risks a double answer.
+12. **Colour is a role (`T.accent`), never a name.**
+13. **This file stays short.** A new feature adds a line or two to its area here; its story goes in
+    its design file and `docs/CHANGELOG.md`. `docs-size.test.js` caps this file.
 
 ## Layout
 
@@ -147,7 +143,7 @@ server/src/
 │   ├── bridge/       # websocket-server (the Chrome-extension transport)
 │   ├── context/      # token budget: code-minifier, symbol-index, context/memory-manager
 │   ├── atlassian/    # Jira: client, config, ADF and wiki markup, `agent atlassian login`
-│   ├── mcp/          # mcp-server.js + tools/
+│   ├── mcp/          # mcp-server.js + tools/ + client/ (MCP servers you add)
 │   ├── prompts/      # prompt files; prompts/v2/ overrides them for later versions
 │   └── storage/  watcher/
 └── frontend/         # the terminal UI; README.md says where to look and how to debug
@@ -163,10 +159,10 @@ server/src/
                       #   AgentTerminal, QuestionPrompt, SettingsList, Panel
 ```
 
-Imports go one way: `frontend/` uses `backend/`, never the reverse. `core/turn/x.js` and the like in
-this file are under `backend/`. Modules are kebab-case; React components keep PascalCase
-(`frontend/App.jsx`). Tests live in `server/test/`, mirroring this tree —
-`src/backend/core/workspace/paths.js` is tested by `test/backend/core/workspace/paths.test.js`.
+Modules are kebab-case; React components keep PascalCase. `core/turn/x.js` and the like in this
+file are under `backend/`. `server/src/index.js` does nothing but re-spawn `main.js` under `tsx`,
+so plain `node src/main.js` fails. Running the CLI without a TTY fails with Ink's "Raw mode is not
+supported": that is the environment, not a bug (`script -q /dev/null <cmd>` gives it a pty).
 
 ## Architecture
 
@@ -174,1670 +170,346 @@ this file are under `backend/`. Modules are kebab-case; React components keep Pa
 
 `main.js` wires everything and hands off to `frontend/cli-ui.jsx` → `frontend/App.jsx`.
 
-1. `App.jsx` sends user input to `AgentLoop.handleUserMessage` (`core/turn/agent-loop.js`).
+1. `App.jsx` sends input to `AgentLoop.handleUserMessage` (`core/turn/agent-loop.js`).
 2. `PromptBuilder.buildPrompt` (`core/prompt/prompt-builder.js`) assembles the prompt.
-3. `AgentLoop._sendToGemini` pushes onto `extensionQueue` and calls `callbacks.injectPrompt`;
-   `bridge/websocket-server.js` relays it to the extension. The queue is serialized by
-   `isExtensionBusy` — one browser tab, one in-flight prompt.
-4. The content script streams back `gemini_response_stream` (rendered live) then
-   `gemini_response`, which resolves `AgentLoop.handleGeminiResponse`.
-5. `_extractToolCalls` parses JSON tool calls out of the reply text (there is no structured
-   tool-call API — this is text parsing, hence `_cleanJsonString`), then `_executeToolCalls`
-   dispatches through `MCPServer.executeTool`.
-6. Results are fed back via `buildToolResultPrompt` and the loop repeats.
+3. `AgentLoop._sendToGemini` queues it (`extensionQueue`, one prompt in flight per tab) and
+   `bridge/websocket-server.js` relays it to the extension.
+4. The content script streams `gemini_response_stream`, then `gemini_response`, which resolves
+   `AgentLoop.handleGeminiResponse`.
+5. `_extractToolCalls` parses JSON tool calls out of the reply text (`_cleanJsonString` is an
+   escape-aware scan), and `_executeToolCalls` dispatches through `MCPServer.executeTool`.
+6. Results go back through `buildToolResultPrompt` and the loop repeats.
 
-### Bridge liveness and the reply path — the rules
+Rounds per turn, not prompt length, are what a turn costs.
 
-The investigations behind each of these (measurements, wrong theories, the reports that started
-them) are in [`docs/history.md`](docs/history.md#bridge-liveness-and-the-reply-path). Read the
-entry before changing the mechanism it describes.
+### Bridge and reply path
 
-- **The reconnect alarm is periodic and permanent.** `stopKeepAlive` must not clear it: it is the
-  only thing that revives a worker Chrome collected while it believed it was connected.
-  `watchdog-alarm.test.js` pins it, including a source assertion.
-- **An undelivered prompt is held, not dropped.** `sendInjectPrompt` honours `broadcast`'s return;
-  `flushPendingInjects` drains when a client *identifies as an extension* (not on socket open);
-  past `INJECT_BUFFER_TTL_MS` it is dropped, because the lane watchdog has abandoned that turn.
-- **Readiness is a handshake, not a sleep.** `waitForBridge` reports `ready` and `canType`; the last
-  40% of its budget accepts `ready` alone so a broken selector fails readably instead of slowly.
-  The `connect` nudge backs off from 3s to 30s once connected.
-- **In a hidden tab only the page's own timers are throttled** (to ~1/min). MutationObserver,
-  layout and Worker/service-worker timers run at full rate. So the clock lives in the service
-  worker (`startCompletionTicks` → `tick_completion`), the tab's interval is a backstop, and focus
-  is returned as soon as the send lands. **A clock fix has as many sites as the clock has
-  callers**: `waitForDom`, the paste-settle check and `waitForSendButton` all run on the observer
-  clock, and are tested with a `setTimeout` that never fires.
-- **A reply's finished row ends the wait (v9.9.4, #104, extension 1.66.0).** Read live: Gemini's
-  copy row under a reply lands ~0.6 s after its last text. Once the text is still for 250 ms and the
-  newest `model-response` (never `initialLastReply`, the previous turn's) has it, the turn completes
-  (`finishedBy: 'row'`); otherwise the quiet checks below decide.
-- **Completion needs consecutive quiet checks**, and `confirmSoon` brings the confirming look
-  forward. `completionConfirms` holds that look so a stop cancels it (it leaked and compounded).
-- **The picker cannot kill a turn.** `NON_FATAL_EXTENSION_OPS`, and a notice is never fatal
-  (checked after the settle and `session_lost` branches). `dismissStuckMenu` runs on every inject:
-  synchronous, unbudgeted, cannot throw, Escape before the trigger (it toggles), and it waits for
-  `trackPicker`'d operations so it never closes a busy menu. `switch_model` has the `isInjecting`
-  guard.
-- **Typing:** an unclaimed synthetic paste goes straight to the `insertText` fallback; only a
-  claimed paste or an image waits. The send-button fallback vetoes `Expand input to Fullscreen`.
-- **Repairs:** `prepareTabForTurn` (no discarding, reload a discarded tab); `sendWithRepairs` —
-  send, re-inject, reload, and **never a fresh tab on a new chat** (a new conversation answers a
-  question it never saw). Since 1.56.0 the reload bypasses the cache, a failed inject carries the
-  page's reason (`lastInjectError`, in `/logs extension`), and **the main lane no longer re-injects
-  or reloads**: one send (`sendOnce`), then the **same** `/app/<id>` in a fresh tab
-  (`reopenInFreshTab`: the tab's URL, else `threadUrl`; the old tab is closed only once the new one
-  is up, and kept if it cannot open), then the error. Subagents keep `sendWithRepairs`. The terminal then says one line
-  and the chat's link (`bridge/tab-failure.js`; owner: "too verbose, keep it simple"). The bridge is an IIFE with a `__agentBridgeStop` handover so re-injection replaces
-  an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
-  (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
-  delivered prompt after a disconnect — both risk a double answer.
-- **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
-  `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
-  tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not
-  hold that prompt. The tab's watchdog counts the dots as busy and waits 5 minutes, and a turn that
-  saw generation is never resent, so it simply died. Now the server arms a clock on every main
-  `_sendToGemini`; the first streamed text (or a reply, or esc) stops it. On expiry the same
-  prompt goes again, verbatim, with `freshTab`: the extension reopens the chat on its own
-  `/app/<id>`, then closes the stuck tab, which ends the silent generation so it cannot answer
-  late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
-  over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
-- **A closed tab is noticed (v8.10, `noteTabClosed`, extension 1.61.0 `tab_closed`, `whoseTab`).**
-  Owner: end the turn and say so, never reopen and resend. Decided by the **lane**, not
-  `pendingGeminiResponse`, which no reply clears: a reply owed ends the turn and carries the message;
-  idle is a row; between rounds of tools the turn goes on and the next prompt reopens the chat. Every
-  close the extension makes must let go of the tab first. With no window left, `tabs.create` rejects
-  (`No current window`, the silent "failed to reopen"), so `openTab` opens a window. Chrome quitting
-  is not covered: nothing watches the socket, so it waits for the two-minute clock.
-- **A message the tab never sent is carried (v7.10, `noteUndelivered`, `carryUndelivered`).**
-  Reported with a screenshot: a question failed with `tab_unreachable`, the next message was "try
-  again", and Gemini answered the question before it. On a fatal `tab_unreachable` or `no_tab`
-  (raised only when the prompt was not submitted) in a turn with no reply at all
-  (`_turnAnswered`), the message is kept and sent in front of the next one, marked as never
-  received; the record keeps what was typed, a `↻` row says so, and `/new` drops it. If the lost
-  prompt was turn 0 (`<system_state`), the builder had already marked it sent, so it is reset and the
-  next message teaches the chat. Pty (`FAKE_FAIL_SENDS=1`): 0 clears at 13 and 24 rows.
-- **Tool amnesia is a thread change.** `_recordThread` calls `resetPromptState()` when the thread
-  id changes from a previous one. `looksLikeCapabilityDenial` judges the *subject* (tooling, not
-  code); `denial-corpus.test.js` holds both directions.
-- **One recovery table** (`core/turn/reply-recovery.js`): a provider error re-sends the failed prompt
-  verbatim after 3s then 8s (±20%, cancelled by `abortExtensionWork`); a usage limit is never
-  retried on the same model — it steps down (v5.28).
-- **Traces:** five stages per turn; `first_token` is marked when the observer first sees text. Since
-  v7.2 (#104) each trace also says how the prompt was typed (`typed`: `pasted` / `pasted_late` /
-  `inserted`, `lines`, `hidden`) and `/logs speed` splits `type` by it; `generating_start` is
-  marked by the observer, because the check's 3 s guard and 2 s tick made it read ~4 s every time.
-  Measured first: typing is most of the gap between turns (0.6 s median, 35 s for 28k
-  characters). The ~2 s completion settle is the other part, and shortening it once truncated
-  replies, so it waits for the live page.
-  Rounds per turn are on every `tool-usage.jsonl` row. Prompt length is not what a turn costs —
-  round trips are.
-- **The screen:** `mergeLoopHistory` uses recorded positions (`__loopIndex`, `__echo`), never a
-  count. A committed turn that grows remounts `<Static>`; keeping `isProcessing` up for the whole
-  turn was 1,228 clears — do not retry it. `agent_response` carries `continuing`. Frame numbers
-  only from a driver that waits on output, never on wall-clock sleeps.
-- **Still unexamined:** narrowing the MutationObserver from `document.body` to the response
-  container — wants measuring on the live page.
+The rules, each with an incident behind it ([`docs/design/bridge.md`](docs/design/bridge.md)):
 
-### Prompt economics
+- **The reconnect alarm is periodic and permanent.** `stopKeepAlive` must not clear it
+  (`watchdog-alarm.test.js`).
+- **An undelivered prompt is held, not dropped.** `flushPendingInjects` drains when a client
+  identifies as an extension (not on socket open); past `INJECT_BUFFER_TTL_MS` it is dropped.
+- **Readiness is a handshake, not a sleep** (`waitForBridge`: `ready`, `canType`).
+- **In a hidden tab only the page's own timers are throttled**, so the clock lives in the service
+  worker (`tick_completion`). A clock fix has as many sites as the clock has callers.
+- **Completion:** Gemini's finished row under the newest reply ends the wait; otherwise
+  consecutive quiet checks do (`completionConfirms`, cancelled by stop).
+- **The model picker cannot kill a turn** (`NON_FATAL_EXTENSION_OPS`; a notice is never fatal).
+  `dismissStuckMenu` runs on every inject.
+- **Repairs:** the main lane sends once, then reopens the **same** `/app/<id>` in a fresh tab,
+  then fails with one line and the chat's link (`bridge/tab-failure.js`). Never a new chat: it
+  would answer a question it never saw. Subagents keep `sendWithRepairs`. An unsubmitted prompt
+  is resent once, verbatim (`_lastMainPrompt`).
+- **Two silent minutes** (`SILENT_REPLY_MS`) resend once, verbatim, in a fresh tab on the same
+  chat; a second silence ends the turn.
+- **A closed tab ends the turn and says so**, decided by the lane; never reopened and resent.
+- **A message the tab never sent is carried** in front of the next one (`carryUndelivered`).
+- **Every main prompt carries `threadUrl`**, and the tab is put back on the session's chat before
+  typing (`ensureOnChat`); if it will not load there, nothing is typed (`chat_unreachable`).
+- **A fresh session starts in a new chat** (`_freshChatOwed`); `--continue`/`--resume` reopen the
+  stored thread.
+- **One profile gets prompts** (`/chrome`, `profile-binding.js`): bound by a pairing link, never
+  a fallback to another profile.
+- **A provider error resends the failed prompt** after 3 s then 8 s; a usage limit steps the model
+  down instead (`core/turn/reply-recovery.js`).
+- **Tool amnesia** ("I cannot access your files"): a new thread re-teaches the whole prompt
+  (`_recordThread` → `resetPromptState()`); a denial inside the same thread is repaired with
+  `requestToolRedeclaration()`, never `resetPromptState()` (`core/turn/drift-detector.js`).
+- **Scraping:** `extractLatestResponse` waits for a *new* block; Gemini's editor takes text only
+  through a synthetic paste (`ClipboardEvent('paste')`), never `innerHTML`; a formula is scraped
+  once, as its TeX; a Canvas chip is a request to write the file with `create_file`.
+- **Traces** record five stages per turn and how the prompt was typed (`/logs speed`).
 
-`PromptBuilder` sends the **full system prompt + tool definitions only on turn 0 and every
-Nth turn** (`resetPromptState` after `/compact` or `/clear`). This is not an optimization —
-resending a large system prompt every turn trips Gemini's repetition/safety
-filters and A/B-test modals. Prompt content is also tiered by `modelTier`
-(`lite` / `flash` / `pro` — renamed 2026-09-20 to the picker's own words) via
-`_getReasoningInstructions`.
+### Prompt
 
-**The prompt follows the tab, not the setting (v5.26, `AgentLoop._promptEffort`).** Every build
-goes through `_promptConfig()`, which uses the rung whose model is selected in the picker
-(`rungForModel`, the reverse of `pickModelFor`, pins included) and falls back to
-`modelConfig.effort` when the picker is unread, the selection is a mode, or a switch is in flight.
-The setting is never rewritten. The thread is re-taught (`resetPromptState`) only when the
-**tier** moves, which `promptBuilder.promptTier` records, so `/effort` no longer resets on its
-own. Each reply records `effort`, `promptEffort` and `model`. The first review of the rungs is
-in `.agent/artifacts/plans/2026-10-26-effort-review.md`.
+- **Turn 0 and every Nth turn carry the full system prompt and tool definitions**; other turns
+  carry the **tool anchor** (names only). Resending the full prompt every turn trips Gemini's
+  filters. `resetPromptState` re-teaches after `/compact`, `/clear` or a thread change.
+- **Two versions** (`core/prompt/prompt-versions.js`, `/prompt`): **v1** (original, frozen by
+  `prompt-v1-golden.test.js`) and **v7** (current, default for new installs). A version is wording
+  only: v7's switches are `flags` (`lookFirst`, `noCanvas`, `modeNote`, `mcpSetup`, …), and
+  `FEATURES` (Jira, MCP, memory) are on for both, each silent until set up. v2–v6 read as v7.
+  Every reply and `tool-usage.jsonl` row records `promptVersion`; judge a change by `/prompt` and
+  `/logs`, not by its size.
+- **Prompt files:** `prompts/<name>.md`, overridden by `prompts/v2/<name>.md` for later versions.
+- **Tier** (`lite` / `flash` / `pro`) shapes the reasoning instructions. The prompt follows the
+  model actually selected in the tab (`_promptConfig`), not the setting.
+- **A tool name on every turn is not a trigger.** An unused tool needs a nudge at the moment it is
+  relevant (`_turnEvidence`), not another mention.
+- **Loop nudges, once per turn:** a reply that promises to look and makes no call is asked to make
+  it (`_askToKeepPromise`); a Canvas reply is asked for the file.
+- **Warm start** (`/startup warm`) sends turn 0 on connect; it is off by default.
 
-**The prompt is versioned (v5.32, `core/prompt/prompt-versions.js`, `/prompt`).** Asked 2026-10-28: "we
-don't know exactly if newer will be better or not". Every prompt change had replaced the one
-before, so "better" was argued from prompt sizes. Now **v1 is frozen**: `prompt-v1-golden.test.js`
-hashes 98 shapes (turn 0, short, refresh, redeclare and warm-up for every effort × mode ×
-subagents; handovers; a tool batch; subagent wrappers; compaction) against
-`test/backend/core/fixtures/prompt-v1-golden.json`, so a change that reaches v1 fails the build — put it
-in a newer version. A version is its differences: `dir` overrides prompt files
-(`prompts/<dir>/<name>.md`, else the base file — `prompt(name, dir)`), `flags` for builder switches,
-`refreshEvery` for the reminder cadence. Per person in `~/.agent/settings.json`, default v1; a
-switch re-teaches the chat only when the version changes. Every reply and every
-`tool-usage.jsonl` row records `promptVersion` (older rows count as v1, since v1 *is* v5.31's
-prompt), and bare `/prompt` and `/logs tools` show turns and rounds per version. The status bar
-says the version only off the current one.
+Details: [`docs/design/prompt-and-models.md`](docs/design/prompt-and-models.md).
 
-**Two versions since v9.9.5: v1 (original) and v7 (current).** Owner: v3 to v6 "are all feature
-upgrades that could be written to the initial v1 and v2". A version is now wording only; Jira, MCP
-and memory are `FEATURES`, on both, each silent until set up (a site, a usable server, a fact).
-v7 is v2's wording plus `lookFirst`; v2 to v6 read as v7 (`LEGACY_VERSIONS`), logged rows keep their
-labels. A missing setting is still v1, so nobody is moved; first start writes v7
-(`firstRunSettings`). The golden was re-pinned once, for `manage_memory`'s wording alone (54 shapes,
-each proved by swapping that line back). Read "v2"…"v6" below as history: a new switch is a v7 flag
-or a feature, never a version. `/prompt` is two rows, `current` and `original`.
+### Models and effort
 
-**v2 is the dedup plan (v5.34, `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`)**, as five
-`flags` plus five files in `prompts/v2/`. It cuts lines that cost round trips: no read-back after
-every edit (the result already says applied, approved, rejected or mismatch — the handovers say
-so too, or they would contradict it); `task.md` ticked in the reply that makes the next call; the
-review subagent only past one file or ~30 lines; `walkthrough.md` only after a `task.md`. It also
-keeps one copy of each repeated rule. **The plan was wrong once:** it dropped the `edit_file`
-mismatch bullet on medium too, but medium gets the terse tool list, which does not say it.
-`prompt-v2.test.js` asserts every surviving copy for that reason. Turn 0 is −78 / −148 / −892
-characters (low / medium / high): the size is not the point, round trips are. Judge it by
-`/prompt` after some days on v2, not by this paragraph.
+- **Effort rungs** low / medium / high / max map to the account's models (`rungForModel`,
+  `pickModelFor`, `model-match.test.js`). Max is the model named Argon, else the first after Pro;
+  without it, Max is unavailable. A **locked** model (lock icon in the picker) does not exist.
+- **The browser differing from the effort is asked about once** (`/effort mismatch ask|follow|switch`),
+  never mid-turn; the footer shows `⚠ <model>`. A switch is confirmed by reading the picker back;
+  a failed switch or a quota reply steps **down**, never up (`core/models/model-fallback.js`).
+- **Thinking level follows effort** (`core/models/thinking.js`), sent with every main prompt, on
+  accounts whose picker has levels; an account with none shows no Thinking anywhere.
 
-**v3 is v2 plus "look before answering" (v7.9, `lookFirst`).** Reported: asked "how is the
-symbol matching done in this node server" on Flash-Lite, the agent answered from `AGENT.md`'s map
-with nothing opened. Two halves. The prompt: rule 9 of the terse list on low, a bullet under
-Source Code on medium (`LOOK_FIRST_RULE` in `prompt-builder.js`; +240 / +273 characters on turn 0);
-high is v2 byte for byte, since Pro plans first. The loop: a reply with no tool call whose last two
-sentences promise to look (`looksLikeEmptyPromise`, offers and questions excluded) is asked once
-per turn to make the call (`_askToKeepPromise`: 3 lines and the tool names; an `empty_promise`
-notice and a `↻` row). The loop half is gated on the version too, so `/prompt` compares what v2
-and v3 do. Replayed over the 99 stored replies that ended a turn: 0 hits, against 11 among
-replies a tool call followed. `looksLikeCodeQuestion` also learnt "this server" and
-`snake_case`/`camelCase` names, so `turn0_no_tools` counts the reported case. Pty: the promise,
-the ask, the call, the answer, 0 clears at 13 and 24 rows.
-
-**Max is a fourth rung: High's prompt on Argon (v5.26).** Argon is a *model* on a few accounts,
-labelled `4 Argon` and listed after Pro (seen on the owner's account, 2026-10-26). Under the old
-"High = the last model" rule it took High, Medium landed on Pro, and Flash became unreachable.
-`byProAnchor` finds Pro by name again; Max is the model named Argon, else the first model after
-Pro. With no Pro in the list the positional rule runs unchanged and Max is unavailable, so every
-three-model account maps exactly as before (pinned in `model-match.test.js`). `/effort max`
-without Argon answers `stays <rung> · Argon is not available on this account` and changes
-nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
-slider's model line names what the marked stop maps to on this account (`stopModel` in
-`frontend/menus/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
-
-**The browser differing from the effort is asked about, and a failed switch steps down (v5.28,
-`core/models/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message
-is typed and offers three choices: switch the browser, send on it this time, or set the effort to
-match. It asks once per disagreement (`_mismatchAcks`, keyed on setting and tab) and never mid-turn.
-`/effort mismatch follow` brings back v5.26's silent following, and `switch` always switches,
-inside `handleUserMessage`, so the side panel gets it too; the panel never asks. A switch is
-confirmed by the picker's read-back (`switchAndConfirm`: the `requested` and `switchedTo` the bridge
-already sent, which nothing used to compare). `ensureRung` walks down from there: Max → High →
-Medium → Low, never up. **A quota reply now steps down and re-sends verbatim** (`step_down` in
-`reply-recovery.js`, once per turn), answering the "drop to Flash? wait?" the recovery table above had left open. A landing
-below the wanted rung is `effortFallback` for the session: the status bar shows `↓ <model>`, nothing
-asks again, and `/effort` clears it. Pty: 0 clears at 13 and 24 rows on all three paths.
-
-**Warm start is opt-in (v5.27, `/startup warm|cold`, `AgentLoop.warmUp`).** Warm sends the turn-0
-block on its own when the first extension identifies (after `resumeThreadOnConnect`) and after
-`/new`, through `_askThread`, so the first message goes out as a short turn. It defaults to cold
-(owner: "warm should be not at default"), because it costs one Gemini message per launch. The
-prompt is marked seen only on Gemini's answer; a timeout, an error or esc resets it, so the worst
-case is a cold start. It is skipped when the chat already has the prompt, when a turn is running,
-or when a thread, recap or compaction hand-over is owed. A warm-up's thread is kept off disk until
-the first real reply (`_threadUnsaved`), or `--continue` could pair a filed conversation with a
-chat that never saw it. The UI learns of it through `onWarm`, not a status message: Chrome usually
-connects before App has attached its callbacks. Pty: prompt 0 is the setup, a message typed
-meanwhile queues and goes as the short turn, and 0 clears at 13 and 24 rows.
-
-**A fresh session starts in a new chat (v7.9, `_freshChatOwed`, extension 1.55.0).** Reported with a
-screenshot: a warm start's setup went in under the previous session's last reply. The extension
-types into the tab it owns, and nothing moved that tab off the last conversation, so a cold start's
-first message went there too. A launch without `--continue`/`--resume` (or one that recaps, or
-finds no history) owes a new chat; `_startFreshChatIfOwed` spends it through `startNewChat` before
-the warm-up's prompt and before the first message (after compaction, before the model switch).
-`startNewChat` answers `false` at once when nothing is connected, and the debt stays for the next
-prompt. The extension skips the navigation when the tab is already on `/app`, keeps a `/u/<n>`
-account prefix (`background/chat-url.js`), and **waits for the load** before acking: the content
-script used to set `location.href` and ack at once, which `/new` never noticed, but a warm-up
-sends the moment the ack lands. The "Ready" row shows until the first *user* message, not while the
-transcript is empty, or `/new`'s own row hid it. Pty: `new_chat` before prompt 0 and before the
-warm-up after `/new`; the one `ESC[2J` is `/new`'s reset.
-
-**A reopened tab goes back to the conversation (v7.9, `threadUrl`).** Reported: after the extension
-was reloaded (which clears `chrome.storage.session`, so it no longer knows its own tab),
-`ensureModelTab` opened a blank `/app` and a 508-character short turn went into a chat that had
-never seen the task; the reply was an essay about LLM agents, and `thread_changed` fired only
-after it. `_enqueueExtensionRequest` now adds `threadUrl` to every main-lane prompt (the tab's own
-URL when it is this chat, which keeps `/u/<n>`), and a tab the extension has to open goes there.
-Subagents and a new chat send none. Owned tabs are still the only ones adopted.
-
-The **tool anchor** (`_buildToolAnchor`) is the exception that rides on *every* turn: tool
-names only, 56 tokens against 1,575 for the definitions. The model does not gradually forget
-its tools, it forgets them completely — mid-session it answers "I cannot execute local
-commands or access your local file system" with total confidence and the turn is lost. Three
-detectors in `core/turn/drift-detector.js` back that up, each with a different response:
-`looksLikeMultipleDrafts` → bring the refresh forward; `looksLikeCapabilityDenial` → resend the
-full definitions and retry the turn once (`requestToolRedeclaration`, **not**
-`resetPromptState` — see below); `looksLikeProviderError` → Gemini's own error rather
-than an answer, so re-ask (this one used to be written to disk as a PR plan). All three match
-prose and will always trail the model's phrasing, which is why the anchor exists: prevention
-first, detection as the backstop.
-
-**Tool amnesia is repaired with `requestToolRedeclaration()`, never `resetPromptState()`:** the condensed
-reminder plus the full definitions (9,991 characters, where a turn-0 reset was 25,445, the payload most
-likely to trip Gemini's filters on a session already failing). It outranks the periodic refresh, which
-sends only names. Why: [`docs/history.md`](docs/history.md#moved-from-claudemd-in-v87).
-
-**`pro-hypothesis.md`** asks `pro` what would disprove the expectation (+714
-characters; a numeric confidence score was declined): [`docs/history.md`](docs/history.md#saying-what-would-prove-you-wrong-pro-hypothesismd).
-
-**There is one pro rung (since 2026-09-20):** the old `standard` plus `deep`'s review step. The
-critical-analysis phase and the assumption ledger are declined: they are paid in output tokens on
-every pro turn, which a prompt character count does not show.
-
-**On `pro`, the review goes to a second tab.** A model reviewing its own diff shares every
-assumption that produced it. With subagents on, step 5 sends the diff to `ask_subagent` with
-`role: "review"` (v2+: only past one file or ~30 lines). With them off it stays self-review,
-because naming a tool the prompt does not define instructs a call to it.
-
-**Why one reviewer and not a pipeline** (extra agents should add intelligence, not writes): see
-[`docs/history.md`](docs/history.md#why-one-reviewer-and-not-a-multi-agent-pipeline).
-
-It is also the only fan-out that is *real* here. `extension-lock` gives each **tab** a lane —
-`main:<model>` for the conversation you are looking at, `sub:<requestId>` for a subagent in
-a tab of its own, kept for its session — so `ask_subagent` calls genuinely run at once, same model or
-not. That was not always true: the extension addressed tabs by URL pattern, so two same-model
-requests raced for one tab and could interleave two prompts into one conversation. Tab identity
-is what removed that, and it is why a same-model reviewer is now offered at all. Claude Code's
-subagents buy *context isolation* rather than speed, and Cursor
-3's eight parallel agents are bought with **git worktree isolation** — a separate filesystem per
-agent, which this project does not have and would need before parallel *writers* were safe.
-
-**A subagent session holds one tab (`core/subagents/subagent-session.js`).** Each round sends only what
-that tab has not seen; a fresh tab per round resent **81% of characters** over ten turns. The
-tab closes when the session ends (v8.1 fixed it closing after round 1). A failure of its tab is
-named as the subagent's in the log, the side panel and the `ask_subagent` row (v8.4, extension 1.58.1).
+Details: [`docs/design/prompt-and-models.md`](docs/design/prompt-and-models.md).
 
 ### Tools
 
-`mcp/mcp-server.js` holds a flat `TOOL_DEFINITIONS` array (name, description, parameters,
-handler) with handlers in `mcp/tools/`. To add a tool: write the handler, add one entry to that
-array, **and one to `core/prompt/tool-catalog.js`** — that is what the prompt is rendered from, and
-`toolCatalogDrift()` fails the build if the two disagree. The description *is* the contract.
+- One flat `TOOL_DEFINITIONS` array in `mcp/mcp-server.js`, handlers in `mcp/tools/`, and the
+  prompt's view in `core/prompt/tool-catalog.js`. Catalog fields decide policy: `mutates`,
+  `shell`, `detached`, `dispatch: 'loop'`, `mcp`, `flag` (offered only on prompt versions with that
+  flag). Loop-answered tools (`ask_question`, `ask_subagent`, `manage_memory`) are in
+  `core/turn/loop-tools.js`, derived from the catalog.
+- **Tool-call parsing:** only a fenced block tagged `json`, or an untagged one with a `"name"` key,
+  is a call. A block that yields no call stays in the reply.
+- **Reads go into the prompt as numbered text.** One that does not fit is cut by whole lines and
+  names the missing range (`fitReadResult`). A partial read ends with the headings or definitions
+  it did not show. An unranged read of a large file goes to a subagent for a digest when that is
+  on (`core/subagents/delegated-read.js`); a large log gets `query_log`'s overview.
+- **Edits:** `edit_file` with `oldText`/`newText` or `append`; a miss names the nearest line.
+  An `oldText` that ends the file and that `newText` starts with is run as an append.
+- **Documents:** PDF, `.docx`, `.pptx` come back as Markdown (`mcp/tools/documents.js`); other
+  binaries are refused.
+- **`query_log`** reads log exports (NDJSON, JSON, CSV, text, `.gz`) as records
+  (`log-records.js`); a time with no zone is UTC.
+- **`find_symbol` / `find_references`** (`context/symbol-index.js`): acorn for JavaScript and JSX,
+  `ruby-symbols.js` for Ruby, one table for 14 other languages (`pattern-symbols.js`). acorn-jsx
+  teaches the parser, not the walker, and acorn-walk ignores `ImportSpecifier` — both bite.
+- **`run_command`** shows its last five lines live (`core/commands/output-tail.js`), charged to
+  the live budget; every run is in the command log.
+- **Project commands** (test, lint, build) are detected from root marker files
+  (`core/prompt/project-commands.js`); an `AGENT.md` `Test:` line wins.
+- `executeTool` retries transient OS errors and rewrites `errno` codes into instructions.
 
-**A name on every turn is not a trigger, and there is now a number for it.** `_buildToolAnchor`
-rides every turn — 18 names, 250 characters — and exists because the model does not gradually
-forget its tools, it forgets them completely. It works for that. It does **not** make a tool
-fire. Across 41 sessions and 529 calls, **eight of the eighteen have never been called once**:
+Details: [`docs/design/tools.md`](docs/design/tools.md).
 
-    find_symbol 0 · find_references 0 · open_in_editor 0 · run_background 0
-    manage_task 0 · get_editor_state 0 · recall_history 0 · get_diagnostics 0
+### Approvals, modes and policy
 
-Some of those are fine — `get_editor_state` needs the companion running, `run_background` is
-rare by design. `find_symbol` and `find_references` are not: "who calls this?" comes up
-constantly and `grep_search` answers it worse, 58 times. So the lever for an unused tool is
-never "name it again" — it is a trigger at the moment of relevance, which a standing list cannot
-be. `_turnEvidence` already counts what has run this turn and is the place a nudge belongs.
+- **Writes never go straight to disk.** `edit_file` / `create_file` build a `DiffEngine` diff
+  (`core/edits/diff-engine.js`) with per-hunk accept, backups, atomic writes and `undo()`.
+  `core/edits/diff-approval.js` keeps the model, the screen and the disk told the same thing.
+- **Who may run what is `core/policy/tool-policy.js`**: `isBlockedOutright` and
+  `requiresApproval`, over the catalog's flags. Never a literal list of tool names in dispatch.
+- **Commands** go through `core/commands/risk-classifier.js`; persistent rules are
+  `commandRules` (`/allowlist`). `critical` is blocked in every mode; `risky` asks in every mode.
+  Anything aimed at Rails production is `critical`.
+- **Three modes** (`core/policy/modes.js`), shift+tab cycles them: **plan** (asks for edits,
+  except Markdown inside the workspace — never `AGENT.md`, `CLAUDE.md`, `GEMINI.md`), **auto**,
+  **strict** (asks for every edit except the agent's own artifacts, decided by resolved location
+  under `paths.artifactsDir`, never by extension).
+- **External writes** (`jira_issue`, Atlassian's server) ask in every mode, Send / Don't send,
+  starting on Don't send, with no "always" (`core/policy/external-approval.js`).
+  `requiresApproval`'s **first** statement checks external writes, before mode or risk, and its
+  second the MCP switch; source assertions pin both places. A 403 is `HANDED OFF — not done`,
+  never retried.
+- `DETACHED_TOOLS` makes the read-only exemption ask about `run_background`, whose process
+  outlives the turn.
 
-**And an untagged code fence was parsed as a tool call.** `_extractToolCalls`'s regex made the
-language tag optional and asked only that the body open with `[` or `{` and close with `]` or
-`}`. Gemini labels an *untagged* fence "Plaintext" in its own UI and writes one whenever it
-shows you something that is not code — so a reply illustrating a proposed reminder,
-`[SYSTEM REMINDER: …]` … `{user_input}`, matched. Measured: `plaintext`, `text` and `bash` all
-escape; **untagged is the one that matches**.
+Details: [`docs/design/policy.md`](docs/design/policy.md).
 
-The throw is inside the `replace` callback, so it discarded the **whole reply**, correct prose
-included — and the loop then sent *"Please correct the previous JSON formatting error."* into
-the thread about a tool call that was never made. Models comply with false premises: it invented
-one and spent the turn investigating a question it had already answered. The tag is captured now
-— ```` ```json ```` is a claim the model got wrong and still earns a repair round; a bare fence
-needs `LOOKS_LIKE_TOOL_CALL`, the `"name"` key the contract requires. A block that yields no call
-is also no longer deleted: it returned `''` unconditionally, so a model answering "your config
-should be:" had the answer removed from its own reply.
+### MCP servers, Jira and Confluence
 
-**A running command shows its last five lines (v5.21), like Claude Code's Bash rows.** `run_command`
-was silent until it exited. `exec` keeps collecting exactly as before — the model's result cannot
-change because the screen watches — and listeners on the child's streams feed `core/commands/output-tail.js`,
-which turns chunks into finished lines (a partial line is shown and replaced; `\r` progress bars
-show only what a terminal would; ANSI and control bytes stripped) and throttles to 4/s, leading and
-trailing edge. The loop sends `tool_output`; the UI keeps it to itself (a side panel that draws
-none of it would otherwise wake the service worker four times a second). The row reads
-`◌ run_command <cmd> · 12s · +340 lines`, the clock starting when the command does rather than
-at `tool_call`, which precedes the approval prompt. **The lines are charged to the live budget in
-`runningLayout`** (`live-layout.js`), after the call rows, so a short terminal drops output before a call
-and the turn keeps its two rows. Measured under the pty: 0 clears after approval at 10, 13, 16 and
-24 rows. The run also showed the approval *decision* row repeating the whole command — a system
-row wraps, so a one-line `for` loop drew four rows charged as one — and that row now names only
-the decision. **Not done:** moving a running command to the background (`ctrl+b` is the browser
-key, and it needs `exec`'s process handed to `TaskManager`). **The approval box fits since
-v5.24** (`approvalLayout`, `live-layout.js`): it is drawn where the input was and was charged as the
-input's three rows while drawing fifteen with a long command — 15 clears at 16 rows. Every row is
-decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
-reason, directory, then the border, never the command; a cut command says so on the title row. 0
-clears at 10, 13, 16 and 24 rows. The diff box: `diffBoxLayout` (v9.9.6).
+- **Servers** come from `~/.agent/mcp.json` (Claude Code's shape) and, once allowed per folder
+  and per whole entry in `/mcp`, a repo's `.mcp.json` (`mcp/client/repo-approval.js`; any edit
+  asks again; it cannot use `${secret:}`). Started on first use, never at launch; children die on
+  exit. HTTP is `https`, or `http` to this machine only. Never pass `redirectPolicy: 'follow'`.
+- **The model reaches them through `mcp_describe` and `mcp_tool`.** Each tool is ask / auto / block
+  (`mcp/client/switches.js`); `alwaysAsk` in `mcp.json` beats it. A result is labelled data.
+- **Adding a server:** `/mcp add` (`components/McpAdd.jsx`, `mcp/client/add-server.js`), or the
+  model's `mcp_setup` **only when asked** (v7, `core/policy/mcp-setup-approval.js`). The box shows
+  the command first; the same name and command again in a session runs unasked; a server needing a
+  secret always asks, because the person types it there (`SetupValues`). Saved only if the test
+  answered. A side panel cannot take a secret, so it gets a refusal naming `/mcp add`.
+- **Secrets** go to the Keychain or a 0600 `mcp-secrets.json`; `mcp.json` holds
+  `${secret:<server>/<VAR>}`; a server reads only its own. A text field behind a menu needs its
+  own `usePaste`.
+- **Jira** (`jira_issue`, `atlassian/`): Cloud uses ADF, Server/DC wiki markup; reads answer in
+  Markdown; every other action is a write. The token is set by `agent atlassian login`.
+- **Atlassian's MCP server** is built in (`mcp/client/oauth.js`, `atlassian-server.js`), signed in
+  by browser OAuth; a connection never opens a browser. The record is stored in the Keychain in
+  3,000-character pieces and read back before it is trusted. Reads are a name list
+  (`ATLASSIAN_READS`); anything else is a write and asks.
 
-**A Canvas is a file request (v9.9.4, `canvasTitles`, `_askForCanvasFile`).** Gemini writes
-documents and "interactive visuals" into its Canvas (read live: ~31 s behind the stop button). The
-chip is scraped as `[Gemini Canvas: "<title>" — …]` (`canvasMarker`); a reply with it and no
-call is asked once per turn for `create_file`. v7 says not to
-(`noCanvas`, v9.9.6). **An append
-hidden in an edit is run as one** (`appendHiddenInEdit`): an `oldText` of 40+ characters that ends
-the file and that `newText` starts with; the classifier counts only the added lines, so auto mode
-does not stop on a section added by rewriting the tail.
-
-**Large files and documents (v5.10).** Reported from the work laptop: simple edits in
-1,000–2,000-line files went badly, and building a Confluence document from several files
-struggled at the highest effort. Measured on this repo: two 800-line reads in one reply (~86k
-characters against the 48k batch budget) were cut **by characters in the middle** — App.jsx lost
-lines 289–641 while the result still claimed `range: 1–800` — inside minified JSON where every
-line break was a `\n` escape. Now: a read goes into the prompt as plain numbered text
-(`formatReadResult`); one that does not fit is cut **by whole lines** and names the missing range
-with the exact `read_file` call (`fitReadResult`). `edit_file` retries an `oldText` whose every
-line carries a copied `  12: ` prefix with the prefixes stripped; a miss names the nearest line
-with its neighbours and the range to re-read; and `append` adds to the end without matching, so a
-document is built a section at a time instead of rewriting the whole file each round (classified
-addition-only, so auto mode does not stop on every section). Edit rows read `edit_file doc.md · +3 −0`
-(v5.12 dropped the repeated file name the result first carried).
-
-**A large file is read by a subagent (v6.16, `core/subagents/delegated-read.js`, plan Phase 7).** An
-unranged `read_file` of a text file over 1,200 lines or 80 KB, with subagents on and `/settings` →
-Large files on `subagent`, goes to a `research` tab; the main chat gets a digest (outline, quoted
-passages with line numbers, how to get exact text) capped at 6k, headed "read by a subagent; this
-is its digest, not the file". A range always reads directly — it is how exact text for an edit is
-fetched. Subagents' own reads never pass through `_executeToolCalls`, so it cannot recurse.
-Documents and files over 1 MB are not delegated. The session has a **90 s** budget for all its
-turns (`runSubAgentSession(..., { timeoutMs })`), and only on a failure, timeout or empty answer
-does the main chat get page 1 headed "Read it yourself: continue with startLine=801". Each one
-writes a `delegated_read` notice (lines, ms, rounds, outcome). v2 documents `purpose`
-(`largeFileDigest`), only while delegation is on. Pty: main prompt 850 characters after a
-2,000-line read (43.7k on the fallback, which is page 1); 0 clears at 13 and 24 rows.
-
-**Project commands are detected (v7.4, `core/prompt/project-commands.js`).** Asked by the codebase-support
-findings: the model opened `package.json` or `Gemfile` to learn how to run tests, a round trip each,
-and guessed `npm test` in Ruby repos. Root marker files give test, lint and build (`package.json` by
-lockfile, `Gemfile` → rspec / Rails / rubocop, `go.mod`, `pyproject.toml`, Maven, Gradle, Cargo,
-CMake, then a `Makefile` for what is missing); a `Test: …` line in `AGENT.md` wins. v2 says it in a
-`<project_commands>` block on turn 0 (`projectCommands`; nothing found, no block); `/context` shows
-each with its source. Pty: `/context` in a Gemfile repo at 13 and 24 rows, 0 clears.
-
-**`query_log` reads log exports (v6.20, `mcp/tools/query-log.js` + `log-records.js`, plan
-`.agent/artifacts/plans/2026-10-30-log-query.md`).** Asked for Grafana/Datadog exports "to debug
-issues". `read_file` pages 800 lines, and `grep_search` is line-based. A Datadog JSON export is
-often one line, so a hit is the whole file; a CSV message holds newlines, so a hit is half a record.
-`log-records.js` streams NDJSON, JSON arrays and wrappers (Datadog `data[].attributes`, Loki
-`data.result[].values`, Grafana columnar frames), CSV/TSV with quoted multi-line fields, and text,
-where an indented line joins the record above. Any of them may be `.gz`. Each comes out as a flat
-record with dotted keys.
-
-`query_log` finds time, level, message and source by name, and answers in ≤6k characters of text.
-- **With only a path**: the levels, a 12-bucket histogram with errors per bucket, and the repeated
-  messages, numbers, ids and quoted values replaced, errors first. Then the fields and their top
-  values, where values repeat.
-- **Narrowing**: `where` (`field=value` … `>=`, a field by its last part, `level`/`message`/`time`
-  whatever the file calls them), `text`, `from`/`to`, `groupBy` (counts only, unless `limit` is
-  given) and `around` (`#n` or a time, unfiltered, and reading stops after it).
-- **Times**: epoch values are read by magnitude. A time with no zone is UTC, so it is shown as
-  written; it was local time at first, five and a half hours off.
-
-Measured: 200 MB NDJSON overview 4.0 s; a 248 MB one-line Datadog JSON 5.3 s; RSS under 215 MB.
-It is **v2 only** (`logQuery`). A catalog entry's `flag` keeps it out of the frozen v1 tool list,
-and the reachability guards hold a gated tool to the version that offers it. On v2, an unranged
-`read_file` of a large log (`core/turn/log-read.js`) gets the overview, headed as one. That applies to
-`.log`, `.jsonl`, `.ndjson`, `.csv`, `.tsv` and `.gz`, and to a `.json` whose head has a time key
-and a message or level key, so `package-lock.json` is not one. It runs before the v6.16 subagent
-digest. Pty: a 1.4 MB one-line export read with `read_file` became a 2,370-character prompt; 0
-clears at 13 and 24 rows.
-
-**`read_file` reads documents (v5.29, `mcp/tools/documents.js`).** Before it, a PDF was decoded as
-UTF-8 and handed to the model as mojibake with no error. Now PDF (`unpdf`, pinned exact,
-lazy-imported), `.docx` and `.pptx` (a small zip reader over `zlib`, no dependency) come back as
-**Markdown, not JSON**: headings, `- ` lists, pipe tables, a `--- page N ---` / `--- slide N ---`
-line each, through the same numbered-text path as any read, so ranges and `fitReadResult` work
-unchanged. JSON was asked for and declined — escaping costs the line structure ranges depend on
-and ~10–20% more characters typed into the tab. `.doc`, `.rtf` and `.odt` go through macOS
-`textutil` (stderr not inherited, like `OSASCRIPT_STDIO`); elsewhere the refusal says to save as
-.docx or .pdf. A PDF with no text layer says so in one line instead of returning blank. Anything
-else with a NUL in its first 8 KB is **refused**, naming what can be read. Extractions are cached by
-path, size and mtime. Pty: one turn reading a PDF, a .docx and a .zip — the prompt log holds the
-two as numbered Markdown and the refusal, 0 clears at 13 and 24 rows.
-
-**`/doctor` and `agent doctor` say what is installed (v5.29, `core/install/doctor.js`).** Asked for for the
-work laptop, where an install can miss a package without anything crashing. `dep-recovery.js`
-handles the loud case (a startup import is missing: install once, restart); this is the quiet
-ones — an **optional** package (`unpdf`, imported only when a PDF is read), a wrong version, a
-missing tool (`git`, `rg`, `textutil`). Every package has a tier (`required` / `optional` /
-`build` / `test` / `dev` / `unused`) and a **why** in `PACKAGES`; `/doctor <package>` prints it with
-what breaks and the files that import it. `doctor.test.js` holds the prose to the code: every
-declared package has an entry, `required` is a static import, `optional` only a lazy one, and
-`doctor.js` imports **only built-ins** — the bin runs `agent doctor` before looking for `tsx`, and a
-missing `tsx` prints the offline report. Latest versions come from `npm outdated`, which uses the
-user's npm config (a company registry, proxy and auth); a refusal is reported with npm's reason,
-never as "up to date" — empty output with an error parsed as `{}` did exactly that at first. A
-missing required/optional package shows one startup row (`✗ unpdf not installed · /doctor fix …`),
-and the slash palette now gives way to notice rows: it always offered six, which overflowed 13
-rows by one with that row up (2 `ESC[2J`). 0 extra clears at 10, 13, 24 rows. It found
-`ink-spinner`, declared and imported by nothing — listed as `unused`, and removed in v5.31.
-
-**`/doctor` is a menu since v5.30 (`frontend/menus/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
-All · Required · Optional · Other · Tools (tab or ←/→). Enter opens a package: why, versions,
-importers, then actions: install what `package.json` wants, update to latest, choose a version (`npm
-view … versions`), **remove** for the `unused` tier. A missing tool gets its installer (`brew` on
-macOS, `winget` on Windows; Linux only names `sudo apt …`). A failed install says one line, and
-**Show the error** opens the installer's output. Esc goes back one view; only the list closes. It
-opens on disk state with no network, and `npm outdated` fills in behind it. A version install keeps
-the range's style (`installArgs`: `^`, `~`, exact). `/doctor report` prints the old table. **A change
-that breaks the next start is undone** (`core/install/doctor-guard.js`): manifests and lockfile are copied to
-`~/.agent/doctor-change.json` first; a start up 8 s confirms; a non-zero exit before that makes
-`index.js` restore, `npm install` and start again, once. The record holds the changing session's pid,
-because that session crashing proves nothing about the change. **Driven end to end in v7.7**, in a
-scratch clone under the pty: `/doctor ink` → ink 6.8.0 (no `usePaste`) → `/restart` crashed, the bin
-put the files back, `npm install` ran, and the next start said `↶ ink 7.1.1 → 6.8.0 broke the start`,
-with the clone's tree clean and no record left. The run's one fault was order: npm's output came
-before the line saying why it was running, so that line is now printed first.
-
-**Update all (v9.5, `updatesAvailable`, `updatePackages`).** A `/doctor` row, then a choice: inside
-their ranges, or all to latest, which names what leaves its range. One `npm install` per workspace
-and save style, so a pin stays a pin; what landed is read from disk, not from npm's exit. Run with
-real npm in a **full copy** (`run-deps.sh`; a symlinked `node_modules` is written through): all 11
-moved and `ink` 8 started; `marked-terminal` 8 is in since v9.9.6 (Node 22.12+), bold its own. The
-guard undoes a crash, nothing else. Below 12 rows a subtitle is shed, so a job takes the title row.
-
-**`/update` is a menu (v9.5, `components/UpdateMenu.jsx`, `core/install/editors.js`).** Update, Editor
-companion, Dismiss. `/update done` is gone: Chrome's extension reloads itself (since 1.58.0), so only
-the companion is ever waited on. Editors are multi-select, read back after install, and Other shows
-the command. **Anything that can reach a real app needs an allow-list:** one harness run really
-installed into an editor found on PATH. `AGENT_EDITOR_APPS` fixes the search; `setup-home.js` sets it.
-
-**Jira (v8.1, `jira_issue`, prompt v4).** Owner: every write asks, as a mandatory step. Reads (`get`,
-`search`) answer in Markdown; every other action, an unknown one included, is a write. Three locks,
-each tested with a negative control: `requiresApproval`'s **first** statement returns
-`isExternalWrite` for an `EXTERNAL_TOOLS` call, before mode or risk (a source assertion pins its
-place); `runExternalTool` (`core/policy/external-approval.js`) plans the write against the live issue,
-shows it as a Send / Don't send box that starts on Don't send, stores no rule for "always", and logs
-the outcome as `risk: 'external'`; and the handler refuses without a one-use token from
-`approval-token.js`, so the registry alone cannot write. Subagents are refused the tool. A 403 is
-`HANDED OFF — not done`, never retried. Cloud is `/rest/api/3` with ADF, Server/DC `/rest/api/2`
-with wiki markup (`atlassian/adf.js`, `wiki.js`); what a write would lose (panels, mentions) is
-named in the box. The token is only in the Keychain or `~/.agent/atlassian-token.json` (0600), set
-by `agent atlassian login` (run by the bin before `tsx`); never in a prompt, log or settings file.
-v4 offers it only once a site is set up (else v3 byte for byte); `/jira` checks the sign-in. Pty
-on the fake Jira: Don't send sends nothing, Send one request, 0 clears. No real Jira run yet.
-
-**A subagent's tab failure is the subagent's (v8.1, extension 1.58.0).** Reported with
-screenshots: digests of CLAUDE.md and CHANGELOG.md failed and the user's turn ended with the
-failed-send line. The worker kept a session tab only when the reply carried `sessionId`, which the
-page never sends, so each session tab closed after turn 1 (`isSessionTab` asks the worker's map
-now); and `tab_unreachable` ended the main turn whoever sent the prompt (it carries `isSubagent`
-and `requestId` now, and settles that request only). **The tab is put back on the session's chat
-before every main prompt** (`ensureOnChat`, `chatToReturnTo`; owner: "the agent should check
-whether it is continuing on the same chat"): `threadUrl` names it, the tab's account is kept. If it
-will not load there nothing is typed: `chat_unreachable`, one warning naming `/chat <link or id>`
-(`openChat`) and `/new`, and the message is carried. A reply from another chat says so too.
-`_cleanJsonString` is a scan now: its regex did not know `\"`, so a long edit's newlines after
-the first escaped quote stayed raw ("Bad control character", a lost round). An extension
-since 1.58.0 that is older than the checkout is asked to reload itself (`reload_extension`), once
-per version and only between turns: no app on macOS opens a `chrome://` link.
-
-`find_symbol` / `find_references` (`context/symbol-index.js`) are the structural half of code
-search, on acorn + acorn-jsx + acorn-walk. Two traps, either of which reproduces the failure
-that got `ast-chunker` deleted: `acorn-jsx` teaches the *parser* and not the walker, so a `.jsx`
-file parses and then throws `No walker function defined for node type JSXElement`; and
-`acorn-walk` defines `ImportSpecifier` as `ignore`, so `import { X }` is never visited and "who
-imports this?" answers nothing. Built lazily and cached by mtime — 135 ms cold, 3 ms warm on
-this repo, 282 of 282 exported symbols.
-
-**Ruby since v6.8 (`context/ruby-symbols.js`), by line patterns, and acorn is loaded on first
-use.** `.rb` and `.rake` files are indexed rather than skipped. Definitions come from `def`
-(operators and any receiver included), `class`, `module`, constants, `attr_*`, `alias`,
-`alias_method`, `define_method :x` and `scope`. References are word matches on code lines, with
-comments, `=begin` blocks, heredoc bodies and string contents blanked (`#{}` kept). Checked
-against Ripper over the 1,093 `.rb` files macOS ships: **17,628 of 17,641 definitions (99.9%)**,
-160 ms cold. The first cut found 92.4% because a heredoc named in a *comment* blanked the rest
-of the file. Answers that include Ruby carry `rubyNote` (no run-time methods, no names in
-strings, `x.name` is any object's), and a Ruby file in `find_references` is marked `byText`.
-`vendor/bundle` is ignored. acorn, acorn-jsx and acorn-walk are `optional` in `/doctor` now;
-`loadJsParser()` imports them, and if that fails JavaScript is listed as skipped with the
-reason. `find_symbol`'s "JavaScript and JSX only" is v1's frozen text; v2 names Ruby
-(`symbolLanguages`), since a tool description is part of the prompt.
-
-**Every other language comes from one table since v6.21 (`context/pattern-symbols.js`).** Asked
-"can't we make it generic?": a row per language (TypeScript, Python, Go, Java, Kotlin, C#, Swift,
-Scala, Rust, PHP, C/C++, Elixir, Lua, shell) gives comments, string forms (raw, triple, interpolated,
-char) and definition patterns. One scanner blanks literals and one matcher finds names. C-like
-rows also pass `definitionShape`, which follows the parameters across lines, rejects a call inside
-an expression, and needs a body, `throws`, `:` or `->` after the `)`. Measured against each
-language's own parser, as definitions / references, recall/precision:
-
-| oracle | files | definitions | references |
-| --- | --- | --- | --- |
-| Python `ast`, stdlib | 626 | 99.80 / 99.99 | 100 / 100 |
-| `go/ast`, every 3rd GOROOT file | 1,501 | 99.96 / 100 | 100 / 100 |
-| TypeScript compiler, `.d.ts` | 108 | 99.11 / 99.98 | 99.98 / 100 |
-| `javac` + its scanner, JDK 23 `java.util/io/net/sql/http` | 410 | 99.31 / 99.97 | 100 / 100 |
-| clang AST + raw lexer, googletest/spirv-tools/glslang (v6.23) | 325 | 98.50 / 97.90 | 100 / 100 |
-| TypeScript compiler, Radix UI's React `.tsx` (v6.23) | 149 | 99.35 / 99.22 | 99.53 / 100 |
-
-C++ counts only definitions with a body (`bodyOnly`) and skips multi-line `#define` bodies; ALL-CAPS
-names before `(` are macro calls. **Kotlin, C#, Swift, Scala, Rust, PHP, Elixir, Lua and shell
-have fixtures, not an oracle.** The index skips files over 2 MB as generated, plus `vendor`,
-`.venv`, `site-packages`, `target`, `Pods`, `.gradle`, `.next` and `*.d.ts`. Answers carry
-`patternNote` and mark such files `byText`. v2's `find_symbol` names the languages; v1 keeps
-"JavaScript and JSX only". What each oracle found: [`docs/history.md`](docs/history.md#moved-from-claudemd-in-v87).
-
-**A partial read of Markdown ends with the headings it did not show (v6.14, `unreadOutline` in
-`mcp/tools/read-file.js`).** Asked about this agent's architecture, the model read README lines
-1–100 and 90–150 and answered from them; the pointer to this file sat under `## More` at line 258,
-and nothing in either read said that section existed. `#`–`###`, fenced code skipped, capped at
-40, written `- ## More (line 258)` because `fitReadResult` reads a leading number as a shown line.
-**Code gets the same since v7.6 (`codeOutline`):** a partial read ends with `Defined outside lines
-1–800:` and `- method total (line 840)`, from the `find_symbol` engines (acorn, Ruby, the pattern
-table), so the next read is aimed rather than paged. Silent on a whole read, an unknown language, a
-file over 2 MB or a parse error. Pty: a scripted ranged read of a Ruby file put `method charge (line
-32)` in the next prompt; 0 clears at 13 and 24 rows.
-`AGENT.md` (in every turn-0 prompt) and README's "How it works" now point here too.
-
-`executeTool` retries transient OS errors (EBUSY/EACCES/EAGAIN/EMFILE/EPERM) with
-backoff and rewrites `errno` codes into LLM-readable instructions.
-
-**MCP client (v9.0, `mcp/client/`).** `~/.agent/mcp.json`, Claude Code's shape. Started on
-the first `/mcp`, never at launch (`AgentLoop.mcp` is lazy), and the model reaches nothing until v9.1.
-`/mcp` lists servers and Jira together. `env` values are scrubbed from errors, descriptions and
-results; children die on `exit`. Tested against a real process (`test/fixtures/mcp-fixture-server.js`).
-
-**The model reaches them through two tools (v9.1, prompt v5).** `mcp_describe` and `mcp_tool`; servers
-are data behind them, so a schema is typed into the tab only when asked for. With no usable server v5
-is v4 byte for byte, and v1–v4 never read a config. Turn 0 gets `<mcp_servers>`, capped: +2,445
-(low) / +3,146 (high) characters at 40 tools. **The switch** (`mcp/client/switches.js`, per person):
-`ask`, `auto`, `block`; new tools ask; `auto` runs in plan and auto and asks in strict; `alwaysAsk` in
-`mcp.json` beats it. Three locks as for Jira: `requiresApproval`'s second statement (a source assertion
-pins it), the box (`core/policy/mcp-approval.js`, starts on Don't run), and a handler that refuses
-without a one-use token unless the switch says run. **In one reply:** `mcp_describe` and calls needing
-no box run together, 4 at once per server; anything else waits for them (`mcpInFlight`) and calls after
-a box wait for it. A call is never repeated. A result is labelled data and cannot close its own label.
-
-**Adding a server (v9.2, `/mcp add`, `components/McpAdd.jsx`).** Four pasted shapes (`parseServerInput`); the
-check step always shows the command before anything runs. A secret goes to
-the Keychain or a 0600 `mcp-secrets.json`, `mcp.json` holds `${secret:<server>/<VAR>}`, and a server reads only
-its own. **A text field behind a menu needs its own `usePaste`:** the prompt's is inactive there, bracketed
-paste goes off, and a pasted JSON's first newline is an Enter. The pty must set `AGENT_MCP_NO_KEYCHAIN=1`.
-
-**The model adds one when asked (v9.9.7, `mcp_setup`, `core/policy/mcp-setup-approval.js`).** Owner: "the agent
-can add and test mcp connection if user asks for it". v7 only (`mcpSetup`), with or without servers: +333 / +333 /
-+688 characters on turn 0. `/mcp add`'s parse, name, test and save. Owner on the box, **one box, then auto**: a new
-name and command show Test and add / Don't add (on Don't add, every mode; esc is Don't add); the same one again this
-session runs unasked; one needing a secret always asks, since the person types it there (`SetupValues`) and it goes
-`answerCommandApproval` → runner → handler, never into a prompt. Saved only if the test answered; the handler wants
-the token; `mcp: true` keeps subagents out. A side panel cannot take a secret, so it gets a refusal naming `/mcp add`.
-Pty `SCRIPT=script-mcp-setup.json ./run-mcp.sh ROWS 90 setup`: 0 clears at 13 and 24, the value in no screen or prompt.
-
-**A repo's `.mcp.json` and HTTP servers (v9.6, `mcp/client/repo-approval.js`, `config.js`).** A cloned
-folder writes that file, so nothing in it runs until the person allows it in `/mcp`, per folder and per whole entry:
-any edit asks again. It cannot use `${secret:}`, because secrets go by server name and a repo picks its names. Your
-`mcp.json` wins a shared name. **`switchKey`** ties a repo server's ask/auto/block to the entry, or it could arrive on
-`auto` by reusing a name. HTTP is `https`, or `http` to this machine only, with `headers`; no SSE. OAuth is v9.9's, below. Cross-origin
-redirects are refused by the SDK's default: do not pass `redirectPolicy: 'follow'`. A lost session fails that call
-and the next one reconnects. Pty: `run-repo.sh`, no process before the yes.
-
-**Jira and Confluence by browser sign-in (v9.9, `mcp/client/oauth.js`, `atlassian-server.js`).**
-`agent atlassian login` opens Atlassian's consent page; `--token` is v8.1's flow, kept for Server/DC. Atlassian's
-server (`https://mcp.atlassian.com/v2/mcp`, read 2026-11-08: 401 with resource metadata, self-registration, PKCE
-S256) is a built-in `/mcp` row, usable once signed in; the SDK does the protocol, a one-shot `127.0.0.1` callback checks
-`state`, and a connection never opens a browser (`SignInNeeded`). The record goes to the Keychain **in 3,000-character
-pieces**, read back before it is trusted: `security -i` cut a 5,806-character value at 4,039. A fresh sign-in drops cached
-discovery and the record names its address, or a moved server fails every sign-in. **Every write asks, in every mode:**
-reads are a name list (`ATLASSIAN_READS`), anything else is a write, by address not name; `requiresApproval` checks
-`external` before any switch, the box is Send / Don't send with no "always", and `mcp_tool` wants a token.
-Pty `run-atl.sh`, `run-atl-bin.sh` (fixture `test/fixtures/oauth-fixture.js`): 0 clears at 13 and 24.
-**An empty `AGENT_ATLASSIAN_MCP_URL` means the real server:** one harness run registered two real clients that way.
-
-### One Chrome profile
-
-**Prompts go to one profile (v9.3, `/chrome`, `core/workspace/profile-binding.js`, extension 1.62.0).**
-`broadcast` reaches every extension, so a second profile typed every prompt into a second account. A profile
-cannot be named from inside, so it is proved: the agent opens it on a `#agent-pair=<token>` link and that
-extension answers with its `storage.local` id. Bound, nothing else is admitted and a closed profile makes prompts
-wait: **never a fallback.** Unbound, the first install connected wins. Harness: `run-two.sh`, `run-chrome.sh`.
-
-**A locked model does not exist (v9.7, extension 1.63.0).** Read live with Claude in Chrome: an account on
-`Gemini Auto` lists 3.1 Pro and 4 Argon with a lock icon and `aria-disabled="false"`, so the icon is the test
-(`locked` from `describeModelOption`). `pickModelFor` drops locked entries first, pin included; the switch
-refuses one. On that account every rung lands on Auto and the prompt follows the setting, Max reading
-High; `/effort max` says `4 Argon is locked on this account` (`lockedReason`). Both accounts tick a thinking
-level too, reported as a mode: `selectedModel` is the only reader of the tab's model, because a ticked `Low`
-answered for it. Pty (`FAKE_LOCKED`, `FAKE_LEVELS`): no switch sent, 0 clears at 13 and 24 rows.
-
-**Thinking level follows effort (v9.9.3, `core/models/thinking.js`, extension 1.65.0).** Read live (Step 0 of
-`2026-11-06-auto-thinking-visuals.md`): Low/Medium/High on every model, kept across a switch, back to Low on a page
-load. It is sent when chosen (`set_thinking`) and on every main-lane prompt. The trigger names a level on some accounts
-("Pro Medium"), never on Gemini Auto, so the menu's tick is the read-back; a trigger read as Low made every set "fail". `same`, the default, is lightest/middle/heaviest for low/medium/high
-and max, stepping down past a lock; `/effort thinking <level>` pins one. A failed set is one `✗` row, not retried until
-the setting changes, and the prompt goes anyway. Owner: an account with no levels shows no Thinking anywhere (slider,
-`/settings`, panels, status bar). A hand-picked Medium once read as the model "Flash-Lite Medium".
-Pty (`FAKE_LEVELS`): 0 clears at 13 and 24 rows, with levels and without.
-
-### Workspace
-
-`core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
-expansion, relative paths, quotes), `validateWorkspace` (exists / is a directory / readable) and
-`listWorkspaceCandidates` for the `/set-workspace` picker. `AgentLoop.setWorkspace` is the one
-place that rewires the collaborators that hold a copy of the path — `/workspace` and
-`/agent-dir` each used to carry their own list and had already drifted. SessionStore is
-deliberately *not* rebound: doing so would write the current conversation into another
-project's history.
-
-### Approval path
-
-Writes never go straight to disk. `edit_file` / `create_file` produce a `DiffEngine`
-(`core/edits/diff-engine.js`) diff with per-hunk accept/reject, backups, atomic writes, and `undo()`.
-Commands pass through `core/commands/risk-classifier.js`, which decides whether `App.jsx` must prompt;
-persistent allow/block rules live in `commandRules`  (`/allowlist`).
-
-**Rails (v6.19).** Anything aimed at production (`RAILS_ENV=` / `RACK_ENV=production`,
-`-e production`, `--environment=production`, `DISABLE_DATABASE_ENVIRONMENT_CHECK=1`) is
-`critical`, which is blocked outright in every mode, and says to run it yourself. A task that
-drops or rewrites the database (`db:drop`, `db:reset`, `db:purge`, `db:schema:load`, …, through
-`rails` or `rake`) stays `risky` — asked about in every mode, auto included — but under its own
-reason, where it used to read "Mutating shell command" like `rspec`. Both only for a command that
-runs something: `grep RAILS_ENV=production config` is a search.
-
-**Who may run what is `core/policy/tool-policy.js`, not `_executeToolCalls`.** Two pure functions —
-`isBlockedOutright` and `requiresApproval` — over the catalog's own `mutates`, `shell` and
-`detached` flags. It was decided inline, 487 lines deep in dispatch, and that is precisely how
-`run_background` came to skip every gate: the plan-mode branch named the mutating tools
-literally, a fourth was added later and not added there, so the mode whose status bar reads
-"plan — every edit needs approval" spawned a detached shell process without asking, while auto
-mode asked about the same call through the classifier's "Unknown tool" default. **The careful
-mode was the permissive one.** The fix is not "add it to the list" — there is no list any more,
-so the next tool that writes is gated by declaring itself beside its description.
-
-`DETACHED_TOOLS` makes the read-only exemption ask about `run_background`, whose process outlives
-the turn: [`docs/history.md`](docs/history.md#moved-from-claudemd-in-v991).
-
-**The rest of the dispatch loop came apart the same way.** `_executeToolCalls` was 487
-lines; it is 240 now, and the two pieces that left are the two that were doing something other
-than dispatching.
-
-`core/turn/loop-tools.js` holds the three the loop answers itself — `ask_question`,
-`ask_subagent`, `manage_memory`. The catalog has said `dispatch: 'loop'` about them since it
-was written, and the chain named them literally with an `else` sending everything else to
-`mcpServer.executeTool`: a fourth loop tool would have gone to a server with no handler and
-come back to the model as an unknown tool it had just been told it has. `LOOP_TOOLS` is derived
-from the catalog now, so the two cannot disagree.
-
-`core/edits/diff-approval.js` holds what happens between building a diff and it being on disk. Three
-parties have to be told the same thing about that, and each has been the odd one out: the model
-(told `pending_approval` about a file already written), the screen (a rejected edit drawn in
-green), and the disk (the only one never wrong). Keeping them in one function is the reason it
-is one.
-
-**Three modes since v5.11 (`core/policy/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24:
-plan mode asked for every section of a document. `strict` is the old plan mode, below. `plan` also
-writes Markdown **inside the workspace** without asking (by location, never extension) except the
-instruction files (`AGENT.md`, `CLAUDE.md`, `GEMINI.md`), the line the paragraph below holds. The
-prompt states the exception in plan and not in strict, as their disagreeing is the failure below.
-Shift+tab cycles plan → auto → strict, at an approval box too (v9.9.6, `loop.mode` notifies
-`onModeChange` and the panels); mid-turn, the next tool-results prompt says so (v7 `modeNote`).
-
-**A plan review opens only for a plan still waiting (v6.7, `planWorthReviewing` in
-`frontend/transcript/plan-box.js`).** "hi" on Flash-Lite in plan mode wrote `task.md`, a one-line plan, ticked it,
-said hello, and ended on *Plan ready for review* with the editor opened. The review and editor are
-skipped when `task.md` was written after the plan with nothing unticked, or the plan has fewer than
-two steps and under 200 characters. v2's cheap rungs also lose "ALWAYS proactively create a task.md"
-(`answerDirectly`); v1 still says it.
-
-**`strict` exempts the agent's own artifacts, and nothing else**, decided by location, never by
-extension. `isAgentArtifact` resolves the path and prefix-checks it against `paths.artifactsDir`:
-`task.md`, `./task.md`, an absolute path and `.agent/artifacts/../../../task.md` are one string test
-and four files. It fails closed. It used to be `path.endsWith('.md')`, which let plan mode silently
-write `README.md`, `CLAUDE.md` and `AGENT.md` while the prompt and status bar said every edit needed
-approval.
+Details: [`docs/design/mcp-and-atlassian.md`](docs/design/mcp-and-atlassian.md).
 
 ### Subagents
 
-**There is one delegation tool and one switch.** `AgentLoop.topology` is gone — it survives
-only in `_loadConfig`'s legacy folding, where a stored `topology: 'duo'` is read and discarded.
-What remains is `subagentsEnabled`, derived from `modelConfig.subagents !== false`: absent means
-**on**, because a config written before the toggle existed had the subagent tools available and
-reading it as "off" would silently take a capability away from every existing workspace.
-
-`ask_reviewer` and `ask_researcher` are gone too. They were the same tool three times —
-`buildSubagentWrapper(role)` took the role and ignored it, so all three got one generic wrapper
-and only the names implied otherwise. One `ask_subagent` with `role: "review" | "research" |
-"task"` replaces them, and `isParallel` is now `call.name === 'ask_subagent'` rather than a list
-of three. Calls run **in parallel**, each in a *different browser tab* on its own
-`sub:<requestId>` lane. `_runSubAgentSession` gives subagents a restricted tool set.
-
-**A description is a routing rule, not a capability list.** Of the three old descriptions only
-`ask_researcher`'s said *when* to reach for it; `ask_subagent`'s said "Delegate a task to a
-generic parallel Gemini subagent" — a capability with no trigger, which is the documented reason
-auto-delegation never happened. Every role in `tool-catalog.js` now leads with its trigger.
-Measured across 41 sessions and 529 tool calls: `read_file` 187, `grep_search` 58,
-`ask_subagent` 8, `ask_reviewer` 4 (pre-collapse) — **delegation at 2.3%**. That figure spans
-both sides of the rewrite, so split it by date before concluding the triggers did not work.
-
-**Duo is two Gemini tabs, not two models,** since ChatGPT was removed. What the reviewer
-contributes is not different weights: it is a reader with **no memory of the conversation that
-produced the work**. That is the half that matters for the failure it exists to catch — a model
-that reads enough to cite and then reasons from the citation instead of reading on. A cold
-reader has nothing to reason from but the file, so it opens the file. The `reviewer !== main`
-guard that used to forbid this was written when two same-model requests raced for one tab; tab
-identity fixed that, and the guard outlived its reason.
-
-### Context engine
-
-`context/` — `code-minifier`, `context-manager`, `memory-manager`, `memory-store`, `symbol-index`. `CodeMinifier.minifyJson` is on the hot
-path: `PromptBuilder.buildToolResultBatch` embeds every tool result in the next prompt, and
-serialising them compact rather than pretty-printed is ~40% fewer characters there — measured
-on a 30-entry `list_directory` shape: 2,456 pretty against 1,424 compact, **42%**.
-
-**`minifyJson` always returns a string.** A replacer keeps what can be serialised and marks what
-cannot (a cycle, a BigInt). It used to return `undefined`, which threw inside the prompt build, or
-`''`, a tool that ran and seemed to produce nothing.
-
-There is no `ast-chunker` and no `skills/` registry any more. Both were written, never wired to
-anything, and removed on 2026-09-10: the chunker resolved 24% of this repo's top-level symbols
-(it walked only `ast.body`, so every class method and every `export const foo = () => {}` missed,
-and plain acorn cannot parse the `.jsx` files at all), and `SkillRegistry` was a second, parallel
-way to declare a tool that competed with `mcp/mcp-server.js`'s `TOOL_DEFINITIONS` — which is the
-one described above and the one that actually runs. A per-symbol read tool is still a real gap;
-it wants `acorn-walk` plus `acorn-jsx`, not that file.
-`watcher/file-watcher.js` reports external edits into the history.
-
-**Memory is a folder (v9.4, `context/memory-store.js`, prompt v6).** Before it: one `memory.md`, no facts
-saved here, 0 `manage_memory` calls logged, and each call on v1–v5 re-sends turn 0 (`resetPromptState`). One
-file per fact, with author, session, time and why stamped by the harness. **One store for every version:** v1's
-words are frozen, its storage is not, so `memory.md` is imported (`importLegacy`, moved aside, a later note is
-still picked up) and only v1's past-the-cap line changed. v6 lists an index and reads a fact when needed, and
-leaves the prompt state alone. A write is checked against the hash this process last showed the model (`seen`,
-inside a per-fact lock), so eight racing processes get one winner; a person's `/memory forget` is forced. The
-nudge (`core/prompt/standing-rule.js`) adds one line to a turn that sets a rule. **Narrow on purpose:** most of
-the owner's messages are one-off requests shaped like rules; over 195 real ones it fires on 2. Judge it by
-`/logs tools`, "Asked to save a fact", not by this paragraph. Pty: `run-memory.sh`, two launches, 0 added clears.
-
-**The file watcher holds no descriptor per file (v5.6).** chokidar held one per watched file, and
-past macOS's `OPEN_MAX` (10,240) every `posix_spawn` failed with `EBADF`: no command, no `/update`,
-no browser. It is Node's recursive `fs.watch` everywhere (FSEvents on macOS); a Linux tree past
-`max_user_watches` only turns announcements off. Ignores are by path segment and add `vendor`,
-`tmp`, `log`, `coverage`. A spawn `EBADF` reaches the model as "the command never started, do not
-retry". **Any new long-lived resource per file is the same bug.**
-
-### Where `.agent/` actually is
-
-The user-facing map of both folders, and what is safe to delete, is
-[`docs/agent-folder.md`](docs/agent-folder.md). Keep it in step with `paths.js`.
-
-`workspace` used to mean two things: where state lives, and what the agent works on. In a
-monorepo those come apart, so `paths.resolveState(workspace)` walks *up* looking for an
-existing `.agent/`, the way git finds `.git`. The first hit is the **root**; the path from it
-down to the workspace is the **scope**.
-
-```
-/base-repo/.agent/             root — shared by every repo
-├── skills/  config.json                            inherited
-├── repo-1/   artifacts/ state/ conversations/ logs/  this repo only
-│             config.json (overrides)
-└── repo-2/ …
-/base-repo/AGENT.md            instructions for every repo under it
-/base-repo/repo-1/             the code, with no .agent of its own
-/base-repo/repo-1/AGENT.md     instructions for this repo — nearest wins
-```
-
-Nothing found — the ordinary single-repo case — and the root is `<workspace>/.agent` with an
-empty scope, byte-identical to the old behaviour. Opening `/base-repo` and opening
-`/base-repo/repo-1` land on the same state, because both walks end at the same root;
-`workspaceSlug` is keyed on the resolved state dir for exactly that reason, so siblings don't
-collide on one history file.
-
-Scope is **explicit, never inferred from which files the agent touches**, and **chosen at
-launch**: `--scope repo-1`, or just open the repo directly. Shown in the status bar. Tools stay
-rooted at the workspace so cross-repo work is still possible — only state, sessions and config
-are scoped. `/scope` still answers, but only to say where you are and how to change it.
-
-**The prompt's `.agent/artifacts/…` and `.agent/tmp/…` are one literal for every repo (v8.9, #154).**
-Tools resolved it against the workspace, so under a scope `task.md` went to `<repo>/.agent/`, where
-nothing reads, and the next launch took that folder for a root and moved the repo's state. Every file
-tool now goes through `paths.resolveToolPath`, and `isAgentArtifact` too. `resolveState` skips a
-`.agent` holding only those two folders (`isStrayAgentDir`) when a real root is above it, and
-`migrateStrayAgentDir` moves its files, never overwriting. The companion's `agentStateDir` has the
-same rule. **A stray that a launch already filled is not recognised:** `config.json` and `conversations/`
-make it look deliberate, so it stays a root. A shell command (`cat .agent/artifacts/task.md`) is not
-mapped either. Pty: `task.md` in the scope, no `.agent` in the repo, 0 clears at 13 and 24 rows.
-
-**`/files` and `.agent/README.md` (v9.9.1, `frontend/menus/files-view.js`, `core/workspace/agent-readme.js`).**
-Steps A and B of the `.agent` plan. `/files` lists the task list, plans, memory, the conversation and
-earlier ones, logs, `/undo` backups, the home copy and the README, each an OSC 8 link (`Choices`
-takes `link`); enter shows it in Finder by argv, and a missing one opens the nearest folder and says so.
-The README goes to the resolved root after `new AgentLoop`, never creates `.agent`, and is rewritten
-only while its first line is the marker. `/reset` moves it. Pty: 0 clears at 13 and 24 rows.
-**Conversations are one folder each (v9.9.2, `storage/session-store.js`, `core/install/migrate-conversations.js`).**
-Owner, on `sessions/sessions/`: "what is all this". `conversations/<id>/` is written from the first turn and
-`current.json` names it, so filing is an index line; `clear()` removes only an unfiled folder, and `--resume`
-files the one in progress. Moved once from `sessions/` (both copies), leftovers to `~/.agent/trash/`;
-on this repo's real data 97 folders, all 96 listed resumable, a second run moves nothing.
-
-**The landmine:** `homeDir()` is `~/.agent`. A naive upward walk from any project under `$HOME`
-finds it and would adopt the global home as a project root, pooling every project's state and
-leaking every project's rules into everyone else's prompt. `resolveState` excludes it and stops
-walking at `$HOME`; `paths.test.js` covers it. **A temp dir's own `.agent` is the same trap (v8.7,
-`tempAgentDirs`)**: on Linux `os.tmpdir()` is the shared `/tmp`, and tests passing a literal
-`'/tmp'` as the workspace left a `/tmp/.agent` that every scratch workspace adopted, 18 CI
-failures. `resolveState` and `skillSearchPath` skip it; `setup-home.js` gives each test process
-its own `TMPDIR`. A test workspace is a `mkdtemp`, never a literal path. An unwritable one is a
-path under a regular file (ENOTDIR everywhere), never `/proc/…`: Linux's recursive `mkdirSync`
-spins forever there, which hung three test files until the 2-minute cap.
-
-| Path | Contents |
-| --- | --- |
-| `<ws>/.agent/config.json` | `modelConfig`, `commandRules`, `memoryEnabled`, `agentName`, `contextFolders`, `skillFolders` |
-| `<ws>/.agent/memory/` | what the agent learned here, one fact per file — scoped, never walked, read back into `<memory>` |
-| `<ws>/.agent/artifacts/` | `task.md`, `implementation_plan.md`, `walkthrough.md` — written for the user to read |
-| `<ws>/.agent/state/` | the VS Code companion's files (see below) and `bridge.json` |
-| `<ws>/.agent/logs/errors.jsonl` | structured failure log — one JSON object per line |
-| `<ws>/.agent/logs/commands/<date>.jsonl` | every shell command run, blocked or rejected — an audit trail, never read back into a prompt |
-| `<ws>/.agent/backups/`, `context/`, `logs/`, `tmp/` | see `paths.js` |
-| `<ws>/.agent/conversations/` | one folder per conversation (`<id>/conversation.jsonl`, `chat.json`, `plans/`), `index.jsonl`, `current.json`, `compacted.jsonl` |
-| `~/.agent/workspaces/<name>-<hash>/conversations/` | the durable copy, laid out the same |
-
-**Resuming has two doors, and one of them used to skip the browser.** The model's memory is not
-`history.jsonl` — that is the *human's* record. It is the chat thread in the tab, and Gemini keeps
-that thread's id in the URL (`/app/<id>`), which the conversation's `chat.json` stores. `resumeSessionById`
-restores all four halves: the transcript, `chatThread`, an `open_thread` to the extension, and —
-only when there is no thread — `pendingRecap`.
-
-`/history` and the side panel called it. **`--resume` and `--continue` called
-`sessionStore.resumeSession(id)`, the storage method, and stopped.** So the transcript came back,
-the tab opened a *new* conversation, and the model was told nothing about either — the exact
-failure `chat-thread.js` exists to prevent, reached through the one door that skipped it.
-`resumeSessionById`'s own comment had warned why: *"Two copies of 'restore a conversation' is how
-one of them ends up forgetting."* It was lifted out for the panel and the picker; the launch flags
-were the copy left behind.
-
-They cannot simply call it: the constructor runs before the WebSocket server exists, so there is
-nowhere to send `open_thread`. The constructor records `_resumeOnConnect` and reads `chatThread`
-from `chat.json`; `resumeThreadOnConnect()` drains it when a client **identifies as an
-extension** — the same event `flushPendingInjects` hangs off, and for the same reason. It holds
-rather than clears the flag when neither callback set exists yet, because `_toExtension` drops
-silently the way `_notify` once did. **The invariant is a reopened thread or a recap, never
-neither**, and `resume-thread.test.js` asserts exactly that.
-
-**A chat we walked away from is a third state (`72fe1ed`).** `setThread` opens with
-`if (!thread?.id) return` — that guard stops a URL with no id, which is every brand-new chat, from
-wiping a good record — and a fresh chat has no id until its first exchange. So between
-`startNewChat()` and the first reply, memory said "no thread" while disk still named the old one,
-and both resume paths read disk. `startNewChat()` now calls `sessionStore.clearThread(previous)`,
-which writes `thread: null, leftThread: previous`; `planResume` turns `left` into `replay`. This
-note said "the next bug" for a while after it was fixed — check the code before believing a
-paragraph here that says something is still open.
-
-**`/reset` starts a repo fresh, and moves rather than deletes (v5.6).** Both copies go — the
-repo's `.agent/` and `~/.agent/workspaces/<slug>/`, or the reconcile on the next start brings the
-history straight back — to `~/.agent/trash/<slug>-<stamp>/`. Only `core/install/reset.js`'s
-`STATE_ENTRIES` move: a monorepo root holds every sibling's scope folder, and this repo's own
-`.agent/` held a stray `server/` scope, so an unknown entry is listed and left. `skills/` stays
-(a person wrote it); `--keep-settings` also keeps `config.json` and `memory.md`. It restarts,
-because the loop would write the old conversation back.
-
-**Compaction never handed anything over, and ran beside the turn (fixed v5.9).** Found under
-the pty by logging every prompt the fake extension received: the first prompt in the fresh chat
-had the system prompt and the next message and **no summary**. The summary was a `system` turn,
-`pendingRecap` skips those, and nothing else read it — the write-only trap a third time, on the
-mechanism that runs exactly when a session is longest. It also fired at the *start* of a turn,
-alongside it, and `startNewChat` had no lane check, so the tab could move to an empty chat
-mid-round. And the summary came from re-pasting every older turn, results replaced by
-placeholders, into a cold tab. Now (`core/turn/compaction.js`):
-
-- **Asked of the current chat** (`_askThread`, a side question on the main lane whose reply is
-  consumed whole and never run): 465 characters out, where the paste was the largest prompt in the
-  system.
-- **Before your next message, never during a turn (v5.20).** Past the threshold, `handleUserMessage`
-  compacts first (`_runCompaction`, awaited, busy flag up so typed prompts queue) and then sends
-  the message into the fresh chat. Owner's call: *"do not compact mid conversation, that should
-  hit after threshold is met and user enters a new message"* — the between-rounds
-  `_compactAndResume` and the automatic end-of-turn run are gone. A `/compact` typed during a
-  turn still runs when it ends. The status bar says `N% until auto-compact` within 20 points.
-  `startNewChat` refuses while the main lane is busy.
-- **Asked, not forced (v7.5, `compactionToAsk`).** Owner: *"before auto-compact, lets give user
-  option, auto-compact now or continue using, we will stop user once and lets not force it"*. Past
-  the threshold, `handleSubmit` stops before sending (after the mismatch ask, whose choice rides in
-  `opts`): **Compact now** (as before) or **Continue in this chat** (`declineCompaction`: not
-  compacted, not asked, no countdown in the status bar, until `startNewChat`). `/compact` still runs.
-  Esc gives the message back. The side panel never asks, so a panel message still compacts when
-  due. Pty: both paths and a third message at 13 and 24 rows, 0 clears.
-- **Handed over once** as `<compacted_context>`: summary, the archive pointer naming
-  `recall_history`, and the kept turns capped (1.5k each, 6k total). The count restarts at **zero**
-  — counting the kept turns in full re-triggered it on the next turn (a 335k-character reply).
-- **The screen survives the rewrite.** `historyOffset` records how far the front moved;
-  `mergeLoopHistory` positions are absolute, or the kept turns are drawn twice. The turn commits
-  while compaction runs (`turnInFlight` excludes `isCompacting`): holding a long final reply live
-  under the progress row was 8 full clears and 3.1 MB for one compaction; now 0.
-- **The budgets are tested by the log, not argued (v7.3).** `contextFill` (tokens and the rung's
-  budget) rides on every trace and on every `provider_error`, `tool_amnesia` and `compaction` row;
-  `/logs speed` shows first token and reply time by fill band (under 25%, 25–50%, 50–80%, over
-  80%). Before this, none of those rows said how full the thread was, so 24k / 48k / 96k could
-  not be checked. Change a budget only when a band says to.
-- One spinner row, `✻ Compacting conversation… (15s · esc to stop)` under the `❯ /compact` row
-  (v7.9; the stages still ride in `progress`, undrawn), esc cancels with nothing changed; the status
-  bar says `N% to auto-compact` within 20 points; every compaction writes a `compaction` notice with
-  which path ran. **Typed `/compact` never showed its progress**: between turns `loop.callbacks` are
-  the background ones, which go to the side panel, so the row read "Thinking…"; App sets the words
-  itself now.
-- **A new chat is asked for twice (v7.9, `startNewChat`).** Reported: `/compact` said the browser did
-  not start a new conversation. Extension 1.55.0 acks only after the load and the bridge (up to
-  13 s) and the server waited 5, so a slow load failed here and succeeded in the tab, with the
-  summary never handed over. 15 s per ask, and a timeout or `ok: false` asks once more; a tab
-  already on a new chat acks at once. The failure message is two lines and the chat's URL, on a
-  line of its own. `visibleWidth`/`wrapAnsi` count OSC 8 links as zero columns: marked-terminal
-  wraps a URL in one, and the bytes broke it after 44 characters. Pty (`FAKE_NEWCHAT=true,false,true`,
-  `FAKE_SUMMARY_MS`): handed over on the second ask, and the both-refused path, at 13 and 24 rows;
-  the one `ESC[2J` is `/compact`'s repaint, on `main` too.
-
-**Compaction keeps what it promises (v6.15, plan Phase 6).** The fresh chat gets the summary plus
-the last **3 exchanges** (`splitForCompaction`: from the third-last user message, however many rows
-follow), not the last five rows of any kind — replayed against real history those were empty in 28%
-and one row in 41%, filled by watcher and tool rows. Watcher rows (`type: 'fs_event'`) are not
-turns for any count a person reads (`countTurns`: `/compact`'s guard, "Compacted N turns",
-`/context`, settings, the local summary); storage is unchanged. The agent's own writes are no
-longer announced as edits "made externally by the user": `DiffEngine._writeFileAtomic` notes the
-path and its temp file in `core/edits/own-writes.js` and the watcher drops events for that path within
-3 s, so a real edit meanwhile still shows. v2's `ask_subagent` says `low | medium | high | max`
-(`subagentEffortWords`); the code already folded both vocabularies. Pty: the fresh chat's first
-prompt held exchanges 4–6 with 8 watcher rows after them; the one `ESC[2J` at compaction is on
-`main` too (13 and 24 rows).
-
-**Session history is written to both copies on every turn** (`storage/session-store.js`). The
-workspace copy sits next to the code; the home copy survives a clean checkout or a wiped
-`.agent/`. On startup the two are reconciled — more turns wins, the other is rebuilt from it.
-
-`AGENT_CLI_HOME` overrides the home dir, which is `~/.agent`. The pre-rename `GEMINI_AGENT_HOME`
-and the older `AGENT_HOME` are still read, because dropping them would silently repoint an
-existing install rather than fail. It is
-deliberately **not** `~/.gemini`: that belongs to Google's Gemini CLI and Antigravity, which
-really do keep data there.
-
-`core/install/migrate.js` folds the pre-`.agent` layout (`.gemini/`, `.gemini-agent/`, `~/.gemini-agent/`,
-`.agent-github-plans/`, root `setAgentName.json` / `agent.log`) into `.agent/` on startup. It
-runs only when `.agent/` is absent, moves rather than copies, and is a no-op on the second run.
-
-**Those three claims are assertions** (`test/backend/core/migrate-workspace.test.js`): the migration
-moves the user's data before anything is on screen, and a clobber cannot be undone. A fixture for it
-must come from the migration's own plan, not from memory of the old layout.
-
-`vscode-companion/chat-panel-html.js` duplicates the `.agent` constant and ports
-`resolveState` as `agentStateDir` — it cannot import from `server/`.
-`state-dir-parity.test.js` compares the port against the real resolver, monorepo layout
-included; changing `AGENT_DIR` or the walk in `paths.js` turns it red. Until v5.2 the companion
-used `<ws>/.agent/state` unconditionally, so in a monorepo every file it wrote went where the CLI
-never reads. Found when the pty harness's scratch folder sat under a stray `/private/tmp/.agent`.
-`openPlan` and the plan-review lens matcher still assume the unscoped layout.
-
-The companion's original channels are files under the state directory, never a socket:
-`editor.json` (active file and cursor), `diagnostics.json` (the Problems panel, debounced 1.5s
-because `onDidChangeDiagnostics` fires continuously while a project indexes),
-`chat-queue.jsonl` (append-only; "Add to Agent Chat" selections, drained by `frontend/input/chat-queue.js`),
-`plan-review.json` (comments accumulated while reviewing) and `plan-approval.json` (the
-submitted verdict: `accept` | `changes_requested` | `reject`). Files rather than a socket is
-what lets the extension queue work before the CLI is even running.
-
-**The chat panel is the one exception (v5.2, companion 1.8.0)**, because a stream cannot be a
-file. It is the Chrome side panel's own page, copied in at package time, with
-`media/vscode-shim.js` answering `chrome.runtime` over the WebSocket — so there is one renderer
-and a request type cannot be handled in one panel and forgotten in the other. The socket lives
-in the webview: the extension host is Node 20 with no WebSocket client, and the companion has
-no dependencies. Three rules hold it together:
-
-- **It identifies as `editor`, never `extension`.** `broadcast('extension', …)` also reaches
-  editor clients unless the type is in `WORKER_ONLY_TYPES` — what the worker handles itself
-  (`inject_prompt`, `new_chat`, `open_thread`, …). A denylist on purpose: an allowlist starves
-  the panel of the next *request* type someone adds, and a request nobody answers deadlocks the
-  turn. `editor-routing.test.js` reads the worker's `handleServerMessage` switch and fails if
-  the list drifts, and asserts `inject_prompt` never reaches an editor even via `'all'`.
-- **It finds the agent through `bridge.json`** in the state directory — port, pid and a
-  per-launch token, 0600, written on listen and removed on stop only if the pid is still ours
-  (you run several agents at once; newest wins). A dead pid reads as stale, not as a port.
-- **Admission is by Origin *and* token.** `chrome-extension://` is admitted on its Origin, as
-  since P0 — it cannot read a file. `vscode-webview://` and Origin-less local processes must
-  present the token. That closes P0's (`docs/history.md`) "another process as the same user can connect" for
-  everything except a process that can read the user's files. **The pty harness's fake
-  extension still works because it sends a `chrome-extension://` Origin.**
-
-**The panel is built on the terminal's design (v8.8, extension 1.60.0, companion 1.8.14).** Reported
-with screenshots as far behind the terminal. Colour is a role (`panel.css` holds `theme.js`'s `dark`
-and `light`; `THEME_BRIDGE` re-points them at the editor's theme), and a conversation is rows: `▌`,
-`●`, `● Verb(x)` with `⎿`. Mode and effort are menus in the composer, one `#popover` with the `/`
-palette; `panelState()` sends each rung's model on this account and each mode's line, so the panel
-keeps no copy, and main.js hands over `SLASH_COMMANDS ∩ AGENT_COMMANDS`, because backend/ cannot import
-frontend/. `command_result` carries `state`, but `/effort` answers before the tab moves, so
-`panel_state` follows every `onModels` (`switching` holds the `⚠` meanwhile): without it the footer
-stayed one switch behind. An agent older than the panel sends no list, and the
-button falls back to the command. `panel-controls.test.js` runs the real page in jsdom. Headless
-Chrome's window has a 500-pixel minimum, so judge narrow widths in an iframe.
-
-A turn started in the panel runs on the server's callbacks, so the terminal draws it on its
-next turn rather than live — the same as the Chrome side panel always has. A turn started in
-the terminal reaches the panel live, through the mirror.
-
-**Chrome assigns a command's `suggested_key` only on first install** — reloading an unpacked
-extension adds the command with nothing bound, and the shortcut silently does nothing. Reported
-the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
-unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
-
-**Exit clears and prints `agent --resume <id>` (v5.4, `frontend/screen/farewell.js`; kept the transcript in
-v5.20–v5.22; since v5.23 it erases back to the shell line that launched it, nothing at all when
-there was no conversation).** Startup asks the cursor row (`ESC[6n`) before the first frame and no
-longer `console.clear()`s; `frontend/screen/screen-span.js` follows every byte written (stdout.write is wrapped)
-and moves that row up on each scroll; exit asks again and rewinds only if the two agree — else (the
-launch line scrolled off, ctrl+e cleared, no answer) it clears screen and scrollback and puts the
-footer at the top. The reports are matched out of stdin before Ink sees them. The pty driver answers
-`ESC[6n` from a live pyte screen (`NO_DSR=1` for the fallback). An *exact* Claude Code exit for a
-session longer than one screen needs the alternate screen, which costs native scrollback. Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
-(erases only the live frame and syncs its log, so the final render on unmount writes nothing),
-unmounts, clears screen and scrollback, then prints Claude Code's footer at the top (v5.21: `Resume this session with:` and the command on
-a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
-no conversation. Dim is gated on a TTY, not on `NO_COLOR`, as the `mono` palette is. The id is
-`SessionStore.liveId()`: the conversation's folder name from its first turn, and used by
-`rollover`, so the id at exit is the id in `/history`; `--resume <live id>` before it is filed
-behaves as `--continue`, and a resumed conversation keeps its id (`listSessions` keeps the
-newest row per id). **ctrl+c is no longer Ink's** (`exitOnCtrlC: false`): Ink's handler
-unmounted the app and left the process alive behind a frozen prompt, measured under the pty.
-The second press is decided in cli-ui on the raw stream (`interruptGate`), below React, so a
-broken render cannot trap anyone; App only clears the prompt and shows the hint where `/help`
-sits.
-
-### Failure logging
-
-**Bare `/logs` is a picker (v5.35, `frontend/menus/logs-view.js`)**: Failures · Speed · Tools · Text channel ·
-Notices · Clear, each row carrying its one-line answer, enter opening the typed form's full text.
-It used to open only once something had failed, so "is it slower?" needed the word `extension`.
-Failures is a second view of flows (esc steps back). The old summary is `/logs failures`; `/logs
-speed` is new. Traces now record `promptVersion`, so Speed splits reply time by version as Tools
-splits rounds. Pty: 0 clears at 13 and 24 rows.
-
-`core/logs/error-log.js` writes every failure to `<ws>/.agent/logs/errors.jsonl`, tagged with the
-flow it came from (`bridge`, `extension`, `agent`, `tool`, `github`, `task`, `diff`, `context`,
-`ui`). `/logs` reads it back grouped by flow; `/logs <flow>` drills in.
-
-It exists because failures here are spread across processes that cannot see each other — a
-content script in a Chrome tab, the bridge, the loop, the tools, the poller — and the symptom
-surfaces far from the cause. The console was the only sink, and console output inside an Ink
-app is destroyed by the next repaint.
-
-Two properties are load-bearing. It **never throws** (every caller is already on a failure
-path). And it **collapses repeats**: identical failures inside a 60s window are counted rather
-than written, because a poller failing every tick used to bury everything else. The tally is
-written as its own record marked `tally: true` when the window closes or the process exits —
-so a storm of 500 shows as 500, not 1, and the tally line is never miscounted as another
-occurrence.
-
-**Failures and notices are counted apart.** `logNotice` writes `level: 'notice'`; `summarizeErrors`
-counts failures and reports notices beside them; `/logs notices` lists them. The field is present
-only on notices, so a row written before it existed reads as a failure. (Over three days the log
-once held 274 rows and about ten real failures.)
-
-**Demote, never drop.** `/logs <flow>` still shows both, marked `✗` and `·`: a notice beside
-the failure after it is often the explanation, and one `extension_stale` accounts for the six
-selector faults under it. The temporary `picker_trace` instrumentation is what found the
-relay-drift bug in one run after five wrong theories had been *shipped*; a log that discards
-what is merely expected cannot be used to find out why an expectation was wrong. The bar is
-**should a reader act on this**, never whether it is interesting.
-
-**Two ops were one name for two opposite readings, and both needed a discriminator rather
-than a verdict.** "No tab" is expected for a background poll and a real fault for an
-`/effort` that has already tried `ensureModelTab` and failed — and only the extension knows
-which, because `userInitiated` lives in the browser, so `level` travels on the `error`
-payload. `stale_response` meant either *you pressed stop*, where discarding the reply is the
-feature working, or *a watchdog gave up*, where the deadline was shorter than the work;
-`noteUserStop` records the difference and `handleUserMessage` clears it, because a reason
-with no clock is a flag that ages into a lie. **Never demote by op name** — the op is what
-the two cases share.
-
-**And how loudly something is recorded must not decide what the bridge does about it.** The
-`error` case still settles `NON_FATAL_EXTENSION_OPS` and resolves `session_lost` regardless
-of level. **It holds the other way too, and 1.41.0 shipped proof:** `menu_left_open` was a
-notice on the `error` channel, and the bridge decided fatality by op, so it aborted every lane
-including the user's turn. A notice is now never fatal, checked *after* the settle and
-`session_lost` branches. An allow-list of the ops that may stay alive cannot enforce this: the
-next informational op falls into the same hole. Coupling those is how a demoted row stops settling a watchdog, which is a hung turn
-reported as a quiet log.
-
-### The command log
-
-`core/logs/command-log.js` appends every `run_command` to `<ws>/.agent/logs/commands/<date>.jsonl`,
-whether it ran, was blocked by the risk classifier, or was rejected at the approval prompt.
-`/commands` reads it back; the Status tab shows today's count.
-
-Nothing reads it into a prompt and nothing acts on it. It answers "what has this thing actually
-been doing on my computer?" for the person whose computer it is, and it is not covered by
-anything else here:
-
-- `errors.jsonl` records **failures**, by flow. `git push --force` does not fail, so the one
-  command you would most want to find is the one that log never sees.
-- the conversation file has tool calls mixed into the conversation, and `/compact` replaces
-  older turns with a summary — the record you would want six weeks from now is the first thing
-  compaction throws away.
-
-One file per day, because that is how people look for this ("what did it do on Tuesday"), with
-a per-process session id inside so a day can be read back session by session. Append-only, and
-`logCommand` never throws: a failure to write the audit log must not fail the command.
-
-**Blocked commands are the most worth keeping, not the least.** What the agent *tried* to do is
-the interesting half — a `critical` verdict from the classifier is exactly the line someone
-would want to see later.
-
-## Branching and PRs
-
-**Never commit or push to `main` directly. Work lands on a branch and merges through a PR.**
-
-The branches in this repo are deliberate: they are the history. `beta-v1` … `beta-v10`,
-`fix/bridge-lock-and-cli`, `v1-stable` are kept on purpose, not left behind. Do not delete
-them, and do not squash their history away.
-
-- Branch from `main`, named `vN.M/short-description`. The series reached **v3.27**;
-  **v4 opened with `v4.0/honest-log`** — v3 was 34 PRs in six days that did not feel like
-  progress, and the reason only became legible once the failure log stopped counting expected
-  states as failures. v4 was the production-readiness plan in
-  `.agent/artifacts/plans/2026-09-27-production-readiness.md` and closed with #62
-  (`v4.2/fixes-from-use`). **v5 opens with `v5.0/clean-slate`**: cleanup, one recovery policy
-  for the reply path, then an editor chat panel in the VS Code companion. **v6 opens with
-  `v6.0/settings-and-update-fixes`** (owner, 2026-10-30): the open GitHub issues and the
-  small UI asks first, then `.agent/artifacts/plans/2026-10-28-plan-by-effort.md` in order.
-  **v7 opens with `v7.0/docs-refresh-and-screenshots`** (2026-10-30): v6 closed at v6.25 (#130),
-  and v7 works through `.agent/artifacts/plans/2026-10-30-v7-plan.md`, quickest first. A v7.x
-  branch is named for what it does, never for the file it touches. **v8 opens with
-  `v8.0/silent-retry-and-cleaner-rows`** (2026-10-31, after v7.10 #141), owner: "push and merge
-  uptil 7.10 and lets start v8". **v9 opens with `v9.0/mcp-client`** (2026-11-05, #158,
-  `.agent/artifacts/plans/2026-11-05-custom-mcp.md`). **v8.1 is Jira and Confluence**
-  (`.agent/artifacts/plans/2026-10-31-atlassian-tools.md`): built here, tested on the work laptop,
-  and every write asks, in every mode.
-  `/update` runs git in `server/`, and status names paths from the repo root — any path
-  handed back to git there needs `:(top)` (#102).
-- Open a PR into `main`. That is the only way work reaches `main`.
-- A force-push to `main` is not a merge and is not covered by this: it is a repair, it needs
-  the owner to ask for it explicitly, and it breaks every open PR targeting `main` plus every
-  existing clone.
-
-A conflict on a PR that *should* be a clean descendant almost always means the two sides no
-longer share history — check `git rev-list --left-right --count main...<branch>` locally
-before believing GitHub. If local says `0 <n>` and GitHub says conflicts, the remote branches
-have diverged (a rewrite that was pushed to one side and not the other), and the fix is to
-make both sides share the same base, not to resolve 120 files by hand.
-
-## Product decisions
-
-Standing constraints on this project. These are choices, not limitations to route around:
-
-- **Gemini Web only.** Not "primary target" any more — the only one. ChatGPT was removed on
-  2026-09-19 (see `docs/history.md`); a second provider is a decision to re-open, not a
-  file to un-delete.
-- **Purely local** — no hosted backend, no telemetry, no API keys. Inference happens in the
-  user's own browser session, which is the whole point of the extension bridge.
-- **Two front-ends** — the terminal CLI and the Chrome side panel are both supported surfaces.
-- **One answer per turn** — never emit drafts or A/B alternatives for the user to pick between.
-- **One bridge.** This used to read "the two bridges stay separate" — ~600 duplicated lines
-  across `gemini-bridge.js` and `chatgpt-bridge.js`, kept apart because collapsing them risked
-  breaking both at once, and defended by jsdom tests that ran against *both* files so a
-  divergence failed the build. Deleting one settled that argument by removing its subject. The
-  jsdom tests still run, against the one bridge, and say in a comment **not** to restore a
-  second target to make the comparison mean something again: the comparison was a side-effect
-  of having two, never a reason to have two.
-- **An API backend is a fork, not a plan.** It would remove the ceiling — structured tool
-  calls, real parallelism, caching, and `looksLikeCapabilityDenial` plus half of
-  `PromptBuilder`'s economics become dead code — and it contradicts "no API keys" above,
-  which is the identity of the project. The framing that preserves the thesis: the browser
-  bridge stays the default, an API backend is opt-in for people who already have a key.
-
-### Standing decisions from `HANDOFF.md`
-
-No reply envelope; the jitter's second half and the emoji sweep are not happening; terminal
-failures are opt-in per terminal; a test can pin the bug; never write a derived number into a
-document here. The reasoning is in [`docs/history.md`](docs/history.md#standing-decisions-rescued-from-handoffmd).
-
-### Measured and discarded
-
-The reconnect address theory, the audio hack, the batch re-serialisation "fix": measured and
-dropped, in [`docs/history.md`](docs/history.md#measured-and-discarded).
-
-## History
-
-Long-form records of what was removed, measured and decided — bridge liveness and the reply
-path (moved 2026-10-30), the GitHub agent and ChatGPT
-removals, the dead-code audits, the Direction phases, P0–P3 and "The fork" — live in
-[`docs/history.md`](docs/history.md). They moved out on 2026-10-25 because this file had reached
-167.9k characters, past the 150k Claude Code loads. Read that file before re-opening any of those
-decisions; this one keeps what governs the code as it is today.
-
-### Search, and why there is still no index
-
-**No embedding index** (decided 2026-09-11): code search is mostly exact symbols, an index goes
-stale on every edit, chunking destroys structure, and every retrieved chunk would be typed into a
-browser tab. grep → read → grep, plus `find_symbol`, is the answer; evidence that grep fails on real
-questions outranks the argument. The full reasoning and the gap table:
-[`docs/history.md`](docs/history.md#moved-from-claudemd-in-v994).
-
-### Queued prompts
-
-**Prompts typed during a turn are queued, not dropped.** `handleUserMessage` returns early
-when busy, pushing a transient status line the thinking cycle paints over — and by then
-`handleSubmit` has echoed the message into the transcript and cleared the input box. It looked
-sent, the text was gone, and nothing would ever answer it. Reported as four prompts typed and
-one reply. `queuedUserMessage` had sat on the loop as a field that nothing read or wrote.
-
-The queue lives in the UI, because that is where the transcript and the marker are, and
-because "one turn at a time" is the contract that keeps the loop tractable. Busy is read from
-`agentLoop.isProcessing`, never React's copy — `handleSubmit` sets that itself. Draining is
-gated on the loop being idle *and* no diff prompt or menu being open, because the two flags
-disagree during an approval and draining then injects a prompt into a turn parked on a
-decision. `:stop` empties the queue, or stopping is followed instantly by the next prompt.
-
-**And the drain is woken by the loop, not by a render (v5.8).** Reported twice: a queued prompt
-sat at "queued" until ↑ brought it back. `agentLoop.isProcessing` is not React state, so its
-turning false caused no render, and when React's copy was already false (a diff prompt, or prose
-with tool calls — v5.5) the turn ended with no state change at all. `isProcessing` is an accessor
-now and `onIdle` fires on its busy → idle edge from any of its eleven writers; App drains on it and
-lowers its own flag. Pty: a prompt queued during a diff turn is sent unprompted; on `main` it
-never is. v5.5 alone already fixes that scenario — this makes it independent of every path
-getting the React flag right.
-
-**Up-arrow takes a queued prompt back** when the box is empty — press enter and it rejoins the
-queue, press nothing and it is gone, which is the cancel nobody had to invent a key for. Only
-when the box is empty: half a typed sentence must not be replaced by something queued a minute
-ago.
-
-**`ctrl+x ctrl+s` steers instead (v5.23).** Asked for on 2026-10-25: queue by default, steer on
-request. The last queued prompt goes to `AgentLoop.steer`; the next tool-results prompt carries it
-as `<user_steer>` with a one-line explanation inline (not in the system prompt — rare, and that is
-the payload kept small), and the loop records a `type: 'steer'` turn drawn as `↳ steered:`. A turn
-that ends with no further tool round never builds that prompt, so the idle edge hands the steer back
-(`takeSteers`) as the next message — first in line. `noteUserStop` drops steers;
-`abortExtensionWork` does not, because it also runs on error paths where the message is still
-wanted. Both bytes are in `HOTKEYS` (raw mode clears IXON, so ctrl+s arrives instead of freezing
-the terminal), and `chordGate` allows 1.5 s between them. Pty: delivered, drawn, and the fallback
-sent as a message; 0 clears at 10, 13, 24 rows.
+- **One tool, one switch:** `ask_subagent` with `role: "review" | "research" | "task"`;
+  `subagentsEnabled` is on unless `modelConfig.subagents === false`.
+- Each subagent runs in **its own tab** on a `sub:<requestId>` lane, so calls really run in
+  parallel; a session keeps its tab and sends only what that tab has not seen
+  (`core/subagents/subagent-session.js`). A subagent tab's failure is the subagent's, not the
+  main turn's.
+- Subagents get a restricted tool set: no external writes, no MCP, no `mcp_setup`.
+- On `pro`, the review step sends the diff to a `review` subagent (past one file or ~30 lines): a
+  reader with no memory of the conversation. A description leads with **when** to use the tool.
+
+Details: [`docs/design/subagents.md`](docs/design/subagents.md).
+
+### Context and memory
+
+- `context/`: `code-minifier` (`minifyJson` always returns a string; tool results are embedded
+  compact), `context-manager`, `memory-manager`, `memory-store`, `symbol-index`.
+- **Memory is a folder** (`context/memory-store.js`): one fact per file, stamped with author,
+  session, time and why; writes are checked against the hash last shown, inside a per-fact lock.
+- **No embedding index.** grep → read → grep, plus `find_symbol`.
+- **The file watcher holds no descriptor per file** (recursive `fs.watch`); the agent's own writes
+  are not announced as external edits (`core/edits/own-writes.js`). Any new long-lived resource
+  per file brings back `EBADF` past the open-file limit.
+
+Details: [`docs/design/context-and-memory.md`](docs/design/context-and-memory.md).
+
+### State, sessions and compaction
+
+- **Where `.agent/` is:** `paths.resolveState(workspace)` walks up for an existing `.agent/`, like
+  git; the first hit is the **root**, the path down to the workspace is the **scope**
+  (`--scope`, or open the repo directly). It never adopts `~/.agent` (it stops at `$HOME`) or a
+  temp dir's `.agent`. Every file tool resolves through `paths.resolveToolPath`. The
+  prompt's `.agent/artifacts/…` is one literal for every repo; a stray `.agent` holding only
+  `artifacts/` and `tmp/` under a real root is skipped and its files moved (`isStrayAgentDir`). The user-facing map
+  is [`docs/agent-folder.md`](docs/agent-folder.md); keep it in step with `paths.js`.
+- **Workspace paths** are `core/workspace/workspaces.js`; `AgentLoop.setWorkspace` is the one place
+  that rewires collaborators (never the session store).
+- **Home** is `~/.agent` (`AGENT_CLI_HOME` overrides; the older names are still read). Never
+  `~/.gemini`, which belongs to Google's tools.
+- **Conversations** are one folder each (`conversations/<id>/`), written to the workspace copy and
+  the home copy on every turn and reconciled at start (more turns wins).
+- **Resuming restores four things**: transcript, `chatThread`, an `open_thread` to the extension,
+  and a recap only when there is no thread. `--resume`/`--continue` go through
+  `resumeThreadOnConnect`; the invariant is a reopened thread or a recap, never neither
+  (`resume-thread.test.js`).
+- **Compaction** (`core/turn/compaction.js`) happens before the next message, never mid-turn, and
+  is offered, not forced (Compact now / Continue in this chat). The summary is asked of the current
+  chat and handed over once as `<compacted_context>` with the last 3 exchanges.
+- **Migrations move, never copy, and run once** (`core/install/migrate*.js`), and are tested from
+  their own plan. `/reset` moves state to `~/.agent/trash/`, never deletes.
+
+Details: [`docs/design/state-and-sessions.md`](docs/design/state-and-sessions.md).
+
+### VS Code companion and side panels
+
+- The companion talks through **files** under the state directory (`editor.json`,
+  `diagnostics.json`, `chat-queue.jsonl`, `plan-review.json`, `plan-approval.json`), except the chat
+  panel, which is the Chrome side panel's own page over the WebSocket.
+- The panel **identifies as `editor`**, never `extension`; worker-only message types are listed in
+  `WORKER_ONLY_TYPES` (a denylist, checked by `editor-routing.test.js`).
+- It finds the agent through `bridge.json` (port, pid, token, 0600). Admission is by Origin **and**
+  token; only `chrome-extension://` is admitted on Origin alone.
+- `chat-panel-html.js` ports `resolveState` as `agentStateDir`; `state-dir-parity.test.js` keeps them
+  equal.
+- The panels follow the terminal's design and its colour roles; `panelState()` sends what they show,
+  so they keep no copy.
+
+Details: [`docs/design/companion-and-panels.md`](docs/design/companion-and-panels.md).
+
+### Logs
+
+- **Failure log** (`core/logs/error-log.js` → `<ws>/.agent/logs/errors.jsonl`), tagged by flow,
+  read by `/logs`. It never throws and collapses repeats within 60 s into a tally. Notices
+  (`level: 'notice'`) are counted apart from failures, and shown beside them: **demote, never
+  drop**. How loudly something is logged never decides what the bridge does about it, and never
+  demote by op name.
+- **Command log** (`core/logs/command-log.js` → `logs/commands/<date>.jsonl`): every
+  `run_command`, MCP and external write, whether it ran, was blocked or rejected. An audit trail,
+  never read into a prompt; `logCommand` never throws.
+- **`/doctor`** says what is installed (`core/install/doctor.js`, built-ins only; every package has
+  a tier and a why). `doctor.test.js` holds it to the code: `required` is a static import,
+  `optional` only a lazy one. A change that breaks the next start is undone (`doctor-guard.js`).
+
+Details: [`docs/design/logs.md`](docs/design/logs.md),
+[`docs/design/install-and-update.md`](docs/design/install-and-update.md).
+
+## Terminal UI
+
+The frontend is Ink. Claude Code is the reference design.
+
+- **The live frame must never outgrow the viewport.** When Ink's dynamic output is taller than the
+  terminal it clears screen and scrollback on every render. So settled turns go to `<Static>`, only
+  the in-flight turn is live, and every live row is charged to `liveBudget` (`live-layout.js`).
+  Below 13 rows spacing is shed, never information. Anything unbounded in the live region — a full
+  tool result, a long list — brings the flicker back.
+- **A row you draw is a row you budget, and a row that wraps is two.** `wrap="truncate"` in the
+  live frame is load-bearing. A truncated row loses its right end, so put what must survive on the
+  left. Clamp in wrapped rows, not `\n`s.
+- **Merging the loop's history into the screen** uses recorded positions (`__loopIndex`,
+  `__echo`, `historyOffset` after compaction), never a count. The transcript advances on
+  `agent_response` and on every `tool_result`; the live list holds only running calls. Keeping
+  `isProcessing` up for a whole turn was 1,228 clears — do not retry it.
+- **A fixed-width glyph beside flexible text goes in a `flexShrink={0}` box.**
+- **App.jsx is performance-sensitive.** `<Static>`, `staticEpoch` and the streaming path stay in
+  it; do not memoize transcript rows (it brought scroll glitches back twice).
+- **Input:** Ink never reads the real stdin — `cli-ui.jsx` pipes it so `enter-splitter.js` can
+  split a trailing Enter. Hotkeys are pulled from stdin before Ink (`hotkeys.js`), because
+  `ink-text-input` types any key it does not know. A retired chord stays in `HOTKEYS` and answers
+  where the thing went. Pastes over four lines fold to a marker; drops (bracketed or typed, chunked
+  by VS Code) become `[File #n]` / `[Image #n]` tags and never inline the content. A handler reads
+  live text (`live`), not a render's props.
+- **A local command must not touch a running turn** (`turnInFlight` reads
+  `agentLoop.isProcessing`), and an instant one raises no spinner (`SLOW_COMMANDS`,
+  `isSlowCommand(command, args)`).
+- **Typed prompts during a turn are queued**, drained on the loop's `onIdle`; ↑ on an empty box
+  takes one back; `ctrl+x ctrl+s` steers instead. `:stop` empties the queue. The drain waits for the
+  loop to be idle **and** no diff prompt or menu to be open.
+- **Every menu is a `Panel`** (no borders, `panelRoom` sheds spacing, never a choice). A menu
+  opened from `/settings` goes back and says nothing (`applyAndReturn`); a menu that mutates shared
+  state needs a fresh `activeMenu` object.
+- **Every slash command validates its words** (`COMMAND_OPTIONS`); a setting reply is one line. A
+  setting that did not change does not call `resetPromptState()`.
+- **Start and first run:** `Intro` then App (`frontend/screen/intro.js`); first-start setup
+  (`components/Onboarding.jsx`) runs instead of App, and is decided before `new AgentLoop`
+  (`welcome.test.js`). The status bar is laid out in `frontend/screen/status-bar.js` with a fixed
+  shedding order.
+- **Colour is a role** (`frontend/theme.js`, `theme-tokens.test.js`); palettes are tested to WCAG
+  contrast. `NO_COLOR` wins.
+- **No mouse tracking.** Scroll, select and copy are the terminal's. `Ctrl+E` toggles verbosity for
+  the whole transcript and is the only deliberate full clear.
+- **A child spawned while Ink is up must not inherit stderr.**
+- **Exit** erases back to the launch line and prints `agent --resume <id>`; ctrl+c is decided in
+  `cli-ui` (`exitOnCtrlC: false`).
+
+Details: [`docs/design/terminal-ui.md`](docs/design/terminal-ui.md).
 
 ## Gotchas
 
-- **`server/src/index.js` is the bin and does nothing but re-spawn `main.js` under `tsx`** —
-  the sources contain JSX, so plain `node src/main.js` fails.
-- `App.jsx` is performance-sensitive: it avoids re-rendering during streaming to prevent
-  terminal tearing. Bold is `marked-terminal`'s: v8 strips an escape byte written into the text,
-  which left `[1m` on screen (v9.9.6). It was split into `frontend/` modules by moving blocks verbatim
-  behind explicit dependency lists; the `<Static>` element, `staticEpoch` and the streaming
-  path stayed in `App.jsx` deliberately, and adding memoization to the transcript rows is how
-  the scroll glitches came back the last two times.
-- **Every slash command is driven once by a test, bare and with arguments.**
-  `use-slash-commands.js` was 967 lines at **8.69% line coverage** — the lowest
-  in the repo, and the surface almost every bug reported from use has come from.
-  `test/frontend/slash-command-smoke.test.js` is shallow and total, the same shape as
-  the tool smoke sweep and for the same reason: the failure worth guarding is
-  "this entry point throws", and a command that crashes takes the turn with it.
-  It also asserts no listed command answers *"No such command"* about itself —
-  the `/name` bug, which shipped fully implemented and unreachable because the
-  dispatcher kept its own copy of the list. **55.5% now, and 92.5% overall.**
+- `AGENT.md` at the repo root is **workspace context** read into the prompt, not instructions for
+  you. It belongs to whatever project the agent is pointed at.
+- The agent defaults to `--workspace ../`, so running it here makes it work on its own repo.
+- Chat-site DOM selectors break when Gemini changes its page.
+- `/update` runs git in `server/`; a path handed back to git there needs `:(top)`.
+- Chrome assigns an extension command's shortcut only on first install; reloading leaves it
+  unbound.
+- `macOS` has no `timeout`; use `perl -e 'alarm N; exec @ARGV'`.
 
-  **Use the real collaborators, not stubs.** A first pass with hand-written
-  stubs produced three confident false positives, including `getAllMemories is
-  not a function` against a method that exists and has three callers. Real
-  `MemoryManager`, `ContextManager`, `DiffEngine` and `TaskManager` cost nothing
-  in a temp workspace and cannot lie that way.
+## Branching and PRs
 
-  The two faults the sweep found (`/effort deeep`, a bare `/`) are in `docs/history.md`.
+- **Never commit or push to `main`.** Branch from `main` as `vN.M/short-description` (named for
+  what it does), open a PR into `main`, and the owner merges. One PR per version, never stacked
+  on another open PR.
+- A force-push to `main` is a repair that only the owner can ask for.
+- Branches are the history: `beta-v1` … `beta-v10`, `fix/bridge-lock-and-cli`, `v1-stable` and
+  every `vN.M/…` are kept. Do not delete or squash them.
+- A conflict on a PR that should be a clean descendant usually means the sides no longer share
+  history: check `git rev-list --left-right --count main...<branch>` before resolving anything.
+- The series history (v3 to v9) is in [`docs/design/project.md`](docs/design/project.md) and
+  [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
-- **A local command must not touch a running turn.** `handleSubmit` set
-  `isProcessing` and cleared `activeToolCalls` before looking at what was
-  submitted, and every slash handler ends with `setIsProcessing(false)` — so
-  typing anything starting with `/` mid-turn wiped the live turn's rows and
-  then declared it finished while the loop carried on. Reported as `/efforttt`
-  during a turn and "the agent stopped responding and did not output the
-  result": it had not stopped, it had run the tool calls and produced the
-  answer. `turnInFlight` is read from **`agentLoop.isProcessing`**, not from
-  React's copy, which this very function sets true. Pinned by a source
-  assertion, because observing it needs a live turn under the pty harness and
-  because moving two `set…` calls back above the branch reads as tidying.
+## Product decisions
 
-  **The transcript advances on `agent_response` and on every `tool_result`
-  (v5.14).** It used to advance only on `agent_response`, which is sent only
-  when a reply has prose left after the tool calls are stripped — so a round
-  that was *only* tool calls left the screen as it was, and finished calls sat
-  in the live list as `✔ name` while an earlier merge drew the same calls
-  above them as `⏺ name args · result`. Twice per call, and the duplicate was
-  charged to no budget: 28 full clears at 13x72 with a prompt queued, 6 at
-  16x72. The loop pushes the call and result turns *before* it sends
-  `tool_result`, so the handler merges and removes that call by name (parallel
-  calls finish out of order; results used to land on the last row). The live
-  list holds only running calls, shares the turn's rows, and gives way first
-  — the thinking line already names the tool. 0 clears from 10 to 40 rows.
+Choices, not limitations to route around:
 
-- **An instant local command must not raise a spinner it takes down again.**
-  Reported with a screenshot: a `Thinking… (0s · ↑ 29.4k tokens · esc to stop)`
-  row sitting above `❯ /paste-image` and another above `❯ /image`, both frozen
-  at 0s, permanently in the scrollback. `handleSubmit` set `isProcessing(true)`
-  for *anything* starting with `/`, and every handler ends by setting it false —
-  so an instant command drew the live row, committed its own output to
-  `<Static>` in between, then shrank the live frame, stranding the row above the
-  static write where Ink can never repaint it. **Above** the command, because it
-  was drawn before the rows it ends up sitting on. `SLOW_COMMANDS`
-  (`core/turn/slash-commands.js`) is the gate. A set beside the commands rather than
-  a literal at the call site, because the literal is what drifts.
+- **Gemini Web only.** ChatGPT was removed on 2026-09-19; a second provider is a decision to
+  re-open, not a file to un-delete.
+- **Purely local:** no hosted backend, no telemetry, no API keys.
+- **Two front-ends:** the terminal and the side panel (Chrome and VS Code).
+- **One answer per turn:** never drafts or alternatives to pick between.
+- **One bridge**, and no second target restored to make a comparison meaningful.
+- **An API backend is a fork, not a plan.** If ever built: opt-in, for people who already have a
+  key, with the browser bridge staying the default.
 
-  **`isSlowCommand(command, args)` takes the args**, because one name can be two commands: `/update
-  pull` is slow and gets the spinner; bare `/update` opens a menu and stays instant.
-
-  **Never split a prompt across messages:** it triples the wait and saves nothing ([`docs/history.md`](docs/history.md#moved-from-claudemd-in-v992)).
-
-- **A drop that arrives typed is a drop too (v6.23, `asBracketedDrop`).** VS Code's terminal types a
-  dropped path in with no paste markers, so it stayed text. One stdin chunk of nothing but existing
-  absolute paths is wrapped as a paste in `cli-ui.jsx`; `/help`, a missing path and a sentence are
-  not. Pty (`{"raw": …}` step): `[File #1: drop-me.jsonl]`, 0 clears at 13 and 24 rows.
-  **It arrives in pieces past 50 characters (v6.25, `createDropJoiner`).** VS Code's pty host
-  writes input in pieces of at most 50, 5 ms apart (`chunkInput` in `ptyHostMain.js`), so a
-  45-character `.dmg` path became a tag and a workspace path did not. A read whose length is a
-  multiple of 50 and that starts like a path is held up to 30 ms and joined; typing never
-  delivers 50 characters in one read. Pty (`{"vscode": …}` step, VS Code's own chunker): tag at
-  13 and 24 rows, 0 clears; `main` sends the quoted path. **Antigravity's agent panel takes image,
-  PDF and video drops for the whole window** (`dragover`/`drop` on `window`, `stopPropagation`),
-  so those never reach its terminal while that panel is open — paste the path instead (a paste
-  of an existing path is a drop), or **right-click → Attach to Agent CLI (v7.8, companion
-  1.8.7)**: the companion appends `{paths}` to `chat-queue.jsonl` and `drainChatQueue` returns
-  `{drop}`, which goes through `attachDropped` like any drop. A menu command cannot be taken by a
-  panel's `drop` handler. Missing files are skipped, at most 20. Pty (a `{"write"}` step into
-  the queue): tags at the caret, the prompt holds headers and no file text, 0 clears at 13 and 24.
-- **A dropped file is a tag too (v5.33, `frontend/input/file-drop.js`).** A terminal has no drop event: a drop
-  is a bracketed paste of paths. It counts only if **every** piece is an existing absolute path
-  (`/…`, `~/…`, `file://…`) — a relative word like `package.json` pasted into a sentence stays
-  text. Images go through `loadImage` and become `[Image #n]`; anything else is
-  `[File #n: name]` / `[Folder #n: name]`, with one header line per file in front of the message
-  (`[File #2: big.js] (6 KB, 1,200 lines) — read it with read_file`) and **never the content**:
-  the model reads the range it needs. Backspace takes the tag (`backspaceAt` knows all three),
-  and the sent message draws `⎿ [File #2: big.js]` as an OSC 8 link (`foldFiles`). Inlining small
-  files was planned and is not built: it would save a round trip only if `/logs tools` says
-  dropped files are read whole. Pty (`{"paste": …}` step in drive2.py): a folder, a 1,200-line
-  file and an image at 13 and 24 rows, 0 clears; the prompt holds headers and no file text.
-- **A file dropped on a side panel is a tag too (v6.17, `onDropFiles` in `side-panel/panel.js`).**
-  Chrome gives a page the dropped file but never its path: an image goes in as a pasted one, a
-  text file up to 8 KB is sent whole as a `<file name=…>` block after its header, and anything
-  larger is refused with "drop it in the terminal, which can send the path". VS Code's webview gets
-  `text/uri-list` for a file dragged from the explorer (with shift), so the path is sent with
-  `— read it with read_file`, as the terminal does. Order on send is the terminal's: image blocks,
-  file headers, message; `foldFiles` also folds the inline blocks so the text is not drawn twice.
-  Not driven in a live browser: a real drag cannot be scripted here; jsdom covers the handler.
-- **An image is a tag in the prompt, Claude Code's way (v5.24, `frontend/input/image-attach.js`).**
-  ctrl+v (or cmd+V with an image and no text on the clipboard) puts `[Image #n]` at the caret;
-  an image goes with a message only while its tag is in the text, so backspace — which takes a
-  tag in one press — is how it comes off. `/image` and `/paste-image` are gone, and so is the
-  status-bar count: the tag *is* the representation. Each image is sent as a
-  `[Image #n: <path>] (KB, mime)` header plus its `<image_data>` block; the tab lifts every
-  block out and pastes the files **on their own, before the text**, and no longer waits five
-  seconds for a text paste that could never land because an image was in it. The record keeps
-  the header without the data, which is what lets the sent message draw `⎿ [Image #n]` rows
-  as OSC 8 links to the file (cmd+click — not mouse tracking) on a resume too.
-
-  **Two races had to go before a tag survived the next key.** The field's handlers edited the
-  *render's* `value`, so on a busy event loop several keys landed between renders and each
-  edited the same stale text; and `cli-ui` dispatched chords before the text in the same chunk.
-  Under the pty, `look at` + ctrl+v + `please` sent `look atplease` with no image. `PromptInput`
-  now reads `live` (text and caret, ahead of the render) and takes outside text through
-  `cursorRef.apply`; `dispatchInOrder` writes text, then defers everything after it a turn, so
-  Ink has read it before the chord runs. **A component that reads its props inside an input
-  handler is a stale closure waiting for a slow frame.**
-
-- **A word a command does not take stops it (v6.24, `COMMAND_OPTIONS` / `invalidOption` in
-  `core/turn/slash-commands.js`).** `/update ayz` ran the update check, and twelve commands answered a
-  wrong word as if it were absent — `/subagents zzz` printed the status, which reads as a
-  confirmation. Checked before dispatch (and before a destructive confirm), it names the word and
-  lists every form with what it does. Free-text commands are absent from the table. A live action
-  row is spaced like a committed one when `spaceLive` says the budget holds it, so the newest read
-  no longer sits tight and then jumps. Pty: 0 clears at 13, 24 and 30 rows.
-- **A setting reply is one line (v5.25, `changed()` in `core/turn/slash-commands.js`).** `⚙ <setting>
-  **from** → **to**`, or `already **x**`, plus at most one `·` clause the status bar does not
-  already say — owner's words: "subagent on -> off or already off/on". No emoji and no paragraph:
-  the reply sits in the scrollback for the rest of the session. A setting that did not change does
-  not call `resetPromptState()`, which would spend a full turn-0 payload to change nothing.
-- **A menu opened from `/settings` must not answer in the transcript.** `returnTo` is the
-  settings page, so setting it back reopens that page *on top of* whatever the command just
-  said. Four screens did this — `/effort`, `/config`, and two on the allowlist — and the
-  symptom is a setting that changes with no sign it did. `applyAndReturn` in `Menus.jsx` is
-  the one rule: go back and say nothing (the row is the confirmation and re-reads live
-  state), or close and let the transcript answer. And a menu that mutates shared state needs
-  a fresh `activeMenu` object — `commandRules` is shared by reference, so the values were
-  already right and React simply had no reason to repaint.
-- **The live frame must never outgrow the viewport.** This is the single most important rule in
-  `frontend/`. When Ink's dynamic output is taller than the terminal, `shouldClearTerminalForFrame`
-  (`ink/build/ink.js`) switches it to writing `ESC[2J ESC[3J` plus a full repaint on *every*
-  render. Measured on the pre-fix code, sitting idle with a 12-turn history in a 24-row
-  terminal: 108 full clears and 108 scrollback wipes in 15 seconds, 3.85 MB of escape codes.
-  That is what "it flickers and I can't scroll or copy" was — the terminal's scrollback and the
-  user's selection were being deleted seven times a second. The same shape is now 36 KB and
-  zero clears. So: settled turns go to `<Static>`, only the in-flight turn is live, and every
-  live row is bounded by `liveBudget` (`terminalHeight - RESERVED_ROWS`). Adding an unbounded
-  row to the live region — a full tool result, an artifact dump, a list that grows — brings the
-  whole thing back.
-
-  **And it can overflow from below, which is newer.** `liveBudget` has a floor, so the frame had
-  a *minimum* height of `RESERVED_ROWS + 3 = 12` rows and any shorter terminal overflowed however
-  much the in-flight turn gave up. Measured, one turn, extension connected: 13 rows → 0 clears,
-  12 → 1, **10 → 166**. Three of the nine reserved rows are pure spacing, so below
-  `COMPACT_BELOW_ROWS` (13) they are dropped and the floor comes down with them — spacing is what
-  gets shed, never a row carrying information. That moves the floor to 9 rows; 8 still costs
-  thirty clears, which is now a documented limit rather than a silent one. Asked whether
-  *resizing* glitches: it does not — a drag firing five SIGWINCH events produces exactly one
-  debounced reprint, and the control run that never resizes is identical.
-
-  **The floor is one row now, and used to be three.** `Math.max(3, …)` never meant "at least
-  three if there is room" — it meant three even when there is not, and the frame then asks
-  for more rows than the terminal has. It was the bug twice: once from the furniture above,
-  and again when `/update`'s two notice rows reproduced it at 13 rows (9 + 2 + a floored 3 is
-  14). Whenever there *is* room the subtraction already yields more than three, so the floor
-  only ever bound in the case where binding it was wrong.
-
-  **The live reply is budgeted too, in wrapped rows.** `liveMessageText` (`live-layout.js`, so a
-  plain `node --test` can import it) clamps it at the terminal's real width and says
-  `… +N more lines`; the committed copy in `<Static>` is whole. Unclamped, only the top of a long
-  reply survived the repaint, and a first clamp that counted `\n` changed nothing. **A clamp
-  measured in the wrong unit reads as a fix and behaves as nothing.**
-
-  **A row you draw is a row you budget, and a row that wraps is two.** `/update`'s reload
-  notice was ~105 characters, which wraps at 80 columns: charged as one row, drawn as two,
-  and 1 `ESC[2J` at 13x80 and 10x80 where there had been none. `wrap="truncate"` on anything
-  in the live frame is load-bearing, not tidiness. The arithmetic test caught the first of
-  these; only the pty run caught the second.
-- **Nothing the user waits for goes in front of the first frame.** Startup was
-  2.46s to the prompt box, and almost none of it was work: `main.js` awaited the
-  1.5s extension-greeting timeout and then the GitHub agent's start (since
-  removed) before it created the Ink UI. Neither answer is something the first
-  frame draws. Moving both behind `cli.start()` took the same measurement to
-  **0.53s**, with no behaviour change. For scale, every module
-  import in the process is 517ms together, 426ms of it ink+react, and `tsx`
-  itself is 120ms — so the two waits were larger than the entire program.
-  `test/backend/core/startup-order.test.js` pins the ordering, because the regression is
-  invisible in review: one more `await` before `cli.start()` reads as ordinary
-  sequencing and costs a second every launch, with no failure to notice.
-
-- **The startup look is Look A (v5.22, chosen 2026-10-25 from
-  `.agent/artifacts/plans/2026-10-25-startup-look.md`).** A four-row `❯` mark in block characters
-  with name, byline, workspace and `/help` beside it (`Banner.jsx` `Header`), replacing six rows of
-  figlet — `figfont.js`, `banner-text.js` and `Standard.flf` are deleted. The input is ruled above
-  and below with no sides (`borderLeft/Right={false}`), so a drag-select no longer copies `│`; same
-  three rows. The mode line carries Claude Code's glyphs (`MODE_GLYPHS`: `⏸` `⏵⏵` `⏹`), which v5.20
-  had removed as rendering badly — chosen back knowingly; the plan's M3 set is the fallback. The
-  header's text column needs an **explicit width**: inside `<Static>` Yoga sizes it to content and
-  `wrap="truncate"` then wraps instead. `/copy` (same release) copies the last reply's markdown.
-
-- **The header draws in on every start, and exit says goodbye (v5.23, `frontend/screen/intro.js`,
-  `components/Intro.jsx`).** `Root` shows `Intro` — the banner with a `frame`: the mark sweeps in,
-  the name types out, the dim lines arrive, ~440 ms — then mounts App, whose `<Static>` writes the
-  same header at the same position. On exit `farewell.js` awaits the registered outro (capped at
-  `OUTRO_CAP_MS`): App swaps its live frame for `❯ Goodbye.`, then the clear and the footer.
-  **App must draw the goodbye itself** — swapping App out for it left Ink laying out the Static App
-  had owned, ~90 blank rows a frame, the transcript pushed off screen. TTY only, ≥16 rows for the
-  intro, off under `AGENT_CLI_NO_ANIMATION` or `CI`. Pty: 1 `ESC[2J` (the exit's own) at 13, 16, 24.
-
-- **First-start setup runs instead of App, then App mounts (v5.22, `components/Onboarding.jsx`,
-  `frontend/screen/welcome.js`).** Splash (the mark draws in, the greeting types out), theme (live preview), name (banner preview), Chrome
-  (Load-unpacked steps with this checkout's real `extension/` path; spinner → `✔ Connected`).
-  `Root` in `cli-ui.jsx` switches — never both mounted — so the banner App commits to `<Static>`
-  has the chosen theme and name. "First" is `welcomed` absent from `~/.agent/settings.json` and an
-  empty `~/.agent/workspaces/`; it is `'pending'` until setup ends (a ctrl+c halfway shows it
-  again) and an install with history is marked `true` unseen. `main.js` must decide before
-  `new AgentLoop` — the session store creates `workspaces/<slug>` — and `welcome.test.js` pins it.
-  The screens are live frames: `onboardingLayout` drops the theme preview and the name preview, then
-  spacing by height. Pty: 0 clears at 12, 16, 20, 30 rows.
-
-- **A fixed-width glyph beside flexible text must be in a `flexShrink={0}` box (v6.12).** Yoga
-  shrinks children in proportion to their natural width; a reply's is the whole paragraph on one
-  line, so the reply's 2-column `● ` was rounded down to 1 and the reply laid out a column wider
-  than the terminal. Each wrapped row spilled a character onto a row of its own, Ink counted fewer
-  rows than the terminal drew, and a long reply left ~20 blank rows above the prompt. Replies are
-  also wrapped by `fitLines` (`text.js`) now, to the width beside the dot, with bullets hanging
-  at their text column — Ink kept the space it broke at and knew nothing of lists. The harness's
-  `snap` is the raw stream with escapes stripped and invents blank rows; use `{"screen": file}`,
-  pyte's rendered viewport, for anything about layout.
-
-- **`?` as the whole input shows the keys (v6.18, `frontend/menus/keys-view.js`).** A grid of `KEY_HINTS`
-  (two or three words each; every key must be one `/help`'s `KEY_ROWS` lists) in the `/` palette's
-  place, 1–3 columns by width, filled down then across, charged `paletteRoom` rows like the palette;
-  short of rows, the last cell is `/help`. Making it found the palette's own overflow: below 13 rows
-  `paletteRoom` added 2 for the spinner and its margin, but the margin is shed there, so `/` drew
-  one row too many and cleared the screen once at 10 rows (on `main` too). Pty: 0 clears for `/`
-  and `?` at 10–13 rows, and at 24 rows × 60 and 120 columns.
-- **The status bar is laid out in `frontend/screen/status-bar.js` (v6.13, Option A of
-  `.agent/artifacts/plans/2026-10-30-status-bar.md`).** Quiet by default: only the mode glyph is
-  coloured; `⚠`/`↓`, `N running` and the meter past 50% are attention, past 80% danger; the rest
-  is dim. Bare values (`v2`, `medium`, `14%`), absent at default (prompt v1, context before the
-  first message). `shift+tab to cycle` shows only before the chat's first message, while idle
-  (owner: "show this at the start of chat only"). What gives way as it narrows is a fixed order
-  (`shed` in `statusBarLayout`), tested at 30–120 columns; App only maps roles to colours. Pty:
-  0 clears at 10, 13, 24 rows × 60, 90 columns.
-
-- **A row in the live frame is truncated from the right, so put the part that
-  must survive on the left.** The filed-session row read `↺ Previous
-  conversation filed (2 turns) — --resume <28-char id>`, which is ~80
-  characters: at 80 columns `wrap="truncate"` ate the end of the id and offered
-  a `--resume` that resumes nothing. Leading with the id and trailing the prose
-  costs nothing and degrades correctly — at 60 columns the sentence is cut and
-  the command is still intact.
-
-- **Colour is a role, never a name (v5.15, `frontend/theme.js`).** Components write `T.accent`,
-  `T.attention`, `T.success`… and the palette picks the colour; `test/frontend/theme-tokens.test.js`
-  fails on any `color="cyan"` or `'cyan'` in a `frontend/` component. About 86 call sites had named
-  ANSI colours, and cyan alone meant six things. The only palette so far is `terminal`, which
-  maps every role back to its old colour — verified under the pty as the same 19 on-screen
-  styles and a byte-identical run. `T` is mutated in place, so a module-level table of colours
-  (`DiffRows`' old `COLOUR`) must be read at render, not at import. Still literal, deliberately:
-  the markdown renderer's colours (`marked-terminal`, configured once at load) and the banner
-  gradient. The plan for the rest is `.agent/artifacts/plans/2026-10-24-ui-redesign.md`.
-  **Palettes since v5.16:** `dark`, `light`, `dark-colorblind`, `light-colorblind` (Okabe–Ito
-  blue/orange), `mono` (every role `null` — plain text), `amoled` (v9.9.1: dark's inks on `#000`; Ink paints no page, so
-  `screen/terminal-bg.js` sets the terminal's with OSC 11 and OSC 111 resets it on a switch, exit or crash;
-  the panels take it from `panel_state.theme`) and `terminal`, still the default. Each
-  palette but `terminal`/`mono` names the background it was designed for in `PALETTE_INFO`, and
-  a test holds every role to WCAG 4.5:1 against it (3:1 for `muted`). `/theme` previews by
-  calling `setTheme` on highlight; esc restores `original`; enter saves to
-  `~/.agent/settings.json` (`core/workspace/user-settings.js` — per person, not per repo) and reprints the
-  transcript, because committed rows cannot be recoloured. `NO_COLOR` beats the saved choice.
-- **Every menu is a `Panel` (v5.24, `frontend/menus/panel.js`, `components/Panel.jsx`).** Asked for 2026-10-26:
-  the boxes "do not follow a common design theme". `/help`'s shape for all of them — a rule, a
-  title, at most two dim lines, `Choices` (`❯`, a dim second column, `✔` on the current one,
-  `1.`–`9.` where a digit may answer, never on an approval), one line of keys. No borders:
-  `panel.test.js` fails on a `borderStyle` in `Menus.jsx`. `panelRoom` sheds spacing, then the
-  description, never a choice. A menu opened **mid-turn** (`ask_question`) is charged like the
-  approval box and hides the live turn — 25 `ESC[2J` at 13 and 16 rows before, 0 now; an idle
-  menu also gets the spinner's rows. Menus at 13 rows: 13 clears on the previous commit, 0 now;
-  10 rows is 8 (22 before), mostly at startup and on close. VS Code: start-up erases in place
-  (`enterSequence`), because a command line scrolled off screen is pinned over the header by
-  sticky scroll.
-- **`/settings` is a list of switches (v5.27, Option C′, `frontend/menus/settings-view.js`,
-  `components/SettingsList.jsx`).** The owner's pick from `.agent/artifacts/plans/2026-10-27-settings-redesign.md`.
-  A row with `control` is a switch (`● on  ○ off`) or a ladder (`◂ high ▸`), and ←/→ set it in place
-  through its own `restore` command, run in order (`settingsChain`), so the leaving summary still
-  sees every change. ←/→ are spatial and never wrap. The hint is on the selected row and drops below
-  70 columns. The filter stays on top, underlined; printable keys go to it, and **tabs are on tab
-  only** now. Enter steps a switch or mode in place and opens a chooser only for Effort, Browser
-  differs (v7.9: the bare `ask · follow · switch` ladder was "confusing even for me"), Startup and
-  Command rules (`OPENS_CHOOSER`); bare `/effort mismatch` opens the same chooser. Values are plain except a switch's active state and a read-only
-  `attention`; `Choices` no longer recolours the selected row's detail in any menu. Pty: 0 clears at
-  13×90, 24×100 and 24×60.
-  **Status → Gemini tab (v7.9)** names the tab the main lane types into and its chat
-  (`tab 1873 · chat 17d6…`), from `tab_status`'s `mainTab`, which extension 1.55.0 sends on connect,
-  on every heartbeat and on each Gemini load (`describeBrowserTab`; older builds say so). The value
-  is an OSC 8 link to the chat (`browserTabUrl`, `link` on a settings row): cmd+click opens it.
-- **A model mismatch is the footer's `⚠ 3.8 Flash` and nothing else (v7.9).** The row above the
-  input went through two redesigns in one afternoon and was then cut (owner: "just show ⚠ 3 Flash,
-  that's it nothing else"): the next message asks anyway, and the ask says both names. The footer's
-  mark now shows at every height (`modelDiffers`; it went with the row below 13). The ask is two
-  answers, **Match the agent** (switch the tab) and **Match the browser** (set the effort to the
-  tab's rung, or send on it when no rung maps); "Send on 3.8 Flash" once was the confusing third.
-  The Effort slider adds `⚠ browser 3.8 Flash` beside the marked stop's model (`tabDiffers`). **A
-  model picked by hand in the tab is seen in ~1.5 s** (extension 1.55.0): the bridge watches the
-  picker's label (`currentModelLabel`, no menu) and sends `model_selected`; `noteSelectedModel`
-  marks the one entry it names, exactly or as its last word (`Flash` is `3.8 Flash`, not
-  `3.1 Flash-Lite`), else asks for the list; `onModels` redraws an idle screen. It was read only at
-  connect, on a new tab and at the end of a turn: "picked up almost a minute later". `Choices` cuts
-  a label past its 28-column cap (`fitLabel`), which had pushed that row's detail a column right.
-  The warm-up row is just `✔ Ready`, and it sits on the input with the blank row above it
-  (`noticeHugsInput`). An extension *newer* than the running agent says `Agent restart needed`
-  instead of `Extension update · 1.55.0 → 1.54.0` (`compareVersions`). The watcher ignores an
-  editor's atomic-save temp files (`x.js.tmp.<pid>.<hex>`, `x~`). Pty: 0 clears at 13, 16 and 24.
-- **A child spawned while Ink is up must not inherit stderr (v5.24).** `execFileSync` passes a
-  child's stderr to ours by default, and ours is Ink's terminal. osascript prints `*** Error
-  creating a JP2 color space` twice when it reads a screenshot, so ctrl+v stranded the input
-  box's top rule in scrollback. `OSASCRIPT_STDIO` in `frontend/input/clipboard-image.js`. The same release
-  stopped the meter counting an image's base64 (`promptCharge`: a 650 KB screenshot read `0%
-  until auto-compact`).
-- **No mouse tracking, ever.** Terminal mouse reporting and native scroll are mutually
-  exclusive: a terminal that is tracking hands the app the wheel and suppresses drag-select. The
-  app therefore enables nothing, and `cli-ui.jsx` writes the disable sequences once on startup
-  in case a crashed run left the terminal tracking. Scroll, drag-select and copy are the
-  terminal's, exactly as in Claude Code. Everything that used to be clickable is a keybinding.
-- **The transcript has no selection model.** `Ctrl+E` toggles verbosity for the *whole*
-  transcript rather than one row, because there is nothing to point at a single row with. Ink
-  cannot repaint what `<Static>` has committed, so `toggleVerbose` clears the screen and lets
-  Static print the transcript again at the new setting — that one clear per keypress is
-  deliberate and is the only `ESC[2J` the app writes. ↑/↓ always mean input history.
-- **`ink-text-input` types every key it does not recognise.** Its handler special-cases exactly
-  one chord, ctrl+c, so a ctrl+e handled in `useKeyBindings` still left a stray `e` in the
-  prompt — and ctrl+o, ctrl+t and ctrl+v their letters. Ink offers no way to stop a `useInput`
-  handler running, and the text field's is registered first (child effects run before the
-  parent's). So the chords never reach Ink at all: `cli-ui.jsx` pulls them out of the stdin
-  chunk via `hotkeys.js` and dispatches them through `use-hotkeys.js`. Adding a new ctrl+ binding
-  means adding it to `HOTKEYS`, not to `useKeyBindings`. **Never a chord another app owns system-wide:** the task
-  list was on ctrl+g until 10-24, and Chrome's Gemini panel takes Ctrl+G on macOS before the
-  terminal sees it — pressing it opened Chrome. It is ctrl+o now.
-  **A retired chord stays in `HOTKEYS` (v5.24).** `ctrl+t` became `/shell` and `ctrl+y` became
-  `/copy code` — a command is listed by `/`, a chord has to be remembered. Unbinding the byte would
-  hand it to `ink-text-input`, which types the letter; it stays taken and answers with one line
-  saying where the thing went.
-- **The prompt's rows are drawn rows (v7.9, `frontend/input/prompt-rows.js`).** ↑/↓ move by the rows Ink
-  draws, wraps included, and only past the first or last row reach input history; the draft is
-  kept (`draftRef`) and ↓ past the newest prompt gives it back, where it used to clear the box.
-  `promptExtraRows` and the field's window count the same rows, so a long wrapped prompt is
-  charged what it draws. `❯ ` sits in a `flexShrink={0}` box, the v6.12 rule: beside a wrapped
-  prompt Yoga squeezed it to one column. **Newlines:** shift+enter (kitty, or Esc+Enter, which
-  companion 1.8.8 binds shift+enter to in the editor's terminal) and `ctrl+n` (a hotkey); ctrl+j
-  is ignored (owner: not needed).
-  `newlineRef` is gone: every newline set it and only an Enter cleared it, so the first Enter after
-  any newline was eaten. Pty at 13 and 24 × 60: a four-line message sent by Enter, the draft back,
-  `XX` typed one wrapped row up in the right column, 0 clears.
-- **A paste is folded to a marker, not typed into the prompt.** `usePaste` (Ink 7) turns on
-  bracketed paste, which is the only thing that distinguishes "pasted forty lines" from "typed
-  forty lines very fast" — and it keeps the text off `useInput` entirely. `paste.js` swaps
-  anything over four lines for `[Pasted text #1 +42 lines]` and `App.handleSubmit` expands it on
-  the way to the model. This is a frame-budget rule as much as a legibility one: the input box
-  is in the live frame, and a pasted file is the easiest way to blow the viewport.
-- **Ink never reads the real stdin.** `cli-ui.jsx` pipes `process.stdin` through a PassThrough
-  so `enter-splitter.js` can peel a trailing `\r` into a chunk of its own. Ink's input parser
-  deliberately does not split `\r` from adjacent text (a CR can sit inside a paste), so when the
-  terminal delivers the last typed character and the Enter after it in one read — routine when
-  typing fast, over ssh, in tmux, or on key repeat — Ink sees `"i\r"` with `key.return` false,
-  `ink-text-input` types the CR into the prompt, and **the message is silently never sent**. The
-  second write is deferred with `setImmediate`, because Ink's `read()` drains everything
-  buffered and two back-to-back writes would arrive as the one chunk this exists to split.
-- Running the CLI without a TTY fails with Ink's "Raw mode is not supported". That is the
-  harness, not a bug — use `script -q /dev/null <cmd>` to test under a pty.
-- **A formula is scraped as its TeX, once (v7.1).** KaTeX draws maths three times (MathML, a
-  TeX annotation, the glyphs), and the walker read all three: `≥80%\ge 80\%≥80%` went into history
-  and compaction summaries. `extractTextContent` returns `$tex$` (`$$…$$` for `katex-display`),
-  preferring `data-math`, then the annotation, then the glyphs once. The terminal draws a formula
-  of known symbols as text (`texToText` in `markdown.js`: `≥ 80%`, `π r²`) and leaves anything
-  else as TeX; `$5 to $10` is not maths. Fixtures are KaTeX's standard markup, not a capture of
-  Gemini's page, which v7.6 should check.
-- Content-script DOM selectors break when the chat sites change; `extractLatestResponse` must
-  wait for a *new* block before scraping. Gemini's editor only ingests text via a synthetic
-  `ClipboardEvent('paste')` — setting `innerHTML` breaks it.
-- `AGENT.md` at the repo root is *workspace* context read by `prompt-builder.js`, not
-  instructions for you. It belongs to whatever project the agent is pointed at. It was the
-  unedited stock template until 2026-09-16 — 740 bytes of `<!-- Describe your project here -->`
-  going into every turn-0 prompt as this project's context, because `_loadAgentMd` skips a file
-  only when its trimmed body is *empty* and a template full of headings is not. It now says what
-  this project is; `instruction-sources.js` flags the template state so the next one cannot sit
-  there unnoticed.
-- The agent defaults to `--workspace ../`, so running it here makes it operate on its own repo.
-  That is why this repo kept accumulating agent state.
+Standing decisions, and what was measured and discarded:
+[`docs/history.md`](docs/history.md#standing-decisions-rescued-from-handoffmd),
+[`docs/history.md`](docs/history.md#measured-and-discarded). Read `docs/history.md` before
+re-opening any removed feature or decision.

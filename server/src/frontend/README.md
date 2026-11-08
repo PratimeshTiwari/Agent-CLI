@@ -35,7 +35,7 @@ terminal.
 | a menu does not fit | `menus/panel.js` (`panelRoom`) |
 
 **Run it in a real terminal.** Tests check the logic; only a terminal shows a frame. The harness
-described in CLAUDE.md, "The pty harness", drives the CLI under a pty with a fake extension and
+described in CLAUDE.md, "Verifying anything a person sees", drives the CLI under a pty with a fake extension and
 counts full clears (`ESC[2J`). Check anything you can see at 13 and 24 rows: it should be 0.
 
 Switches: `AGENT_CLI_NO_ANIMATION=1` skips the intro, `AGENT_CLI_NO_CLEAR=1` keeps the screen at
@@ -63,4 +63,5 @@ A test cannot import a `.jsx` file under plain `node --test`, so logic worth tes
 - **`App.jsx` is sensitive to re-renders.** `<Static>`, `staticEpoch` and the streaming path stay
   in it; memoizing transcript rows brought the scroll bugs back twice.
 
-The reasons behind each rule are in [`CLAUDE.md`](../../../CLAUDE.md), under Gotchas.
+The rules are in [`CLAUDE.md`](../../../CLAUDE.md), under Terminal UI; the reasons behind each are in
+[`docs/design/terminal-ui.md`](../../../docs/design/terminal-ui.md).
