@@ -47,6 +47,33 @@ function Field({ value, onChange, onSubmit, hidden = false, width }) {
   );
 }
 
+/**
+ * `mcp_setup`'s secret fields (v9.9.7), after the person chose Test and add.
+ * One field at a time, like `/mcp add`'s; an empty enter does nothing. Four rows,
+ * under the box's own charge.
+ */
+export function SetupValues({ ask, width, onDone }) {
+  const [at, setAt] = React.useState(0);
+  const [values, setValues] = React.useState({});
+  const [draft, setDraft] = React.useState('');
+  const item = ask[at];
+  const submit = (typed) => {
+    if (!typed.trim()) return;
+    const next = { ...values, [item.key]: typed.trim() };
+    if (at + 1 >= ask.length) { onDone(next); return; }
+    setValues(next);
+    setAt(at + 1);
+    setDraft('');
+  };
+  return (
+    <Panel width={width} tone="attention" title={item.key} tight
+      status={item.hidden ? `hidden · saved in ${secretPlace()}, never shown to the model` : 'what the server needs, typed by you'}
+      keys={`enter next${ask.length > 1 ? ` · ${at + 1} of ${ask.length}` : ''} · esc don't add`}>
+      <Field key={at} value={draft} onChange={setDraft} onSubmit={submit} hidden={item.hidden} width={width} />
+    </Panel>
+  );
+}
+
 export function McpAdd({ agentLoop, width, rows, text, onSaved, onLeave }) {
   const taken = () => agentLoop.mcp.snapshot().servers.map((s) => s.name);
   const [state, setState] = React.useState(() => (text ? submitPaste(startAdd(), text, { taken: taken() }) : startAdd()));

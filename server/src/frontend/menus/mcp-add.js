@@ -5,7 +5,7 @@
  * The check step always shows the command before anything runs: it came from a
  * web page, and testing it starts it.
  */
-import { nameProblem, parseServerInput, planEnv, suggestName } from '../../backend/mcp/client/add-server.js';
+import { commandLine, nameProblem, parseServerInput, planEnv, suggestName } from '../../backend/mcp/client/add-server.js';
 
 export const startAdd = () => ({ step: 'paste', text: '', error: null });
 
@@ -50,8 +50,8 @@ export function stepBack(state) {
   return { ...state, step: 'check', result: null, error: null };
 }
 
-/** The command or address as the check step shows it. A value is never drawn, only its name. */
-export const commandLine = (entry) => entry.url || [entry.command, ...(entry.args || [])].join(' ');
+/** The command or address as the check step shows it (in add-server.js since v9.9.7, for `mcp_setup`). */
+export { commandLine };
 
 /**
  * The check step exists to show what will run, so the command wraps instead of

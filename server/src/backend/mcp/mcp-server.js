@@ -12,6 +12,7 @@ import { findSymbol, findReferences } from './tools/find-symbol.js';
 import { queryLog } from './tools/query-log.js';
 import { jiraIssue } from './tools/jira-issue.js';
 import { mcpDescribe, mcpTool } from './tools/mcp-tool.js';
+import { mcpSetup } from './tools/mcp-setup.js';
 import { readFile } from './tools/read-file.js';
 import { editFile } from './tools/edit-file.js';
 import { createFile } from './tools/create-file.js';
@@ -127,6 +128,17 @@ const TOOL_DEFINITIONS = [
       args: { type: 'object', description: 'Its arguments', required: false },
     },
     handler: mcpTool,
+  },
+  {
+    // v9.9.7: the current prompt only (`mcpSetup`). It runs only with the box's
+    // token: core/policy/mcp-setup-approval.js.
+    name: 'mcp_setup',
+    description: 'Add an MCP server the user asked for to ~/.agent/mcp.json, after testing that it starts.',
+    parameters: {
+      input: { type: 'string', description: 'The command, URL or JSON the user gave', required: true },
+      name: { type: 'string', description: 'What to call it', required: false },
+    },
+    handler: mcpSetup,
   },
   {
     // v8.1: offered by prompt versions with `jira` (v4), and only once a site

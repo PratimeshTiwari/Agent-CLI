@@ -485,17 +485,6 @@ needs `LOOKS_LIKE_TOOL_CALL`, the `"name"` key the contract requires. A block th
 is also no longer deleted: it returned `''` unconditionally, so a model answering "your config
 should be:" had the answer removed from its own reply.
 
-**`find_references` answers one of two questions, and the caller says which.** By default, uses of
-a binding (`fs.readFile` is not a use of a `readFile` variable). `includeMembers` adds `x.name()`
-calls, tagged `viaMember` because `x.name` cannot be told from a same-named method elsewhere, and
-only for a name defined as a method in this repo (unconditionally, `map` was 165 rows of
-`Array.prototype`). A method's definition is added in the handler, because `referencesIn` never
-visits a `MethodDefinition` key. It used to answer 0 for every method and suggest dead code.
-
-**`grep_search` searches identifier-only alternation (`a|b|c`) as alternatives** even with
-`isRegex` false, and says so; a literal `a || b` or a shell pipe is searched as written. As
-`--fixed-strings` it answered 0 where the regex found 26.
-
 **A running command shows its last five lines (v5.21), like Claude Code's Bash rows.** `run_command`
 was silent until it exited. `exec` keeps collecting exactly as before — the model's result cannot
 change because the screen watches — and listeners on the child's streams feed `core/commands/output-tail.js`,
@@ -701,11 +690,6 @@ strings, `x.name` is any object's), and a Ruby file in `find_references` is mark
 reason. `find_symbol`'s "JavaScript and JSX only" is v1's frozen text; v2 names Ruby
 (`symbolLanguages`), since a tool description is part of the prompt.
 
-**Ruby references are precise since v6.19** (precision 91.8% → 99.5% against Ripper's lexer):
-`codeOf` is a literal scanner (regexes, `%w[]` and friends, `#{}`, `?/`, heredocs), and a literal
-open at a line's end carries into the next, capped at `CARRY_MAX` (40) so a misread cannot blank a
-file. A keyword-named method matches only after `.`, `:` or `def`; `__END__` ends the code.
-
 **Every other language comes from one table since v6.21 (`context/pattern-symbols.js`).** Asked
 "can't we make it generic?": a row per language (TypeScript, Python, Go, Java, Kotlin, C#, Swift,
 Scala, Rust, PHP, C/C++, Elixir, Lua, shell) gives comments, string forms (raw, triple, interpolated,
@@ -762,10 +746,19 @@ no box run together, 4 at once per server; anything else waits for them (`mcpInF
 a box wait for it. A call is never repeated. A result is labelled data and cannot close its own label.
 
 **Adding a server (v9.2, `/mcp add`, `components/McpAdd.jsx`).** Four pasted shapes (`parseServerInput`); the
-check step always shows the command before anything runs, and the model can never add one. A secret goes to
+check step always shows the command before anything runs. A secret goes to
 the Keychain or a 0600 `mcp-secrets.json`, `mcp.json` holds `${secret:<server>/<VAR>}`, and a server reads only
 its own. **A text field behind a menu needs its own `usePaste`:** the prompt's is inactive there, bracketed
 paste goes off, and a pasted JSON's first newline is an Enter. The pty must set `AGENT_MCP_NO_KEYCHAIN=1`.
+
+**The model adds one when asked (v9.9.7, `mcp_setup`, `core/policy/mcp-setup-approval.js`).** Owner: "the agent
+can add and test mcp connection if user asks for it". v7 only (`mcpSetup`), with or without servers: +333 / +333 /
++688 characters on turn 0. `/mcp add`'s parse, name, test and save. Owner on the box, **one box, then auto**: a new
+name and command show Test and add / Don't add (on Don't add, every mode; esc is Don't add); the same one again this
+session runs unasked; one needing a secret always asks, since the person types it there (`SetupValues`) and it goes
+`answerCommandApproval` → runner → handler, never into a prompt. Saved only if the test answered; the handler wants
+the token; `mcp: true` keeps subagents out. A side panel cannot take a secret, so it gets a refusal naming `/mcp add`.
+Pty `SCRIPT=script-mcp-setup.json ./run-mcp.sh ROWS 90 setup`: 0 clears at 13 and 24, the value in no screen or prompt.
 
 **A repo's `.mcp.json` and HTTP servers (v9.6, `mcp/client/repo-approval.js`, `config.js`).** A cloned
 folder writes that file, so nothing in it runs until the person allows it in `/mcp`, per folder and per whole entry:

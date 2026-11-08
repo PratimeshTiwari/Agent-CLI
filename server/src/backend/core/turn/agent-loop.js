@@ -189,6 +189,7 @@ import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from '../policy/tool-policy.js';
 import { runExternalTool } from '../policy/external-approval.js';
 import { runMcpTool, runsTogether } from '../policy/mcp-approval.js';
+import { runMcpSetup } from '../policy/mcp-setup-approval.js';
 import { LOOP_TOOLS, dispatchLoopTool } from './loop-tools.js';
 import { resolveDiff } from '../edits/diff-approval.js';
 import { createOutputTail } from '../commands/output-tail.js';
@@ -1852,7 +1853,12 @@ export class AgentLoop {
     }
   }
 
-  answerCommandApproval(action, command) {
+  /**
+   * `values` (v9.9.7) are what the person typed into `mcp_setup`'s box for a
+   * server's secrets. They go to the runner and from it to the handler, never
+   * into a prompt.
+   */
+  answerCommandApproval(action, command, values = undefined) {
     if (this.pendingCommandResolve) {
       if (this._pendingExternal) {
         // An external write (v8.1) is never remembered either way: "always"
@@ -1863,6 +1869,7 @@ export class AgentLoop {
         this.pendingCommandResolve({
           approved: ['allow_once', 'allow_always', 'accept', 'send'].includes(action),
           always: action === 'allow_always',
+          ...(values ? { values } : {}),
         });
         this._pendingExternal = false;
       } else if (action === 'allow_always') {
@@ -3788,6 +3795,10 @@ export class AgentLoop {
         // Jira (v8.1): a write is shown and sent only on the person's yes, in
         // every mode — core/policy/external-approval.js.
         result = await runExternalTool(this, call, { editor: this.editor, taskManager: this.taskManager });
+      } else if (call.name === 'mcp_setup') {
+        // v9.9.7: a box before a new command first runs, secrets typed there:
+        // core/policy/mcp-setup-approval.js.
+        result = await runMcpSetup(this, call);
       } else if (MCP_TOOLS.has(call.name)) {
         // The switch, the box and the log: core/policy/mcp-approval.js.
         result = await runMcpTool(this, call);

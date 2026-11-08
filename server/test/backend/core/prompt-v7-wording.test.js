@@ -24,7 +24,7 @@ const count = (text, needle) => text.split(needle).length - 1;
 test('v7 is a set of wording switches, all on', () => {
   const flags = PROMPT_VERSIONS.v7.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'lookFirst', 'modeNote', 'noCanvas', 'oneCopy', 'projectCommands', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'lookFirst', 'mcpSetup', 'modeNote', 'noCanvas', 'oneCopy', 'projectCommands', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -148,7 +148,8 @@ test('the dedup is shorter on every turn 0, and only turn 0 and the handovers mo
         // does not have, so its own section is left out of the comparison.
         // Look-first (v7.9) and no-Canvas (v9.9.6) are rules added on purpose,
         // not dedup: left out too.
-        const dedup = v2[key].replace(/## query_log[\s\S]*?(?=## )/, '')
+        // mcp_setup (v9.9.7) is a tool v1 does not have either.
+        const dedup = v2[key].replace(/## query_log[\s\S]*?(?=## )/, '').replace(/## mcp_setup[\s\S]*?(?=## )/, '')
           .split('\n').filter((l) => !/answered from files you open|Gemini's Canvas/.test(l)).join('\n');
         assert.ok(v2[key].includes('## query_log'), `${key}: v2 offers query_log`);
         assert.ok(dedup.length < v1[key].length, `${key}: ${dedup.length} vs ${v1[key].length}`);
@@ -159,8 +160,9 @@ test('the dedup is shorter on every turn 0, and only turn 0 and the handovers mo
   for (const key of ['batch', 'subagent/review', 'compaction']) {
     assert.equal(v2[key], v1[key], key);
   }
-  // The short turn differs by one name in the tool anchor (v6.20).
-  assert.equal(v2['high/plan/sub/short'], v1['high/plan/sub/short'].replace(' read_file ', ' read_file query_log '));
+  // The short turn differs by two names in the tool anchor: query_log (v6.20)
+  // and mcp_setup (v9.9.7).
+  assert.equal(v2['high/plan/sub/short'], v1['high/plan/sub/short'].replace(' read_file ', ' read_file query_log mcp_setup '));
 });
 
 test('ask_subagent takes the /effort words on v2, max included; v1 keeps its own (v6.15)', () => {

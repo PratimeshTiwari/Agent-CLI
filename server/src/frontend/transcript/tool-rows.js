@@ -7,6 +7,7 @@
 
 import { normalizeQuestionSet } from '../../backend/core/turn/question.js';
 import { oneLine, shortenPath } from '../text.js';
+import { parseServerInput, suggestName } from '../../backend/mcp/client/add-server.js';
 
 /**
  * One-line description of a tool result, for the collapsed transcript row.
@@ -64,6 +65,13 @@ export function subjectOf(toolName, args, max = 44) {
       // `github search_issues`: which server, and which of its tools.
       raw = [pick('server'), pick('tool')].filter(Boolean).join(' ');
       break;
+    case 'mcp_setup': {
+      // v9.9.7: the name it asked for, else the one /mcp add would suggest;
+      // a pasted JSON block is not a name.
+      const parsed = pick('name') ? null : parseServerInput(pick('input'));
+      raw = pick('name') || parsed?.name || (parsed?.entry ? suggestName(parsed.entry) : '') || pick('input');
+      break;
+    }
     case 'jira_issue':
       // `comment PROJ-12`, `search project = X`: the action and what it is on.
       raw = [pick('action'), pick('key', 'project', 'jql')].filter(Boolean).join(' ');
@@ -201,6 +209,10 @@ export function summarizeResult(toolName, result) {
       case 'mcp_describe':
         // v9.1: the first line inside the `<mcp_result>` label, not the label.
         if (typeof r === 'string') return oneLine(r.split('\n')[1] || '');
+        break;
+      case 'mcp_setup':
+        // v9.9.7: `Added github … 12 tools: …`, cut from the right.
+        if (typeof r === 'string') return oneLine(r.split('\n')[0]);
         break;
       case 'jira_issue':
         // v8.1: the first line is the answer (`Created PROJ-45 · …`); a hand-off

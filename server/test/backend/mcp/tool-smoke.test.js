@@ -97,6 +97,9 @@ const HAPPY_PATH = {
   jira_issue: { action: 'get', key: 'PROJ-12' },
   mcp_describe: { server: 'smoke' },
   mcp_tool: { server: 'smoke', tool: 'echo', args: { q: 'hi' } },
+  // Runs only with the box's token, and writes ~/.agent/mcp.json: mcp-setup.test.js
+  // drives it against the fixture server, token and refusal both.
+  mcp_setup: null,
   run_command: { command: 'echo ok' },
   run_background: { command: 'sh -c "sleep 5"' },
   manage_task: { action: 'list' },

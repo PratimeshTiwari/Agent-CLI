@@ -348,7 +348,7 @@ describe('the handler is the third lock', () => {
 
 describe('subagents', () => {
   it('the batch runner refuses both, and no call reaches the handler', async () => {
-    assert.deepEqual([...MCP_TOOLS].sort(), ['mcp_describe', 'mcp_tool']);
+    assert.deepEqual([...MCP_TOOLS].sort(), ['mcp_describe', 'mcp_setup', 'mcp_tool']);
     for (const name of MCP_TOOLS) {
       const calls = [];
       let turn = 0;

@@ -68,6 +68,7 @@ export const PROMPT_VERSIONS = {
       lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
       modeNote: true,            // a mode switched during a turn is said in the next tool-results prompt (v9.9.6)
       noCanvas: true,            // files go through the tools, never Gemini's Canvas (v9.9.6)
+      mcpSetup: true,            // mcp_setup: the model adds and tests a server the user asks for (v9.9.7)
     },
   },
 };
@@ -112,6 +113,7 @@ export const FLAG_NOTES = {
   lookFirst: 'A question about the project is answered from files opened this turn',
   modeNote: 'A mode switched during a turn is said with the next tool results',
   noCanvas: 'Files go through the tools, never into Gemini\'s Canvas',
+  mcpSetup: 'mcp_setup adds and tests an MCP server when you ask; you see the command first',
   jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
   customMcp: 'mcp_tool calls the servers you added; /mcp sets each tool to ask, auto or block',
   memoryFolder: 'The prompt lists saved facts by name; the model reads one when it needs it',
