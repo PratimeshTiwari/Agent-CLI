@@ -5,6 +5,17 @@ through a Gemini tab in your own Chrome, signed in as you: the agent writes the 
 extension types it in and streams the reply back, and the agent reads, edits and runs things in your
 repo.
 
+> [!WARNING]
+> **For development and learning only.** This project exists to explore what is possible when a
+> coding agent drives a chat web app. It is not for personal or commercial use.
+>
+> - **It automates gemini.google.com**, a consumer web app. Automating it is likely against
+>   Google's terms of service and may get your account restricted.
+> - **Not affiliated with or endorsed by Google.** "Gemini" refers only to the service the
+>   extension types into.
+> - **No warranty.** It is provided as is, and you are responsible for how you use it. For real
+>   work, use a supported tool or an official API.
+
 ![Agent CLI reading two models and documenting them](docs/images/terminal.svg)
 
 - **Local.** No hosted backend, no telemetry, no keys. Nothing leaves your machine except the chat
