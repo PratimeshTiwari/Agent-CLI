@@ -517,10 +517,11 @@ decided and truncated now, the extra rows come out of the live turn, and what gi
 reason, directory, then the border, never the command; a cut command says so on the title row. 0
 clears at 10, 13, 16 and 24 rows. The diff box: `diffBoxLayout` (v9.9.6).
 
-**A Canvas is a file request (v9.9.4, `canvasTitles`, `_askForCanvasFile`).** Gemini can write a
-document into its Canvas, an iframe the scrape cannot read. The bridge scrapes the chip as
-`[Gemini Canvas: "<title>" — …]` (`canvasMarker`; a test holds the two regexes together), and a
-reply with it and no call is asked once per turn, every version, for `create_file`. **An append
+**A Canvas is a file request (v9.9.4, `canvasTitles`, `_askForCanvasFile`).** Gemini writes
+documents and "interactive visuals" into its Canvas (read live: ~31 s behind the stop button). The
+chip is scraped as `[Gemini Canvas: "<title>" — …]` (`canvasMarker`); a reply with it and no
+call is asked once per turn for `create_file`. v7 says not to
+(`noCanvas`, v9.9.6). **An append
 hidden in an edit is run as one** (`appendHiddenInEdit`): an `oldText` of 40+ characters that ends
 the file and that `newText` starts with; the classifier counts only the added lines, so auto mode
 does not stop on a section added by rewriting the tail.

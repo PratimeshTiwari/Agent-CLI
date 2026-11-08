@@ -52,6 +52,21 @@ const LOOK_FIRST_RULE = {
     + 'how projects usually work. If you say you will look, make the call in the same reply.',
 };
 
+/*
+ * Canvas (v9.9.6). Asked for a visual, a document or an app, Gemini can build it
+ * in its Canvas: read live on 2026-11-08, ~31 s of building behind the stop
+ * button, then a chip the scrape can only name (`canvasMarker`), and the loop
+ * asks again for a file (`_askForCanvasFile`). Prevention first, as with the
+ * tool anchor; on every rung, because Pro does it too.
+ */
+const NO_CANVAS_RULE = {
+  terse: (n) => `${n}. Write files with create_file or edit_file, never in Gemini's Canvas, and make `
+    + 'no interactive visuals: the user is in a terminal and nothing here can read them.',
+  bullet: "- **Files go through the tools.** Never write a file, document or app in Gemini's Canvas, "
+    + 'and make no interactive visuals: the user is in a terminal and nothing here can read them. '
+    + 'Use `create_file` or `edit_file`.',
+};
+
 // How often to send the condensed reminder, counted in MESSAGES pushed to the tab —
 // not user turns. One user turn can be a dozen tool round-trips, so a turn-based
 // counter drifts by an order of magnitude in tool-heavy work and fires far too
@@ -948,9 +963,12 @@ underspecified, say what you assumed rather than guessing silently.
    */
   _buildFlashCoreInstructions() {
     const core = this._prompt('core-terse');
-    if (!this._flag('lookFirst')) return core;
+    const rules = [];
+    if (this._flag('lookFirst')) rules.push(LOOK_FIRST_RULE.terse);
+    if (this._flag('noCanvas')) rules.push(NO_CANVAS_RULE.terse(9 + rules.length));
+    if (!rules.length) return core;
     const body = core.trimEnd();
-    return `${body}\n${LOOK_FIRST_RULE.terse}${core.slice(body.length)}`;
+    return `${body}\n${rules.join('\n')}${core.slice(body.length)}`;
   }
 
   /**
@@ -1005,7 +1023,8 @@ underspecified, say what you assumed rather than guessing silently.
 - ONLY reference code that you have explicitly read using \`read_file\` or \`grep_search\`.
 - Never guess line numbers, function signatures, or variable names.`}
 - When running commands, ensure the \`cwd\` is correct.${this._flag('lookFirst') && !pro ? `
-${LOOK_FIRST_RULE.bullet}` : ''}
+${LOOK_FIRST_RULE.bullet}` : ''}${this._flag('noCanvas') ? `
+${NO_CANVAS_RULE.bullet}` : ''}
 
 ## Documentation & Context Maintenance
 - **Project instructions**: \`AGENT.md\` is where a project's standing rules live, walked from the code upward. If the user tells you a convention that should hold for every future turn, offer to add it there — do not keep it only in your own memory.

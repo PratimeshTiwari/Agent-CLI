@@ -67,6 +67,7 @@ export const PROMPT_VERSIONS = {
       projectCommands: true,     // turn 0 says how this project tests, lints and builds (v7.4)
       lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
       modeNote: true,            // a mode switched during a turn is said in the next tool-results prompt (v9.9.6)
+      noCanvas: true,            // files go through the tools, never Gemini's Canvas (v9.9.6)
     },
   },
 };
@@ -110,6 +111,7 @@ export const FLAG_NOTES = {
   projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
   lookFirst: 'A question about the project is answered from files opened this turn',
   modeNote: 'A mode switched during a turn is said with the next tool results',
+  noCanvas: 'Files go through the tools, never into Gemini\'s Canvas',
   jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
   customMcp: 'mcp_tool calls the servers you added; /mcp sets each tool to ask, auto or block',
   memoryFolder: 'The prompt lists saved facts by name; the model reads one when it needs it',

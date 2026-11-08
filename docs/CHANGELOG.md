@@ -28,7 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
-| v9.9.6 | — | 1.8.18 | — |
+| v9.9.6 | — | 1.8.18 | v7 gains two lines |
 | v9.9.5 | — | — | v7 (v2 to v6 become it) |
 | v9.9.4 | 1.66.0 | — | — |
 | v9.9.3 | 1.65.0 | 1.8.17 | — |
@@ -72,7 +72,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.6 | 11-08 | — | Shift+tab at an approval box; the diff box fits; Cursor's chat can move right; `marked-terminal` 8 |
+| v9.9.6 | 11-08 | — | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
 | v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
 | v9.9.3 | 11-08 | [#171](https://github.com/PratimeshTiwari/Agent-CLI/pull/171) | Thinking level follows effort |
@@ -100,6 +100,8 @@ change.
   a box cut short said `+0 / -0`.
 
 **Changed**
+- The current prompt (v7) asks Gemini not to build in its Canvas or make interactive visuals,
+  which take about 30 seconds and which the agent cannot read. +164 to +215 characters on turn 0.
 - `marked-terminal` 8; bold and the other styles are its own. Node 22.12 or newer.
 - Companion 1.8.18: in Cursor, which cannot put a view in the secondary side bar, the chat offers
   once to move there ("Move Chat to Another Side Bar").
