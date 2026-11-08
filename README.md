@@ -13,6 +13,9 @@ repo.
 > - **Third-party services.** This project interacts with third-party web services. Users are
 >   solely responsible for ensuring that their use complies with the terms of service and
 >   policies of any such service, including those of Google.
+> - **Personal and production use.** For any personal, production or commercial use, use the
+>   official [Gemini API](https://ai.google.dev/gemini-api/docs) through Google AI Studio or
+>   Vertex AI, under its applicable terms.
 > - **No affiliation.** This project is not affiliated with, endorsed by or sponsored by Google
 >   LLC. "Gemini" and related names are trademarks of their respective owners and are used here
 >   for identification only.
