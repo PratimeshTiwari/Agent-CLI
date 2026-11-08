@@ -62,6 +62,9 @@ test that sets its own home must **restore** the previous value on teardown, nev
 it, or every later test in that file falls back to the real one; `test-home.test.js` names
 any file that does. Running a single file with bare `node --test` skips the preload — use
 `node --import ./test/setup-home.js --test <file>` for anything that touches sessions.
+**Nor does it write into the repo (v9.9.4).** The v1-golden negative control edited a shipped
+prompt file in place, and a running agent's watcher showed it as "modified externally". It copies
+`SHIPPED_PROMPTS_DIR` to a temp dir and points `usePromptsDir` there, restoring it on teardown.
 
 **Expected state: all tests pass.** They used to be 34/10/24 red: the tests described designs
 the code had replaced — `plan-generator` writes one file per comment under `PR-<n>/` rather than
@@ -204,6 +207,10 @@ entry before changing the mechanism it describes.
   is returned as soon as the send lands. **A clock fix has as many sites as the clock has
   callers**: `waitForDom`, the paste-settle check and `waitForSendButton` all run on the observer
   clock, and are tested with a `setTimeout` that never fires.
+- **A reply's finished row ends the wait (v9.9.4, #104, extension 1.66.0).** Read live: Gemini's
+  copy row under a reply lands ~0.6 s after its last text. Once the text is still for 250 ms and the
+  newest `model-response` (never `initialLastReply`, the previous turn's) has it, the turn completes
+  (`finishedBy: 'row'`); otherwise the quiet checks below decide.
 - **Completion needs consecutive quiet checks**, and `confirmSoon` brings the confirming look
   forward. `completionConfirms` holds that look so a stop cancels it (it leaked and compounded).
 - **The picker cannot kill a turn.** `NON_FATAL_EXTENSION_OPS`, and a notice is never fatal
@@ -501,6 +508,14 @@ input's three rows while drawing fifteen with a long command — 15 clears at 16
 decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
 reason, directory, then the border, never the command; a cut command says so on the title row. 0
 clears at 10, 13, 16 and 24 rows.
+
+**A Canvas is a file request (v9.9.4, `canvasTitles`, `_askForCanvasFile`).** Gemini can write a
+document into its Canvas, an iframe the scrape cannot read. The bridge scrapes the chip as
+`[Gemini Canvas: "<title>" — …]` (`canvasMarker`; a test holds the two regexes together), and a
+reply with it and no call is asked once per turn, every version, for `create_file`. **An append
+hidden in an edit is run as one** (`appendHiddenInEdit`): an `oldText` of 40+ characters that ends
+the file and that `newText` starts with; the classifier counts only the added lines, so auto mode
+does not stop on a section added by rewriting the tail.
 
 **Large files and documents (v5.10).** Reported from the work laptop: simple edits in
 1,000–2,000-line files went badly, and building a Confluence document from several files
@@ -1380,41 +1395,11 @@ decisions; this one keeps what governs the code as it is today.
 
 ### Search, and why there is still no index
 
-Decided 2026-09-11, revisited deliberately because the next codebase is a large one.
-
-**No embedding index.** Phase 1 deleted `semantic_search` for being broken; this is the
-separate question of whether a *working* one should replace it. It should not, and Claude Code —
-the benchmark this project is measured against — does not have one either. Four reasons, the
-last of which is specific to this architecture:
-
-- Code search is mostly **exact-symbol** search (`getUserById`, `EADDRINUSE`), where lexical
-  matching wins outright.
-- An index goes **stale on every edit**. Cursor pays for a persistent background service to
-  re-index continuously; the alternative is serving the model a confident map of code that no
-  longer exists — the same failure phase 1 removed.
-- **Chunking destroys structure.** This repo already learned that: the deleted `ast-chunker`
-  resolved 24% of its own top-level symbols.
-- **Retrieval is single-shot; an agent iterates.** grep → read → grep again with a better term
-  beats one shot at the twenty nearest chunks, because the second query knows what the first
-  found.
-
-The constraint that settles it: **the context window is a browser chat tab.** Every retrieved
-chunk is typed into Gemini by a content script. Twenty 500-token chunks is 10,000 tokens typed
-into a browser per query, most of it unread — in a project whose whole prompt strategy exists to
-avoid large repeated payloads. Agentic grep→read sends only what the model decided it needed.
-
-**What a large codebase actually needs**, none of which is RAG:
-
-| gap | answer | where |
-| --- | --- | --- |
-| you don't know the codebase's word for it ("rate limit" vs `throttle`) | multi-pattern `grep_search`, and prompt guidance to try synonyms — the model already knows them, it just burns a browser round-trip per guess | P2 |
-| "who calls this?", "what extends this?" | a symbol index (tree-sitter or ctags): exact, invalidates on mtime, needs no model | P3 |
-| orientation in an unfamiliar repo | `AGENT.md` — a human-written map beats a generated one because someone vouched for it | done, phase 2 |
-| a 50-line unranked hit list is hard to reason from | context lines, grouping by file, ranking | P2 |
-
-This is a decision made from the architecture, not from measurement. If grep genuinely fails on
-real questions in the large codebase, that evidence outranks the argument above — and the shape
-of the failures says which of the four rows is the one that bites.
+**No embedding index** (decided 2026-09-11): code search is mostly exact symbols, an index goes
+stale on every edit, chunking destroys structure, and every retrieved chunk would be typed into a
+browser tab. grep → read → grep, plus `find_symbol`, is the answer; evidence that grep fails on real
+questions outranks the argument. The full reasoning and the gap table:
+[`docs/history.md`](docs/history.md#moved-from-claudemd-in-v994).
 
 ### Queued prompts
 
