@@ -343,6 +343,43 @@ export class AgentLoop {
     }
   }
 
+  /**
+   * The mode, as an accessor (v9.9.6), so every writer tells everyone: the
+   * terminal's shift+tab, `/plan` typed in a panel, Approve-and-stop-asking.
+   * It was a field, and a panel that changed it left the terminal's status bar
+   * on the old mode until something else redrew it, and the panels learned of
+   * a terminal change only on the next turn. A switch during a turn is kept
+   * for the next tool-results prompt (`takeModeSwitch`), since the model was
+   * told the mode at the start of the turn and is otherwise not told again.
+   */
+  get mode() {
+    return this._mode || 'plan';
+  }
+
+  set mode(value) {
+    const was = this._mode;
+    this._mode = value;
+    if (was === undefined || was === value) return;
+    if (this._isProcessing) this._modeSwitch = value;
+    for (const fn of this._modeListeners || []) {
+      try { fn(value, was); } catch { /* a listener must not stop the switch */ }
+    }
+    this.notifyPanelChange?.();
+  }
+
+  /** Told on every mode change, from any writer. Returns the unsubscribe. */
+  onModeChange(fn) {
+    (this._modeListeners ||= new Set()).add(fn);
+    return () => this._modeListeners.delete(fn);
+  }
+
+  /** The mode switched to during this turn, once; null when none. */
+  takeModeSwitch() {
+    const to = this._modeSwitch || null;
+    this._modeSwitch = null;
+    return to;
+  }
+
   /** Called on every busy → idle edge. Returns the unsubscribe. */
   onIdle(fn) {
     (this._idleListeners ||= new Set()).add(fn);
@@ -3977,8 +4014,9 @@ export class AgentLoop {
 
     const steers = this.takeSteers();
     const steerText = steers.join('\n\n');
+    const switchedTo = this.takeModeSwitch();
     const batch = this.promptBuilder.buildToolResultBatch(
-      toolResults, this.turnEvidence, this._dueHandover(), withheld, steerText,
+      toolResults, this.turnEvidence, this._dueHandover(), withheld, steerText, switchedTo,
     );
     if (steers.length) {
       // On the record, and on screen as `↳ steered:` inside the running turn.

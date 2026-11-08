@@ -63,5 +63,7 @@ test('a short command is one row', () => {
 test('App charges the box against the live turn', () => {
   const app = readFileSync(new URL('../../src/frontend/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /approvalLayout\(activeMenu\.payload, \{ width: terminalWidth, maxRows: INPUT_ROWS \+ frameBudget - 1 \}\)/);
-  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\n\s+- \(menuMidTurn \? menuRows - INPUT_ROWS : 0\)\);/);
+  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\n\s+- \(diffBox \? Math\.max\(0, diffBox\.height - INPUT_ROWS\) : 0\)\n\s+- \(menuMidTurn \? menuRows - INPUT_ROWS : 0\)\);/);
+  // The diff box too (v9.9.6), from the same room.
+  assert.match(app, /expanded: diffExpanded, maxRows: INPUT_ROWS \+ frameBudget - 1,/);
 });

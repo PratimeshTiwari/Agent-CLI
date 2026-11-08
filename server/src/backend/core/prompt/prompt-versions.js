@@ -66,6 +66,7 @@ export const PROMPT_VERSIONS = {
       logQuery: true,            // query_log is offered: log files and exports, however large (v6.20)
       projectCommands: true,     // turn 0 says how this project tests, lints and builds (v7.4)
       lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
+      modeNote: true,            // a mode switched during a turn is said in the next tool-results prompt (v9.9.6)
     },
   },
 };
@@ -108,6 +109,7 @@ export const FLAG_NOTES = {
   logQuery: 'query_log reads log files and Grafana/Datadog exports',
   projectCommands: 'Turn 0 names the project\'s test, lint and build commands',
   lookFirst: 'A question about the project is answered from files opened this turn',
+  modeNote: 'A mode switched during a turn is said with the next tool results',
   jira: 'jira_issue works with Jira issues once a site is set up; every write asks you',
   customMcp: 'mcp_tool calls the servers you added; /mcp sets each tool to ask, auto or block',
   memoryFolder: 'The prompt lists saved facts by name; the model reads one when it needs it',

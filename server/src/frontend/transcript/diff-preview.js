@@ -80,3 +80,46 @@ export function rowsFromPatch(patch, { maxLines = 16 } = {}) {
   }
   return rows;
 }
+
+/** Approve and Reject, and in plan and strict "Approve, and stop asking". */
+export const diffChoiceCount = (mode) => (mode === 'plan' || mode === 'strict' ? 3 : 2);
+
+/** Rows under the diff box: the spacing row and the status bar, plus one, because Ink repaints a frame as tall as the screen. */
+export const DIFF_BOX_BELOW = 3;
+
+/**
+ * What the diff approval box draws in `terminalHeight` rows (v9.9.6).
+ *
+ * The box asked for 16 diff lines whatever the terminal, and its spacing and
+ * reason line on top. At 13 rows a two-line edit drew a frame exactly as tall
+ * as the screen, and Ink clears the screen and scrollback for that: once when
+ * the box appeared, and again on every redraw of it, such as a mode switched
+ * from it. What gives way, in order: diff lines down to three, the spacing
+ * around them, the reason line, then diff lines down to one. The choices and
+ * the title never do.
+ *
+ * @returns {{rows: Array, margins: boolean, reason: boolean, hint: boolean, height: number}}
+ */
+export function diffBoxLayout({ patch, choices = 3, reason = false, expanded = false, terminalHeight = 24, maxRows = null, collapsed = 16 } = {}) {
+  // `maxRows`: what App gives the box, the input's rows and the live frame's
+  // past one row of the turn (as the command box). Else the screen's height.
+  const room = Math.max(1, maxRows ?? terminalHeight - DIFF_BOX_BELOW);
+  const start = expanded ? Math.max(collapsed, terminalHeight) : collapsed;
+  const levels = [
+    { margins: true, reason, floor: 3 },
+    { margins: false, reason, floor: 3 },
+    { margins: false, reason: false, floor: 1 },
+  ];
+  let last = null;
+  for (const level of levels) {
+    for (let maxLines = start; maxLines >= level.floor; maxLines--) {
+      const rows = rowsFromPatch(patch, { maxLines });
+      const hint = expanded || rows.some((r) => r.type === 'more');
+      const height = 2 + choices + (level.reason ? 1 : 0)
+        + (rows.length ? rows.length + (level.margins ? 2 : 0) : 0) + (hint ? 1 : 0);
+      last = { rows, margins: level.margins, reason: level.reason, hint, height };
+      if (height <= room) return last;
+    }
+  }
+  return last;
+}

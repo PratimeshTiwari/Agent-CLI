@@ -13,6 +13,7 @@ import { loadImage, tagAt, textAt, imagesInText, imagePromptBlock, recordedImage
 import { describeDropped, fileTag, filesInText, filePromptBlock, setDropWorkspace } from './input/file-drop.js';
 import { actionHead } from './transcript/action-row.js';
 import { approvalLayout, artifactBodyLines, midTurnTaskLayout, runningLayout } from './transcript/live-layout.js';
+import { diffBoxLayout, diffChoiceCount } from './transcript/diff-preview.js';
 import { contextMeter, disconnectedHint, elapsedLabel, taskProgress } from './transcript/status-rows.js';
 import { workBreakdown } from './transcript/tool-rows.js';
 import { easeCount, streamTokens } from './transcript/token-count.js';
@@ -140,6 +141,10 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('');
   const [diffRequest, setDiffRequest] = useState(null);
+  // `d` in the diff box; collapsed again for the next file (v9.9.6: kept here,
+  // because the box's size, and so the live turn's, depends on it).
+  const [diffExpanded, setDiffExpanded] = useState(false);
+  useEffect(() => { setDiffExpanded(false); }, [diffRequest?.diffId]);
   /**
    * Prompts typed while a turn was running.
    *
@@ -824,6 +829,15 @@ export function App({ agentLoop, wsServer, closing = false }) {
   const approval = activeMenu?.type === 'command_approval'
     ? approvalLayout(activeMenu.payload, { width: terminalWidth, maxRows: INPUT_ROWS + frameBudget - 1 })
     : null;
+  // The diff box the same way (v9.9.6). It was sized from the screen's height
+  // alone, with the live turn's rows above it uncharged: at 13 rows a two-line
+  // edit cleared the screen when the box appeared and on each redraw of it.
+  const diffBox = diffRequest
+    ? diffBoxLayout({
+      patch: diffRequest.patch, choices: diffChoiceCount(mode), reason: Boolean(diffRequest.riskReason),
+      expanded: diffExpanded, maxRows: INPUT_ROWS + frameBudget - 1,
+    })
+    : null;
   // What a menu drawn in place of the input may use: the input's own rows and
   // the live frame's, which a menu opened between turns has to itself — and,
   // between turns, the spinner row and its margin, which `reservedRows` counts
@@ -840,6 +854,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     ? Math.max(3, INPUT_ROWS + frameBudget - 1)
     : Math.max(3, frameBudget + INPUT_ROWS + idleRows);
   const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0)
+    - (diffBox ? Math.max(0, diffBox.height - INPUT_ROWS) : 0)
     - (menuMidTurn ? menuRows - INPUT_ROWS : 0));
 
   /*
@@ -893,6 +908,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
     // /plan and /auto mutate agentLoop.mode directly, so mirror it back.
     if (agentLoop.mode !== mode) setMode(agentLoop.mode);
   }, [history, isProcessing, agentLoop.mode, mode]);
+  // A panel's mode menu changes it with no render here; the loop says so (v9.9.6).
+  useEffect(() => agentLoop.onModeChange?.((next) => setMode(next)), [agentLoop]);
 
   useEffect(() => {
     if (isProcessing) return;
@@ -1761,6 +1778,9 @@ export function App({ agentLoop, wsServer, closing = false }) {
             mode={mode}
             terminalHeight={terminalHeight}
             width={terminalWidth}
+            layout={diffBox}
+            expanded={diffExpanded}
+            setExpanded={setDiffExpanded}
           />
 
           {/*

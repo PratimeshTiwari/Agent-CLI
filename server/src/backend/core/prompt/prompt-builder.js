@@ -36,6 +36,13 @@ import { looksLikeStandingRule, MEMORY_NUDGE } from './standing-rule.js';
  * the terse list (low), and a bullet under "Source Code" (medium). Pro already
  * plans first and has the guardrails, so it is not given it.
  */
+/** What a mode switched to during a turn means for the rest of it (`modeNote`). */
+const MODE_SWITCH_NOTES = {
+  auto: 'The user switched to AUTO MODE while you worked: safe edits and commands now run without asking.',
+  plan: 'The user switched to PLAN MODE while you worked: edits and commands now ask first, Markdown in the repo does not.',
+  strict: 'The user switched to STRICT PLAN MODE while you worked: every edit and command now asks first.',
+};
+
 const LOOK_FIRST_RULE = {
   terse: '9. A question about this project is answered from files you open this turn (find_symbol, '
     + 'grep_search, read_file), never from the map in AGENT.md or from how projects usually work. '
@@ -490,7 +497,7 @@ export class PromptBuilder {
     return this._prompt('pro-handover-review');
   }
 
-  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '') {
+  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '', modeSwitch = null) {
     const failures = results.filter((r) => r.failed);
 
     /**
@@ -609,6 +616,14 @@ export class PromptBuilder {
         + 'change course now, and say in one line what you changed.']
       : [];
 
+    /*
+     * The mode changed during the turn (v9.9.6, current prompt only: v1 is
+     * frozen). Turn 0 and each message say the mode; a tool round did not,
+     * so a model told "PLAN MODE" kept writing as if every edit would be shown
+     * to someone after the person had switched to auto, and the reverse.
+     */
+    const switched = modeSwitch && this._flag('modeNote') ? ['', MODE_SWITCH_NOTES[modeSwitch] || ''] : [];
+
     return [
       '<tool_results>',
       ...body,
@@ -616,6 +631,7 @@ export class PromptBuilder {
       ...evidence,
       ...review,
       ...held,
+      ...switched,
       ...steered,
       '',
       instruction,

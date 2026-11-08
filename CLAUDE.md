@@ -515,7 +515,7 @@ v5.24** (`approvalLayout`, `live-layout.js`): it is drawn where the input was an
 input's three rows while drawing fifteen with a long command — 15 clears at 16 rows. Every row is
 decided and truncated now, the extra rows come out of the live turn, and what gives way is padding,
 reason, directory, then the border, never the command; a cut command says so on the title row. 0
-clears at 10, 13, 16 and 24 rows.
+clears at 10, 13, 16 and 24 rows. The diff box: `diffBoxLayout` (v9.9.6).
 
 **A Canvas is a file request (v9.9.4, `canvasTitles`, `_askForCanvasFile`).** Gemini can write a
 document into its Canvas, an iframe the scrape cannot read. The bridge scrapes the chip as
@@ -866,13 +866,13 @@ parties have to be told the same thing about that, and each has been the odd one
 green), and the disk (the only one never wrong). Keeping them in one function is the reason it
 is one.
 
-**Three modes since v5.11 (`core/policy/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24,
-because building a document section by section in plan mode asked for every section. `strict` is
-the old plan mode, described below unchanged. `plan` additionally writes Markdown **inside the
-workspace** without asking — decided by location, never by extension alone — except the
-instruction files (`AGENT.md`, `CLAUDE.md`, `GEMINI.md`), which is the line the paragraph below
-was written to hold. The prompt states the exception in plan and not in strict, because the two
-disagreeing is the failure recorded below. Tab cycles plan → auto → strict.
+**Three modes since v5.11 (`core/policy/modes.js`): `plan`, `auto`, `strict`.** Asked for on 2026-10-24:
+plan mode asked for every section of a document. `strict` is the old plan mode, below. `plan` also
+writes Markdown **inside the workspace** without asking (by location, never extension) except the
+instruction files (`AGENT.md`, `CLAUDE.md`, `GEMINI.md`), the line the paragraph below holds. The
+prompt states the exception in plan and not in strict, as their disagreeing is the failure below.
+Shift+tab cycles plan → auto → strict, at an approval box too (v9.9.6, `loop.mode` notifies
+`onModeChange` and the panels); mid-turn, the next tool-results prompt says so (v7 `modeNote`).
 
 **A plan review opens only for a plan still waiting (v6.7, `planWorthReviewing` in
 `frontend/transcript/plan-box.js`).** "hi" on Flash-Lite in plan mode wrote `task.md`, a one-line plan, ticked it,
