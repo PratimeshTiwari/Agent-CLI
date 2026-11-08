@@ -55,7 +55,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#172](https://github.com/PratimeshTiwari/Agent-CLI/pull/172)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173)
 
 **Highlights**
 
@@ -69,7 +69,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.4 | 11-08 | [#172](https://github.com/PratimeshTiwari/Agent-CLI/pull/172) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
+| v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
 | v9.9.3 | 11-08 | [#171](https://github.com/PratimeshTiwari/Agent-CLI/pull/171) | Thinking level follows effort |
 | v9.9.2 | 11-08 | [#170](https://github.com/PratimeshTiwari/Agent-CLI/pull/170) | Conversations are one folder each |
 | v9.9.1 | 11-08 | [#169](https://github.com/PratimeshTiwari/Agent-CLI/pull/169) | `/theme amoled`, `/files`, and a README inside `.agent/` |
