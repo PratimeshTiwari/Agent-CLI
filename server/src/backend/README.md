@@ -12,10 +12,10 @@ the browser, and what is kept on disk. Nothing here imports from `frontend/`.
 | `mcp/` | the tools the model can call | `mcp-server.js` (`TOOL_DEFINITIONS`), `tools/` |
 | `prompts/` | prompt text; `v2/` overrides files for later prompt versions | `core/prompt/prompt-loader.js` reads it |
 | `context/` | token budget, memory, and code search (`find_symbol`, `find_references`) | `symbol-index.js` |
-| `storage/` | conversation history, written to the repo and to `~/.agent` | `session-store.js` |
+| `storage/` | conversations, one folder each (`.agent/conversations/<id>/`), written to the repo and to `~/.agent` | `session-store.js` |
 | `watcher/` | reports files changed outside the agent | `file-watcher.js` |
-| `atlassian/` | Jira: client, sign-in, ADF and wiki markup | `jira-client.js` |
-| `mcp/client/` | MCP servers: `~/.agent/mcp.json` and a repo's `.mcp.json` (asked about first), local or HTTP, `/mcp`'s list, `/mcp add` | `servers.js`, `add-server.js`, `repo-approval.js` |
+| `atlassian/` | Jira by token (`agent atlassian login --token`, Server/DC): client, ADF and wiki markup | `jira-client.js` |
+| `mcp/client/` | MCP servers: `~/.agent/mcp.json` and a repo's `.mcp.json` (asked about first), local or HTTP, `/mcp`'s list, `/mcp add`; Atlassian's own server by browser sign-in | `servers.js`, `add-server.js`, `repo-approval.js`, `oauth.js` |
 
 Inside `core/`, one folder per job:
 
@@ -23,14 +23,14 @@ Inside `core/`, one folder per job:
 | --- | --- | --- |
 | `turn/` | the turn loop, recovery from bad replies, compaction, the chat thread, slash commands | `agent-loop.js` |
 | `prompt/` | building the prompt, its versions, the tool catalog, `AGENT.md` and skills | `prompt-builder.js` |
-| `models/` | effort rungs and which Gemini model each one uses, stepping down on a quota | `effort.js` |
+| `models/` | effort rungs and which Gemini model each one uses, the thinking level, stepping down on a quota | `effort.js`, `thinking.js` |
 | `edits/` | diffs, approval of a diff, backups, the agent's own writes | `diff-engine.js` |
 | `commands/` | shell commands: risk, splitting, background tasks, live output | `risk-classifier.js` |
-| `policy/` | who may run what: modes, approval, Jira writes | `tool-policy.js` |
+| `policy/` | who may run what: modes, approval, Jira and Confluence writes, MCP tools | `tool-policy.js` |
 | `subagents/` | a subagent's tab session, large files read by a subagent | `subagent-session.js` |
 | `logs/` | failures, traces, tool usage, the command log | `error-log.js` |
 | `install/` | `agent doctor`, updates, restart, migration of old layouts, `/reset` | `doctor.js` |
-| `workspace/` | paths, workspaces, settings | `paths.js` |
+| `workspace/` | paths, workspaces, settings, the Chrome profile that gets prompts, `.agent/README.md` | `paths.js` |
 
 `workspace/paths.js` is the only place a `.agent/` path is built. Import it; never write the path
 by hand.
@@ -82,6 +82,7 @@ folder, or the test writes into your real `~/.agent`.
   two disagree.
 - **Prompt v1 is frozen.** A change that alters it fails `prompt-v1-golden.test.js`; put it in a
   new version in `core/prompt/prompt-versions.js`.
-- **A write to Jira always asks**, in every mode, through `core/policy/external-approval.js`.
+- **A write to Jira or Confluence always asks**, in every mode, with no "always": `core/policy/external-approval.js`
+  for `jira_issue`, and the `external` check in `tool-policy.js` for Atlassian's MCP server.
 
 The reasons behind all of this are in [`CLAUDE.md`](../../../CLAUDE.md), section Architecture.

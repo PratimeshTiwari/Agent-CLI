@@ -18,6 +18,19 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.66.0 — 2026-11-08
+
+**A Canvas is named, not dropped.** Asked for a design document, Gemini wrote it into its Canvas,
+a frame beside the reply that the scrape cannot read, and the agent saw the title welded to the
+buttons' labels ("Fruit Stand Design DocumentCodePreviewExport"). `<immersive-entry-chip>` is now
+scraped as `[Gemini Canvas: "<title>" — written in Gemini's Canvas, not in this reply]`, and the
+preview beside it as nothing; the agent asks once for the document as a file.
+
+**A reply's own finished row ends the wait (#104).** Read live: the copy and feedback row under a
+reply appears about 0.6 s after its last text, and the quiet rule waited about 2 s past it. Once the
+text has been still for 250 ms and the newest reply has that row, the turn completes
+(`finishedBy: 'row'` in the trace). The previous reply's row never counts.
+
 ### 1.65.0 — 2026-11-08
 
 **Thinking level is set by the agent.** A level chosen in `/effort` is set at once (`set_thinking`,

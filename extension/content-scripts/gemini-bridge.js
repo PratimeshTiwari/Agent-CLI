@@ -244,6 +244,31 @@ let responseObserver = null;
 let lastResponseText = '';
 let responseIdleTimer = null;
 let initialResponseCount = 0;
+/** The newest reply block before this turn's send, so its footer is never read as this turn's. */
+let initialLastReply = null;
+
+function lastModelResponse() {
+  const all = document.querySelectorAll('model-response');
+  return all.length ? all[all.length - 1] : null;
+}
+
+/*
+ * Gemini's own "this reply is finished" (#104, read live 2026-11-08): the copy
+ * and feedback row under a reply appears only once it is done. On a short
+ * reply the Stop button went at 14.74 s, the text kept growing until 15.35 s —
+ * which is why a shorter quiet rule once cut replies off — and the row came at
+ * 15.99 s. The quiet rule waits ~2 s past the last text on every round; this
+ * ends the wait when the page says so. Never on the block that was there before
+ * the send, and the quiet rule still runs where the row never comes.
+ */
+function replyMarkedFinished() {
+  const last = lastModelResponse();
+  if (!last || last === initialLastReply) return false;
+  return Boolean(last.querySelector('message-actions copy-button, message-actions button[aria-label*="copy" i]'));
+}
+
+/** How long the text must have been still when the row is there: it lands ~0.6 s after the last text. */
+const FINISHED_ROW_QUIET_MS = 250;
 let responseStartTime = 0;
 
 /**
@@ -709,6 +734,7 @@ async function injectPrompt(text, { thinking = null } = {}) {
 
     // Record how many responses exist BEFORE we send
     initialResponseCount = getResponseCount();
+    initialLastReply = lastModelResponse();
 
     input.focus();
 
@@ -1211,6 +1237,10 @@ function startResponseObserver() {
     }
 
     const currentResponse = extractLatestResponse();
+    // The finished row landing is a mutation: look now, not on the next 2 s tick.
+    if (lastResponseText && currentResponse === lastResponseText && replyMarkedFinished()) {
+      queueMicrotask(() => completionCheck?.());
+    }
 
     if (currentResponse && currentResponse !== lastResponseText) {
       /**
@@ -1314,6 +1344,19 @@ function startResponseObserver() {
     }
     if (isGenerating) sawGenerating = true;
     if (isGenerating) lastBusyAt = now;
+
+    // Gemini says the reply is done: take the text as it stands now.
+    if (!isGenerating && lastResponseText && silenceDuration >= FINISHED_ROW_QUIET_MS && replyMarkedFinished()) {
+      const fresh = extractLatestResponse();
+      if (fresh && fresh === lastResponseText) {
+        console.log('[Gemini Bridge] Generation finished (the reply\'s own finished row)');
+        if (turnTrace) turnTrace.finishedBy = 'row';
+        clearInterval(streamingUpdateTimer);
+        onResponseComplete(lastResponseText);
+        return;
+      }
+      if (fresh) { lastResponseText = fresh; lastActivityTime = now; }
+    }
 
     // Finished means: no Stop button, the text has stopped growing, and both
     // were still true on the next check. `silenceDuration` is time since the
@@ -2639,6 +2682,29 @@ function markSelected(described, triggerLabel) {
   return described.map((m, i) => (m.isMode ? m : { ...m, selected: i === index }));
 }
 
+/*
+ * A Canvas chip's title (v9.9.4). Read live on a test account: the chip's
+ * text is "Fruit Stand Design Document\nCode\nPreview\nExport" — the title,
+ * then its buttons' labels. `innerText` keeps those line breaks; jsdom and a
+ * hidden tab may not, so the labels are also cut off the end.
+ */
+const CANVAS_LABELS = /(?:\s*(?:Code|Preview|Export|Share|Open|Close))+\s*$/;
+
+function canvasTitle(chip) {
+  const raw = String(chip?.innerText || chip?.textContent || '').trim();
+  // With line breaks the title is the first line, whole ("Source Code" keeps
+  // its last word); welded on, the labels are cut off the end.
+  const title = raw.includes('\n')
+    ? raw.split('\n').map((s) => s.trim()).find(Boolean)
+    : raw.replace(CANVAS_LABELS, '');
+  return String(title || '').trim() || 'untitled';
+}
+
+/** The words the server's `CANVAS_MARKER` matches; change both or neither. */
+function canvasMarker(title) {
+  return `[Gemini Canvas: "${String(title).replace(/"/g, "'")}" — written in Gemini's Canvas, not in this reply]`;
+}
+
 /**
  * Turn the reply's DOM into markdown.
  *
@@ -2757,6 +2823,17 @@ function extractTextContent(element) {
     }
 
     switch (tag) {
+      // A Canvas (v9.9.4). Gemini writes the document into an iframe beside
+      // the reply and leaves a chip here whose text is "Title Code Preview
+      // Export", so the agent saw a title welded to three button labels and
+      // no document. Said as what it is, so the loop can ask for a file.
+      case 'IMMERSIVE-ENTRY-CHIP': {
+        return `\n\n${canvasMarker(canvasTitle(node))}\n\n`;
+      }
+      case 'INLINE-PREVIEW':
+      case 'WEB-PREVIEW':
+        return '';
+
       case 'CODE-BLOCK':
       case 'PRE': {
         const pre = tag === 'PRE' ? node : node.querySelector('pre');
