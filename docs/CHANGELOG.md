@@ -58,7 +58,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-09 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-09 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#176](https://github.com/PratimeshTiwari/Agent-CLI/pull/176)
 
 **Highlights**
 
@@ -74,7 +74,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.7 | 11-09 | — | Ask the agent to add an MCP server: it shows you the command, then tests and saves it |
+| v9.9.7 | 11-09 | [#176](https://github.com/PratimeshTiwari/Agent-CLI/pull/176) | Ask the agent to add an MCP server: it shows you the command, then tests and saves it |
 | v9.9.6 | 11-08 | [#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
 | v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
