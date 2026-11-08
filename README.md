@@ -6,16 +6,14 @@ prompt, a small extension types it in and streams the reply back, and the agent 
 runs things in your repo.
 
 > [!WARNING]
-> **Use at your own risk:** this project drives the Gemini web app with browser automation, which
-> Google's terms may not allow. Google can restrict, suspend or ban an account it finds being used
-> this way. Do not connect your primary personal or workplace Google account: use a separate account
-> made for this. You assume full responsibility for any account actions, quota limits or service
-> terminations.
+> **Use at your own risk:** Google can detect automated use of its web apps, and can restrict,
+> suspend or ban the accounts behind it. This project drives the Gemini web app through browser
+> automation. **Do not connect your primary personal or workplace Google account. Always use a
+> dedicated burner account.** You assume full responsibility for any account actions, quota limits
+> or service terminations.
 >
-> It is provided for research, development and learning only, "as is" and without warranty of any
-> kind. You are responsible for following the terms of every service it touches. For personal,
-> production or commercial use, use the official [Gemini API](https://ai.google.dev/gemini-api/docs)
-> through Google AI Studio or Vertex AI.
+> For research, development and learning only, "as is" and without warranty. For personal,
+> production or commercial use, use the official [Gemini API](https://ai.google.dev/gemini-api/docs).
 
 ![Agent CLI reading two models and documenting them](docs/images/terminal.svg)
 
