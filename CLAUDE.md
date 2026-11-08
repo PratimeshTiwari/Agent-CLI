@@ -938,7 +938,7 @@ down to the workspace is the **scope**.
 ```
 /base-repo/.agent/             root — shared by every repo
 ├── skills/  config.json                            inherited
-├── repo-1/   artifacts/ state/ sessions/ logs/     this repo only
+├── repo-1/   artifacts/ state/ conversations/ logs/  this repo only
 │             config.json (overrides)
 └── repo-2/ …
 /base-repo/AGENT.md            instructions for every repo under it
@@ -963,7 +963,7 @@ nothing reads, and the next launch took that folder for a root and moved the rep
 tool now goes through `paths.resolveToolPath`, and `isAgentArtifact` too. `resolveState` skips a
 `.agent` holding only those two folders (`isStrayAgentDir`) when a real root is above it, and
 `migrateStrayAgentDir` moves its files, never overwriting. The companion's `agentStateDir` has the
-same rule. **A stray that a launch already filled is not recognised:** `config.json` and `sessions/`
+same rule. **A stray that a launch already filled is not recognised:** `config.json` and `conversations/`
 make it look deliberate, so it stays a root. A shell command (`cat .agent/artifacts/task.md`) is not
 mapped either. Pty: `task.md` in the scope, no `.agent` in the repo, 0 clears at 13 and 24 rows.
 
@@ -973,6 +973,11 @@ earlier ones, logs, `/undo` backups, the home copy and the README, each an OSC 8
 takes `link`); enter shows it in Finder by argv, and a missing one opens the nearest folder and says so.
 The README goes to the resolved root after `new AgentLoop`, never creates `.agent`, and is rewritten
 only while its first line is the marker. `/reset` moves it. Pty: 0 clears at 13 and 24 rows.
+**Conversations are one folder each (v9.9.2, `storage/session-store.js`, `core/install/migrate-conversations.js`).**
+Owner, on `sessions/sessions/`: "what is all this". `conversations/<id>/` is written from the first turn and
+`current.json` names it, so filing is an index line; `clear()` removes only an unfiled folder, and `--resume`
+files the one in progress. Moved once from `sessions/` (both copies), leftovers to `~/.agent/trash/`;
+on this repo's real data 97 folders, all 96 listed resumable, a second run moves nothing.
 
 **The landmine:** `homeDir()` is `~/.agent`. A naive upward walk from any project under `$HOME`
 finds it and would adopt the global home as a project root, pooling every project's state and
@@ -994,12 +999,12 @@ spins forever there, which hung three test files until the 2-minute cap.
 | `<ws>/.agent/logs/errors.jsonl` | structured failure log — one JSON object per line |
 | `<ws>/.agent/logs/commands/<date>.jsonl` | every shell command run, blocked or rejected — an audit trail, never read back into a prompt |
 | `<ws>/.agent/backups/`, `context/`, `logs/`, `tmp/` | see `paths.js` |
-| `<ws>/.agent/sessions/history.jsonl` | conversation history, local copy |
-| `~/.agent/workspaces/<name>-<hash>/history.jsonl` | the durable copy of the same history |
+| `<ws>/.agent/conversations/` | one folder per conversation (`<id>/conversation.jsonl`, `chat.json`, `plans/`), `index.jsonl`, `current.json`, `compacted.jsonl` |
+| `~/.agent/workspaces/<name>-<hash>/conversations/` | the durable copy, laid out the same |
 
 **Resuming has two doors, and one of them used to skip the browser.** The model's memory is not
 `history.jsonl` — that is the *human's* record. It is the chat thread in the tab, and Gemini keeps
-that thread's id in the URL (`/app/<id>`), which `session-meta.json` stores. `resumeSessionById`
+that thread's id in the URL (`/app/<id>`), which the conversation's `chat.json` stores. `resumeSessionById`
 restores all four halves: the transcript, `chatThread`, an `open_thread` to the extension, and —
 only when there is no thread — `pendingRecap`.
 
@@ -1013,7 +1018,7 @@ were the copy left behind.
 
 They cannot simply call it: the constructor runs before the WebSocket server exists, so there is
 nowhere to send `open_thread`. The constructor records `_resumeOnConnect` and reads `chatThread`
-from `session-meta.json`; `resumeThreadOnConnect()` drains it when a client **identifies as an
+from `chat.json`; `resumeThreadOnConnect()` drains it when a client **identifies as an
 extension** — the same event `flushPendingInjects` hangs off, and for the same reason. It holds
 rather than clears the flag when neither callback set exists yet, because `_toExtension` drops
 silently the way `_notify` once did. **The invariant is a reopened thread or a recap, never
@@ -1193,7 +1198,7 @@ session longer than one screen needs the alternate screen, which costs native sc
 unmounts, clears screen and scrollback, then prints Claude Code's footer at the top (v5.21: `Resume this session with:` and the command on
 a line of its own, dim, flush left, the shell prompt directly under it) — or nothing, when there was
 no conversation. Dim is gated on a TTY, not on `NO_COLOR`, as the `mono` palette is. The id is
-`SessionStore.liveId()`: allocated on first ask, kept in `session-meta.json`, and used by
+`SessionStore.liveId()`: the conversation's folder name from its first turn, and used by
 `rollover`, so the id at exit is the id in `/history`; `--resume <live id>` before it is filed
 behaves as `--continue`, and a resumed conversation keeps its id (`listSessions` keeps the
 newest row per id). **ctrl+c is no longer Ink's** (`exitOnCtrlC: false`): Ink's handler
@@ -1270,7 +1275,7 @@ anything else here:
 
 - `errors.jsonl` records **failures**, by flow. `git push --force` does not fail, so the one
   command you would most want to find is the one that log never sees.
-- `sessions/history.jsonl` has tool calls mixed into the conversation, and `/compact` replaces
+- the conversation file has tool calls mixed into the conversation, and `/compact` replaces
   older turns with a summary — the record you would want six weeks from now is the first thing
   compaction throws away.
 
@@ -1510,13 +1515,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   **`isSlowCommand(command, args)` takes the args**, because one name can be two commands: `/update
   pull` is slow and gets the spinner; bare `/update` opens a menu and stays instant.
 
-  **Prompt length is not what a turn costs.** Measured over 265 real turns:
-  `type` — the synthetic paste, where length is paid — is **23ms median, 410ms
-  p90, 2,450ms max**, against a **4,673ms median round trip** (14,913ms p90).
-  Even the worst paste of a full 26,268-character turn-0 prompt is half of one
-  median round trip, so **splitting a prompt across messages costs 3× the wait
-  and saves nothing**: the context is identical when the task arrives, plus the
-  model's acknowledgements. Make turn 0 smaller; do not spread it out.
+  **Never split a prompt across messages:** it triples the wait and saves nothing ([`docs/history.md`](docs/history.md#moved-from-claudemd-in-v992)).
 
 - **A drop that arrives typed is a drop too (v6.23, `asBracketedDrop`).** VS Code's terminal types a
   dropped path in with no paste markers, so it stayed text. One stdin chunk of nothing but existing

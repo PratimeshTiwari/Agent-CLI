@@ -15,6 +15,7 @@ import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import * as paths from '../../backend/core/workspace/paths.js';
+import { currentConversationFile } from '../../backend/storage/session-store.js';
 
 /** What the folder's own README is called (step B writes it). */
 export const AGENT_README = 'README.md';
@@ -25,16 +26,19 @@ export const AGENT_README = 'README.md';
  * question; `null` where a number would say nothing.
  */
 export function fileRows(workspace, { fs = nodeFs } = {}) {
-  const sessions = paths.sessionsDirLocal(workspace);
+  const conversations = paths.conversationsDir(workspace);
+  // A folder is a conversation when it holds one (v9.9.2): not `plans/`-only leftovers.
+  const isConversation = (f, dir) => existsAs(fs, path.join(dir, f, 'conversation.jsonl'), 'file');
   const spec = [
     ['Task list', paths.artifactPath(workspace, 'task.md'), 'file'],
     ['Plans', paths.planArchiveDir(workspace), 'dir', (f) => f.endsWith('.md'), 'plan'],
     ['Memory', paths.memoryDir(workspace), 'dir', (f) => f.endsWith('.md') && !f.startsWith('.'), 'fact'],
-    ['Conversation', paths.localSessionPath(workspace), 'file'],
-    ['Earlier conversations', path.join(sessions, 'sessions'), 'dir', (f) => f.endsWith('.jsonl'), 'conversation'],
+    // Before the first turn there is none: the row names the folder it will be in, and says "not yet".
+    ['This conversation', currentConversationFile(workspace) || conversations, 'file'],
+    ['Conversations', conversations, 'dir', isConversation, 'conversation'],
     ['Logs', paths.logsDir(workspace), 'dir'],
     ['Backups for /undo', paths.backupsDir(workspace), 'dir', (f) => !f.startsWith('.'), 'file'],
-    ['Second copy', paths.workspaceHomeDir(workspace), 'dir'],
+    ['Second copy', paths.homeConversationsDir(workspace), 'dir', isConversation, 'conversation'],
     // At the shared root in a monorepo, which is where agent-readme.js writes it.
     ['About these folders', path.join(paths.sharedAgentDir(workspace), AGENT_README), 'file'],
   ];
@@ -43,7 +47,7 @@ export function fileRows(workspace, { fs = nodeFs } = {}) {
     let count = null;
     if (exists && counts) {
       try {
-        const n = fs.readdirSync(target).filter(counts).length;
+        const n = fs.readdirSync(target).filter((f) => counts(f, target)).length;
         count = `${n} ${noun}${n === 1 ? '' : 's'}`;
       } catch { /* unreadable: say nothing rather than 0 */ }
     }
@@ -79,7 +83,7 @@ export function rowLink(row, { fs = nodeFs } = {}) {
 }
 
 function nearestExisting(fs, target) {
-  let at = path.dirname(target);
+  let at = target;
   while (at !== path.dirname(at)) {
     if (existsAs(fs, at, 'dir')) return at;
     at = path.dirname(at);
@@ -104,7 +108,7 @@ export function revealCommand(row, { platform = process.platform, fs = nodeFs } 
 export function revealedLine(row, { fs = nodeFs } = {}) {
   if (row.exists) return `shown: ${row.label.toLowerCase()}`;
   const at = nearestExisting(fs, row.path);
-  return `no ${row.label.toLowerCase()} yet · opened ${path.basename(at)}/`;
+  return `${row.label.toLowerCase()}: not written yet · opened ${path.basename(at)}/`;
 }
 
 /** What the desktop calls its file browser, for the one line enter leaves. */

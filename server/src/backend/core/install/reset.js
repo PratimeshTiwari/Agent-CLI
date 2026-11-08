@@ -25,7 +25,7 @@ import { agentDir, homeDir, workspaceHomeDir, workspaceSlug } from '../workspace
 
 /** Entries of a state directory that are agent state. Anything else stays. */
 export const STATE_ENTRIES = [
-  'artifacts', 'backups', 'context', 'logs', 'sessions', 'state', 'tmp',
+  'artifacts', 'backups', 'context', 'conversations', 'logs', 'sessions', 'state', 'tmp',
   'github-reviews', 'github-pr-plans', 'memory.json',
   'config.json', 'memory.md', 'memory', 'README.md',
 ];

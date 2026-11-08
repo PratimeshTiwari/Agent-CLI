@@ -1,28 +1,39 @@
 /**
- * Session Store
+ * Session Store — one folder per conversation (v9.9.2).
  *
- * Conversation history is written to TWO places on every turn:
+ *   <workspace>/.agent/conversations/
+ *     index.jsonl                 the list /history shows, one record per filing
+ *     current.json                { "id": … } — the conversation in progress
+ *     compacted.jsonl             turns compaction summarised (session-recall.js)
+ *     <id>/conversation.jsonl     every turn, written from the first one
+ *     <id>/chat.json              which Gemini chat it is held in
+ *     <id>/plans/                 its task list and plans, moved here when filed
  *
- *   <workspace>/.agent/sessions/history.jsonl        travels with the project
- *   ~/.agent/workspaces/<name>-<hash>/history.jsonl  survives losing the project
+ * and the same `conversations/` under `~/.agent/workspaces/<name>-<hash>/`,
+ * written on every turn: the workspace copy is the one you can see, the home
+ * copy survives a clean checkout or a wiped `.agent/`. On load the current
+ * conversation and the index are reconciled — the longer copy wins.
  *
- * The workspace copy is the one you can see and read next to the code. The home
- * copy is the safety net: a clean checkout, a deleted worktree, or a wiped
- * `.agent/` directory takes the local copy with it, and the home copy restores it.
- *
- * On load the two are reconciled — whichever holds more turns wins, and the
- * other is rebuilt from it. That keeps them converging instead of silently
- * diverging when one of them is lost or edited.
+ * Before v9.9.2 the live conversation was a rolling `sessions/history.jsonl`
+ * that filing *copied* into `sessions/sessions/<id>.jsonl`, with its meta in
+ * `session-meta.json` and its plans in `<id>-artifacts/`. Now the conversation
+ * lives in its folder from the start, so filing is an index line and a pointer
+ * dropped. `core/install/migrate.js` moves the old layout once.
  */
 
 import fs from 'fs';
 import path from 'path';
 import { logError } from '../core/logs/error-log.js';
-import {
-  localSessionPath,
-  homeSessionPath,
-  ensureParent,
-} from '../core/workspace/paths.js';
+import { conversationsDir, homeConversationsDir, artifactsDir } from '../core/workspace/paths.js';
+
+const CURRENT = 'current.json';
+const CONVERSATION = 'conversation.jsonl';
+const CHAT = 'chat.json';
+const INDEX = 'index.jsonl';
+
+/** An id is a folder name: nothing that could climb out of `conversations/`. */
+export const isConversationId = (id) =>
+  typeof id === 'string' && /^[\w.-]+$/.test(id) && id !== '.' && id !== '..';
 
 /**
  * Sortable, filename-safe, and readable — the id doubles as the date.
@@ -36,45 +47,102 @@ export function newSessionId(now = new Date()) {
   return `${now.toISOString().replace(/[:.]/g, '-').slice(0, 23)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
+/** The conversation in progress in a workspace, without a store: `session-recall.js` searches it. */
+export function currentConversationFile(workspace) {
+  const root = conversationsDir(workspace);
+  const id = readJson(path.join(root, CURRENT))?.id;
+  return isConversationId(id) ? path.join(root, id, CONVERSATION) : null;
+}
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')) || null; } catch { return null; }
+}
+
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+function countLines(file) {
+  try {
+    return fs.readFileSync(file, 'utf-8').split('\n').filter((l) => l.trim() !== '').length;
+  } catch {
+    return -1;
+  }
+}
+
+function readTurns(file) {
+  return fs.readFileSync(file, 'utf-8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line));
+}
+
 export class SessionStore {
   constructor(workspacePath) {
     this.workspacePath = workspacePath;
-
-    this.localFile = localSessionPath(workspacePath);
-    this.homeFile = homeSessionPath(workspacePath);
-
+    this.localRoot = conversationsDir(workspacePath);
+    this.homeRoot = homeConversationsDir(workspacePath);
     this._reconcile();
   }
 
-  /** Both destinations, in write order. */
-  get _targets() {
-    return [this.localFile, this.homeFile];
+  /** Both copies, in write order. */
+  get _roots() {
+    return [this.localRoot, this.homeRoot];
   }
 
-  _countLines(file) {
-    try {
-      if (!fs.existsSync(file)) return -1;
-      return fs.readFileSync(file, 'utf-8').split('\n').filter((l) => l.trim() !== '').length;
-    } catch {
-      return -1;
+  _conversationFile(root, id) {
+    return path.join(root, id, CONVERSATION);
+  }
+
+  /** The conversation in progress, or null when none has started. */
+  _currentId() {
+    for (const root of this._roots) {
+      const id = readJson(path.join(root, CURRENT))?.id;
+      if (isConversationId(id)) return id;
     }
+    return null;
+  }
+
+  _setCurrent(id) {
+    this._writeBoth((root) => writeJson(path.join(root, CURRENT), { id }));
+  }
+
+  /** The current id, starting a conversation if there is none. */
+  _ensureId() {
+    let id = this._currentId();
+    if (!id) {
+      id = newSessionId();
+      this._setCurrent(id);
+    }
+    return id;
   }
 
   /**
-   * Make the two copies agree, preferring whichever has more turns. Runs once at
-   * construction, which is also what restores a workspace copy that was lost.
+   * Make the two copies agree, preferring whichever holds more: the pointer,
+   * the current conversation and the index. Runs once at construction, which is
+   * also what restores a workspace copy that was lost.
    */
   _reconcile() {
-    const local = this._countLines(this.localFile);
-    const home = this._countLines(this.homeFile);
-
-    if (local === -1 && home === -1) return; // nothing recorded yet
-
     try {
-      if (home > local) {
-        fs.copyFileSync(this.homeFile, ensureParent(this.localFile));
-      } else if (local > home) {
-        fs.copyFileSync(this.localFile, ensureParent(this.homeFile));
+      const [local, home] = this._roots;
+      const sync = (rel) => {
+        const a = countLines(path.join(local, rel));
+        const b = countLines(path.join(home, rel));
+        if (a === -1 && b === -1) return;
+        const [from, to] = b > a ? [home, local] : a > b ? [local, home] : [null, null];
+        if (!from) return;
+        fs.mkdirSync(path.dirname(path.join(to, rel)), { recursive: true });
+        fs.copyFileSync(path.join(from, rel), path.join(to, rel));
+      };
+      sync(CURRENT);
+      sync(INDEX);
+      const id = this._currentId();
+      if (id) {
+        sync(path.join(id, CONVERSATION));
+        sync(path.join(id, CHAT));
       }
     } catch (err) {
       logError(this.workspacePath, {
@@ -84,53 +152,59 @@ export class SessionStore {
     }
   }
 
-  /** Write to both copies, reporting per-destination failures without throwing. */
+  /** Run `fn(root)` for both copies, reporting per-copy failures without throwing. */
   _writeBoth(fn) {
-    for (const file of this._targets) {
+    for (const root of this._roots) {
       try {
-        fn(ensureParent(file));
+        fs.mkdirSync(root, { recursive: true });
+        fn(root);
       } catch (err) {
         logError(this.workspacePath, {
           flow: 'storage', op: 'write',
-          message: `Error writing ${path.basename(file)}: ${err.message}`,
-          meta: { file },
+          message: `Error writing ${path.basename(root)}: ${err.message}`,
+          meta: { root },
         });
       }
     }
   }
 
   /**
-   * Append a single turn to both JSONL files.
+   * Append a single turn to both copies.
    * @param {Object} turn
    */
   appendTurn(turn) {
+    const id = this._ensureId();
     const line = JSON.stringify(turn) + '\n';
-    this._writeBoth((file) => fs.appendFileSync(file, line, 'utf-8'));
+    this._writeBoth((root) => {
+      fs.mkdirSync(path.join(root, id), { recursive: true });
+      fs.appendFileSync(this._conversationFile(root, id), line, 'utf-8');
+    });
   }
 
   /**
-   * Rewrite the entire history (e.g. after compaction).
+   * Rewrite the entire conversation (e.g. after compaction).
    * @param {Array<Object>} history
    */
   saveHistory(history) {
+    const id = this._ensureId();
     const lines = history.map((turn) => JSON.stringify(turn)).join('\n') + '\n';
-    this._writeBoth((file) => fs.writeFileSync(file, lines, 'utf-8'));
+    this._writeBoth((root) => {
+      fs.mkdirSync(path.join(root, id), { recursive: true });
+      fs.writeFileSync(this._conversationFile(root, id), lines, 'utf-8');
+    });
   }
 
   /**
-   * Load history, preferring the workspace copy (already reconciled at startup).
+   * The current conversation, preferring the workspace copy (already reconciled).
    * @returns {Array<Object>}
    */
   loadHistory() {
-    const file = fs.existsSync(this.localFile) ? this.localFile : this.homeFile;
-    if (!fs.existsSync(file)) return [];
-
+    const id = this._currentId();
+    if (!id) return [];
+    const file = this._roots.map((r) => this._conversationFile(r, id)).find((f) => fs.existsSync(f));
+    if (!file) return [];
     try {
-      const data = fs.readFileSync(file, 'utf-8');
-      return data
-        .split('\n')
-        .filter((line) => line.trim() !== '')
-        .map((line) => JSON.parse(line));
+      return readTurns(file);
     } catch (err) {
       logError(this.workspacePath, {
         flow: 'storage', op: 'load',
@@ -191,15 +265,9 @@ export class SessionStore {
 
   /** One writer for both, so the two states cannot be written inconsistently. */
   _writeThreadMeta(fields) {
-    this._writeBoth((file) => {
-      const meta = path.join(path.dirname(file), 'session-meta.json');
-      let existing = {};
-      try { existing = JSON.parse(fs.readFileSync(meta, 'utf-8')); } catch { /* first write */ }
-      fs.writeFileSync(
-        meta,
-        JSON.stringify({ ...existing, ...fields, updated: Date.now() }, null, 2),
-      );
-    });
+    const id = this._ensureId();
+    const existing = this._threadMeta(id);
+    this._writeBoth((root) => writeJson(path.join(root, id, CHAT), { ...existing, ...fields, updated: Date.now() }));
   }
 
   /** The conversation this session is held in **now**, or `null`. */
@@ -208,27 +276,20 @@ export class SessionStore {
   }
 
   /**
-   * The id this live conversation will be filed under — and the one printed
-   * when the CLI exits, as `agent --resume <id>`.
+   * The id this conversation is kept under — and the one printed when the CLI
+   * exits, as `agent --resume <id>`.
    *
-   * A conversation used to get its id only when the *next* launch filed it,
-   * so at exit there was nothing to print: the answer to "how do I get back
-   * to this?" did not exist yet. Asked for directly: show the resume id on
-   * exit, as Claude Code does. Allocated on first ask and kept in
-   * `session-meta.json` until `rollover` files under it, so the id at exit,
-   * the id in `/history` and the id `--resume` accepts are one id.
+   * Asked for directly: show the resume id on exit, as Claude Code does. The
+   * conversation's folder is named by it from the first turn, so the id at
+   * exit, the id in `/history` and the id `--resume` accepts are one id.
    */
   liveId() {
-    const existing = this._threadMeta().liveId;
-    if (existing) return existing;
-    const id = newSessionId();
-    this._writeThreadMeta({ liveId: id });
-    return id;
+    return this._ensureId();
   }
 
-  /** The live id if one was ever handed out, without allocating one. */
+  /** The current id if a conversation has started, without starting one. */
   peekLiveId() {
-    return this._threadMeta().liveId || null;
+    return this._currentId();
   }
 
   /** Is there a conversation worth resuming — one the user actually spoke in? */
@@ -249,33 +310,26 @@ export class SessionStore {
     return meta.thread ? null : (meta.leftThread || null);
   }
 
-  _threadMeta() {
-    try {
-      const meta = path.join(path.dirname(this.localFile), 'session-meta.json');
-      return JSON.parse(fs.readFileSync(meta, 'utf-8')) || {};
-    } catch {
-      return {};
+  _threadMeta(id = this._currentId()) {
+    if (!id) return {};
+    for (const root of this._roots) {
+      const meta = readJson(path.join(root, id, CHAT));
+      if (meta) return meta;
     }
+    return {};
   }
 
   /**
    * Past conversations, newest first.
    *
-   * There were none until now. `--sessions` and `--resume <id>` have been in
-   * `--help` the whole time, parsed into config, and **read by nothing** — an
-   * advertised feature that silently did nothing, which is worse than a
-   * missing one because it looks like it works.
-   *
-   * The reason there were none is that `history.jsonl` is a single rolling
-   * file: starting without `--continue` simply wiped it. So the fix is not a
-   * picker, it is making a conversation survive the start of the next one.
+   * `--sessions` and `--resume <id>` were in `--help`, parsed into config, and
+   * read by nothing until conversations survived the start of the next one.
    *
    * @returns {Array<{id, started, updated, turns, title, thread}>}
    */
   listSessions() {
-    const file = fs.existsSync(this._indexFile(this.localFile))
-      ? this._indexFile(this.localFile)
-      : this._indexFile(this.homeFile);
+    const file = this._roots.map((r) => path.join(r, INDEX)).find((f) => fs.existsSync(f));
+    if (!file) return []; // no sessions yet is the ordinary first-run case
     try {
       return fs.readFileSync(file, 'utf-8')
         .split('\n')
@@ -283,32 +337,25 @@ export class SessionStore {
         .map((l) => { try { return JSON.parse(l); } catch { return null; } })
         .filter(Boolean)
         .reverse()
-        // Newest record per id. A resumed conversation keeps its id (see
-        // `resumeSession`), so filing it again appends a second record for
-        // the same conversation, now longer — one row, the latest.
+        // Newest record per id. A resumed conversation keeps its id, so filing
+        // it again appends a second record for the same conversation, now
+        // longer — one row, the latest.
         .filter((r, i, all) => all.findIndex((o) => o.id === r.id) === i);
     } catch {
-      return []; // no sessions yet is the ordinary first-run case
+      return [];
     }
   }
 
-  /** Where the index of past sessions lives, beside a history file. */
-  _indexFile(historyFile) {
-    return path.join(path.dirname(historyFile), 'index.jsonl');
-  }
-
-  /** Where one past conversation lives, beside a history file. */
-  _archivedFile(historyFile, id) {
-    return path.join(path.dirname(historyFile), 'sessions', `${id}.jsonl`);
+  _isFiled(id) {
+    return this.listSessions().some((r) => r.id === id);
   }
 
   /**
-   * Put the current conversation away, so the next one does not destroy it.
+   * Put the current conversation on the list, so the next one does not replace it.
    *
-   * Called before `clear()` wipes the live file. Everything else here is
-   * append-or-overwrite; this is the only operation that has to happen
-   * *before* a destructive one, which is why it is its own method rather than
-   * a flag on `clear`.
+   * Always followed by `clear()` at the call sites. The conversation is already
+   * in its folder, so filing is an index record, its plans moved in beside it,
+   * and the pointer dropped — nothing is copied.
    *
    * The title is the first thing the user said, because that is what a person
    * scanning a list is actually looking for — not a timestamp, and not a
@@ -318,6 +365,8 @@ export class SessionStore {
    *   nothing worth keeping
    */
   rollover() {
+    const id = this._currentId();
+    if (!id) return null;
     const turns = this.loadHistory();
     if (turns.length === 0) return null;
 
@@ -330,22 +379,12 @@ export class SessionStore {
      * whenever anything on disk changes, so leaving the agent open in an
      * editor session manufactures history with no prompt in it. Filing those
      * put **6 of 19** rows into this user's `/history` picker, every one of
-     * them reading `Untitled` with a turn count and nothing to tell them
-     * apart — a third of the list was file-watcher noise you cannot choose
-     * between, in a picker whose whole job is choosing.
-     *
-     * Dropped rather than titled better, because a better title would still
-     * be a row offering to restore a transcript of file notifications. The
-     * turns are not lost in any sense that matters: they are notifications
-     * about edits the user watched themselves make.
+     * them reading `Untitled`. `clear()` drops such a folder instead.
      */
     if (!firstUser) return null;
 
     const title = (firstUser.content || 'Untitled')
       .replace(/\s+/g, ' ').trim().slice(0, 72);
-
-    // The id printed at exit, if one was; see `liveId`.
-    const id = this.peekLiveId() || newSessionId();
 
     const record = {
       id,
@@ -362,26 +401,17 @@ export class SessionStore {
       leftThread: this.getLeftThread(),
     };
 
-    const body = turns.map((t) => JSON.stringify(t)).join('\n') + '\n';
     try {
       // The artifacts belong to the conversation, not to the workspace.
       //
       // Reported from use: open the agent fresh, type nothing, and the status
       // row already reads "task.md · walkthrough.md" — a finished plan from a
       // conversation that had just been filed away. Worse than untidy, because
-      // `task.md` is also fed back to the model every turn, so a completed
-      // checklist from unrelated work arrived with the first prompt of the next
-      // task.
+      // `task.md` is also fed back to the model every turn.
       this._archiveArtifacts(id);
-      // Beside *both* history files, so the home copy keeps its purpose:
-      // surviving a wiped `.agent/` or a fresh checkout.
-      for (const file of this._targets) {
-        fs.mkdirSync(path.dirname(this._archivedFile(file, id)), { recursive: true });
-        fs.writeFileSync(this._archivedFile(file, id), body, 'utf-8');
-        fs.appendFileSync(this._indexFile(file), JSON.stringify(record) + '\n', 'utf-8');
-      }
+      this._writeBoth((root) => fs.appendFileSync(path.join(root, INDEX), JSON.stringify(record) + '\n', 'utf-8'));
       // Filed: the next conversation is a new one with a new id.
-      this._writeThreadMeta({ liveId: null });
+      this._dropCurrent();
     } catch (err) {
       logError(this.workspacePath, {
         flow: 'storage', op: 'rollover',
@@ -392,17 +422,23 @@ export class SessionStore {
     return id;
   }
 
+  _dropCurrent() {
+    for (const root of this._roots) {
+      try { fs.rmSync(path.join(root, CURRENT), { force: true }); } catch { /* the other copy still answers */ }
+    }
+  }
+
   /** The documents a conversation wrote for the user to read. */
   static get ARTIFACTS() {
     return ['task.md', 'plan.md', 'implementation_plan.md', 'walkthrough.md'];
   }
 
   _artifactDir() {
-    return path.join(path.dirname(path.dirname(this.localFile)), 'artifacts');
+    return artifactsDir(this.workspacePath);
   }
 
   _sessionArtifactDir(id) {
-    return path.join(path.dirname(this.localFile), 'sessions', `${id}-artifacts`);
+    return path.join(this.localRoot, id, 'plans');
   }
 
   /**
@@ -454,27 +490,34 @@ export class SessionStore {
    * Make a past conversation the current one.
    *
    * Restores its thread too, so `planResume` can still tell whether the model
-   * remembers it — a resumed session with no thread would always be treated as
-   * needing a replay, which is safe but wrong.
+   * remembers it. The one in progress is filed first (`--resume` used to
+   * overwrite it), unless it is the one asked for.
    *
    * @returns {Array<Object>|null} the turns, or null if there is no such session
    */
   resumeSession(id) {
-    if (!id) return null;
-    const file = [this.localFile, this.homeFile]
-      .map((f) => this._archivedFile(f, id))
-      .find((f) => fs.existsSync(f));
-    if (!file) return null;
+    if (!isConversationId(id)) return null;
+    const source = this._roots.map((r) => this._conversationFile(r, id)).find((f) => fs.existsSync(f));
+    if (!source) return null;
 
     try {
-      const turns = fs.readFileSync(file, 'utf-8')
-        .split('\n')
-        .filter((l) => l.trim())
-        .map((l) => JSON.parse(l));
-      this.saveHistory(turns);
+      const turns = readTurns(source);
+      const current = this._currentId();
+      if (current && current !== id) {
+        this.rollover();
+        this.clear();
+      }
+      // A conversation only the home copy kept comes back into the workspace too.
+      for (const root of this._roots) {
+        const file = this._conversationFile(root, id);
+        if (file !== source && !fs.existsSync(file)) {
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.copyFileSync(source, file);
+        }
+      }
       // It goes on being that conversation: exit prints the same id, and
       // filing it again updates its row rather than adding a copy.
-      this._writeThreadMeta({ liveId: id });
+      this._setCurrent(id);
       const record = this.listSessions().find((r) => r.id === id);
       if (record?.thread) this.setThread(record.thread);
       // Its plan and its walkthrough come back with it, or the conversation is
@@ -490,20 +533,26 @@ export class SessionStore {
     }
   }
 
-  /** Clear both copies. */
+  /**
+   * End the current conversation. A filed one stays in its folder; one that was
+   * never filed — `/clear`, or nothing but file-watcher rows — is removed.
+   */
   clear() {
-    // Cleared without filing (`/clear`) is the end of that conversation too.
-    if (this.peekLiveId()) this._writeThreadMeta({ liveId: null });
-    for (const file of this._targets) {
-      try {
-        if (fs.existsSync(file)) fs.unlinkSync(file);
-      } catch (err) {
-        logError(this.workspacePath, {
-          flow: 'storage', op: 'clear',
-          message: `Error clearing ${path.basename(file)}: ${err.message}`,
-          meta: { file },
-        });
+    const id = this._currentId();
+    if (!id) return;
+    if (!this._isFiled(id)) {
+      for (const root of this._roots) {
+        try {
+          fs.rmSync(path.join(root, id), { recursive: true, force: true });
+        } catch (err) {
+          logError(this.workspacePath, {
+            flow: 'storage', op: 'clear',
+            message: `Error clearing ${id}: ${err.message}`,
+            meta: { root },
+          });
+        }
       }
     }
+    this._dropCurrent();
   }
 }
