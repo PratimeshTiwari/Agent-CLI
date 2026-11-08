@@ -21,12 +21,14 @@ const offered = (loop) => Boolean(resolvePromptVersion(loop.promptVersion).flags
 
 function decide(loop, call) {
   const { server, tool } = call.args || {};
+  const external = loop.mcp.kindOf?.(server, tool) || null;
   const mcpSwitch = switchFor(loop.mcp.switchKey(server), tool);
   const alwaysAsk = loop.mcp.alwaysAsks(server);
   return {
     alwaysAsk,
-    blocked: isBlockedOutright(call, null, { mcpSwitch }),
-    ask: requiresApproval(call, { mode: loop.mode, mcpSwitch, alwaysAsk }),
+    external,
+    blocked: isBlockedOutright(call, null, { mcpSwitch, external }),
+    ask: requiresApproval(call, { mode: loop.mode, mcpSwitch, alwaysAsk, external }),
   };
 }
 
@@ -45,9 +47,13 @@ export function argLines(args) {
   return lines.length > MAX_ARG_LINES ? [...lines.slice(0, MAX_ARG_LINES), `… +${lines.length - MAX_ARG_LINES} lines`] : lines;
 }
 
-async function askToRun(loop, { server, tool, args }, { alwaysAsk }) {
+async function askToRun(loop, { server, tool, args }, { alwaysAsk, external }) {
   const always = alwaysAsk ? [] : [{ label: 'Always for this tool', value: 'allow_always' }];
   const lines = argLines(args);
+  // Atlassian's write is Jira's box in Jira's words (v9.9): Send, never "always".
+  const words = external === 'write'
+    ? { title: `Send to Atlassian · ${tool}?`, reason: 'Other people see this at once, and /undo cannot take it back', yes: 'Send', no: "Don't send" }
+    : { title: `Run ${server} · ${tool}?`, reason: 'A server you added runs this, and /undo cannot take it back', yes: 'Run', no: "Don't run" };
   try {
     return await loop._parked(new Promise((resolve) => {
       loop.pendingCommandResolve = resolve;
@@ -57,13 +63,13 @@ async function askToRun(loop, { server, tool, args }, { alwaysAsk }) {
         type: 'request_command_approval',
         payload: {
           kind: 'external',
-          title: `Run ${server} · ${tool}?`,
+          title: words.title,
           command: lines.join('\n'),
           lines,
           cwd: 'MCP server',
           riskLevel: 'external',
-          riskReason: 'A server you added runs this, and /undo cannot take it back',
-          choices: [{ label: 'Run', value: 'send' }, ...always, { label: "Don't run", value: 'reject' }],
+          riskReason: words.reason,
+          choices: [{ label: words.yes, value: 'send' }, ...(external ? [] : always), { label: words.no, value: 'reject' }],
         },
         timestamp: Date.now(),
       });
@@ -85,7 +91,7 @@ export async function runMcpTool(loop, call, context = {}) {
     return loop.mcpServer.executeTool(call.name, call.args, ctx);
   }
 
-  const audit = { command: `mcp ${server} ${tool}`, cwd: server, risk: 'mcp' };
+  const audit = { command: `mcp ${server} ${tool}`, cwd: server, risk: loop.mcp.kindOf?.(server, tool) === 'write' ? 'external' : 'mcp' };
   const decision = decide(loop, call);
   if (decision.blocked) {
     logCommand(loop.workspace, { ...audit, outcome: 'blocked' });
@@ -99,7 +105,7 @@ export async function runMcpTool(loop, call, context = {}) {
       logCommand(loop.workspace, { ...audit, outcome: 'rejected' });
       return { success: false, error: 'User rejected: nothing was run. Do not retry it; ask what they want changed.' };
     }
-    if (answer.always && !decision.alwaysAsk) setSwitch(loop.mcp.switchKey(server), tool, 'auto');
+    if (answer.always && !decision.alwaysAsk && !decision.external) setSwitch(loop.mcp.switchKey(server), tool, 'auto');
     approval = issueApproval();
   }
 

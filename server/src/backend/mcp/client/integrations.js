@@ -10,6 +10,7 @@ import { atlassianSite } from '../../atlassian/config.js';
 
 const stateWords = {
   ready: 'connected', connecting: 'starting', failed: 'failed', disabled: 'off', invalid: 'not usable', idle: 'not started',
+  signed_out: 'not signed in',
 };
 
 /** One line for a row or the report: what it is doing, and why not if it is not. */
@@ -17,6 +18,9 @@ export function statusLine(row) {
   if (row.builtin) return row.detail;
   const count = row.tools.length;
   const tools = `${count} tool${count === 1 ? '' : 's'}`;
+  // Atlassian's server (v9.9): what it is, since the name alone does not say.
+  if (row.atlassian && row.state === 'signed_out') return 'Jira and Confluence Cloud · not signed in · enter to sign in';
+  if (row.atlassian && row.state === 'ready') return `connected · ${tools} · writes always ask`;
   if (row.state === 'unapproved') return row.changed ? 'from this repo · changed, needs your ok again' : 'from this repo · needs your ok';
   if (row.state === 'ready') return `connected · ${tools}`;
   if (row.error) return `${stateWords[row.state]} · ${row.error}`;
@@ -36,7 +40,7 @@ function jiraRow() {
     ],
     detail: site
       ? `built in · ${site.site.replace(/^https?:\/\//, '')} · writes always ask`
-      : 'built in · not set up · run `agent atlassian login` in a terminal',
+      : 'token sign-in for Server / Data Center · `agent atlassian login --token`',
   };
 }
 

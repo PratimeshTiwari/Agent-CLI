@@ -26,6 +26,8 @@ import { McpConnection, McpSdkMissing } from './connection.js';
 import { reviewOf } from './add-server.js';
 import { allowRepoServer, forgetRepoServer } from './repo-approval.js';
 import { switchFor } from './switches.js';
+import { atlassianEntry, atlassianKind, isAtlassianServer, ATLASSIAN_SCOPES } from './atlassian-server.js';
+import { makeStore, signIn as browserSignIn } from './oauth.js';
 
 export const mcpCachePath = () => join(homeDir(), 'mcp-cache.json');
 
@@ -58,9 +60,14 @@ export class McpServers {
     load = null,
     connection = (server, opts) => new McpConnection(server, opts),
     cachePath = mcpCachePath(),
+    builtins = null,
   } = {}) {
     this.workspace = workspace;
-    this.load = load || (() => loadServers({ workspace: this.workspace }));
+    // Atlassian's server is listed for everyone (v9.9). A test that passes its
+    // own `load` gets none unless it asks, so its lists stay its own.
+    this.builtins = builtins || (load ? () => [] : () => [atlassianEntry()]);
+    const read = load || (() => loadServers({ workspace: this.workspace }));
+    this.load = () => this._withBuiltins(read());
     this.connection = connection;
     this.cachePath = cachePath;
     this.live = new Map();      // name -> { state, connection, tools, error, fingerprint }
@@ -69,6 +76,12 @@ export class McpServers {
     this.cache = readCache(cachePath);
     this._killOnExit = () => this.killAll();
     process.on('exit', this._killOnExit);
+  }
+
+  /** A built-in is listed after the person's own, and a name of theirs wins. */
+  _withBuiltins(config) {
+    const mine = new Set(config.servers.map((s) => s.name));
+    return { ...config, servers: [...config.servers, ...this.builtins().filter((b) => !mine.has(b.name))] };
   }
 
   /** Called on every change of state, so an open menu can redraw. */
@@ -89,7 +102,8 @@ export class McpServers {
       const live = this.live.get(server.name);
       const cached = this.cache[server.name]?.fingerprint === server.fingerprint ? this.cache[server.name] : null;
       const state = server.problem ? 'invalid'
-        : server.disabled ? 'disabled'
+        : server.signedOut ? 'signed_out'
+          : server.disabled ? 'disabled'
           : server.unapproved ? 'unapproved'
             : live?.fingerprint === server.fingerprint ? live.state : 'idle';
       return {
@@ -105,7 +119,9 @@ export class McpServers {
         sdkMissing: state === 'failed' && Boolean(live?.sdkMissing),
         tools: (state === 'ready' ? live.tools : cached?.tools) || [],
         toolsStale: state !== 'ready' && Boolean(cached),
-        alwaysAsk: Boolean(server.alwaysAsk),
+        alwaysAsk: this.alwaysAsks(server.name),
+        atlassian: isAtlassianServer(server),
+        oauth: server.auth === 'oauth',
       };
     });
     return {
@@ -124,7 +140,39 @@ export class McpServers {
   /** Valid and switched on: what a tool may name. */
   usable(name) {
     const server = this._server(name);
-    return Boolean(server && !server.problem && !server.disabled && !server.unapproved);
+    return Boolean(server && !server.problem && !server.disabled && !server.unapproved && !server.signedOut);
+  }
+
+  /**
+   * Atlassian's tools are `'read'` or `'write'`, and no switch reaches them
+   * (`atlassian-server.js`). Any other server's: null, and its switch decides.
+   */
+  kindOf(name, tool) {
+    return isAtlassianServer(this._server(name)) ? atlassianKind(tool) : null;
+  }
+
+  /** The browser sign-in, for a server that signs in that way. Starts it after. */
+  async signIn(name, { open, timeoutMs } = {}) {
+    const server = this._server(name);
+    if (server?.auth !== 'oauth') return { ok: false, error: `${name} does not sign in in the browser` };
+    const result = await browserSignIn({
+      server: name,
+      url: server.url,
+      open,
+      timeoutMs,
+      store: makeStore(name),
+      scope: isAtlassianServer(server) ? ATLASSIAN_SCOPES : undefined,
+    });
+    await this.configChanged();
+    if (result.ok) await this.connect(name);
+    return result;
+  }
+
+  async signOut(name) {
+    if (this._server(name)?.auth !== 'oauth') return false;
+    makeStore(name).forget();
+    await this.configChanged();
+    return true;
   }
 
   /** Whose ask/auto/block this is. A repo's server has its own, per entry. */
@@ -149,7 +197,8 @@ export class McpServers {
   }
 
   alwaysAsks(name) {
-    return Boolean(this._server(name)?.alwaysAsk);
+    const server = this._server(name);
+    return Boolean(server?.alwaysAsk) || isAtlassianServer(server);
   }
 
   scrub(name, text) {
@@ -217,7 +266,7 @@ export class McpServers {
   /** Start one server and list its tools. Safe to call twice: the first call is the one that runs. */
   connect(name) {
     const server = this.config.servers.find((s) => s.name === name);
-    if (!server || server.problem || server.disabled || server.unapproved) return Promise.resolve(false);
+    if (!server || server.problem || server.disabled || server.unapproved || server.signedOut) return Promise.resolve(false);
     const live = this.live.get(name);
     if (live?.fingerprint === server.fingerprint && live.starting) return live.starting;
     if (live?.fingerprint === server.fingerprint && live.state === 'ready') return Promise.resolve(true);
@@ -272,7 +321,8 @@ export class McpServers {
     this.cache = readCache(this.cachePath);
     const stale = [...this.live].filter(([name, entry]) => {
       const server = this._server(name);
-      return !server || !this.usable(name) || server.fingerprint !== entry.fingerprint;
+      // A failed OAuth start is retried after a sign-in: same fingerprint, new tokens.
+      return !server || !this.usable(name) || server.fingerprint !== entry.fingerprint || (server.auth === 'oauth' && entry.state === 'failed');
     });
     for (const [name] of stale) this.live.delete(name);
     await Promise.all(stale.map(([, entry]) => entry.connection?.close()));

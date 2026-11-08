@@ -48,8 +48,8 @@ if (process.argv[2] === 'doctor' || process.argv.includes('--doctor')) {
   process.exit(await runDoctorCli(process.argv.slice(2)));
 }
 
-// `agent atlassian login | logout | status` (v8.1): in a shell of its own so a
-// token is typed with echo off, never into the agent's prompt and history.
+// `agent atlassian login [--token] | logout | status` (v8.1; browser sign-in v9.9): in a
+// shell of its own so a token is typed with echo off, never into the agent's prompt and history.
 if (process.argv[2] === 'atlassian') {
   const { runAtlassianCli } = await import('./backend/atlassian/cli.js');
   process.exit(await runAtlassianCli(process.argv.slice(3)));

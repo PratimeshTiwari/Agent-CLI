@@ -165,7 +165,7 @@ conversation.
 | `agent doctor` | what is installed, what is missing, what is out of date; works even when the agent cannot start |
 | `agent doctor <package>` | why a package is used, and what breaks without it |
 | `agent doctor --test` | run the agent's own tests, to check this install |
-| `agent atlassian login` · `status` · `logout` | sign in to Jira; the token goes to the Keychain |
+| `agent atlassian login` · `status` · `logout` | sign in to Jira and Confluence Cloud in the browser; every write asks first. `login --token` for Server / Data Center |
 | `agent --help` | all of the above, and every option |
 
 ## Inside the agent

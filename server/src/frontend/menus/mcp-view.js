@@ -6,6 +6,7 @@
  */
 import { homedir } from 'node:os';
 import { statusLine } from '../../backend/mcp/client/integrations.js';
+import { atlassianKind } from '../../backend/mcp/client/atlassian-server.js';
 
 export const shortPath = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p || '');
 
@@ -39,7 +40,7 @@ export function mcpHomeItems(list, { T = {}, needsPrompt = false } = {}) {
   if (list.error) items.unshift({ label: 'mcp.json', detail: list.error, value: '', colour: T.danger });
   else items.unshift({ label: 'Add a server', detail: 'paste its command, address or JSON', value: 'add' });
   // Nothing moves on its own: the row offers it, and enter is the yes.
-  if (needsPrompt && list.rows.some((r) => !r.builtin && !['invalid', 'disabled', 'unapproved'].includes(r.state))) {
+  if (needsPrompt && list.rows.some((r) => !r.builtin && !['invalid', 'disabled', 'unapproved', 'signed_out'].includes(r.state))) {
     items.push({ label: 'Use prompt v5', detail: 'lets the model call these, and teaches the chat again', value: 'prompt' });
   }
   // A row, not the line under the title: a short terminal sheds that one.
@@ -59,6 +60,22 @@ const firstLine = (text) => String(text || '').trim().split('\n')[0];
  * `switchOf`: a custom server's switches. Jira has none: its writes always ask.
  */
 export function serverToolItems(row, { said = false, switchOf = null } = {}) {
+  // Atlassian's (v9.9): a sign-in, not a command, and no switches. Reads run;
+  // every other tool asks in every mode, so enter on a tool does nothing.
+  if (row.atlassian) {
+    if (row.state === 'signed_out') {
+      return [{ label: 'Sign in', detail: 'opens Atlassian in your browser', value: '', key: 'signin', action: 'signin' }];
+    }
+    const tools = row.tools.map((t) => ({
+      label: t.name,
+      detail: `${atlassianKind(t.name) === 'read' ? 'reads, runs' : 'always asks, in every mode'} · ${firstLine(t.description)}`,
+      value: '',
+    }));
+    return [
+      { label: 'Sign out', detail: 'forgets the sign-in on this computer', value: '', key: 'signout', action: 'signout' },
+      ...(tools.length ? tools : [{ label: 'No tools yet', detail: said ? '' : statusLine(row), value: '', key: 'none' }]),
+    ];
+  }
   // What a person can do to the server itself, before any list of tools.
   const inMcpJson = row.source !== 'repo';
   const manage = row.builtin || !switchOf ? [] : !inMcpJson ? [{ label: 'Stop allowing', detail: 'it will ask again', value: '', key: 'forget', action: 'forget' }] : [
@@ -83,4 +100,4 @@ export const ALLOW_ITEMS = [
 ];
 
 /** Where a server's page says it came from. */
-export const serverOrigin = (row) => (row.builtin ? 'built in' : row.source === 'repo' ? '.mcp.json · this repo' : 'mcp.json');
+export const serverOrigin = (row) => (row.builtin || row.atlassian ? 'built in' : row.source === 'repo' ? '.mcp.json · this repo' : 'mcp.json');

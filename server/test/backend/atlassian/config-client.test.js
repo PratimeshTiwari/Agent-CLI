@@ -179,7 +179,7 @@ describe('agent atlassian login', () => {
     const output = new PassThrough();
     let shown = '';
     output.on('data', (d) => { shown += d; });
-    const done = runAtlassianCli(['login'], { input, output });
+    const done = runAtlassianCli(['login', '--token'], { input, output });
     input.write(`${fake.site}\n`);
     await new Promise((r) => setTimeout(r, 100));
     input.write(`${TOKEN}\n`);
@@ -199,6 +199,49 @@ describe('agent atlassian login', () => {
     assert.match(shown, /Not signed in/);
     assert.equal(await runAtlassianCli(['logout'], { output: out }), 0);
     assert.equal(await runAtlassianCli(['nope'], { output: out }), 1);
-    assert.match(shown, /Usage: agent atlassian login \| logout \| status/);
+    assert.match(shown, /Usage: agent atlassian login \[--token\] \| logout \| status/);
+  });
+});
+
+describe('agent atlassian login opens the browser (v9.9)', () => {
+  const capture = () => {
+    const output = new PassThrough();
+    let shown = '';
+    output.on('data', (d) => { shown += d; });
+    return { output, text: () => shown };
+  };
+
+  it('asks for no site, email or token, prints the address, and reports the tools', async () => {
+    const { output, text } = capture();
+    const opened = [];
+    let asked;
+    const code = await runAtlassianCli(['login'], {
+      output,
+      browser: {
+        open: (u) => opened.push(u),
+        signInImpl: async (opts) => { asked = opts; opts.open('https://auth.example/authorize?x=1'); return { ok: true }; },
+        connect: () => ({ connect: async () => {}, listTools: async () => [{ name: 'a' }, { name: 'b' }], close: async () => {} }),
+      },
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(opened, ['https://auth.example/authorize?x=1']);
+    assert.equal(asked.server, 'atlassian');
+    assert.match(asked.url, /^https:\/\/mcp\.atlassian\.com\/v2\/mcp$/);
+    assert.match(text(), /If nothing opened, visit:\n {2}https:\/\/auth\.example/);
+    assert.match(text(), /✔ Signed in to Atlassian · 2 Jira and Confluence tools/);
+    assert.match(text(), /Every write asks you first, in every mode/);
+    // The old flow's three questions; "Choose your site" is Atlassian's own page.
+    assert.doesNotMatch(text(), /Jira site|Email|Token \(not shown\)/);
+  });
+
+  it('a refusal says so and names --token', async () => {
+    const { output, text } = capture();
+    const code = await runAtlassianCli(['login'], {
+      output,
+      browser: { open: () => {}, signInImpl: async () => ({ ok: false, error: 'the sign-in was refused: access_denied' }) },
+    });
+    assert.equal(code, 1);
+    assert.match(text(), /✗ Not signed in: the sign-in was refused: access_denied/);
+    assert.match(text(), /agent atlassian login --token/);
   });
 });

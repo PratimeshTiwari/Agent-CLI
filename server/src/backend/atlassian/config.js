@@ -165,14 +165,14 @@ export function atlassianSite() {
 export function atlassianCredentials() {
   const cfg = atlassianSite();
   if (!cfg) {
-    return { error: 'Jira is not set up. Ask the user to run `agent atlassian login` in a terminal.' };
+    return { error: 'Jira is not set up. Ask the user to run `agent atlassian login --token` in a terminal.' };
   }
   const token = readToken(cfg.site);
   if (!token) {
-    return { error: `No token is stored for ${cfg.site}. Ask the user to run \`agent atlassian login\` in a terminal.` };
+    return { error: `No token is stored for ${cfg.site}. Ask the user to run \`agent atlassian login --token\` in a terminal.` };
   }
   if (cfg.kind === 'cloud' && !cfg.email) {
-    return { error: `Jira Cloud needs the account's email, and none is stored for ${cfg.site}. Ask the user to run \`agent atlassian login\`.` };
+    return { error: `Jira Cloud needs the account's email, and none is stored for ${cfg.site}. Ask the user to run \`agent atlassian login --token\`.` };
   }
   return { ...cfg, token };
 }

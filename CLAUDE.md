@@ -595,17 +595,6 @@ and the slash palette now gives way to notice rows: it always offered six, which
 rows by one with that row up (2 `ESC[2J`). 0 extra clears at 10, 13, 24 rows. It found
 `ink-spinner`, declared and imported by nothing — listed as `unused`, and removed in v5.31.
 
-**v5.31: optional packages can be uninstalled, and ripgrep needs no installer.** An optional
-package gets **Uninstall** (`npm uninstall`, out of `package.json` too, so a later `npm install`
-does not quietly bring it back); it then stays listed as `removed` — dim, not a fault, no startup
-row — with **Install** at `PACKAGES[name].restore.range` (held to the manifest by a test). The home
-list has **Remove unused** when anything is. A required package no longer repeats "The agent does
-not start" under its tier (`withoutBeyondTier`). **ripgrep:** the work laptop has no Homebrew, and
-every VS Code ships rg for its own search (`@vscode/ripgrep-universal/bin/darwin-<arch>/rg`;
-Cursor's `@vscode/ripgrep/bin/rg`). `core/install/find-rg.js` looks in `AGENT_RG`, then PATH, then the
-editors' bundles; `grep_search` and `/doctor` both use it, and the tool row reads `from Visual
-Studio Code`. `doctor.js` may import local modules now, and the built-ins test follows them down.
-
 **`/doctor` is a menu since v5.30 (`frontend/menus/doctor-view.js`, the `doctor` type in `Menus.jsx`).** Tabs
 All · Required · Optional · Other · Tools (tab or ←/→). Enter opens a package: why, versions,
 importers, then actions: install what `package.json` wants, update to latest, choose a version (`npm
@@ -758,9 +747,21 @@ paste goes off, and a pasted JSON's first newline is an Enter. The pty must set 
 folder writes that file, so nothing in it runs until the person allows it in `/mcp`, per folder and per whole entry:
 any edit asks again. It cannot use `${secret:}`, because secrets go by server name and a repo picks its names. Your
 `mcp.json` wins a shared name. **`switchKey`** ties a repo server's ask/auto/block to the entry, or it could arrive on
-`auto` by reusing a name. HTTP is `https`, or `http` to this machine only, with `headers`; no OAuth or SSE. Cross-origin
+`auto` by reusing a name. HTTP is `https`, or `http` to this machine only, with `headers`; no SSE. OAuth is v9.9's, below. Cross-origin
 redirects are refused by the SDK's default: do not pass `redirectPolicy: 'follow'`. A lost session fails that call
 and the next one reconnects. Pty: `run-repo.sh`, no process before the yes.
+
+**Jira and Confluence by browser sign-in (v9.9, `mcp/client/oauth.js`, `atlassian-server.js`).**
+`agent atlassian login` opens Atlassian's consent page; `--token` is v8.1's flow, kept for Server/DC. Atlassian's
+server (`https://mcp.atlassian.com/v2/mcp`, read 2026-11-08: 401 with resource metadata, self-registration, PKCE
+S256) is a built-in `/mcp` row, usable once signed in; the SDK does the protocol, a one-shot `127.0.0.1` callback checks
+`state`, and a connection never opens a browser (`SignInNeeded`). The record goes to the Keychain **in 3,000-character
+pieces**, read back before it is trusted: `security -i` cut a 5,806-character value at 4,039. A fresh sign-in drops cached
+discovery and the record names its address, or a moved server fails every sign-in. **Every write asks, in every mode:**
+reads are a name list (`ATLASSIAN_READS`), anything else is a write, by address not name; `requiresApproval` checks
+`external` before any switch, the box is Send / Don't send with no "always", and `mcp_tool` wants a token.
+Pty `run-atl.sh`, `run-atl-bin.sh` (fixture `test/fixtures/oauth-fixture.js`): 0 clears at 13 and 24.
+**An empty `AGENT_ATLASSIAN_MCP_URL` means the real server:** one harness run registered two real clients that way.
 
 ### One Chrome profile
 
