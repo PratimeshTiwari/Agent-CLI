@@ -113,7 +113,7 @@ Subagents get tabs of their own. The full design, and the reasons behind it, are
 
 ## Install
 
-You need **Node.js 22+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
+You need **Node.js 22.12+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Agent-CLI/main/setup.sh | bash

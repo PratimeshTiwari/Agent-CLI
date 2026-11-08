@@ -24,7 +24,7 @@
     "ink-select-input": "^6.2.0",
     "ink-text-input": "^6.0.0",
     "marked": "^15.0.12",
-    "marked-terminal": "^7.3.0",
+    "marked-terminal": "^8.0.0",
     "react": "^19.2.8",
     "unpdf": "1.8.1",
     "ws": "^8.18.0",
@@ -35,6 +35,6 @@
     "tsx": "^4.23.12"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   }
 }

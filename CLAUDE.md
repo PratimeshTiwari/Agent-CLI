@@ -639,7 +639,7 @@ before the line saying why it was running, so that line is now printed first.
 their ranges, or all to latest, which names what leaves its range. One `npm install` per workspace
 and save style, so a pin stays a pin; what landed is read from disk, not from npm's exit. Run with
 real npm in a **full copy** (`run-deps.sh`; a symlinked `node_modules` is written through): all 11
-moved and `ink` 8 started, and `marked-terminal` 8 fails two tests with raw bold codes in rows. The
+moved and `ink` 8 started; `marked-terminal` 8 is in since v9.9.6 (Node 22.12+), bold its own. The
 guard undoes a crash, nothing else. Below 12 rows a subtitle is shed, so a job takes the title row.
 
 **`/update` is a menu (v9.5, `components/UpdateMenu.jsx`, `core/install/editors.js`).** Update, Editor
@@ -1454,8 +1454,8 @@ sent as a message; 0 clears at 10, 13, 24 rows.
 - **`server/src/index.js` is the bin and does nothing but re-spawn `main.js` under `tsx`** —
   the sources contain JSX, so plain `node src/main.js` fails.
 - `App.jsx` is performance-sensitive: it avoids re-rendering during streaming to prevent
-  terminal tearing, and uses raw ANSI (`\x1b[1m`) in places because `marked-terminal` mangles
-  inline markdown inside list items. It was split into `frontend/` modules by moving blocks verbatim
+  terminal tearing. Bold is `marked-terminal`'s: v8 strips an escape byte written into the text,
+  which left `[1m` on screen (v9.9.6). It was split into `frontend/` modules by moving blocks verbatim
   behind explicit dependency lists; the `<Static>` element, `staticEpoch` and the streaming
   path stayed in `App.jsx` deliberately, and adding memoization to the transcript rows is how
   the scroll glitches came back the last two times.
