@@ -148,6 +148,41 @@ test('bare /effort opens the menu; /effort low runs', (t) => {
   assert.deepEqual(commands(), [{ command: 'effort', args: ['low'] }]);
 });
 
+const THINKING = {
+  setting: 'same', current: 'Low', same: 'High',
+  stops: [
+    { id: 'same', label: 'same as effort', locked: false },
+    { id: 'low', label: 'Low', locked: false },
+    { id: 'medium', label: 'Medium', locked: true },
+    { id: 'high', label: 'High', locked: false },
+  ],
+};
+
+test('thinking sits under the efforts: same as effort ticked, a locked level refused, a pick sends it', (t) => {
+  const { $, doc, commands, key } = page(t, { state: { ...STATE, thinking: THINKING } });
+  $('#effort-btn').click();
+  assert.deepEqual(rows(doc), ['Low', 'High', 'Max', 'same as effort', 'Low', 'Medium', 'High']);
+  assert.match([...doc.querySelectorAll('.pop-title')].map((e) => e.textContent).join('|'), /Thinking/);
+  const rowsEl = [...doc.querySelectorAll('.pop-row')];
+  assert.equal(rowsEl[3].querySelector('.pop-check').textContent, '✔', 'the setting is not ticked');
+  assert.match(rowsEl[3].textContent, /High/, 'same as effort does not say what it means here');
+  assert.equal(rowsEl[5].disabled, true, 'a locked level can be chosen');
+  const down = (n) => { for (let i = 0; i < n; i++) key('ArrowDown'); };
+  down(1);                               // High → (Max refused) → same as effort
+  assert.equal(doc.querySelector('.pop-row.active .pop-name').textContent, 'same as effort');
+  down(2);                               // Low, then past Medium to High
+  assert.equal(doc.querySelector('.pop-row.active .pop-name').textContent, 'High');
+  key('Enter');
+  assert.deepEqual(commands(), [{ command: 'effort', args: ['thinking', 'high'] }]);
+});
+
+test('an account with no levels: no Thinking heading at all, and the footer says none', (t) => {
+  const { $, doc } = page(t);
+  $('#effort-btn').click();
+  assert.equal(doc.querySelectorAll('.pop-title').length, 1, 'only the menu title');
+  assert.doesNotMatch($('#effort-btn').title, /thinking/);
+});
+
 test('an agent older than the panel: the button falls back to the command', (t) => {
   const { $, commands } = page(t, { state: { effort: 'high' } });
   $('#effort-btn').click();

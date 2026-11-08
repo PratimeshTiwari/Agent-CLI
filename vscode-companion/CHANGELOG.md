@@ -1,5 +1,10 @@
 # Agent CLI Companion: version history
 
+## 1.8.17 — 2026-11-08
+
+**The chat's effort menu sets the thinking level.** Under the efforts, `same as effort` or a level,
+where the account's picker has levels; a locked one is listed and refused. See extension 1.65.0.
+
 ## 1.8.16 — 2026-11-08
 
 **The chat can be true black.** With the terminal on `/theme amoled`, the chat's surfaces are black

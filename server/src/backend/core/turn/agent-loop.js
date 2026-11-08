@@ -174,6 +174,7 @@ import {
   planModelSwitch, browserModelPin, rungForModel, pickModelFor, selectedModel,
 } from '../models/model-match.js';
 import { MODES, describeMode } from '../policy/modes.js';
+import { wantedThinking, normaliseThinkingSetting, currentThinking, thinkingStops } from '../models/thinking.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
 import { stripImageData, stripImageHeaders, promptCharge } from '../prompt/prompt-builder.js';
@@ -291,6 +292,18 @@ export function carryUndelivered(undelivered, message) {
   const lost = texts.map((t) => `"""\n${t}\n"""`).join('\n');
   return `[My previous message${texts.length > 1 ? 's' : ''} never reached you: the browser tab failed to send `
     + `${texts.length > 1 ? 'them' : 'it'}. Here ${texts.length > 1 ? 'they are' : 'it is'}:]\n${lost}\n\n${message}`;
+}
+
+/** The panels' Thinking group (v9.9.3), or null where the picker has no levels. */
+function panelThinking(modelConfig, options) {
+  const stops = thinkingStops(options);
+  if (!stops.length) return null;
+  return {
+    setting: normaliseThinkingSetting(modelConfig?.thinking),
+    current: currentThinking(options),
+    same: wantedThinking({ rung: resolveEffort(modelConfig?.effort).id, setting: 'same', options }).level,
+    stops,
+  };
 }
 
 export class AgentLoop {
@@ -2139,7 +2152,10 @@ export class AgentLoop {
    * exactly, or as its last word (`Flash` is `3.8 Flash`, not `3.1 Flash-Lite`).
    * Otherwise the list is asked for again, which opens the menu once.
    */
-  noteSelectedModel(label) {
+  noteSelectedModel(label, level) {
+    // A level, picked by hand or set before a prompt (v9.9.3). `undefined` is an
+    // extension older than 1.65.0, which says nothing about it.
+    if (level !== undefined) this._noteSelectedLevel(level);
     const want = String(label || '').trim().toLowerCase();
     if (!want) return;
     const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
@@ -2158,6 +2174,18 @@ export class AgentLoop {
     }
     if (hit.selected) return;
     this.modelOptions = this.modelOptions.map((m) => (m?.isMode ? m : { ...m, selected: m === hit }));
+    this._emitModels();
+  }
+
+  _noteSelectedLevel(level) {
+    const want = String(level || '').trim().toLowerCase();
+    const options = this.modelOptions || [];
+    if (!want || !options.some((m) => m?.level)) return;
+    const hit = options.find((m) => m?.level && String(m.label).trim().toLowerCase() === want);
+    if (!hit || hit.selected) return;
+    // A level that lands is a level that works: a failed one may be asked for again.
+    if (this._thinkingFailed && this._thinkingFailed.toLowerCase() === want) this._thinkingFailed = null;
+    this.modelOptions = options.map((m) => (m?.level ? { ...m, selected: m === hit } : m));
     this._emitModels();
   }
 
@@ -2802,7 +2830,45 @@ export class AgentLoop {
      * essay. A tab the extension has to open goes to this conversation instead.
      */
     const url = payload.isSubagent ? null : this._threadUrl();
-    this.extensionLock.enqueue(url ? { ...payload, threadUrl: url } : payload);
+    // The thinking level the tab applies before typing (v9.9.3); main lane only.
+    const thinking = payload.isSubagent ? null : this._wantedThinking();
+    this.extensionLock.enqueue({
+      ...payload,
+      ...(url ? { threadUrl: url } : {}),
+      ...(thinking ? { thinking } : {}),
+    });
+  }
+
+  /**
+   * The level to ask the tab for, or null (v9.9.3): no levels on this account,
+   * a pinned level it lacks or has locked, or one that failed to set and has
+   * not been asked for differently since — a level is never retried into a
+   * loop, and never worth a lost turn.
+   */
+  _wantedThinking() {
+    const { level } = wantedThinking({
+      rung: resolveEffort(this.modelConfig?.effort).id,
+      setting: this.modelConfig?.thinking,
+      options: this.modelOptions || [],
+    });
+    if (!level || this._thinkingFailed === level) return null;
+    return level;
+  }
+
+  /** `/effort thinking <same|level>`: saved, and the next prompt asks for it. */
+  setThinking(value) {
+    this.modelConfig.thinking = normaliseThinkingSetting(value);
+    this._thinkingFailed = null;
+    this._saveConfig();
+    this._emitModels();
+  }
+
+  /** The tab could not set the level: one row, and not asked again until the setting changes. */
+  noteThinkingFailed({ wanted, stays } = {}) {
+    if (!wanted || this._thinkingFailed === wanted) return;
+    this._thinkingFailed = wanted;
+    this._notify(`✗ Could not set thinking to ${wanted}${stays ? ` · stays ${stays}` : ''}`);
+    logNotice(this.workspace, { flow: 'extension', op: 'set_thinking', message: `could not set ${wanted}`, meta: { stays: stays || null } });
   }
 
   /** This session's Gemini conversation as a URL, or null for a new chat. */
@@ -3073,6 +3139,10 @@ export class AgentLoop {
           : { id: rung.id, name: rung.name, model: rung.id === 'max' ? 'not on this account' : 'nothing suits it', available: false };
       }),
       modes: MODES.map((id) => ({ id, about: describeMode(id).replace(/^\w+ — /, '') })),
+      // Thinking level (v9.9.3), only where the picker has levels: the setting,
+      // the level ticked in the tab, what `same` means on this effort, and the
+      // stops the terminal's slider offers, locked ones marked.
+      thinking: panelThinking(this.modelConfig, this.modelOptions || []),
       // The terminal's saved palette (v9.9.1). Only `amoled` changes the panels,
       // which otherwise follow the system or the editor's theme.
       theme: loadUserSettings().theme || null,

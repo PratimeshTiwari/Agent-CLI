@@ -505,6 +505,7 @@ function panelStateLine(state) {
   return [
     state.effort,
     state.model,
+    state.thinking?.current ? `thinking ${state.thinking.current.toLowerCase()}` : null,
     Number.isFinite(state.contextPct) ? `${state.contextPct}% context` : null,
   ].filter(Boolean).join(' · ');
 }
@@ -620,13 +621,35 @@ function menuRows(kind) {
       current: m.id === currentMode,
     }));
   }
-  return (panelState?.efforts || []).map((e) => ({
+  const efforts = (panelState?.efforts || []).map((e) => ({
     value: e.id,
     name: e.name,
     detail: e.model,
     current: e.id === panelState.effort,
     disabled: !e.available,
   }));
+  return efforts.length ? [...efforts, ...thinkingRows(panelState?.thinking)] : efforts;
+}
+
+/*
+ * Thinking level under the efforts (1.65.0), as the terminal's slider has it:
+ * `same as effort` or a level, a locked one listed and refused. An account
+ * whose picker has no levels sends none, and the menu shows no heading.
+ */
+function thinkingRows(thinking) {
+  if (!thinking?.stops?.length) return [];
+  return [
+    { heading: 'Thinking', disabled: true },
+    ...thinking.stops.map((s) => ({
+      value: `thinking:${s.id}`,
+      name: s.label,
+      detail: s.locked ? 'locked'
+        : s.id === 'same' ? (thinking.same || '')
+          : (thinking.current && thinking.current.toLowerCase() === s.id ? 'in the tab now' : ''),
+      current: s.id === thinking.setting,
+      disabled: s.locked,
+    })),
+  ];
 }
 
 function matchingCommands(typed) {
@@ -649,13 +672,13 @@ function renderPopover() {
   popoverEl.classList.toggle('is-palette', kind === 'palette');
   const title = { mode: 'Mode', effort: 'Effort · the model each level uses' }[kind];
   popoverEl.innerHTML = (title ? `<div class="pop-title">${escapeHtml(title)}</div>` : '')
-    + rows.map((r, i) => `
+    + rows.map((r, i) => (r.heading ? `<div class="pop-title">${escapeHtml(r.heading)}</div>` : `
       <button class="pop-row${i === at ? ' active' : ''}" role="option" data-i="${i}"${r.disabled ? ' disabled' : ''}>
         ${kind === 'palette' ? '' : `<span class="pop-glyph ${r.glyphClass || ''}">${r.glyph || ''}</span>`}
         <span class="pop-name">${escapeHtml(r.name)}</span>
         ${kind === 'palette' ? '' : `<span class="pop-check">${r.current ? '✔' : ''}</span>`}
         ${r.detail ? `<span class="pop-detail">${escapeHtml(r.detail)}</span>` : ''}
-      </button>`).join('')
+      </button>`)).join('')
     + '<div class="pop-keys">↑↓ move · enter choose · esc close</div>';
   popoverEl.hidden = false;
   popoverEl.querySelectorAll('.pop-row').forEach((row) => {
@@ -673,7 +696,7 @@ function renderPopover() {
 function openPopover(kind, rows) {
   if (rows.length === 0) { closePopover(); return false; }
   const current = rows.findIndex((r) => r.current);
-  popover = { kind, rows, at: current >= 0 ? current : 0 };
+  popover = { kind, rows, at: current >= 0 ? current : rows.findIndex((r) => !r.disabled) };
   renderPopover();
   return true;
 }
@@ -713,6 +736,12 @@ function choosePopover() {
   closePopover();
   if (kind === 'mode') { if (!row.current) setMode(row.value); return; }
   if (kind === 'effort') {
+    if (row.value.startsWith('thinking:')) {
+      if (!row.current) {
+        chrome.runtime.sendMessage({ type: 'slash_command', payload: { command: 'effort', args: ['thinking', row.value.slice(9)] } });
+      }
+      return;
+    }
     if (!row.current) {
       chrome.runtime.sendMessage({ type: 'slash_command', payload: { command: 'effort', args: [row.value] } });
     }

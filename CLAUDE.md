@@ -779,6 +779,15 @@ High; `/effort max` says `4 Argon is locked on this account` (`lockedReason`). B
 level too, reported as a mode: `selectedModel` is the only reader of the tab's model, because a ticked `Low`
 answered for it. Pty (`FAKE_LOCKED`, `FAKE_LEVELS`): no switch sent, 0 clears at 13 and 24 rows.
 
+**Thinking level follows effort (v9.9.3, `core/models/thinking.js`, extension 1.65.0).** Read live (Step 0 of
+`2026-11-06-auto-thinking-visuals.md`): Low/Medium/High on every model, kept across a switch, back to Low on a page
+load. Every main-lane prompt carries `thinking`; the tab reads the trigger ("currently Pro Medium"; the lightest adds
+nothing) and opens the menu only when it is wrong. `same`, the default, is lightest/middle/heaviest for low/medium/high
+and max, stepping down past a lock; `/effort thinking <level>` pins one. A failed set is one `✗` row, not retried until
+the setting changes, and the prompt goes anyway. Owner: an account with no levels shows no Thinking anywhere (slider,
+`/settings`, panels, status bar). The model watcher strips the level: a hand-picked Medium read "Flash-Lite Medium".
+Pty (`FAKE_LEVELS`): 0 clears at 13 and 24 rows, with levels and without.
+
 ### Workspace
 
 `core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
@@ -1701,16 +1710,6 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   (`shed` in `statusBarLayout`), tested at 30–120 columns; App only maps roles to colours. Pty:
   0 clears at 10, 13, 24 rows × 60, 90 columns.
 
-- **Table rows are told apart only when one wraps (v8.0, `table()` in `markdown.js`).** Option C of
-  `.agent/artifacts/plans/2026-10-31-table-rows.md`, chosen from screenshots of a demo chat
-  (`table-rows.png` / `table-open.png` there): a dim `┄` rule between rows and `╞═╡` under the
-  header once any body row wraps; a table of one-line rows is unchanged. Making the doc found
-  `wrapAnsi` breaking at a full row rather than an overflowing one, so a cell that fit its column
-  exactly wrapped (v7.10). Pty: a reply with both kinds of table, 0 clears at 13 and 24 rows.
-- **A call the schema refused reads `wrong arguments · query missing` (v8.0,
-  `badArgumentsOutcome` in `action-row.js`).** The row showed the first line of the model's
-  message, `grep_search was called with arguments that do not match its…`, cut before it said
-  what was wrong. The model still gets the whole message.
 - **A row in the live frame is truncated from the right, so put the part that
   must survive on the left.** The filed-session row read `↺ Previous
   conversation filed (2 turns) — --resume <28-char id>`, which is ~80

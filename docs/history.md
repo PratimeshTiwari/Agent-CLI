@@ -1592,3 +1592,17 @@ Even the worst paste of a full 26,268-character turn-0 prompt is half of one
 median round trip, so **splitting a prompt across messages costs 3× the wait
 and saves nothing**: the context is identical when the task arrives, plus the
 model's acknowledgements. Make turn 0 smaller; do not spread it out.
+
+## Moved from CLAUDE.md in v9.9.3
+
+**Table rows are told apart only when one wraps (v8.0, `table()` in `markdown.js`).** Option C of
+`.agent/artifacts/plans/2026-10-31-table-rows.md`, chosen from screenshots of a demo chat
+(`table-rows.png` / `table-open.png` there): a dim `┄` rule between rows and `╞═╡` under the
+header once any body row wraps; a table of one-line rows is unchanged. Making the doc found
+`wrapAnsi` breaking at a full row rather than an overflowing one, so a cell that fit its column
+exactly wrapped (v7.10). Pty: a reply with both kinds of table, 0 clears at 13 and 24 rows.
+
+**A call the schema refused reads `wrong arguments · query missing` (v8.0,
+`badArgumentsOutcome` in `action-row.js`).** The row showed the first line of the model's
+message, `grep_search was called with arguments that do not match its…`, cut before it said
+what was wrong. The model still gets the whole message.

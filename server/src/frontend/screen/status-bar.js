@@ -71,6 +71,7 @@ function contextRole(pct) {
  * @param {string} [o.model]        the browser's selected model
  * @param {'↓'|'⚠'} [o.modelMark]   stepped down, or not what the effort wants
  * @param {string} [o.effort]       shown when the model is unread
+ * @param {string} [o.thinking]     the tab's thinking level, where the picker has levels
  * @param {number|null} [o.pct]     context used; null hides the field
  * @param {string} [o.meter]        the meter's cells for `pct`
  * @param {number} [o.compactAtPct]
@@ -88,7 +89,7 @@ export function statusBarLayout(o) {
   // null is "declined for this chat" (v7.5); only a missing value means the default.
   const compactAt = o.compactAtPct === null ? null : (o.compactAtPct ?? 80);
   // Each step gives one thing up, in the order the plan fixed; `build` reads them.
-  const shed = { hint: false, pastes: false, modeWord: false, profile: false, scope: false, meter: false,
+  const shed = { hint: false, thinking: false, pastes: false, modeWord: false, profile: false, scope: false, meter: false,
     version: false, modelNumber: false, tasks: false, context: false };
 
   const build = () => {
@@ -110,6 +111,9 @@ export function statusBarLayout(o) {
     if (o.model) {
       const label = shed.modelNumber ? shortModel(o.model) : o.model;
       fields.push([{ text: o.modelMark ? `${o.modelMark} ${label}` : label, role: o.modelMark ? 'attention' : 'dim' }]);
+      // The tab's thinking level (v9.9.3), only where the picker has levels;
+      // the first thing to go when the bar is short.
+      if (o.thinking && !shed.thinking) fields.push([{ text: `thinking ${o.thinking}`, role: 'dim' }]);
     } else if (o.effort) {
       fields.push([{ text: o.effort, role: 'dim' }]);
     }

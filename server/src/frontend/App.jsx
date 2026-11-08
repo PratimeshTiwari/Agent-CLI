@@ -21,6 +21,7 @@ import { keysLayout } from './menus/keys-view.js';
 import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../backend/core/models/effort.js';
+import { currentThinking } from '../backend/core/models/thinking.js';
 import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './transcript/activity.js';
 import { modelMismatch, browserModelPin, selectedModel } from '../backend/core/models/model-match.js';
@@ -1589,6 +1590,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     model: browserModelLabel,
     modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : modelDiffers ? '⚠' : null) : null,
     effort: resolveEffort(agentLoop.modelConfig?.effort).id,
+    thinking: currentThinking(agentLoop.modelOptions || [])?.toLowerCase() || null,
     pct: syncTokenEstimate > 0 ? tokenPct : null,
     meter: contextMeter(tokenPct),
     // "Continue in this chat" (v7.5): no countdown to a compaction that will not come.

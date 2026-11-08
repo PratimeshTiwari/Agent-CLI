@@ -11,7 +11,8 @@ import { oneLine } from '../text.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../menus/help.js';
 import { panelRoom, wrapLines, cutStart } from '../menus/panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view.js';
-import { sliderLayout, stopModel, tabDiffers, onlyModel, onlyModelLine } from '../menus/effort-slider.js';
+import { sliderLayout, stopModel, tabDiffers, onlyModel, onlyModelLine, stepThinking, thinkingLine } from '../menus/effort-slider.js';
+import { thinkingStops, normaliseThinkingSetting } from '../../backend/core/models/thinking.js';
 import { Panel, Choices } from './Panel.jsx';
 import { ChromeProfiles } from './ChromeProfiles.jsx';
 import { UpdateMenu } from './UpdateMenu.jsx';
@@ -124,7 +125,7 @@ export function Menus({
    * there is not, close and let the transcript answer, which is where a reply
    * belongs when nothing is covering it.
    */
-  const applyAndReturn = React.useCallback(async (menu, command, args) => {
+  const applyAndReturn = React.useCallback(async (menu, command, args, typed = null) => {
     // From the settings page, a chooser's pick waits for Apply like a ←/→ on
     // the row does (v6.1) — found by the command the row would run for it.
     if (menu?.returnTo?.type === 'settings') {
@@ -153,7 +154,7 @@ export function Menus({
       // from (reported: "i changed effort but effort did not show up").
       setHistory((prev) => [...prev,
         // As typed: the chooser's own words, not the value picked in it.
-        { role: 'user', content: `/${[command, ...args.slice(0, -1)].join(' ')}`, isLocal: true },
+        { role: 'user', content: typed || `/${[command, ...args.slice(0, -1)].join(' ')}`, isLocal: true },
         { role: 'assistant', content: result.message, isLocal: true }]);
     }
   }, [agentLoop, setActiveMenu, setFocus, setHistory]);
@@ -339,6 +340,33 @@ export function Menus({
     if (activeMenu?.type === 'effort') {
       const current = resolveEffort(agentLoop.modelConfig?.effort).id;
       const at = Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === (activeMenu.at || current)));
+      // The Thinking row (v9.9.3), only on an account whose picker has levels.
+      const tStops = thinkingStops(agentLoop.modelOptions || []);
+      const tSetting = normaliseThinkingSetting(agentLoop.modelConfig?.thinking);
+      const tAt = activeMenu.thinking || tSetting;
+      if (tStops.length && (key.upArrow || key.downArrow)) {
+        setActiveMenu({ ...activeMenu, row: key.downArrow ? 'thinking' : 'effort' });
+        return;
+      }
+      if (tStops.length && activeMenu.row === 'thinking' && (key.leftArrow || key.rightArrow)) {
+        const next = stepThinking(tStops, tAt, key.leftArrow ? -1 : 1);
+        if (next !== tAt) setActiveMenu({ ...activeMenu, thinking: next });
+        return;
+      }
+      const digitPick = /^[1-9]$/.test(_char) ? Number(_char) - 1 : -1;
+      if (tStops.length && tAt !== tSetting && (key.return || (digitPick >= 0 && digitPick < EFFORT_LEVELS.length))) {
+        const effortId = EFFORT_LEVELS[key.return ? at : digitPick].id;
+        // Only thinking moved: its answer is the reply. Both: thinking is set
+        // first, quietly, and the effort row answers (the status bar says the level).
+        if (effortId === current) {
+          // Echoed as `/effort`, what was typed, not `/effort thinking`.
+          applyAndReturn(activeMenu, 'effort', ['thinking', tAt], '/effort');
+          return;
+        }
+        agentLoop.setThinking(tAt);
+        applyAndReturn(activeMenu, 'effort', [effortId]);
+        return;
+      }
       if (key.leftArrow || key.rightArrow) {
         const next = Math.max(0, Math.min(EFFORT_LEVELS.length - 1, at + (key.leftArrow ? -1 : 1)));
         if (next !== at) setActiveMenu({ ...activeMenu, at: EFFORT_LEVELS[next].id });
@@ -714,16 +742,28 @@ export function Menus({
           const tick = marked.id === current ? '  ✔ current' : '';
           const differs = tabDiffers(model, agentLoop.modelOptions);
           const warn = differs ? `  ⚠ browser ${differs}` : '';
-          const { tight } = fit('', 5);
+          // The Thinking row (v9.9.3): absent on an account with no levels.
+          const tStops = thinkingStops(agentLoop.modelOptions || []);
+          const thinking = tStops.length ? thinkingLine({
+            stops: tStops,
+            at: activeMenu.thinking || normaliseThinkingSetting(agentLoop.modelConfig?.thinking),
+            rung: marked.id,
+            options: agentLoop.modelOptions || [],
+          }) : null;
+          const onThinking = Boolean(thinking) && activeMenu.row === 'thinking';
+          const { tight } = fit('', thinking ? 6 : 5);
           // A blank row each side of the model line (owner, 2026-10-26: "fix
           // spacing between effort, model name and description, just a bit"),
           // when the panel has the two rows; rule + title + gap + gap + keys
-          // + the five slider rows + these two is 12.
-          const airy = !tight && menuRows >= 12;
+          // + the five slider rows + these two is 12, and the Thinking row
+          // with its gap two more.
+          const airy = !tight && menuRows >= (thinking ? 14 : 12);
           let used = 0;
           return (
             <Panel width={W} title="Effort" tight={tight}
-              keys={`←/→ adjust · 1–${EFFORT_LEVELS.length} or enter confirm · esc cancel`}>
+              keys={thinking
+                ? `↑↓ effort or thinking · ←/→ adjust · enter confirm · esc cancel`
+                : `←/→ adjust · 1–${EFFORT_LEVELS.length} or enter confirm · esc cancel`}>
               {tight ? null : <Text dimColor wrap="truncate">{pad}{s.ends}</Text>}
               <Text wrap="truncate">
                 {pad}<Text color={T.muted}>{s.bar.before}</Text>
@@ -753,6 +793,14 @@ export function Menus({
               </Text>
               {airy ? <Text> </Text> : null}
               <Text dimColor wrap="truncate">{lead(marked.blurb)}{marked.blurb}</Text>
+              {thinking && airy ? <Text> </Text> : null}
+              {thinking ? (
+                <Text wrap="truncate">
+                  {pad}<Text color={onThinking ? T.accent : undefined} bold={onThinking}>{thinking.name}</Text>
+                  <Text color={onThinking ? T.accent : undefined}>{thinking.value}</Text>
+                  <Text dimColor>{thinking.detail}</Text>
+                </Text>
+              ) : null}
             </Panel>
           );
         })()}

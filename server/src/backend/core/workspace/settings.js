@@ -34,6 +34,7 @@ import { countToday } from '../logs/command-log.js';
 import { describeInstructionSources } from '../prompt/instruction-sources.js';
 import { changed } from '../turn/slash-commands.js';
 import { countTurns } from '../turn/compaction.js';
+import { thinkingStops, normaliseThinkingSetting, wantedThinking } from '../models/thinking.js';
 
 /**
  * The tabs, in the order they are shown.
@@ -72,6 +73,25 @@ const MODE_HINTS = {
 /** Read something that may not be there, without taking the screen down. */
 function safeRead(fn, fallback) {
   try { return fn() ?? fallback; } catch { return fallback; }
+}
+
+/** The Thinking row, or none on an account whose picker has no levels. */
+function thinkingRow(agentLoop, mc, effort) {
+  const stops = thinkingStops(agentLoop?.modelOptions || []);
+  if (!stops.length) return [];
+  const setting = normaliseThinkingSetting(mc?.thinking);
+  const means = wantedThinking({ rung: effort.id, setting: 'same', options: agentLoop.modelOptions }).level;
+  const locked = stops.filter((s) => s.locked).map((s) => s.label);
+  return [{
+    group: 'Settings',
+    label: 'Thinking',
+    value: setting,
+    hint: (setting === 'same' && means ? `follows effort: ${means}` : 'pinned, whatever the effort')
+      + (locked.length ? ` · ${locked.join(', ')} locked` : ''),
+    run: '/effort thinking',
+    restore: (value) => `/effort thinking ${value}`,
+    control: { kind: 'ladder', options: stops.filter((s) => !s.locked).map((s) => s.id) },
+  }];
 }
 
 export function describeSettings(agentLoop) {
@@ -115,6 +135,8 @@ export function describeSettings(agentLoop) {
       restore: (value) => `/effort ${value}`,
       control: { kind: 'ladder', options: EFFORT_LEVELS.map((e) => e.id) },
     },
+    // Thinking level (v9.9.3): only where the tab's picker has levels.
+    ...thinkingRow(agentLoop, mc, effort),
     {
       group: 'Settings',
       label: 'Browser differs',
