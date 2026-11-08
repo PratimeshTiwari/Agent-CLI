@@ -26,8 +26,9 @@ Commands
   agent doctor <package>           why a package is used, and what breaks without it
   agent doctor --offline           the same, without asking npm for the latest versions
   agent doctor --test              run the agent's own tests, to check this install
-  agent atlassian login            sign in to Jira once; the token goes to the Keychain
-  agent atlassian status | logout  who is signed in; sign out and delete the token
+  agent atlassian login            sign in to Jira and Confluence Cloud in the browser
+  agent atlassian login --token    sign in with a token instead (Server / Data Center)
+  agent atlassian status | logout  who is signed in; sign out and delete what was saved
 
 Inside the agent, /help lists every key and command.
 

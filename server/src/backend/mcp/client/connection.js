@@ -19,6 +19,7 @@
  * and also that a redirect within the address still works.
  */
 import { scrub } from './config.js';
+import { connectionAuth } from './oauth.js';
 
 export const CONNECT_TIMEOUT_MS = 60_000; // `npx -y` may have a package to fetch
 export const CALL_TIMEOUT_MS = 120_000;
@@ -55,8 +56,9 @@ export class McpConnection {
    * @param {object} server - an entry from `loadMcpConfig`
    * @param {{cwd?: string, timeoutMs?: number, sdk?: () => Promise<object>}} [opts]
    */
-  constructor(server, { cwd, timeoutMs = CONNECT_TIMEOUT_MS, sdk = loadSdk } = {}) {
+  constructor(server, { cwd, timeoutMs = CONNECT_TIMEOUT_MS, sdk = loadSdk, auth = connectionAuth } = {}) {
     this.server = server;
+    this.auth = auth;
     this.cwd = cwd;
     this.timeoutMs = timeoutMs;
     this.sdk = sdk;
@@ -75,7 +77,10 @@ export class McpConnection {
   _transport(sdk) {
     const { command, args, env, url, headers, transport } = this.server;
     if (transport === 'http') {
-      return new sdk.StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } });
+      // A browser sign-in's tokens (v9.9): refreshed by the SDK on a 401, and a
+      // sign-in that has lapsed is `SignInNeeded`, never a browser opened unasked.
+      const authProvider = this.server.auth === 'oauth' ? this.auth(this.server.name) : undefined;
+      return new sdk.StreamableHTTPClientTransport(new URL(url), { requestInit: { headers }, ...(authProvider ? { authProvider } : {}) });
     }
     return new sdk.StdioClientTransport({ command, args, env, cwd: this.cwd, stderr: 'pipe' });
   }
@@ -100,8 +105,12 @@ export class McpConnection {
 
   /** One line: what went wrong, with what the server said about it if anything. */
   describeFailure(err) {
+    if (this.server.auth === 'oauth' && (err?.signIn || err?.code === 401 || err?.name === 'UnauthorizedError'
+      || /unauthori[sz]ed|invalid_grant|SignInNeeded|sign in again/i.test(String(err?.message)))) {
+      return this.server.atlassian ? 'signed out · run `agent atlassian login` in a terminal' : 'signed out · sign in again from /mcp';
+    }
     if (err?.code === 401) {
-      return 'the server wants a sign-in: put a token in `headers` (OAuth is not supported yet)';
+      return 'the server wants a sign-in: put a token in `headers`, or sign in from /mcp if it offers one';
     }
     const said = this.stderrTail.trim().split('\n').pop() || '';
     // fetch's own words are in `cause`: "fetch failed" alone says nothing.

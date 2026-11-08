@@ -30,6 +30,8 @@ import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVe
 import { summariseToolUsage } from '../logs/tool-usage.js';
 import { atlassianSite, atlassianCredentials } from '../../atlassian/config.js';
 import { createJiraClient } from '../../atlassian/jira-client.js';
+import { makeStore } from '../../mcp/client/oauth.js';
+import { ATLASSIAN_NAME } from '../../mcp/client/atlassian-server.js';
 import { changeMcp, listIntegrations, mcpReport } from '../../mcp/client/integrations.js';
 
 /**
@@ -361,7 +363,11 @@ export async function handleSlashCommand(loop, command, args) {
      */
     case 'jira': {
       const cfg = atlassianSite();
-      if (!cfg) return { message: 'Jira · not set up · run `agent atlassian login` in a terminal, then `/jira`' };
+      if (!cfg) {
+        // The browser sign-in (v9.9) is Atlassian's MCP server, which `/mcp` shows.
+        if (makeStore(ATLASSIAN_NAME).signedIn()) return { message: 'Jira · signed in through Atlassian in the browser · `/mcp` shows its tools; the model uses them on prompt v5 or newer' };
+        return { message: 'Jira · not set up · run `agent atlassian login` in a terminal (`--token` for Server / Data Center), then `/jira`' };
+      }
       const host = cfg.site.replace(/^https?:\/\//, '');
       const creds = atlassianCredentials();
       if (creds.error) return { message: `✗ Jira · ${host} · ${creds.error}` };

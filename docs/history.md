@@ -1548,3 +1548,16 @@ loud.
 derived, it would be comparing the catalog to itself. It went red the moment the arms left
 `agent-loop.js`, and it now reads `loop-tools.js`. **The file it reads must be the file with
 the implementation in it.**
+
+## Moved from CLAUDE.md in v9.9
+
+**v5.31: optional packages can be uninstalled, and ripgrep needs no installer.** An optional
+package gets **Uninstall** (`npm uninstall`, out of `package.json` too, so a later `npm install`
+does not quietly bring it back); it then stays listed as `removed` — dim, not a fault, no startup
+row — with **Install** at `PACKAGES[name].restore.range` (held to the manifest by a test). The home
+list has **Remove unused** when anything is. A required package no longer repeats "The agent does
+not start" under its tier (`withoutBeyondTier`). **ripgrep:** the work laptop has no Homebrew, and
+every VS Code ships rg for its own search (`@vscode/ripgrep-universal/bin/darwin-<arch>/rg`;
+Cursor's `@vscode/ripgrep/bin/rg`). `core/install/find-rg.js` looks in `AGENT_RG`, then PATH, then the
+editors' bundles; `grep_search` and `/doctor` both use it, and the tool row reads `from Visual
+Studio Code`. `doctor.js` may import local modules now, and the built-ins test follows them down.

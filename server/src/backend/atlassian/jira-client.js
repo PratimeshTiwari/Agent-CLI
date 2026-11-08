@@ -93,7 +93,7 @@ export function createJiraClient({ site, kind, email = '', token, fetchImpl = gl
       const kindOf = KIND_BY_STATUS[res.status] || 'error';
       const msg = jiraErrorText(data, res.status);
       if (kindOf === 'auth') {
-        throw new JiraError(`Jira refused the token for ${site} (401). Ask the user to run \`agent atlassian login\` again.`, { status: 401, kind: 'auth' });
+        throw new JiraError(`Jira refused the token for ${site} (401). Ask the user to run \`agent atlassian login --token\` again.`, { status: 401, kind: 'auth' });
       }
       throw new JiraError(msg, { status: res.status, kind: kindOf });
     }

@@ -33,8 +33,8 @@ import { asksForEdits, isProjectMarkdown } from './modes.js';
  * @param {{level: string}} risk
  * @param {{mcpSwitch?: string}} [ctx]
  */
-export function isBlockedOutright(call, risk, { mcpSwitch } = {}) {
-  if (call?.name === 'mcp_tool') return mcpSwitch === 'block';
+export function isBlockedOutright(call, risk, { mcpSwitch, external } = {}) {
+  if (call?.name === 'mcp_tool') return !external && mcpSwitch === 'block';
   return SHELL_TOOLS.has(call?.name) && risk?.level === 'critical';
 }
 
@@ -42,9 +42,11 @@ export function isBlockedOutright(call, risk, { mcpSwitch } = {}) {
  * Must the user be asked before this runs?
  *
  * @param {{name: string, args?: object}} call
- * @param {{mode: string, risk: {level: string}, workspace: string, mcpSwitch?: string, alwaysAsk?: boolean}} ctx
+ * `external` is Atlassian's verdict on an `mcp_tool` call (`'read'` or `'write'`, v9.9).
+ *
+ * @param {{mode: string, risk: {level: string}, workspace: string, mcpSwitch?: string, alwaysAsk?: boolean, external?: string}} ctx
  */
-export function requiresApproval(call, { mode, risk, workspace, mcpSwitch, alwaysAsk } = {}) {
+export function requiresApproval(call, { mode, risk, workspace, mcpSwitch, alwaysAsk, external } = {}) {
   const name = call?.name;
 
   /*
@@ -64,6 +66,12 @@ export function requiresApproval(call, { mode, risk, workspace, mcpSwitch, alway
    * way to read. With no switch to go on it asks: fail closed.
    */
   if (name === 'mcp_describe') return false;
+  /*
+   * Atlassian's server (v9.9) is Jira by another road, so the Jira rule holds on
+   * it: a read runs, anything else asks in every mode, and no switch is read.
+   * Only an exact `'read'` skips the box: a missing verdict asks.
+   */
+  if (name === 'mcp_tool' && external) return external !== 'read';
   if (name === 'mcp_tool') return mcpDecision(mcpSwitch ?? 'ask', mode, { alwaysAsk }) !== 'run';
 
   if (!asksForEdits(mode)) {

@@ -1,6 +1,6 @@
 /** `/mcp`'s rows (v9.0). */
 import { statusLine } from '../../src/backend/mcp/client/integrations.js';
-import test from 'node:test';
+import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mcpHomeItems, serverToolItems, homeLine, ALLOW_ITEMS, serverOrigin,
 } from '../../src/frontend/menus/mcp-view.js';
@@ -98,4 +98,34 @@ test('a broken .mcp.json and a shadowed name are rows', () => {
   const items = mcpHomeItems({ rows: [], exists: true, repo: { exists: true, error: 'not valid JSON', shadowed: ['gh'] } }, { T: { danger: 'D' } });
   assert.equal(items.find((i) => i.label === '.mcp.json').colour, 'D');
   assert.match(items.find((i) => i.label === 'gh').detail, /yours is the one used/);
+});
+
+describe('Atlassian\'s page (v9.9)', () => {
+  const row = (state, tools = []) => ({ name: 'atlassian', atlassian: true, source: 'builtin', state, tools });
+
+  it('signed out: one row, Sign in, and the home row says what it is', () => {
+    const items = serverToolItems(row('signed_out'));
+    assert.deepEqual(items.map((i) => i.action), ['signin']);
+    assert.match(statusLine(row('signed_out')), /Jira and Confluence Cloud · not signed in/);
+    assert.equal(serverOrigin(row('signed_out')), 'built in');
+  });
+
+  it('signed in: Sign out, then each tool as a read that runs or a write that always asks, with no switch', () => {
+    const items = serverToolItems(row('ready', [
+      { name: 'getJiraIssue', description: 'reads' },
+      { name: 'createJiraIssue', description: 'writes' },
+      { name: 'somethingNew', description: '?' },
+    ]), { switchOf: () => 'auto' });
+    assert.equal(items[0].action, 'signout');
+    assert.match(items[1].detail, /^reads, runs/);
+    assert.match(items[2].detail, /^always asks, in every mode/);
+    assert.match(items[3].detail, /^always asks, in every mode/);
+    assert.ok(items.slice(1).every((i) => i.value === ''), 'enter changes nothing on a tool');
+    assert.ok(!items.some((i) => /auto/.test(i.detail)), 'no switch is shown');
+  });
+
+  it('a signed-out Atlassian does not offer the prompt switch', () => {
+    const items = mcpHomeItems({ exists: true, rows: [row('signed_out')] }, { needsPrompt: true });
+    assert.ok(!items.some((i) => i.value === 'prompt'));
+  });
 });

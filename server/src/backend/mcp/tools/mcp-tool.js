@@ -44,8 +44,12 @@ export async function mcpDescribe({ server, tool } = {}, ctx = {}) {
 export async function mcpTool({ server, tool, args = {} } = {}, ctx = {}) {
   const mcp = servers(ctx, 'mcp_tool');
   knownServer(mcp, server);
-  const value = switchFor(mcp.switchKey(server), tool);
-  const decision = mcpDecision(value, ctx.mode, { alwaysAsk: mcp.alwaysAsks(server) });
+  // Atlassian's (v9.9): a read runs, a write needs the box's token, whatever a
+  // switch in settings.json says.
+  const external = mcp.kindOf?.(server, tool) || null;
+  const decision = external
+    ? (external === 'read' ? 'run' : 'ask')
+    : mcpDecision(switchFor(mcp.switchKey(server), tool), ctx.mode, { alwaysAsk: mcp.alwaysAsks(server) });
   if (decision === 'refuse') throw new Error(`${server} · ${tool} is blocked by the user. Do not retry it.`);
   if (!consumeApproval(ctx.approval) && decision !== 'run') {
     throw new Error('This call needs the user\'s approval and was not approved. Nothing was run.');

@@ -135,7 +135,8 @@ test('one list: custom servers and Jira', async (t) => {
   const list = listIntegrations(mcp);
   assert.deepEqual(list.rows.map((r) => r.name), ['a', 'jira']);
   assert.equal(statusLine(list.rows[0]), 'connected · 2 tools');
-  assert.match(statusLine(list.rows[1]), /built in/);
+  // v9.9: Jira's own row is the token path, for Server / Data Center.
+  assert.match(statusLine(list.rows[1]), /token sign-in for Server \/ Data Center/);
   assert.match(mcpReport(list), /- a · connected · 2 tools/);
 });
 

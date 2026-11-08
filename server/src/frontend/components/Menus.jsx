@@ -19,6 +19,7 @@ import { SettingsList } from './SettingsList.jsx';
 import { logsHomeItems, failureItems } from '../menus/logs-view.js';
 import { mcpHomeItems, serverToolItems, serverLine, homeLine, shortPath, ALLOW_ITEMS, serverOrigin } from '../menus/mcp-view.js';
 import { fitCommand } from '../menus/mcp-add.js';
+import { openBrowser } from '../../backend/atlassian/cli.js';
 import { changeMcp, listIntegrations } from '../../backend/mcp/client/integrations.js';
 import { removeServer, setServerDisabled } from '../../backend/mcp/client/edit-config.js';
 import { McpAdd } from './McpAdd.jsx';
@@ -1529,7 +1530,8 @@ export function Menus({
             );
           }
           if (chosen) {
-            const { sub, tight, room } = fit(serverLine(chosen));
+            const { sub, tight, room } = fit(m.signingIn ? 'Waiting for the browser · choose your site and allow access'
+              : m.problem || serverLine(chosen));
             const switchKey = agentLoop.mcp.switchKey(chosen.name);
             const switchOf = (tool) => switchFor(switchKey, tool);
             const items = serverToolItems(chosen, { said: sub.length > 0, switchOf });
@@ -1540,6 +1542,20 @@ export function Menus({
                   limit={room}
                   items={items}
                   onSelect={(item) => {
+                    // v9.9: the browser sign-in, from here as from a terminal.
+                    if (item.action === 'signin' && !m.signingIn) {
+                      setActiveMenu({ ...m, signingIn: true, problem: null });
+                      let result = null;
+                      changeMcp(agentLoop, async () => { result = await agentLoop.mcp.signIn(chosen.name, { open: openBrowser }); })
+                        .catch((err) => { result = { ok: false, error: err.message }; })
+                        .finally(() => setActiveMenu((cur) => (cur?.type === 'mcp'
+                          ? { ...cur, signingIn: false, problem: result?.ok ? null : `✗ ${result?.error || 'not signed in'}` } : cur)));
+                      return;
+                    }
+                    if (item.action === 'signout') {
+                      changeMcp(agentLoop, () => agentLoop.mcp.signOut(chosen.name)).catch(() => {});
+                      return;
+                    }
                     if (item.action === 'remove') { setActiveMenu({ ...m, view: 'remove' }); return; }
                     if (item.action === 'forget') {
                       setActiveMenu({ ...m, view: 'home', server: null });
@@ -1577,7 +1593,7 @@ export function Menus({
                     handleSubmit(item.value === 'reload' ? '/mcp reload' : '/prompt v5');
                     return;
                   }
-                  setActiveMenu({ ...m, view: 'server', server: item.value });
+                  setActiveMenu({ ...m, view: 'server', server: item.value, problem: null, signingIn: false });
                 }}
               />
             </Panel>
