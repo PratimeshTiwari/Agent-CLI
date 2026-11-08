@@ -146,7 +146,7 @@ export function tokenFromUrl(url) {
 export const WORKER_ONLY_TYPES = new Set([
   'inject_prompt', 'new_chat', 'open_thread', 'end_session', 'focus_tab',
   'discover_models', 'switch_model', 'heartbeat_ack', 'stop_generation',
-  'reload_extension',
+  'reload_extension', 'set_thinking',
 ]);
 
 export class WebSocketServer {
@@ -642,7 +642,7 @@ export class WebSocketServer {
 
       case 'model_selected':
         // Picked by hand in the tab (extension 1.55.0): just the name.
-        this.agentLoop.noteSelectedModel?.(payload?.label);
+        this.agentLoop.noteSelectedModel?.(payload?.label, payload?.level);
         break;
 
       /**
@@ -1003,6 +1003,11 @@ export class WebSocketServer {
          * too, and an allow-list of the ops that may stay alive cannot enforce
          * it: the next informational op would be killed the same way.
          */
+        // A thinking level that would not set (v9.9.3): one row, the turn goes on.
+        if (payload?.op === 'set_thinking') {
+          this.agentLoop.noteThinkingFailed?.(payload);
+          break;
+        }
         if (payload?.level === 'notice') break;
 
         // A prompt the tab never sent is carried into the next message (v7.10).

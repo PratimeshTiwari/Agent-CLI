@@ -56,7 +56,8 @@ test('the worker relays it and the bridge watches the label', () => {
   const worker = readFileSync(new URL('../../../../extension/src/background/main.js', import.meta.url), 'utf8');
   assert.match(worker, /case 'model_selected':[^]*?sendToServer\(\{ type, payload \}\)/);
   const bridge = readFileSync(new URL('../../../../extension/content-scripts/gemini-bridge.js', import.meta.url), 'utf8');
-  assert.match(bridge, /safeSend\(\{ type: 'model_selected', payload: \{ label: now \} \}\)/);
+  // Since 1.65.0 the level rides along, and the model is the label with the level taken off.
+  assert.match(bridge, /safeSend\(\{ type: 'model_selected', payload: \{ label: model, level: currentThinkingLabel\(\) \} \}\)/);
   assert.match(bridge, /onInvalidated\.push\(\(\) => \{\n\s*clearInterval\(modelWatch\)/, 'an orphaned bridge stops watching');
   const server = readFileSync(new URL('../../../src/backend/bridge/websocket-server.js', import.meta.url), 'utf8');
   assert.match(server, /case 'model_selected':\n[^]*?noteSelectedModel/);

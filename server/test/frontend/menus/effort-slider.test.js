@@ -48,7 +48,8 @@ test('the menu moves it with ←/→ and draws no list', () => {
   const menus = readFileSync(new URL('../../../src/frontend/components/Menus.jsx', import.meta.url), 'utf8');
   const effort = menus.slice(menus.indexOf("activeMenu?.type === 'effort' && (() =>"));
   assert.match(effort.slice(0, 4000), /sliderLayout\(/);
-  assert.match(menus, /activeMenu\?\.type === 'effort'[\s\S]{0,400}leftArrow/);
+  // The Thinking row's keys come first since v9.9.3, so the window is wider.
+  assert.match(menus, /activeMenu\?\.type === 'effort'[\s\S]{0,1600}leftArrow/);
 });
 
 /*

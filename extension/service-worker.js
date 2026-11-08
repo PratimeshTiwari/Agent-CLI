@@ -1097,6 +1097,8 @@
         break;
       case "discover_models":
       case "switch_model":
+      // 1.65.0: a thinking level set when it is chosen, not only before the next prompt.
+      case "set_thinking":
         if (payload?.userInitiated && !payload?.sessionId) {
           try {
             await ensureModelTab(payload?.targetModel || "gemini");

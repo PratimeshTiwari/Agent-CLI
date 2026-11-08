@@ -18,6 +18,21 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.65.0 — 2026-11-08
+
+**Thinking level is set by the agent.** A level chosen in `/effort` is set at once (`set_thinking`,
+after any model switch in flight), and each main-lane prompt carries it too, since Gemini resets the
+level to the lightest on a page load. The level is clicked as a model is, through the Thinking level
+row, and confirmed by its own tick, which lands within 50 ms. The trigger is not enough: it names the
+level on some accounts ("currently Flash-Lite Medium", nothing for the lightest) and never on Gemini
+Auto, where the first build read every set back as Low and reported it failed. Where the trigger is
+silent, the level is the menu's last tick, or unknown until the menu is read; never a guess. A locked level is refused, and a failure is a
+`set_thinking` notice naming what it stays on; the prompt is typed either way. A level picked by hand is
+reported with the model (`model_selected` carries `level`), and the model watcher takes the level off
+before matching: a hand-picked Medium made the model read as "Flash-Lite Medium". The panel's effort menu
+lists the levels under the efforts, `same as effort` first, locked ones refused; an account whose picker
+has no levels shows none.
+
 ### 1.64.0 — 2026-11-08
 
 **The terminal's AMOLED black theme reaches the panel.** `/theme amoled` in the terminal sets

@@ -102,3 +102,15 @@ test('the same model again says nothing', () => {
   loop.noteSelectedModel('3.1 Pro');
   assert.equal(sent.length, 0);
 });
+
+test('thinking: the setting, the tab\'s level, what same means, and the stops — or nothing where there are no levels', () => {
+  const lvl = (label, extra = {}) => ({ label, isMode: true, level: true, ...extra });
+  const options = [{ label: '3.1 Pro', selected: true }, lvl('Low', { selected: true }), lvl('Medium'), lvl('High', { locked: true })];
+  const s = AgentLoop.prototype.panelState.call({ modelConfig: { effort: 'high' }, modelOptions: options, mode: 'plan', contextLimit: 0 });
+  assert.equal(s.thinking.setting, 'same');
+  assert.equal(s.thinking.current, 'Low');
+  assert.equal(s.thinking.same, 'Medium', 'High is locked, so same steps down');
+  assert.deepEqual(s.thinking.stops.map((x) => [x.id, x.locked]), [['same', false], ['low', false], ['medium', false], ['high', true]]);
+  const none = AgentLoop.prototype.panelState.call({ modelConfig: {}, modelOptions: [{ label: '3.1 Pro' }], mode: 'plan', contextLimit: 0 });
+  assert.equal(none.thinking, null);
+});

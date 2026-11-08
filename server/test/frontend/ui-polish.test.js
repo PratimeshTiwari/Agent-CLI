@@ -75,5 +75,6 @@ test('a menu pick echoes its command above the answer, like every local command'
   // Reported: "i changed effort but effort did not show up in messages".
   assert.match(src('frontend/components/Menus.jsx'),
     // `/effort mismatch`, not `/effort`: the chooser's own words (v7.9).
-    /\{ role: 'user', content: `\/\$\{\[command, \.\.\.args\.slice\(0, -1\)\]\.join\(' '\)\}`, isLocal: true \},\s*\{ role: 'assistant', content: result\.message, isLocal: true \}/);
+    // A caller may name what was typed instead: the Thinking row is `/effort` (v9.9.3).
+    /\{ role: 'user', content: typed \|\| `\/\$\{\[command, \.\.\.args\.slice\(0, -1\)\]\.join\(' '\)\}`, isLocal: true \},\s*\{ role: 'assistant', content: result\.message, isLocal: true \}/);
 });

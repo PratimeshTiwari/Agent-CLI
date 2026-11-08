@@ -650,7 +650,7 @@ function getResponseCount() {
 /**
  * Inject a prompt into Gemini's input field and send it.
  */
-async function injectPrompt(text) {
+async function injectPrompt(text, { thinking = null } = {}) {
   if (isInjecting) {
     console.warn('[Gemini Bridge] Already injecting a prompt');
     lastInjectError = 'the tab was still typing the previous prompt';
@@ -677,7 +677,13 @@ async function injectPrompt(text) {
    * composer and defer rather than re-open the menu we are closing.
    */
   dismissStuckMenu();
+  // The thinking level the agent asked for (1.65.0), before the clock starts so
+  // a menu opened here is not charged to `find_input`.
+  const thinkingStart = Date.now();
+  await applyThinking(thinking);
+  const thinkingMs = Date.now() - thinkingStart;
   traceStart();
+  if (thinking && thinkingMs > 50 && turnTrace) turnTrace.stages.thinking = thinkingMs;
   // Its own stage, only when it happened: a subagent turn waiting on its
   // model switch is normal, and folding the wait into `find_input` would send
   // the next reader after a selector that is fine.
@@ -1813,12 +1819,175 @@ function describeMenu(items) {
    * decides, as before.
    */
   const ids = items.some((el) => el.hasAttribute?.('data-mode-id'));
-  return items.map((el) => ({
-    ...describeModelOption(el),
+  const described = items.map((el) => {
     // No rule found at all — an older layout, or a plan with no modes. Then
     // nothing is a mode, and the server's word veto is still there behind this.
-    isMode: modeOf.get(el) === true || (ids && !el.hasAttribute('data-mode-id')),
-  }));
+    const isMode = modeOf.get(el) === true || (ids && !el.hasAttribute('data-mode-id'));
+    const submenu = el.getAttribute?.('aria-haspopup') === 'true';
+    return {
+      ...describeModelOption(el),
+      isMode,
+      // Thinking level (1.65.0): the row that opens the submenu, and the levels
+      // in it — radio items that are modes. Read live 2026-11-08: Low, Medium,
+      // High, the same on every model, in the DOM as soon as the picker opens.
+      submenu,
+      level: isMode && !submenu && el.getAttribute?.('role') === 'menuitemradio',
+    };
+  });
+  const levels = described.filter((m) => m.level && m.label).map((m) => m.label);
+  if (levels.length) {
+    knownLevels = levels;
+    noteTickedLevel(described.find((m) => m.level && m.selected)?.label || null);
+  }
+  return described;
+}
+
+/*
+ * Thinking level, as the trigger shows it (1.65.0).
+ *
+ * Read live 2026-11-08: the trigger's label names the level after the model —
+ * "currently Pro Medium" — except the lightest, which adds nothing
+ * ("currently Flash-Lite"). So a level is readable with one query and no menu,
+ * and the model watcher must take it off before matching, or a hand-picked
+ * Medium made the model read as "Flash-Lite Medium".
+ *
+ * The levels are remembered from the last menu read, lightest first. Before the
+ * first read, the three words Gemini uses stand in for them.
+ */
+let knownLevels = [];
+const LEVEL_WORDS = ['low', 'medium', 'high'];
+
+/*
+ * Not every account's trigger names the level (1.65.0, read live 2026-11-08).
+ * On "Gemini Auto" it says "currently Gemini Auto" at every level, so a set
+ * that worked was read back as Low, reported as failed and never asked again
+ * (owner: "thinking levels do not change"). So the menu is the record: the
+ * level ticked when it was last read, and whether this page's trigger names a
+ * level at all — learnt when a level other than the lightest is ticked.
+ */
+let lastTickedLevel = null;
+let triggerNamesLevels = null;
+
+function noteTickedLevel(level) {
+  lastTickedLevel = level;
+  if (!level || norm(level) === norm(knownLevels[0])) return;
+  const named = splitTriggerLabel(currentTriggerText()).level;
+  triggerNamesLevels = Boolean(named) && norm(named) === norm(level);
+}
+
+function splitTriggerLabel(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const levels = knownLevels.length ? knownLevels.map(norm) : LEVEL_WORDS;
+  for (let n = Math.min(2, words.length - 1); n >= 1; n--) {
+    const tail = words.slice(-n).join(' ');
+    if (levels.includes(norm(tail))) return { model: words.slice(0, -n).join(' '), level: tail };
+  }
+  return { model: words.join(' '), level: null };
+}
+
+/** The trigger's whole "currently …" text, model and level together. */
+function currentTriggerText() {
+  const trigger = findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
+  const label = trigger?.getAttribute('aria-label') || '';
+  const m = label.match(/currently\s+(.+)$/i);
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * The level in the tab, or null when it cannot be told without opening the menu.
+ * A level the trigger names is the answer. Where the trigger is known to name
+ * levels, naming none means the lightest; otherwise the menu's last tick is.
+ */
+function currentThinkingLabel() {
+  const text = currentTriggerText();
+  if (!text) return null;
+  const named = splitTriggerLabel(text).level;
+  if (named) { triggerNamesLevels = true; return named; }
+  if (triggerNamesLevels === true) return knownLevels[0] || null;
+  return lastTickedLevel;
+}
+
+/**
+ * Set the thinking level by clicking it, and read it back (1.65.0).
+ *
+ * The way a model switch works, never keys: open the picker, open the Thinking
+ * level row (a synthetic click opens it, read live), click the level, which
+ * closes the whole menu by itself, then read the trigger. A locked level is
+ * refused, as a locked model is.
+ */
+async function selectThinkingLevel(wanted) {
+  const want = norm(wanted);
+  const trigger = await findModelTrigger();
+  if (!trigger) throw new Error('[set_thinking] no control that opens the mode picker');
+  let items = await openModelMenu(trigger);
+  let described = describeMenu(items);
+  let hitAt = described.findIndex((m) => m.level && norm(m.label) === want);
+  if (hitAt === -1) {
+    closeModelMenu(trigger);
+    items = await openModelMenu(trigger);
+    described = describeMenu(items);
+    hitAt = described.findIndex((m) => m.level && norm(m.label) === want);
+  }
+  const rowAt = described.findIndex((m) => m.submenu);
+  if (hitAt === -1) {
+    closeModelMenu(trigger);
+    const offered = described.filter((m) => m.level).map((m) => m.label);
+    throw new Error(offered.length
+      ? `[set_thinking] no level called "${wanted}" (it offered: ${offered.join(', ')})`
+      : '[set_thinking] the picker has no Thinking level');
+  }
+  if (described[hitAt].locked) {
+    closeModelMenu(trigger);
+    throw new Error(`[set_thinking] "${wanted}" is locked on this account`);
+  }
+  if (described[hitAt].selected) {
+    closeModelMenu(trigger);
+    return described[hitAt].label;
+  }
+  const row = rowAt === -1 ? null : items[rowAt];
+  if (row && row.getAttribute('aria-expanded') !== 'true') row.click();
+  await waitForDom(() => (items[hitAt].offsetWidth > 0 ? true : null), MENU_OPEN_BUDGET_MS);
+  const hit = items[hitAt];
+  hit.click();
+  // The clicked level ticks itself within 50 ms (read live), before the menu
+  // closes; the trigger says so only on accounts whose trigger names levels.
+  const got = await waitForDom(() => {
+    if (hit.getAttribute('aria-checked') === 'true' || hit.classList.contains('selected')) return described[hitAt].label;
+    const named = splitTriggerLabel(currentTriggerText()).level;
+    return named && norm(named) === want ? named : null;
+  }, MODEL_SETTLE_BUDGET_MS);
+  // The tick only: the trigger may lag the click, so what it names is learnt from a menu read.
+  if (got) lastTickedLevel = got;
+  // A level click closes the menu itself; this only acts if it did not.
+  closeModelMenu(trigger);
+  if (!got) throw new Error(`[set_thinking] clicked "${wanted}", and the picker still says ${currentThinkingLabel() || 'nothing'}`);
+  return got;
+}
+
+/**
+ * Before a prompt is typed: make the level the one the agent asked for.
+ *
+ * Checked from the trigger first, which costs nothing, so the menu opens only
+ * when the level is wrong — after a page load, where it resets to the lightest
+ * (read live). A failure is a notice and the prompt still goes: a level is
+ * never worth a lost turn.
+ */
+async function applyThinking(wanted) {
+  if (!wanted) return;
+  const now = currentThinkingLabel();
+  if (now && norm(now) === norm(wanted)) return;
+  try {
+    const got = await selectThinkingLevel(wanted);
+    // Waits for the menu to be shut before anything is typed.
+    const trigger = findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
+    await waitForDom(() => (trigger?.getAttribute('aria-expanded') === 'true' ? null : true), MENU_CLOSE_BUDGET_MS);
+    safeSend({ type: 'model_selected', payload: { label: splitTriggerLabel(currentTriggerText()).model, level: got } });
+  } catch (err) {
+    safeSend({
+      type: 'error',
+      payload: { op: 'set_thinking', level: 'notice', wanted, stays: currentThinkingLabel(), message: err.message },
+    });
+  }
 }
 
 /**
@@ -1942,9 +2111,12 @@ function trackPicker(op) {
   const read = readModelOptions;
   const select = selectModelByLabel;
   const close = closeModelMenu;
+  // Guarded: tests lift this block out of the file on its own.
+  const thinking = typeof selectThinkingLevel === 'function' ? selectThinkingLevel : null;
   readModelOptions = (...args) => trackPicker(read(...args));
   selectModelByLabel = (...args) => trackPicker(select(...args));
   closeModelMenu = (...args) => trackPicker(close(...args));
+  if (thinking) selectThinkingLevel = (...args) => trackPicker(thinking(...args));
 }
 
 /**
@@ -2204,10 +2376,9 @@ function findModelTriggerStructurally() {
  * menu over a composer is the bug `switch_model` was just laned to avoid.
  */
 function currentModelLabel() {
-  const trigger = findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
-  const label = trigger?.getAttribute('aria-label') || '';
-  const m = label.match(/currently\s+(.+)$/i);
-  return m ? m[1].trim() : null;
+  const text = currentTriggerText();
+  // The model only: "Pro Medium" is Pro at Medium (1.65.0).
+  return text ? splitTriggerLabel(text).model || null : null;
 }
 
 /*
@@ -2223,11 +2394,15 @@ function currentModelLabel() {
 let lastSeenModel = null;
 function reportModelIfChanged() {
   if (bridgeInvalidated) return;
-  const now = currentModelLabel();
+  // The whole text, so a level picked by hand is reported too (1.65.0).
+  const now = currentTriggerText();
   if (!now || now === lastSeenModel) return;
   const first = lastSeenModel === null;
   lastSeenModel = now;
-  if (!first) safeSend({ type: 'model_selected', payload: { label: now } });
+  if (!first) {
+    const { model } = splitTriggerLabel(now);
+    safeSend({ type: 'model_selected', payload: { label: model, level: currentThinkingLabel() } });
+  }
 }
 const modelWatch = setInterval(reportModelIfChanged, 1500);
 document.addEventListener('visibilitychange', reportModelIfChanged);
@@ -2800,7 +2975,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         gap: payload.gap,
       };
       lastInjectError = null;
-      injectPrompt(payload.prompt).then(success => {
+      injectPrompt(payload.prompt, { thinking: payload.thinking || null }).then(success => {
         // The reason travels with a failure: the worker used to say only
         // "Content script reported failure" (1.56.0).
         sendResponse(success ? { success } : { success, error: lastInjectError || undefined });
@@ -2930,6 +3105,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       runSwitchModel(payload?.label);
       sendResponse({ success: true });
       return true;
+
+    case 'set_thinking':
+      /*
+       * A level chosen in `/effort`, set now (1.65.0). Reported: "thinking
+       * levels do not change" — it rode only on the next prompt. Mid-prompt it
+       * is left: that prompt, or the next, carries the level anyway. It waits
+       * for a model switch sent just before it, since both open the picker.
+       */
+      if (isInjecting) {
+        sendResponse({ success: true, deferred: true });
+        return false;
+      }
+      waitForPickerIdle().then(() => applyThinking(payload?.level)).catch(() => {});
+      sendResponse({ success: true });
+      return false;
 
     case 'get_page_status':
       sendResponse({

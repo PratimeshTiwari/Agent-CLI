@@ -33,6 +33,10 @@ import { createJiraClient } from '../../atlassian/jira-client.js';
 import { makeStore } from '../../mcp/client/oauth.js';
 import { ATLASSIAN_NAME } from '../../mcp/client/atlassian-server.js';
 import { changeMcp, listIntegrations, mcpReport } from '../../mcp/client/integrations.js';
+import { normaliseThinkingSetting, thinkingStops } from '../models/thinking.js';
+
+/** How a thinking setting reads in a reply. */
+const thinkingWord = (s) => (s === 'same' ? 'same as effort' : s);
 
 /**
  * How long a name the banner can take.
@@ -671,6 +675,36 @@ export async function handleSlashCommand(loop, command, args) {
         };
       }
 
+      /*
+       * Thinking level (v9.9.3): `same` follows effort, a level pins it. An
+       * account with no levels says so and keeps the setting, which is the
+       * person's, not the Google account's.
+       */
+      if (wanted === 'thinking') {
+        const asked = args.slice(1).join(' ');
+        const was = normaliseThinkingSetting(loop.modelConfig.thinking);
+        const stops = thinkingStops(loop.modelOptions || []);
+        const words = stops.map((s) => s.id).join('|') || 'same|low|medium|high';
+        if (!asked) {
+          return { message: `⚙ thinking  **${thinkingWord(was)}**`
+            + (stops.length ? ` · \`/effort thinking ${words}\`` : ' · no thinking level on this account') };
+        }
+        const to = normaliseThinkingSetting(asked);
+        const stop = stops.find((s) => s.id === to);
+        if (stops.length && !stop) {
+          return { message: `⚙ thinking  stays **${thinkingWord(was)}** · \`${asked}\` is not a level here · \`/effort thinking ${words}\`` };
+        }
+        if (stop?.locked) {
+          return { message: `⚙ thinking  stays **${thinkingWord(was)}** · ${stop.label} is locked on this account` };
+        }
+        if (!stops.length && to !== 'same' && !['low', 'medium', 'high'].includes(to)) {
+          return { message: `⚙ thinking  stays **${thinkingWord(was)}** · \`/effort thinking same|low|medium|high\`` };
+        }
+        loop.setThinking(to);
+        return { message: changed('thinking', thinkingWord(was), thinkingWord(to),
+          stops.length ? '' : 'no thinking level on this account; kept for one that has it') };
+      }
+
       if (wanted && foldEffort(wanted)) {
         const chosen = resolveEffort(wanted);
         // Choosing a rung ends a step-down: the user is asking for this one again.
@@ -767,6 +801,8 @@ export async function handleSlashCommand(loop, command, args) {
         // A pin naming something this plan does not offer is the single way
         // this feature can fail quietly, so it is the one thing always said.
         if (plan.pinMissed) browser += ` · ⚠ ${plan.pinMissed}`;
+        // `same as effort` (v9.9.3): a new rung is a new level, set now, after the switch.
+        loop.applyThinkingNow?.();
 
         /*
          * No second line about the cost. It said the next message resends the

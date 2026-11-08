@@ -13,6 +13,7 @@
 import {
   pickModelFor, browserModelPin, lockedReason, selectedModel,
 } from '../../backend/core/models/model-match.js';
+import { wantedThinking } from '../../backend/core/models/thinking.js';
 
 /**
  * The model a stop would put the tab on, on this account (C2).
@@ -111,4 +112,36 @@ export function sliderLayout({ levels, at = 0, width = 80 }) {
   const right = 'Smarter';
   const ends = left + ' '.repeat(Math.max(1, span - left.length - right.length)) + right;
   return { indent, span, ends, bar, labels };
+}
+
+/**
+ * The next Thinking stop from `at`, one step left or right, past locked levels;
+ * it stops at the ends (v9.9.3).
+ */
+export function stepThinking(stops, at, dir) {
+  let i = Math.max(0, stops.findIndex((s) => s.id === at));
+  for (let j = i + dir; j >= 0 && j < stops.length; j += dir) {
+    if (!stops[j].locked) return stops[j].id;
+  }
+  return stops[i]?.id ?? at;
+}
+
+/**
+ * The Thinking row under the slider: its name, the stop between ◂ ▸, then the
+ * level it means for the marked rung and any locked levels (owner: "show is
+ * locked or something").
+ *
+ * @returns {{name: string, value: string, detail: string}}
+ */
+export function thinkingLine({ stops, at, rung, options }) {
+  const stop = stops.find((s) => s.id === at) || stops[0];
+  const means = stop.id === 'same'
+    ? wantedThinking({ rung, setting: 'same', options }).level
+    : null;
+  const locked = stops.filter((s) => s.locked).map((s) => s.label);
+  return {
+    name: 'Thinking  ',
+    value: `◂ ${stop.label} ▸`,
+    detail: (means ? `  ${means}` : '') + (locked.length ? `  · ${locked.join(', ')} locked` : ''),
+  };
 }

@@ -392,6 +392,8 @@ async function handleServerMessage(message) {
 
     case 'discover_models':
     case 'switch_model':
+    // 1.65.0: a thinking level set when it is chosen, not only before the next prompt.
+    case 'set_thinking':
       // Straight to the model tab. Neither injects a prompt, so neither goes
       // through the extension lock — reading the picker is not a turn.
       //
