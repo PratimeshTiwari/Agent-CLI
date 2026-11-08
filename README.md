@@ -1,23 +1,19 @@
 # Agent CLI
 
 A coding agent for your terminal, in the style of Claude Code, with **no API key**. It works
-through a Gemini tab in your own Chrome, signed in as you: the agent writes the prompt, a small
-extension types it in and streams the reply back, and the agent reads, edits and runs things in your
-repo.
+through a Gemini tab in your own Chrome, signed in to the account you choose: the agent writes the
+prompt, a small extension types it in and streams the reply back, and the agent reads, edits and
+runs things in your repo.
 
-> [!IMPORTANT]
-> **Disclaimer.** This project is provided solely for research, development and educational
-> purposes, to demonstrate what is technically possible. It is not intended for personal or
-> commercial use.
+> [!WARNING]
+> **Use at your own risk:** Google can detect automated use of its web apps, and can restrict,
+> suspend or ban the accounts behind it. This project drives the Gemini web app through browser
+> automation. **Do not connect your primary personal or workplace Google account. Always use a
+> dedicated burner account.** You assume full responsibility for any account actions, quota limits
+> or service terminations.
 >
-> - **Third-party services.** This project interacts with third-party web services. Users are
->   solely responsible for ensuring that their use complies with the terms of service and
->   policies of any such service, including those of Google.
-> - **Personal and production use.** For any personal, production or commercial use, use the
->   official [Gemini API](https://ai.google.dev/gemini-api/docs) through Google AI Studio or
->   Vertex AI, under its applicable terms.
-> - **No warranty.** The software is provided "as is", without warranty of any kind. The authors
->   accept no liability for any use of it or for any consequence arising from such use.
+> For research, development and learning only, "as is" and without warranty. For personal,
+> production or commercial use, use the official [Gemini API](https://ai.google.dev/gemini-api/docs).
 
 ![Agent CLI reading two models and documenting them](docs/images/terminal.svg)
 
@@ -199,7 +195,7 @@ conversation.
 
 | Command | |
 | --- | --- |
-| `/effort` | how hard to work, on a slider; switches the Gemini model to match |
+| `/effort` | how hard to work, on a slider; switches the Gemini model, and its thinking level, to match. `/effort thinking <level>` pins a level |
 | `/settings` | everything that is set, on one page |
 | `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v6`. Jira needs v4, MCP servers v5, memory v6; bare `/prompt` compares them |
 | `/chat <link or id>` | continue this session in another Gemini chat |
@@ -245,6 +241,7 @@ the model, which reads what it needs.
 - **Match the model.** `/effort` picks low, medium, high or max and switches Gemini to match. If the
   tab is on another model it asks; if Pro is at its limit it resends one rung lower and says so. A model
   your account has locked is never chosen: on an account with only Gemini Auto, every level stays on Auto.
+  Where the picker has thinking levels, Low, Medium or High follows the effort too.
 
 ## Telling it about your project
 
@@ -257,8 +254,8 @@ the model, which reads what it needs.
 
 ## Where it keeps things
 
-- **`<repo>/.agent/`**: config, sessions, logs, backups for `/undo`, and `artifacts/` (task list,
-  plans) for you to read.
+- **`<repo>/.agent/`**: config, memory, conversations (one folder each), logs, backups for `/undo`,
+  and `artifacts/` (task list, plans) for you to read. `/files` lists them, each a link.
 - **`~/.agent/workspaces/`**: a second copy of each conversation, so a fresh checkout keeps it.
 - **Monorepos**: one `.agent/` at the top, with a folder per repo.
 
@@ -279,12 +276,13 @@ the model, which reads what it needs.
 
 ## Release history
 
-Every change reached `main` through a pull request from a branch that is kept. Each release, with its
-date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+Every change reached `main` through a pull request from a branch that is kept.
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) has each series' highlights, one line per release, the
+details folded, and which extension and companion each release needs.
 
 | Series | Dates | PRs | Highlights |
 | --- | --- | --- | --- |
-| **v9** | 2026-11-05 … | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)– | Your MCP servers, local or HTTP, with a repo's `.mcp.json` asked about first; one Chrome profile; memory as a folder; `/update` and Update all in `/doctor`; locked models skipped and Gemini Auto read |
+| **v9** | 2026-11-05 … 2026-11-08 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Your MCP servers, local or HTTP; Jira and Confluence by browser sign-in; one Chrome profile; memory as a folder; thinking level follows effort; conversations one folder each; `/files` and `/theme amoled` |
 | **v8** | 2026-10-31 … 2026-11-05 | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#157](https://github.com/PratimeshTiwari/Agent-CLI/pull/157) | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | New docs and screenshots; faster typing between turns; formulas in replies; test and build commands detected; outlines on partial reads; a live token count |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply in place; Claude Code-style questions and action rows; a quieter status bar; large files and log exports; symbols in 16 languages; drag and drop |

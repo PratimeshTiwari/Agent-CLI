@@ -18,7 +18,10 @@ floating window.
 ## What it does
 
 - **Types and reads.** A content script pastes the prompt into Gemini, presses send, and reads the
-  reply out of the page, formulas and code blocks included.
+  reply out of the page, formulas and code blocks included. A document Gemini puts in its Canvas
+  cannot be read, so the reply says so where it was, and the agent asks for it as a file.
+- **Picks the model and thinking level.** The agent's effort chooses a model in Gemini's picker
+  (never a locked one) and, where the account has them, a thinking level of Low, Medium or High.
 - **One tab per request.** The main conversation has its own tab; each subagent gets a tab of its
   own, kept for its session and closed when it ends.
 - **Keeps the right chat.** Before each prompt it puts the tab back on this session's chat, and
@@ -31,7 +34,7 @@ floating window.
   and `⚠` when the tab is on another model. Bind `⌘⇧1` once at `chrome://extensions/shortcuts`
   (choose **Global**).
 - **Stays current.** The agent checks the version Chrome loaded, and from 1.58.0 on an extension
-  older than the checkout reloads itself between turns. Current version: **1.65.0**.
+  older than the checkout reloads itself between turns. Current version: **1.66.0**.
 
 ```
 agent  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content script  ──▶  gemini.google.com
@@ -65,6 +68,7 @@ src/background/            what it is built from
   socket.js                the WebSocket, reconnecting, the agent's messages
   content.js               tab lanes, sessions, sending and repairs
   chat-url.js              a chat's /app/<id> URL, keeping a /u/<n> account
+  pairing.js               pairing this profile with the agent (`/chrome`)
   floating.js              the floating window
   messaging.js  state.js  policy.js
 content-scripts/

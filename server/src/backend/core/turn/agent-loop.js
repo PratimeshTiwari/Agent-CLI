@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
-import { looksLikeMultipleDrafts, looksLikeCodeQuestion, looksLikeEmptyPromise } from './drift-detector.js';
+import { looksLikeMultipleDrafts, looksLikeCodeQuestion, looksLikeEmptyPromise, canvasTitles } from './drift-detector.js';
 import { classifyIncomplete, classifyParseFailure, classifyReply, MAX_PARSE_RETRIES, MAX_PROVIDER_RETRIES } from './reply-recovery.js';
 import { logError, logNotice } from '../logs/error-log.js';
 import { describeInstructionSources } from '../prompt/instruction-sources.js';
@@ -665,6 +665,7 @@ export class AgentLoop {
       this._deniedToolsOnce = false;
       this._steppedDownThisTurn = false;
       this._promiseNudged = false;
+      this._canvasNudged = false;
       this._silentRetried = false;
       /**
        * What this turn has actually done, for the model to read back.
@@ -892,6 +893,8 @@ export class AgentLoop {
 
     // v3: "let me check X." with no call would end the turn on the promise.
     const keepPromise = toolCalls.length === 0 && !premature && this._promisedAndStopped(cleanContent);
+    const canvas = toolCalls.length === 0 && !premature && !keepPromise && !this._canvasNudged
+      ? canvasTitles(cleanContent) : [];
 
     // Show the response text (without tool call blocks) in the side panel
     if (cleanContent.trim() && !premature) {
@@ -939,7 +942,7 @@ export class AgentLoop {
       this.callbacks.sendToPanel({
         id: randomUUID(),
         type: 'agent_response',
-        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 || keepPromise },
+        payload: { content: cleanContent.trim(), continuing: toolCalls.length > 0 || keepPromise || canvas.length > 0 },
         timestamp: Date.now(),
       });
       this._sendTaskList();
@@ -950,6 +953,8 @@ export class AgentLoop {
       await this._executeToolCalls(toolCalls);
     } else if (keepPromise) {
       this._askToKeepPromise(cleanContent);
+    } else if (canvas.length > 0) {
+      this._askForCanvasFile(canvas);
     } else {
       this._finishTurn(cleanContent, { isFirstReply, premature });
     }
@@ -987,6 +992,34 @@ export class AgentLoop {
     this._sendToGemini([
       'You said you would look, but your reply had no tool call, so nothing ran.',
       'Make that call now, in a ```json block, and answer from what it returns.',
+      anchor,
+    ].filter(Boolean).join('\n'), this.callbacks);
+  }
+
+  /**
+   * The reply wrote a document into Gemini's Canvas (v9.9.4).
+   *
+   * The Canvas is an iframe the scrape cannot read, so the document never
+   * reached the agent and nothing was written: the turn ended on "I've
+   * generated the design document" with no file. Asked once per turn to write
+   * it with `create_file`, for every prompt version, because unlike a wording
+   * change this is a reply the agent cannot use at all. A second Canvas ends
+   * the turn as before, with the marker in it saying where the text went.
+   */
+  _askForCanvasFile(titles) {
+    this._canvasNudged = true;
+    const named = titles.map((t) => `"${t}"`).join(', ');
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'canvas_reply',
+      message: 'The reply wrote into Gemini\'s Canvas, which the agent cannot read; asked once for a file',
+      detail: named,
+      meta: { effort: this.modelConfig?.effort || null, promptVersion: this.promptVersion },
+    });
+    this._noticeRow(`↻ It wrote ${named} in Gemini's Canvas · asked for a file instead`);
+    const anchor = this.promptBuilder._buildToolAnchor(this.subagentsEnabled, this._promptConfig());
+    this._sendToGemini([
+      `Your reply put ${named} in Gemini's Canvas. This agent cannot read the Canvas, so nothing was saved.`,
+      'Write it to a file with create_file in a ```json block (for a long document, create it with the first sections and add the rest with edit_file append). Do not use Canvas here.',
       anchor,
     ].filter(Boolean).join('\n'), this.callbacks);
   }
@@ -1501,6 +1534,7 @@ export class AgentLoop {
     this._deniedToolsOnce = false;
     this._steppedDownThisTurn = false;
     this._promiseNudged = false;
+    this._canvasNudged = false;
     this._silentRetried = false;
     this._resentUnsubmittedOnce = false;
     this._failedRounds = 0;

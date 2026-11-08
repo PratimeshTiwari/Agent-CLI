@@ -1606,3 +1606,43 @@ exactly wrapped (v7.10). Pty: a reply with both kinds of table, 0 clears at 13 a
 `badArgumentsOutcome` in `action-row.js`).** The row showed the first line of the model's
 message, `grep_search was called with arguments that do not match its…`, cut before it said
 what was wrong. The model still gets the whole message.
+
+## Moved from CLAUDE.md in v9.9.4
+
+### Search, and why there is still no index (decided 2026-09-11)
+
+Decided 2026-09-11, revisited deliberately because the next codebase is a large one.
+
+**No embedding index.** Phase 1 deleted `semantic_search` for being broken; this is the
+separate question of whether a *working* one should replace it. It should not, and Claude Code —
+the benchmark this project is measured against — does not have one either. Four reasons, the
+last of which is specific to this architecture:
+
+- Code search is mostly **exact-symbol** search (`getUserById`, `EADDRINUSE`), where lexical
+  matching wins outright.
+- An index goes **stale on every edit**. Cursor pays for a persistent background service to
+  re-index continuously; the alternative is serving the model a confident map of code that no
+  longer exists — the same failure phase 1 removed.
+- **Chunking destroys structure.** This repo already learned that: the deleted `ast-chunker`
+  resolved 24% of its own top-level symbols.
+- **Retrieval is single-shot; an agent iterates.** grep → read → grep again with a better term
+  beats one shot at the twenty nearest chunks, because the second query knows what the first
+  found.
+
+The constraint that settles it: **the context window is a browser chat tab.** Every retrieved
+chunk is typed into Gemini by a content script. Twenty 500-token chunks is 10,000 tokens typed
+into a browser per query, most of it unread — in a project whose whole prompt strategy exists to
+avoid large repeated payloads. Agentic grep→read sends only what the model decided it needed.
+
+**What a large codebase actually needs**, none of which is RAG:
+
+| gap | answer | where |
+| --- | --- | --- |
+| you don't know the codebase's word for it ("rate limit" vs `throttle`) | multi-pattern `grep_search`, and prompt guidance to try synonyms — the model already knows them, it just burns a browser round-trip per guess | P2 |
+| "who calls this?", "what extends this?" | a symbol index (tree-sitter or ctags): exact, invalidates on mtime, needs no model | P3 |
+| orientation in an unfamiliar repo | `AGENT.md` — a human-written map beats a generated one because someone vouched for it | done, phase 2 |
+| a 50-line unranked hit list is hard to reason from | context lines, grouping by file, ranking | P2 |
+
+This is a decision made from the architecture, not from measurement. If grep genuinely fails on
+real questions in the large codebase, that evidence outranks the argument above — and the shape
+of the failures says which of the four rows is the one that bites.

@@ -151,11 +151,22 @@ export class RiskClassifier {
       let totalAddedLines = 0;
 
       for (const edit of edits) {
-        if (edit.oldText) {
-          totalDeletedLines += (edit.oldText.match(/\n/g) || []).length + 1;
+        // An edit whose new text keeps its old text whole, before or after,
+        // removes nothing (v9.9.4): Flash built a document by sending the whole
+        // file back with a section on the end, read here as a large deletion.
+        const { oldText, newText } = edit;
+        const kept = typeof oldText === 'string' && oldText && typeof newText === 'string'
+          && newText.length > oldText.length && (newText.startsWith(oldText) || newText.endsWith(oldText));
+        if (kept) {
+          const added = newText.startsWith(oldText) ? newText.slice(oldText.length) : newText.slice(0, -oldText.length);
+          totalAddedLines += (added.match(/\n/g) || []).length + 1;
+          continue;
         }
-        if (edit.newText) {
-          totalAddedLines += (edit.newText.match(/\n/g) || []).length + 1;
+        if (oldText) {
+          totalDeletedLines += (oldText.match(/\n/g) || []).length + 1;
+        }
+        if (newText) {
+          totalAddedLines += (newText.match(/\n/g) || []).length + 1;
         }
       }
 
