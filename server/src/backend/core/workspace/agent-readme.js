@@ -29,7 +29,7 @@ anywhere. In the agent, \`/files\` lists these with links.
 | \`artifacts/\` | the task list, plans and walkthroughs, written for you to read | \`plans/\` yes; the rest while no task is running |
 | \`memory/\` | what the agent learned here, one fact per file (\`/memory\`) | yes, if you mean it |
 | \`config.json\` | this project's settings (\`/settings\`) | yes, if you mean it |
-| \`sessions/\` | conversations (\`/history\`); \`sessions/sessions/\` holds earlier ones | only with the copy in \`~/.agent/workspaces/\` too |
+| \`conversations/\` | one folder per conversation (\`/history\`); \`index.jsonl\` lists them | a folder, only with its copy in \`~/.agent/workspaces/\` too |
 | \`logs/\` | failures, timings, tool use, every shell command (\`/logs\`, \`/commands\`) | yes |
 | \`backups/\` | a copy of each file before an edit (\`/undo\`) | yes, between sessions |
 | \`state/\` | files the VS Code companion reads and writes | yes, while the agent is closed |

@@ -141,11 +141,11 @@ describe('resumeSession', () => {
 });
 
 describe('both copies, because the home one exists to survive a wiped .agent/', () => {
-  test('an archived session is written next to both histories', () => {
+  test('a filed conversation is in its folder in both copies', () => {
     const store = conversation(new SessionStore(dir));
     const id = store.rollover();
-    assert.ok(existsSync(store._archivedFile(store.localFile, id)), 'missing beside the workspace copy');
-    assert.ok(existsSync(store._archivedFile(store.homeFile, id)), 'missing beside the home copy');
+    assert.ok(existsSync(store._conversationFile(store.localRoot, id)), 'missing from the workspace copy');
+    assert.ok(existsSync(store._conversationFile(store.homeRoot, id)), 'missing from the home copy');
   });
 
   test('a workspace whose .agent was wiped still lists its sessions', () => {

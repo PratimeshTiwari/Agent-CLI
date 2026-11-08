@@ -1,5 +1,6 @@
 import fs from 'fs';
 import * as paths from '../workspace/paths.js';
+import { currentConversationFile } from '../../storage/session-store.js';
 
 /**
  * Looking back into a conversation the model can no longer see.
@@ -10,7 +11,7 @@ import * as paths from '../workspace/paths.js';
  * do. Letting the model look the detail up afterwards does not.
  *
  * **The premise had to be built first.** `CLAUDE.md` records this idea as
- * cheap because "`sessions/history.jsonl` still holds every turn". It does not:
+ * cheap because "the session history still holds every turn". It does not:
  * `_compactHistory` calls `saveHistory`, which rewrites the file — both copies —
  * so the dropped turns were gone from disk as well. They are archived now,
  * before the rewrite, and this searches the archive and the live history
@@ -40,8 +41,8 @@ function readTurns(file) {
 /** Every turn this workspace has, archived ones first — oldest to newest. */
 export function allTurns(workspace) {
   return [
-    ...readTurns(paths.archivePath(workspace)),
-    ...readTurns(paths.localSessionPath(workspace)),
+    ...readTurns(paths.compactedPath(workspace)),
+    ...readTurns(currentConversationFile(workspace)),
   ];
 }
 
@@ -49,7 +50,7 @@ export function allTurns(workspace) {
 export function archiveTurns(workspace, turns) {
   try {
     if (!Array.isArray(turns) || turns.length === 0) return 0;
-    const file = paths.ensureParent(paths.archivePath(workspace));
+    const file = paths.ensureParent(paths.compactedPath(workspace));
     fs.appendFileSync(file, `${turns.map((t) => JSON.stringify(t)).join('\n')}\n`, 'utf8');
     return turns.length;
   } catch {
@@ -79,8 +80,8 @@ export function recall(workspace, query, { limit = 5 } = {}) {
   const needle = String(query || '').trim();
   if (!needle) return { total: 0, shown: [] };
 
-  const archived = readTurns(paths.archivePath(workspace));
-  const live = readTurns(paths.localSessionPath(workspace));
+  const archived = readTurns(paths.compactedPath(workspace));
+  const live = readTurns(currentConversationFile(workspace));
   const tagged = [
     ...archived.map((t) => ({ turn: t, archived: true })),
     ...live.map((t) => ({ turn: t, archived: false })),

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileRows, rowDetail, rowLink, revealCommand, shownPath, fileBrowserName, revealedLine } from '../../../src/frontend/menus/files-view.js';
 import * as paths from '../../../src/backend/core/workspace/paths.js';
+import { SessionStore } from '../../../src/backend/storage/session-store.js';
 
 function workspace() {
   const ws = mkdtempSync(join(tmpdir(), 'files-view-'));
@@ -19,10 +20,11 @@ test('every row is where paths.js keeps it, and a fresh repo says "not yet"', ()
   assert.equal(by['Task list'].path, paths.artifactPath(ws, 'task.md'));
   assert.equal(by.Plans.path, paths.planArchiveDir(ws));
   assert.equal(by.Memory.path, paths.memoryDir(ws));
-  assert.equal(by.Conversation.path, paths.localSessionPath(ws));
+  assert.equal(by['This conversation'].path, paths.conversationsDir(ws), 'none started: the folder it will be in');
+  assert.equal(by.Conversations.path, paths.conversationsDir(ws));
   assert.equal(by.Logs.path, paths.logsDir(ws));
   assert.equal(by['Backups for /undo'].path, paths.backupsDir(ws));
-  assert.equal(by['Second copy'].path, paths.workspaceHomeDir(ws));
+  assert.equal(by['Second copy'].path, paths.homeConversationsDir(ws));
   for (const r of rows.filter((x) => x.label !== 'Second copy')) {
     assert.equal(r.exists, false, r.label);
     assert.match(rowDetail(r), / · not yet$/, r.label);
@@ -81,10 +83,14 @@ test('/files is a listed command that takes no words, opening its menu', () => {
 
 test('after enter, the title says what opened, and says so when it was the folder above', () => {
   const ws = workspace();
-  mkdirSync(paths.sessionsDirLocal(ws), { recursive: true });
+  mkdirSync(paths.agentDir(ws), { recursive: true });
   const rows = Object.fromEntries(fileRows(ws).map((r) => [r.label, r]));
-  assert.equal(revealedLine(rows.Conversation), 'no conversation yet · opened sessions/');
-  writeFileSync(paths.localSessionPath(ws), '');
-  const again = fileRows(ws).find((r) => r.label === 'Conversation');
-  assert.equal(revealedLine(again), 'shown: conversation');
+  assert.equal(revealedLine(rows['This conversation']), 'this conversation: not written yet · opened .agent/');
+  const store = new SessionStore(ws);
+  store.appendTurn({ role: 'user', content: 'hi', timestamp: 1 });
+  const again = fileRows(ws).find((r) => r.label === 'This conversation');
+  assert.equal(again.path, join(paths.conversationsDir(ws), store.peekLiveId(), 'conversation.jsonl'));
+  assert.equal(revealedLine(again), 'shown: this conversation');
+  const listed = fileRows(ws).find((r) => r.label === 'Conversations');
+  assert.equal(listed.count, '1 conversation', 'a folder holding a conversation counts');
 });

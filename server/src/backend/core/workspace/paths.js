@@ -290,21 +290,32 @@ export const contextDir = (workspace) => path.join(agentDir(workspace), 'context
  */
 export const plansDir = (workspace) => path.join(agentDir(workspace), 'github-reviews');
 export const logsDir = (workspace) => path.join(agentDir(workspace), 'logs');
-export const sessionsDirLocal = (workspace) => path.join(agentDir(workspace), 'sessions');
+/**
+ * Conversations (v9.9.2): one folder each, `<id>/conversation.jsonl` plus its
+ * `chat.json` and filed `plans/`; `index.jsonl` is the list `/history` shows and
+ * `current.json` names the one in progress. `storage/session-store.js` owns it.
+ * It replaced `sessions/`, where one conversation was spread over a rolling
+ * `history.jsonl`, `session-meta.json`, a line in the index and a later copy in
+ * `sessions/sessions/` (owner: "very confusing").
+ */
+export const conversationsDir = (workspace) => path.join(agentDir(workspace), 'conversations');
 
 /**
  * Turns that compaction replaced with a summary.
  *
- * Compaction rewrites `history.jsonl` in place — both copies — so what it drops
+ * Compaction rewrites the conversation in place — both copies — so what it drops
  * is gone from disk, not merely from the model's view. That makes "look it up
  * in the session log" impossible, which is what the recall tool needs. Dropped
  * turns are appended here first, so the detail survives the summary.
  *
+ * One file for every conversation: the old `archive.jsonl` cannot be split by
+ * conversation without guessing from timestamps, and recall searches all of it.
  * Append-only and never read into a prompt on its own: it is searched on demand.
  */
-export const archivePath = (workspace) => path.join(sessionsDirLocal(workspace), 'archive.jsonl');
-/** Session history kept alongside the project. */
-export const localSessionPath = (workspace) => path.join(sessionsDirLocal(workspace), 'history.jsonl');
+export const compactedPath = (workspace) => path.join(conversationsDir(workspace), 'compacted.jsonl');
+
+/** The pre-v9.9.2 `sessions/` folder, read only by the migration that moves it. */
+export const oldSessionsDir = (workspace) => path.join(agentDir(workspace), 'sessions');
 export const tmpDir = (workspace) => path.join(agentDir(workspace), 'tmp');
 /**
  * Where `/skills` keeps one markdown file per skill.
@@ -364,7 +375,11 @@ export const legacySessionName = (workspace) =>
 export const workspaceHomeDir = (workspace) =>
   path.join(homeDir(), 'workspaces', workspaceSlug(workspace));
 
-/** Durable copy of the session history, outside the project. */
+/** The durable copy of `conversations/`, outside the project, laid out the same. */
+export const homeConversationsDir = (workspace) =>
+  path.join(workspaceHomeDir(workspace), 'conversations');
+
+/** Pre-v9.9.2: the home copy's rolling history. Read only by the migrations. */
 export const homeSessionPath = (workspace) =>
   path.join(workspaceHomeDir(workspace), 'history.jsonl');
 

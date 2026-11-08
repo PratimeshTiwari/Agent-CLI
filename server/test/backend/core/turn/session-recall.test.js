@@ -6,17 +6,20 @@ import { join } from 'path';
 import { recall, archiveTurns, allTurns } from '../../../../src/backend/core/turn/session-recall.js';
 
 let ws;
-const sessions = () => join(ws, '.agent', 'sessions');
+// v9.9.2: the conversation in progress is `conversations/<id>/conversation.jsonl`,
+// named by `conversations/current.json`.
+const sessions = () => join(ws, '.agent', 'conversations', 'c1');
 const turn = (role, content, ts) => ({ role, content, timestamp: ts });
 
 beforeEach(() => {
   ws = mkdtempSync(join(tmpdir(), 'recall-'));
   mkdirSync(sessions(), { recursive: true });
+  writeFileSync(join(ws, '.agent', 'conversations', 'current.json'), '{"id":"c1"}');
 });
 after(() => { try { rmSync(ws, { recursive: true, force: true }); } catch {} });
 
 const writeHistory = (turns) => writeFileSync(
-  join(sessions(), 'history.jsonl'), turns.map((t) => JSON.stringify(t)).join('\n') + '\n',
+  join(sessions(), 'conversation.jsonl'), turns.map((t) => JSON.stringify(t)).join('\n') + '\n',
 );
 
 describe('recall — looking back into what the model can no longer see', () => {
@@ -84,8 +87,8 @@ describe('recall — looking back into what the model can no longer see', () => 
 
   test('a torn line loses itself, not the rest of the file', () => {
     writeHistory([turn('user', 'first mention of widgets', 1)]);
-    appendFileSync(join(sessions(), 'history.jsonl'), '{"role":"user","content":"tor\n');
-    appendFileSync(join(sessions(), 'history.jsonl'), JSON.stringify(turn('user', 'second widgets', 2)) + '\n');
+    appendFileSync(join(sessions(), 'conversation.jsonl'), '{"role":"user","content":"tor\n');
+    appendFileSync(join(sessions(), 'conversation.jsonl'), JSON.stringify(turn('user', 'second widgets', 2)) + '\n');
     assert.equal(recall(ws, 'widgets').total, 2);
   });
 

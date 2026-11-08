@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import * as paths from '../workspace/paths.js';
 import { parseMemory, renderMemory } from '../../context/memory-manager.js';
+import { migrateConversations } from './migrate-conversations.js';
 
 /** Move a file or directory, creating the destination's parent. Returns true if moved. */
 function move(from, to) {
@@ -380,6 +381,13 @@ export function runMigrations(workspace) {
   if (stray.length > 0) {
     console.log(`📦 Moved ${stray.length} file${stray.length === 1 ? '' : 's'} from this repo's own `
       + `${paths.AGENT_DIR}/ to ${paths.artifactsDir(workspace)}`);
+  }
+
+  // After the stray folder, so its root is settled (v9.9.2).
+  const conversations = migrateConversations(workspace);
+  if (conversations.moved.length > 0) {
+    console.log(`📦 Conversations are one folder each now: ${paths.conversationsDir(workspace)}`
+      + (conversations.trash ? ` · ${conversations.leftovers.length} leftover file${conversations.leftovers.length === 1 ? '' : 's'} moved to ${conversations.trash}` : ''));
   }
 
   const retired = retiredInstructionFiles(workspace);

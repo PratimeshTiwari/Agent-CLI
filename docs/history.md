@@ -1582,3 +1582,13 @@ believe it changed and every later turn goes out on the old rung. And **a bare
 `/` answered "No such command: `/`" followed by "Type `/` on its own to see
 what there is"** — advice to do the thing that had just been done. It lists
 the commands now, and an unknown command says so *and then* lists them.
+
+## Moved from CLAUDE.md in v9.9.2
+
+**Prompt length is not what a turn costs.** Measured over 265 real turns:
+`type` — the synthetic paste, where length is paid — is **23ms median, 410ms
+p90, 2,450ms max**, against a **4,673ms median round trip** (14,913ms p90).
+Even the worst paste of a full 26,268-character turn-0 prompt is half of one
+median round trip, so **splitting a prompt across messages costs 3× the wait
+and saves nothing**: the context is identical when the task arrives, plus the
+model's acknowledgements. Make turn 0 smaller; do not spread it out.
