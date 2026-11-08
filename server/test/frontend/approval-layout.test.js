@@ -63,5 +63,12 @@ test('a short command is one row', () => {
 test('App charges the box against the live turn', () => {
   const app = readFileSync(new URL('../../src/frontend/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /approvalLayout\(activeMenu\.payload, \{ width: terminalWidth, maxRows: INPUT_ROWS \+ frameBudget - 1 \}\)/);
-  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\n\s+- \(menuMidTurn \? menuRows - INPUT_ROWS : 0\)\);/);
+  assert.match(app, /const liveBudget = Math\.max\(1, frameBudget - \(approval \? Math\.max\(0, approval\.rows - INPUT_ROWS\) : 0\)\n\s+- \(diffBox \? Math\.max\(0, diffBox\.height - DIFF_FREE_ROWS\) : 0\)\n\s+- \(menuMidTurn \? menuRows - INPUT_ROWS : 0\)\);/);
+  // The diff box too (v9.9.6), from the same room plus the spinner's rows,
+  // which InputBar does not draw while a diff is up.
+  assert.match(app, /const DIFF_FREE_ROWS = INPUT_ROWS \+ \(compact \? 1 : 2\);/);
+  assert.match(app, /expanded: diffExpanded, maxRows: DIFF_FREE_ROWS \+ frameBudget - 1,/);
+  const bar = readFileSync(new URL('../../src/frontend/components/InputBar.jsx', import.meta.url), 'utf8');
+  assert.match(bar, /\{isProcessing && !diffRequest && \(\n\s+<Box flexDirection="column" marginTop=\{compact \? 0 : 1\}>/,
+    'the spinner and its margin are what the diff box is given');
 });

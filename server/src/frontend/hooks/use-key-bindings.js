@@ -58,6 +58,13 @@ export function useKeyBindings({
     // answered through their own SelectInput, so a stray keystroke can never
     // approve an edit or pick an option. Without this the arrow keys would move
     // the menu *and* rewrite the prompt from input history at the same time.
+    // Except shift+tab at an approval box (v9.9.6): it switches the mode and
+    // the box stays up, approving nothing. That is where a person decides they
+    // want to stop being asked, and the key did nothing there.
+    if (key.tab && key.shift && (diffRequest || activeMenu?.type === 'command_approval')) {
+      cycleMode();
+      return;
+    }
     if (diffRequest || activeMenu) return;
 
     // Shift+Enter inserts a newline instead of submitting. Terminals only

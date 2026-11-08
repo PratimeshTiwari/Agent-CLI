@@ -1,7 +1,7 @@
 # Changelog
 
 > [!NOTE]
-> **Current: v9.9.5** · extension **1.66.0** · VS Code companion **1.8.17** · prompt **v7**
+> **Current: v9.9.6** · extension **1.66.0** · VS Code companion **1.8.18** · prompt **v7**
 > (current; new installs) or **v1** (original, frozen), with Jira, MCP and memory on both.
 > After updating: Chrome reloads the extension itself; reinstall the companion from `/update` →
 > Editor companion; restart the agent.
@@ -28,6 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
+| v9.9.6 | — | 1.8.18 | v7 gains two lines |
 | v9.9.5 | — | — | v7 (v2 to v6 become it) |
 | v9.9.4 | 1.66.0 | — | — |
 | v9.9.3 | 1.65.0 | 1.8.17 | — |
@@ -56,7 +57,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175)
 
 **Highlights**
 
@@ -71,6 +72,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
+| v9.9.6 | 11-08 | [#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
 | v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
 | v9.9.3 | 11-08 | [#171](https://github.com/PratimeshTiwari/Agent-CLI/pull/171) | Thinking level follows effort |
@@ -86,6 +88,24 @@ change.
 | v9.2 | 11-05 | [#160](https://github.com/PratimeshTiwari/Agent-CLI/pull/160) | `/mcp add` |
 | v9.1 | 11-05 | [#159](https://github.com/PratimeshTiwari/Agent-CLI/pull/159) | The model can call your MCP tools; prompt v5 |
 | v9.0 | 11-05 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158) | The MCP client, listed in `/mcp` |
+
+<details><summary><b>v9.9.6</b> — small fixes</summary>
+
+**Fixed**
+- Shift+tab at an edit or command approval box changes the mode; it used to do nothing there. The
+  box stays open and the key approves nothing. On current, the next prompt tells the model which
+  mode it is in now, and the side panels follow.
+- The edit approval box fits a short terminal: diff lines, then spacing, then the reason give way,
+  never a choice, and the rest of the turn is charged for it. Its header counts the whole change;
+  a box cut short said `+0 / -0`.
+
+**Changed**
+- The current prompt (v7) asks Gemini not to build in its Canvas or make interactive visuals,
+  which take about 30 seconds and which the agent cannot read. +164 to +215 characters on turn 0.
+- `marked-terminal` 8; bold and the other styles are its own. Node 22.12 or newer.
+- Companion 1.8.18: in Cursor, which cannot put a view in the secondary side bar, the chat offers
+  once to move there ("Move Chat to Another Side Bar").
+</details>
 
 <details><summary><b>v9.9.5</b> — one prompt</summary>
 

@@ -113,7 +113,7 @@ Subagents get tabs of their own. The full design, and the reasons behind it, are
 
 ## Install
 
-You need **Node.js 22+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
+You need **Node.js 22.12+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Agent-CLI/main/setup.sh | bash
@@ -133,7 +133,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.17.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.18.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in
@@ -282,7 +282,7 @@ details folded, and which extension and companion each release needs.
 
 | Series | Dates | PRs | Highlights |
 | --- | --- | --- | --- |
-| **v9** | 2026-11-05 … 2026-11-08 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | One prompt, with every feature on it; your MCP servers, local or HTTP; Jira and Confluence by browser sign-in; one Chrome profile; memory as a folder; thinking level follows effort; conversations one folder each; `/files` and `/theme amoled` |
+| **v9** | 2026-11-05 … 2026-11-08 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | One prompt, with every feature on it; your MCP servers, local or HTTP; Jira and Confluence by browser sign-in; one Chrome profile; memory as a folder; thinking level follows effort; conversations one folder each; `/files` and `/theme amoled` |
 | **v8** | 2026-10-31 … 2026-11-05 | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#157](https://github.com/PratimeshTiwari/Agent-CLI/pull/157) | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | New docs and screenshots; faster typing between turns; formulas in replies; test and build commands detected; outlines on partial reads; a live token count |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply in place; Claude Code-style questions and action rows; a quieter status bar; large files and log exports; symbols in 16 languages; drag and drop |
@@ -292,6 +292,8 @@ details folded, and which extension and companion each release needs.
 | **v2** | 2026-09-20 … 2026-09-22 | [#17](https://github.com/PratimeshTiwari/Agent-CLI/pull/17)–[#25](https://github.com/PratimeshTiwari/Agent-CLI/pull/25) | A faster, steadier bridge; sturdier tool-call parsing; shorter prompts |
 | **v1** | 2026-09-16 | [#13](https://github.com/PratimeshTiwari/Agent-CLI/pull/13)–[#16](https://github.com/PratimeshTiwari/Agent-CLI/pull/16) | The first stable release |
 | **Betas** | 2026-08-26 … 2026-09-06 | [#1](https://github.com/PratimeshTiwari/Agent-CLI/pull/1)–[#12](https://github.com/PratimeshTiwari/Agent-CLI/pull/12) | Context management, subagents, the CLI |
+
+**v9 is the last series.** No v10 is planned; fixes, if any, land as v9.9.x.
 
 ## More
 

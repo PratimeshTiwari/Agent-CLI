@@ -1,5 +1,13 @@
 # Agent CLI Companion: version history
 
+## 1.8.18 — 2026-11-08
+
+**Cursor: the chat can move to the right.** Cursor is built on VS Code 1.105, and an extension can
+place a view in the secondary side bar only from 1.106, so there the chat opens on the left beside
+the files. Once, on such an editor, the companion offers to move it: yes focuses the chat and opens
+the editor's own Move View list, where you pick "Secondary Side Bar". **Agent CLI: Move Chat to
+Another Side Bar** does the same later. Not yet tried in Cursor itself.
+
 ## 1.8.17 — 2026-11-08
 
 **The chat's effort menu sets the thinking level.** Under the efforts, `same as effort` or a level,

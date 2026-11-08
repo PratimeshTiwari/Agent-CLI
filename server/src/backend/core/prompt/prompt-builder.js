@@ -36,6 +36,13 @@ import { looksLikeStandingRule, MEMORY_NUDGE } from './standing-rule.js';
  * the terse list (low), and a bullet under "Source Code" (medium). Pro already
  * plans first and has the guardrails, so it is not given it.
  */
+/** What a mode switched to during a turn means for the rest of it (`modeNote`). */
+const MODE_SWITCH_NOTES = {
+  auto: 'The user switched to AUTO MODE while you worked: safe edits and commands now run without asking.',
+  plan: 'The user switched to PLAN MODE while you worked: edits and commands now ask first, Markdown in the repo does not.',
+  strict: 'The user switched to STRICT PLAN MODE while you worked: every edit and command now asks first.',
+};
+
 const LOOK_FIRST_RULE = {
   terse: '9. A question about this project is answered from files you open this turn (find_symbol, '
     + 'grep_search, read_file), never from the map in AGENT.md or from how projects usually work. '
@@ -43,6 +50,21 @@ const LOOK_FIRST_RULE = {
   bullet: '- **Look before answering.** A question about this project is answered from files you open '
     + 'this turn (`find_symbol`, `grep_search`, `read_file`), never from the map in `AGENT.md` or from '
     + 'how projects usually work. If you say you will look, make the call in the same reply.',
+};
+
+/*
+ * Canvas (v9.9.6). Asked for a visual, a document or an app, Gemini can build it
+ * in its Canvas: read live on 2026-11-08, ~31 s of building behind the stop
+ * button, then a chip the scrape can only name (`canvasMarker`), and the loop
+ * asks again for a file (`_askForCanvasFile`). Prevention first, as with the
+ * tool anchor; on every rung, because Pro does it too.
+ */
+const NO_CANVAS_RULE = {
+  terse: (n) => `${n}. Write files with create_file or edit_file, never in Gemini's Canvas, and make `
+    + 'no interactive visuals: the user is in a terminal and nothing here can read them.',
+  bullet: "- **Files go through the tools.** Never write a file, document or app in Gemini's Canvas, "
+    + 'and make no interactive visuals: the user is in a terminal and nothing here can read them. '
+    + 'Use `create_file` or `edit_file`.',
 };
 
 // How often to send the condensed reminder, counted in MESSAGES pushed to the tab —
@@ -490,7 +512,7 @@ export class PromptBuilder {
     return this._prompt('pro-handover-review');
   }
 
-  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '') {
+  buildToolResultBatch(results = [], turnEvidence = '', handover = '', withheld = '', steer = '', modeSwitch = null) {
     const failures = results.filter((r) => r.failed);
 
     /**
@@ -609,6 +631,14 @@ export class PromptBuilder {
         + 'change course now, and say in one line what you changed.']
       : [];
 
+    /*
+     * The mode changed during the turn (v9.9.6, current prompt only: v1 is
+     * frozen). Turn 0 and each message say the mode; a tool round did not,
+     * so a model told "PLAN MODE" kept writing as if every edit would be shown
+     * to someone after the person had switched to auto, and the reverse.
+     */
+    const switched = modeSwitch && this._flag('modeNote') ? ['', MODE_SWITCH_NOTES[modeSwitch] || ''] : [];
+
     return [
       '<tool_results>',
       ...body,
@@ -616,6 +646,7 @@ export class PromptBuilder {
       ...evidence,
       ...review,
       ...held,
+      ...switched,
       ...steered,
       '',
       instruction,
@@ -932,9 +963,12 @@ underspecified, say what you assumed rather than guessing silently.
    */
   _buildFlashCoreInstructions() {
     const core = this._prompt('core-terse');
-    if (!this._flag('lookFirst')) return core;
+    const rules = [];
+    if (this._flag('lookFirst')) rules.push(LOOK_FIRST_RULE.terse);
+    if (this._flag('noCanvas')) rules.push(NO_CANVAS_RULE.terse(9 + rules.length));
+    if (!rules.length) return core;
     const body = core.trimEnd();
-    return `${body}\n${LOOK_FIRST_RULE.terse}${core.slice(body.length)}`;
+    return `${body}\n${rules.join('\n')}${core.slice(body.length)}`;
   }
 
   /**
@@ -989,7 +1023,8 @@ underspecified, say what you assumed rather than guessing silently.
 - ONLY reference code that you have explicitly read using \`read_file\` or \`grep_search\`.
 - Never guess line numbers, function signatures, or variable names.`}
 - When running commands, ensure the \`cwd\` is correct.${this._flag('lookFirst') && !pro ? `
-${LOOK_FIRST_RULE.bullet}` : ''}
+${LOOK_FIRST_RULE.bullet}` : ''}${this._flag('noCanvas') ? `
+${NO_CANVAS_RULE.bullet}` : ''}
 
 ## Documentation & Context Maintenance
 - **Project instructions**: \`AGENT.md\` is where a project's standing rules live, walked from the code upward. If the user tells you a convention that should hold for every future turn, offer to add it there — do not keep it only in your own memory.

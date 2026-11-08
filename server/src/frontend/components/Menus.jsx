@@ -3,7 +3,7 @@ import { exec, execFile } from 'child_process';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
-import { rowsFromPatch } from '../transcript/diff-preview.js';
+import { diffBoxLayout, patchCounts } from '../transcript/diff-preview.js';
 import ThemePreview from './ThemePreview.jsx';
 import { previewSize, PREVIEW_ROWS } from '../menus/theme-preview.js';
 import { DiffRows } from './DiffRows.jsx';
@@ -2102,18 +2102,7 @@ export function Menus({
 /** Collapsed: enough to see the shape of the change without filling the box. */
 const DIFF_ROWS_COLLAPSED = 16;
 
-/**
- * Furniture around the diff rows: the box border, the heading, the risk line,
- * the margin, the choices and the hint. Subtracted so an expanded diff grows
- * into the room that is actually there and no further.
- *
- * Counted from the choices rather than fixed at 12, because plan mode has a
- * third one ("Approve, and stop asking"). A row you draw is a row you budget
- * — a constant that silently stopped matching the rows underneath it is how
- * an expanded diff would push the buttons off the screen it exists to show.
- */
-const DIFF_BOX_FURNITURE_BASE = 10;
-const diffBoxFurniture = (choices) => DIFF_BOX_FURNITURE_BASE + choices;
+// What the box draws around the diff is counted in `diffBoxLayout` (diff-preview.js).
 
 export function DiffApproval({
   diffRequest,
@@ -2122,18 +2111,12 @@ export function DiffApproval({
   mode = 'plan',
   terminalHeight = 24,
   width = process.stdout.columns || 80,
+  // App sizes the box (v9.9.6), so the live turn above gives up the rows it
+  // takes; expanded lives there too, because the size depends on it.
+  layout = null,
+  expanded = false,
+  setExpanded = () => {},
 }) {
-  const [expanded, setExpanded] = React.useState(false);
-
-  // Collapsed again for the next file, or this one would open expanded
-  // because the previous decision left the flag set.
-  const requestKey = diffRequest?.diffId ?? null;
-  const lastKey = React.useRef(requestKey);
-  if (lastKey.current !== requestKey) {
-    lastKey.current = requestKey;
-    if (expanded) setExpanded(false);
-  }
-
   /**
    * `d` opens the rest of the diff.
    *
@@ -2209,13 +2192,13 @@ export function DiffApproval({
       : []),
   ];
 
-  const maxLines = expanded
-    ? Math.max(DIFF_ROWS_COLLAPSED, terminalHeight - diffBoxFurniture(choices.length))
-    : DIFF_ROWS_COLLAPSED;
-  const rows = rowsFromPatch(diffRequest.patch, { maxLines });
-  const hidden = rows.some((r) => r.type === 'more');
-  const added = rows.filter((r) => r.type === 'add').length;
-  const removed = rows.filter((r) => r.type === 'del').length;
+  // Fitted to the terminal (v9.9.6): a box as tall as the screen cleared it.
+  const fitted = layout || diffBoxLayout({
+    patch: diffRequest.patch, choices: choices.length, reason: Boolean(diffRequest.riskReason),
+    expanded, terminalHeight, collapsed: DIFF_ROWS_COLLAPSED,
+  });
+  const { rows } = fitted;
+  const { added, removed } = patchCounts(diffRequest.patch);
   const critical = diffRequest.riskLevel === 'critical';
 
 
@@ -2238,12 +2221,12 @@ export function DiffApproval({
         </Text>
       </Box>
 
-      {diffRequest.riskReason ? (
+      {diffRequest.riskReason && fitted.reason ? (
         <Text dimColor wrap="truncate">{' '}{diffRequest.riskReason}</Text>
       ) : null}
 
       {rows.length > 0 && (
-        <Box flexDirection="column" marginY={1} paddingLeft={1}>
+        <Box flexDirection="column" marginY={fitted.margins ? 1 : 0} paddingLeft={1}>
           {/* The gutter earns its width here: this is the screen where you are
               deciding whether to let the change happen. */}
           <DiffRows rows={rows} gutter />
@@ -2259,7 +2242,7 @@ export function DiffApproval({
         }}
       />
 
-      {(hidden || expanded) && (
+      {fitted.hint && (
         <Text dimColor wrap="truncate">
           {expanded
             ? '   d — collapse'

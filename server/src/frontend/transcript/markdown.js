@@ -433,10 +433,11 @@ export function renderMarkdown(content, width = 80) {
       return `x0codeblock${blocks.length - 1}x0`;
     });
 
+    // Bold and headings are marked-terminal's own since v9.9.6. They used to
+    // be swapped for raw escape codes first, which version 8 strips from text
+    // it is given (the escape byte goes, `[1m` stays on screen).
     out = marked
-      .parse(stashed
-        .replace(/\*\*(.*?)\*\*/g, '\x1b[1m$1\x1b[22m')
-        .replace(/^###\s+(.*$)/gm, '\x1b[1;32m$1\x1b[0m'))
+      .parse(stashed)
       .trim()
       // Every block here ends in a blank line and the list renderer opens with
       // one, so a list after a paragraph is separated twice. Safe to collapse

@@ -147,7 +147,7 @@ ROOT="$(pwd)"
 step "Checking Node"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "  Node is not installed. Get it from https://nodejs.org (v22 or newer)."
+  echo "  Node is not installed. Get it from https://nodejs.org (v22.12 or newer)."
   exit 1
 fi
 
@@ -156,9 +156,11 @@ fi
 # user through this gate and then fail on npm's own check a step later — a
 # worse failure than the one this is here to give, because it arrives after
 # the script has said the version is fine.
+# 22.12 since v9.9.6: marked-terminal 8 needs it.
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 22 ]; then
-  echo "  Node $(node -v) is too old — v22 or newer is required."
+NODE_MINOR="$(node -p 'process.versions.node.split(".")[1]')"
+if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 12 ]; }; then
+  echo "  Node $(node -v) is too old — v22.12 or newer is required."
   exit 1
 fi
 ok "node $(node -v)"
