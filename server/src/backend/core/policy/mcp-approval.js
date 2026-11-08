@@ -9,7 +9,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { logCommand } from '../logs/command-log.js';
-import { resolvePromptVersion } from '../prompt/prompt-versions.js';
 import { setSwitch, switchFor } from '../../mcp/client/switches.js';
 import { issueApproval } from './approval-token.js';
 import { isBlockedOutright, requiresApproval } from './tool-policy.js';
@@ -17,7 +16,6 @@ import { isBlockedOutright, requiresApproval } from './tool-policy.js';
 const MAX_ARG_LINES = 40;
 const MAX_LINE = 200;
 
-const offered = (loop) => Boolean(resolvePromptVersion(loop.promptVersion).flags?.customMcp);
 
 function decide(loop, call) {
   const { server, tool } = call.args || {};
@@ -34,7 +32,6 @@ function decide(loop, call) {
 
 /** Calls that need no box run together; anything that asks holds its place in the reply. */
 export function runsTogether(loop, call) {
-  if (!offered(loop)) return false;
   if (call.name === 'mcp_describe') return true;
   if (call.name !== 'mcp_tool' || !loop.mcp.usable(call.args?.server)) return false;
   const { blocked, ask } = decide(loop, call);
@@ -81,7 +78,6 @@ async function askToRun(loop, { server, tool, args }, { alwaysAsk, external }) {
 
 /** One MCP call from the main loop. */
 export async function runMcpTool(loop, call, context = {}) {
-  if (!offered(loop)) return { success: false, error: `${call.name} is not offered by this prompt version.` };
   const signal = loop._mcpAbort?.signal;
   if (signal?.aborted) return { success: false, error: 'Stopped by the user. Nothing was run.' };
   const ctx = { ...context, mcp: loop.mcp, mode: loop.mode, signal };

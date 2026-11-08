@@ -105,13 +105,18 @@ test('MemoryManager', async (t) => {
 test('memory reaches the model — the half that was missing', async (t) => {
   t.afterEach(() => { paths.setActiveScope(null); paths.clearPathCache(); });
 
-  await t.test('stored facts come back in the prompt, numbered', () => {
+  // An index of named facts on every version since v9.9.5 (it was v6's); the
+  // numbered list was v1 to v5's.
+  await t.test('stored facts come back in the prompt, newest first, by name', () => {
     const ws = workspace();
     const m = new MemoryManager(ws);
     m.addMemory('deploys go through argo');
     m.addMemory('the api client is generated');
 
-    assert.equal(memoryBlock(firstPrompt(ws)), '1. deploys go through argo\n2. the api client is generated');
+    const block = memoryBlock(firstPrompt(ws));
+    assert.match(block, /^Saved in earlier sessions, newest first/);
+    assert.ok(block.indexOf('api client is generated') < block.indexOf('deploys go through argo'), block);
+    assert.match(block, /manage_memory read/);
   });
 
   await t.test('no memory file means no block at all', () => {
@@ -133,9 +138,9 @@ test('memory reaches the model — the half that was missing', async (t) => {
     for (let i = 0; i < 60; i++) m.addMemory(`fact number ${i} about this project`);
 
     const block = memoryBlock(firstPrompt(ws));
-    assert.ok(block.includes('1. fact number 0 about this project'));
-    assert.doesNotMatch(block, /fact number 59/);
-    assert.match(block, /more in .*memory/);
+    assert.ok(block.includes('fact number 59 about this project'), 'newest first');
+    assert.doesNotMatch(block, /fact number 0 about/);
+    assert.match(block, /older: manage_memory list/);
     assert.ok(block.length < 4600, `bounded, got ${block.length}`);
   });
 });

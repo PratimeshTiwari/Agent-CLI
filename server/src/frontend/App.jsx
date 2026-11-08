@@ -22,7 +22,7 @@ import { modeColor } from './constants.js';
 import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reservedRows, isCompactHeight } from './constants.js';
 import { resolveEffort } from '../backend/core/models/effort.js';
 import { currentThinking } from '../backend/core/models/thinking.js';
-import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt/prompt-versions.js';
+import { CURRENT_PROMPT_VERSION } from '../backend/core/prompt/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './transcript/activity.js';
 import { modelMismatch, browserModelPin, selectedModel } from '../backend/core/models/model-match.js';
 import { mismatchPolicy } from '../backend/core/models/model-fallback.js';
@@ -1586,7 +1586,8 @@ export function App({ agentLoop, wsServer, closing = false }) {
     pastes: attachedCount,
     running: runningTasks,
     tasks: isProcessing && tasksDone ? tasksDone : null,
-    version: agentLoop.promptVersion && agentLoop.promptVersion !== DEFAULT_PROMPT_VERSION ? agentLoop.promptVersion : null,
+    // Shown off the current prompt (v9.9.5), so someone on the original sees `v1`.
+    version: agentLoop.promptVersion && agentLoop.promptVersion !== CURRENT_PROMPT_VERSION ? agentLoop.promptVersion : null,
     model: browserModelLabel,
     modelMark: browserModelLabel ? (agentLoop.effortFallback ? '↓' : modelDiffers ? '⚠' : null) : null,
     effort: resolveEffort(agentLoop.modelConfig?.effort).id,

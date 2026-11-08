@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  firstRunState, extensionDir, extensionStatus, tildify, progressBar, revealColumns, onboardingLayout, STEPS,
+  firstRunState, firstRunSettings, extensionDir, extensionStatus, tildify, progressBar, revealColumns, onboardingLayout, STEPS,
 } from '../../../src/frontend/screen/welcome.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,24 @@ const emptyWorkspaces = () => {
 
 test('a new person gets setup, marked pending until it ends', () => {
   assert.deepEqual(firstRunState({ settings: {}, workspacesDir: emptyWorkspaces() }), { show: true, write: 'pending' });
+});
+
+test('a new person starts on the current prompt; nobody else is moved (v9.9.5)', () => {
+  const fresh = firstRunState({ settings: {}, workspacesDir: emptyWorkspaces() });
+  assert.deepEqual(firstRunSettings(fresh, {}, 'v7'), { welcomed: 'pending', promptVersion: 'v7' });
+  // An install with history but no setting: marked welcomed, left on v1.
+  const old = { show: false, write: true };
+  assert.deepEqual(firstRunSettings(old, {}, 'v7'), { welcomed: true });
+  // A choice already made is kept, and a resumed setup writes nothing.
+  assert.deepEqual(firstRunSettings(fresh, { promptVersion: 'v1' }, 'v7'), { welcomed: 'pending' });
+  assert.equal(firstRunSettings({ show: true, write: null }, {}, 'v7'), null);
+});
+
+test('main.js gives first start its settings before the loop reads them (source)', () => {
+  const main = readFileSync(join(here, '../../../src/main.js'), 'utf8');
+  const at = main.indexOf('firstRunSettings(firstRun, settingsNow, CURRENT_PROMPT_VERSION)');
+  assert.ok(at > 0, 'main.js no longer writes the first-start settings');
+  assert.ok(at < main.indexOf('new AgentLoop('), 'written after the loop has read the setting');
 });
 
 test('ctrl+c halfway brings it back, even though the loop has created workspaces/<slug> by then', () => {

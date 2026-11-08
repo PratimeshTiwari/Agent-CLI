@@ -308,8 +308,16 @@ in a newer version. A version is its differences: `dir` overrides prompt files
 switch re-teaches the chat only when the version changes. Every reply and every
 `tool-usage.jsonl` row records `promptVersion` (older rows count as v1, since v1 *is* v5.31's
 prompt), and bare `/prompt` and `/logs tools` show turns and rounds per version. The status bar
-says `prompt v2` only off the default.
-Pty: after `/prompt v2` the next prompt is the full 19,342 characters; 0 clears at 13 and 24 rows.
+says the version only off the current one.
+
+**Two versions since v9.9.5: v1 (original) and v7 (current).** Owner: v3 to v6 "are all feature
+upgrades that could be written to the initial v1 and v2". A version is now wording only; Jira, MCP
+and memory are `FEATURES`, on both, each silent until set up (a site, a usable server, a fact).
+v7 is v2's wording plus `lookFirst`; v2 to v6 read as v7 (`LEGACY_VERSIONS`), logged rows keep their
+labels. A missing setting is still v1, so nobody is moved; first start writes v7
+(`firstRunSettings`). The golden was re-pinned once, for `manage_memory`'s wording alone (54 shapes,
+each proved by swapping that line back). Read "v2"…"v6" below as history: a new switch is a v7 flag
+or a feature, never a version. `/prompt` is two rows, `current` and `original`.
 
 **v2 is the dedup plan (v5.34, `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`)**, as five
 `flags` plus five files in `prompts/v2/`. It cuts lines that cost round trips: no read-back after

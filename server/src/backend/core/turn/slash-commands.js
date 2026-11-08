@@ -26,7 +26,7 @@ import {
   planModelSwitch, browserModelPin, pickModelFor, lockedReason,
 } from '../models/model-match.js';
 import { MISMATCH_POLICIES, mismatchPolicy } from '../models/model-fallback.js';
-import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVersion } from '../prompt/prompt-versions.js';
+import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, LEGACY_VERSIONS, isPromptVersion } from '../prompt/prompt-versions.js';
 import { summariseToolUsage } from '../logs/tool-usage.js';
 import { atlassianSite, atlassianCredentials } from '../../atlassian/config.js';
 import { createJiraClient } from '../../atlassian/jira-client.js';
@@ -96,9 +96,9 @@ export function promptVersionRows(loop) {
     const use = !v ? 'not used yet'
       : `${v.turns} turn${v.turns === 1 ? '' : 's'}`
         + (v.rounds ? ` · rounds median ${v.rounds.median}, p90 ${v.rounds.p90}` : '');
-    const { hint, summary } = PROMPT_VERSIONS[id];
+    const { hint, summary, label } = PROMPT_VERSIONS[id];
     return {
-      id, hint, summary, use, current: id === current,
+      id, hint, summary, label, use, current: id === current,
       turns: v?.turns || 0, median: v?.rounds?.median ?? null, p90: v?.rounds?.p90 ?? null,
     };
   });
@@ -108,10 +108,11 @@ export function promptVersionReport(loop) {
   const current = loop.promptVersion || DEFAULT_PROMPT_VERSION;
   const width = Math.max(...PROMPT_VERSION_IDS.map((id) => id.length));
   const rows = promptVersionRows(loop).map((r) =>
-    `${r.current ? '❯' : ' '} ${r.id.padEnd(width)}  ${r.summary} · ${r.use}`);
-  const other = PROMPT_VERSION_IDS.find((id) => id !== current);
+    `${r.current ? '❯' : ' '} ${r.id.padEnd(width)}  ${r.label.padEnd(8)}  ${r.summary} · ${r.use}`);
+  const other = PROMPT_VERSIONS[PROMPT_VERSION_IDS.find((id) => id !== current)].label;
   return `Prompt **${current}**\n\n\`\`\`\n${rows.join('\n')}\n\`\`\`\n`
-    + `\`/prompt ${other}\` to switch · the chat is sent the new prompt with your next message`;
+    + `\`/prompt ${other}\` to switch · the chat is sent the new prompt with your next message · `
+    + 'Jira, MCP servers and memory work on both'
 }
 
 /**
@@ -369,7 +370,7 @@ export async function handleSlashCommand(loop, command, args) {
       const cfg = atlassianSite();
       if (!cfg) {
         // The browser sign-in (v9.9) is Atlassian's MCP server, which `/mcp` shows.
-        if (makeStore(ATLASSIAN_NAME).signedIn()) return { message: 'Jira · signed in through Atlassian in the browser · `/mcp` shows its tools; the model uses them on prompt v5 or newer' };
+        if (makeStore(ATLASSIAN_NAME).signedIn()) return { message: 'Jira · signed in through Atlassian in the browser · `/mcp` shows its tools, and the model can use them' };
         return { message: 'Jira · not set up · run `agent atlassian login` in a terminal (`--token` for Server / Data Center), then `/jira`' };
       }
       const host = cfg.site.replace(/^https?:\/\//, '');
@@ -383,8 +384,6 @@ export async function handleSlashCommand(loop, command, args) {
         return { message: `✗ Jira · ${host} · ${err.message}` };
       }
       const kind = cfg.kind === 'cloud' ? 'Cloud' : 'Server/DC';
-      const offered = Boolean(PROMPT_VERSIONS[loop.promptVersion]?.flags?.jira);
-      if (!offered) return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · \`/prompt v4\` offers it to the model` };
       loop.promptBuilder.requestToolRedeclaration?.();
       return { message: `✔ Jira · ${host} (${kind}) · signed in as ${who} · the model is told with your next message; every write asks you` };
     }
@@ -429,10 +428,12 @@ export async function handleSlashCommand(loop, command, args) {
       const asked = String(args?.[0] || '').toLowerCase();
       if (!asked) return { message: promptVersionReport(loop) };
       if (!isPromptVersion(asked)) {
-        return { message: `No prompt version **${asked}** · there is ${PROMPT_VERSION_IDS.join(', ')}` };
+        return { message: `No prompt version **${asked}** · there is \`current\` (v7) and \`original\` (v1)` };
       }
       const r = loop.setPromptVersion(asked);
       let note = r.changed ? 'the chat is sent this prompt with your next message' : '';
+      // v9.9.5: v2 to v6 became the current prompt; say where a typed one went.
+      if (LEGACY_VERSIONS.includes(asked)) note = [`${asked} is part of the current prompt now`, note].filter(Boolean).join(' · ');
       if (!r.saved) note = [note, 'this session only, settings.json could not be written'].filter(Boolean).join(' · ');
       return { message: changed('prompt', r.from, r.to, note) };
     }

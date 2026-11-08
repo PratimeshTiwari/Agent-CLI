@@ -52,6 +52,19 @@ export function firstRunState({ settings = {}, workspacesDir, readdir = fs.readd
   return existing === 0 ? { show: true, write: 'pending' } : { show: false, write: true };
 }
 
+/**
+ * What first start writes to `~/.agent/settings.json` (v9.9.5): `welcomed`, and
+ * for a new person the current prompt. Someone with history who never chose a
+ * version stays on v1, the default for a missing setting (owner, 2026-11-08:
+ * existing people are not moved). A version already chosen is never replaced.
+ */
+export function firstRunSettings(firstRun, settings = {}, current) {
+  if (firstRun.write === null) return null;
+  const out = { welcomed: firstRun.write };
+  if (firstRun.write === 'pending' && !settings.promptVersion && current) out.promptVersion = current;
+  return out;
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** This checkout's `extension/` folder — what "Load unpacked" wants picked. */

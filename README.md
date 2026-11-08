@@ -197,7 +197,7 @@ conversation.
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model, and its thinking level, to match. `/effort thinking <level>` pins a level |
 | `/settings` | everything that is set, on one page |
-| `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v6`. Jira needs v4, MCP servers v5, memory v6; bare `/prompt` compares them |
+| `/prompt` | **current** (v7, what a new install gets) or **original** (v1, frozen, kept for comparison). Jira, MCP servers and memory work on both; bare `/prompt` compares them |
 | `/chat <link or id>` | continue this session in another Gemini chat |
 | `/doctor` | packages and tools: install, update one or all, pick a version, remove unused |
 | `/update` | pull the latest version, and install the editor companion in VS Code, Cursor or Antigravity |
@@ -227,16 +227,16 @@ the model, which reads what it needs.
 - **Read code.** `find_symbol` and `find_references` in JavaScript, TypeScript, Ruby, Python, Go,
   Java, C/C++ and nine more, measured at 98–99.9% against each language's own parser.
 - **Read documents and logs.** PDF, Word and PowerPoint come back as Markdown. `query_log` reads
-  Grafana, Loki and Datadog exports of any size (200 MB in about 4 s, prompt v2).
+  Grafana, Loki and Datadog exports of any size (200 MB in about 4 s, on the current prompt).
 - **Handle big files.** With subagents on, a file over 1,200 lines comes back as a digest; a ranged
   read always gets the exact text.
 - **Keep to one Google account.** `/chrome` lists your Chrome profiles, opens the one you choose and pairs with its
   extension. No other profile gets a prompt, and if the chosen one is closed, prompts wait for it.
-- **Use your MCP servers** (prompt v5). Run `/mcp add` and paste the server's command, its address or the JSON from its
+- **Use your MCP servers.** Run `/mcp add` and paste the server's command, its address or the JSON from its
   README; tokens go in your Keychain, not the config. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses.
   A repo's own `.mcp.json` is read too, and nothing in it runs until you allow it in `/mcp`. Each
   tool asks first, runs on its own or is blocked, as you set it in `/mcp`; strict mode always asks.
-- **Work with Jira** (prompt v4). Read, search, create, update, comment, move and attach, on Cloud and
+- **Work with Jira.** Read, search, create, update, comment, move and attach, on Cloud and
   Server/DC. Every write is shown first as a Send / Don't send box, in every mode.
 - **Match the model.** `/effort` picks low, medium, high or max and switches Gemini to match. If the
   tab is on another model it asks; if Pro is at its limit it resends one rung lower and says so. A model
@@ -250,7 +250,7 @@ the model, which reads what it needs.
   `~/.agent/AGENT.md` applies everywhere.
 - **Skills**: Markdown files in `.agent/skills/` that it opens only when their one-line description
   matches the task. `/skills` lists and creates them.
-- **Memory**: facts it learns along the way, one file each in `.agent/memory/`, with who wrote it, when and why. `/memory` shows them. Prompt v6 reads them back only when needed.
+- **Memory**: facts it learns along the way, one file each in `.agent/memory/`, with who wrote it, when and why. `/memory` shows them. The prompt lists them by name, and the agent reads one when it needs it.
 
 ## Where it keeps things
 
@@ -282,7 +282,7 @@ details folded, and which extension and companion each release needs.
 
 | Series | Dates | PRs | Highlights |
 | --- | --- | --- | --- |
-| **v9** | 2026-11-05 … 2026-11-08 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Your MCP servers, local or HTTP; Jira and Confluence by browser sign-in; one Chrome profile; memory as a folder; thinking level follows effort; conversations one folder each; `/files` and `/theme amoled` |
+| **v9** | 2026-11-05 … 2026-11-08 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | One prompt, with every feature on it; your MCP servers, local or HTTP; Jira and Confluence by browser sign-in; one Chrome profile; memory as a folder; thinking level follows effort; conversations one folder each; `/files` and `/theme amoled` |
 | **v8** | 2026-10-31 … 2026-11-05 | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#157](https://github.com/PratimeshTiwari/Agent-CLI/pull/157) | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | New docs and screenshots; faster typing between turns; formulas in replies; test and build commands detected; outlines on partial reads; a live token count |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply in place; Claude Code-style questions and action rows; a quieter status bar; large files and log exports; symbols in 16 languages; drag and drop |

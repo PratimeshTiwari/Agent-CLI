@@ -38,16 +38,16 @@ test('every switch a version turns on has a line to say what it changes', () => 
     for (const flag of Object.keys(v.flags || {})) assert.ok(FLAG_NOTES[flag], `${v.id}.${flag} has no FLAG_NOTES entry`);
   }
   assert.deepEqual(versionChanges('v1'), [], 'v1 is the baseline');
-  assert.equal(versionChanges('v2').length, Object.keys(PROMPT_VERSIONS.v2.flags).length);
+  assert.equal(versionChanges('v7').length, Object.keys(PROMPT_VERSIONS.v7.flags).length);
 });
 
-test('each version is described by what it adds to the one before (v8.1)', () => {
-  // v4's only new line, Jira, used to sit behind "… +6 more".
+test('the current prompt is described by what it changes from the original (v9.9.5)', () => {
   assert.deepEqual(versionAdds('v1'), { from: null, lines: [] });
-  assert.equal(versionAdds('v2').from, 'v1');
-  assert.deepEqual(versionAdds('v2').lines, versionChanges('v2'));
-  assert.deepEqual(versionAdds('v3'), { from: 'v2', lines: [FLAG_NOTES.lookFirst] });
-  assert.deepEqual(versionAdds('v4'), { from: 'v3', lines: [FLAG_NOTES.jira] });
+  assert.equal(versionAdds('v7').from, 'v1');
+  assert.deepEqual(versionAdds('v7').lines, versionChanges('v7'));
+  assert.ok(versionAdds('v7').lines.includes(FLAG_NOTES.lookFirst));
+  // A feature is not a version's change: Jira, MCP and memory are on both.
+  assert.ok(!versionAdds('v7').lines.includes(FLAG_NOTES.jira));
 });
 
 test('the → page scrolls, and says what is above and below', async () => {

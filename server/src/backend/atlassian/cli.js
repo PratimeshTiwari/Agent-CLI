@@ -75,7 +75,7 @@ async function browserLogin(say, { open = openBrowser, signInImpl = signIn, conn
   else say(`✔ Signed in, but the server did not answer yet: ${check.error}`);
   say(process.platform === 'darwin' && !process.env.AGENT_MCP_NO_KEYCHAIN
     ? 'The sign-in is in your login Keychain (agent-cli-mcp).' : 'The sign-in is in ~/.agent/mcp-secrets.json (readable only by you).');
-  say('In the agent, the model uses it on prompt v5 or newer (/prompt). Every write asks you first, in every mode.');
+  say('In the agent, the model can use it now. Every write asks you first, in every mode.');
   return 0;
 }
 
@@ -187,7 +187,7 @@ export async function runAtlassianCli(argv = [], { input = process.stdin, output
     if (!r.ok) { say(`✗ ${r.error}`); return 1; }
     say(`✔ Signed in to ${site} as ${r.name}.`);
     say(process.platform === 'darwin' ? 'The token is in your login Keychain (agent-cli-atlassian).' : 'The token is in ~/.agent/atlassian-token.json (readable only by you).');
-    say('In the agent, /prompt v4 offers Jira to the model. Every write will ask you first.');
+    say('In the agent, the model is offered Jira with your next message. Every write will ask you first.');
     return 0;
   } finally {
     rl.close();

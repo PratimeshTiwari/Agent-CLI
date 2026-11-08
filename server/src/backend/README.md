@@ -10,7 +10,7 @@ the browser, and what is kept on disk. Nothing here imports from `frontend/`.
 | `core/` | the turn loop and everything it decides, in folders by job (below) | `turn/agent-loop.js` |
 | `bridge/` | the WebSocket to the Chrome extension; tab lanes (`extension-lock.js`); the line shown when a tab fails (`tab-failure.js`) | `websocket-server.js` |
 | `mcp/` | the tools the model can call | `mcp-server.js` (`TOOL_DEFINITIONS`), `tools/` |
-| `prompts/` | prompt text; `v2/` overrides files for later prompt versions | `core/prompt/prompt-loader.js` reads it |
+| `prompts/` | prompt text; `v2/` overrides files for the current prompt (v7) | `core/prompt/prompt-loader.js` reads it |
 | `context/` | token budget, memory, and code search (`find_symbol`, `find_references`) | `symbol-index.js` |
 | `storage/` | conversations, one folder each (`.agent/conversations/<id>/`), written to the repo and to `~/.agent` | `session-store.js` |
 | `watcher/` | reports files changed outside the agent | `file-watcher.js` |
@@ -80,8 +80,9 @@ folder, or the test writes into your real `~/.agent`.
 - **A new tool** needs its handler in `mcp/tools/`, an entry in `TOOL_DEFINITIONS`, and one in
   `core/prompt/tool-catalog.js`. The catalog is what the prompt is built from, and a test fails if the
   two disagree.
-- **Prompt v1 is frozen.** A change that alters it fails `prompt-v1-golden.test.js`; put it in a
-  new version in `core/prompt/prompt-versions.js`.
+- **Prompt v1 is frozen; v7 is current.** A change of wording that alters v1 fails
+  `prompt-v1-golden.test.js`: put it in v7. A feature (a tool, a block that appears once something
+  is set up) goes in `FEATURES` in `core/prompt/prompt-versions.js`, on both, never in a new version.
 - **A write to Jira or Confluence always asks**, in every mode, with no "always": `core/policy/external-approval.js`
   for `jira_issue`, and the `external` check in `tool-policy.js` for Atlassian's MCP server.
 

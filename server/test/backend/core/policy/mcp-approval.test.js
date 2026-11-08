@@ -237,11 +237,11 @@ describe('through the real loop', () => {
     assert.ok(!results(l).some((r) => /- never:/.test(r.result)));
   });
 
-  it('a version without the flag offers nothing and builds nothing', async () => {
-    const { l, panel } = driven({ version: 'v4', answer: 'send' });
+  it('every prompt version calls a server, v1 included (v9.9.5: a feature, not a version)', async () => {
+    const { l, panel } = driven({ version: 'v1', answer: 'send' });
     await l._executeToolCalls([call('echo', { q: 'x' })]);
-    assert.equal(boxes(panel).length, 0);
-    assert.match(results(l)[0].result, /not offered by this prompt version/);
+    assert.equal(boxes(panel).length, 1, 'asked, as on any version');
+    assert.doesNotMatch(results(l)[0].result, /not offered/);
   });
 });
 

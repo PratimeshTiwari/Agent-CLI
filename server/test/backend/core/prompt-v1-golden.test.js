@@ -18,6 +18,11 @@ import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-version
  *
  * A failure here means a change reached v1. Put it in a newer version instead
  * (core/prompt/prompt-versions.js: a file under prompts/<dir>/, or a flag).
+ *
+ * Re-pinned once, in v9.9.5, on purpose: features (Jira, MCP, memory) became
+ * every version's, and the one line that moved with nothing set up is
+ * `manage_memory`'s, which now names facts. 54 shapes moved; with that line
+ * swapped back, every one hashed to the v5.31 baseline (checked before writing).
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +41,7 @@ test('naming v1 explicitly is the same as the default', () => {
 });
 
 test('negative control: a file override under a newer version moves its shapes and leaves v1 alone', (t) => {
-  // v2 overrides by directory; plant one override and watch only v2 change.
+  // v7 overrides by directory; plant one override and watch only v7 change.
   // A file v2 does not override yet, so the control never has to skip.
   // In a copy: planted in the source tree, a running agent's watcher reported it
   // as an edit made by the user (seen 2026-11-01).
@@ -44,16 +49,16 @@ test('negative control: a file override under a newer version moves its shapes a
   cpSync(SHIPPED_PROMPTS_DIR, base, { recursive: true });
   usePromptsDir(base);
   t.after(() => { usePromptsDir(null); rmSync(base, { recursive: true, force: true }); });
-  const dir = join(base, PROMPT_VERSIONS.v2.dir);
+  const dir = join(base, PROMPT_VERSIONS.v7.dir);
   const name = ['tool-call-format-terse', 'reasoning-lite', 'tool-call-format-full', 'pro-guardrails']
     .find((n) => !existsSync(join(dir, `${n}.md`)));
-  assert.ok(name, 'v2 overrides every candidate: add one it does not');
+  assert.ok(name, 'v7 overrides every candidate: add one it does not');
   const file = join(dir, `${name}.md`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(file, 'OVERRIDDEN FOR THE CONTROL\n');
   clearPromptCache();
-  const v2 = promptShapes({ version: 'v2' });
-  assert.ok(Object.values(v2).some((text) => text.includes('OVERRIDDEN FOR THE CONTROL')), 'the override never reached a prompt');
+  const v7 = promptShapes({ version: 'v7' });
+  assert.ok(Object.values(v7).some((text) => text.includes('OVERRIDDEN FOR THE CONTROL')), 'the override never reached a prompt');
   clearPromptCache();
-  assert.deepEqual(hashedShapes({ version: 'v1' }), golden, 'v1 must not see v2\'s file');
+  assert.deepEqual(hashedShapes({ version: 'v1' }), golden, 'v1 must not see v7\'s file');
 });
