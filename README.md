@@ -178,7 +178,7 @@ conversation.
 | `ctrl+o` | show or hide the task list, during a turn too |
 | `ctrl+b` | bring the Gemini tab to the front |
 | `shift+enter` · `ctrl+n` | a newline without sending (`shift+enter` where the terminal reports it, and in editors with the companion) |
-| `ctrl+v` | attach an image from the clipboard as `[Image #1]` |
+| `ctrl+v` | attach an image from the clipboard as `[Image #1]` (in macOS Terminal `ctrl+v`, not `⌘V`, which Terminal keeps for text) |
 | `⌘⇧1` | the floating chat window, from any app *(bind it once at `chrome://extensions/shortcuts`, Global)* |
 
 ### Commands
@@ -187,7 +187,7 @@ conversation.
 | --- | --- |
 | `/effort` | how hard to work, on a slider; switches the Gemini model to match |
 | `/settings` | everything that is set, on one page |
-| `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v5` (adds your MCP servers); bare `/prompt` compares them |
+| `/prompt` | which prompt version is sent: `v1` (the default, frozen) to `v6`. Jira needs v4, MCP servers v5, memory v6; bare `/prompt` compares them |
 | `/chat <link or id>` | continue this session in another Gemini chat |
 | `/doctor` | packages and tools: install, update one or all, pick a version, remove unused |
 | `/update` | pull the latest version, and install the editor companion in VS Code, Cursor or Antigravity |
@@ -228,7 +228,8 @@ the model, which reads what it needs.
 - **Work with Jira** (prompt v4). Read, search, create, update, comment, move and attach, on Cloud and
   Server/DC. Every write is shown first as a Send / Don't send box, in every mode.
 - **Match the model.** `/effort` picks low, medium, high or max and switches Gemini to match. If the
-  tab is on another model it asks; if Pro is at its limit it resends one rung lower and says so.
+  tab is on another model it asks; if Pro is at its limit it resends one rung lower and says so. A model
+  your account has locked is never chosen: on an account with only Gemini Auto, every level stays on Auto.
 
 ## Telling it about your project
 
@@ -237,7 +238,7 @@ the model, which reads what it needs.
   `~/.agent/AGENT.md` applies everywhere.
 - **Skills**: Markdown files in `.agent/skills/` that it opens only when their one-line description
   matches the task. `/skills` lists and creates them.
-- **Memory**: facts it learns along the way, one file each in `.agent/memory/`, with who wrote it, when and why. `/memory` shows them.
+- **Memory**: facts it learns along the way, one file each in `.agent/memory/`, with who wrote it, when and why. `/memory` shows them. Prompt v6 reads them back only when needed.
 
 ## Where it keeps things
 
@@ -268,7 +269,8 @@ date, branch and notes, is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 | Series | Dates | PRs | Highlights |
 | --- | --- | --- | --- |
-| **v8** | 2026-10-31 … | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)– | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
+| **v9** | 2026-11-05 … | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)– | Your MCP servers, local or HTTP, with a repo's `.mcp.json` asked about first; one Chrome profile; memory as a folder; `/update` and Update all in `/doctor`; locked models skipped and Gemini Auto read |
+| **v8** | 2026-10-31 … 2026-11-05 | [#142](https://github.com/PratimeshTiwari/Agent-CLI/pull/142)–[#157](https://github.com/PratimeshTiwari/Agent-CLI/pull/157) | A silent reply is retried in a fresh tab; Jira, with every write approved; prompts always land in this session's chat; the server split into backend and frontend; the panels catch up: attach, stop, queue, and the VS Code chat in the right-hand side bar |
 | **v7** | 2026-10-30 … 2026-10-31 | [#131](https://github.com/PratimeshTiwari/Agent-CLI/pull/131)–[#141](https://github.com/PratimeshTiwari/Agent-CLI/pull/141) | New docs and screenshots; faster typing between turns; formulas in replies; test and build commands detected; outlines on partial reads; a live token count |
 | **v6** | 2026-10-30 | [#105](https://github.com/PratimeshTiwari/Agent-CLI/pull/105)–[#130](https://github.com/PratimeshTiwari/Agent-CLI/pull/130) | Settings that apply in place; Claude Code-style questions and action rows; a quieter status bar; large files and log exports; symbols in 16 languages; drag and drop |
 | **v5** | 2026-10-19 … 2026-10-28 | [#63](https://github.com/PratimeshTiwari/Agent-CLI/pull/63)–[#101](https://github.com/PratimeshTiwari/Agent-CLI/pull/101) | The VS Code chat panel; three modes; themes; first-start setup; the effort slider; documents; `/doctor`; prompt versions |

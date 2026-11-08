@@ -30,7 +30,7 @@ plus a standalone `vscode-companion/`.
 npm install                          # both workspaces, from the root
 npm run start                        # server, workspace pinned to ../
 npm test                             # server, extension and companion
-node --test server/test/backend/core/workspace/paths.test.js        # one file
+cd server && node --import ./test/setup-home.js --test test/backend/core/workspace/paths.test.js  # one file
 npm run build --workspace=extension  # rebuild the service worker
 ```
 
@@ -49,9 +49,10 @@ server/src/
 │   ├── core/      # by job: turn/ (agent-loop, slash-commands), prompt/, models/,
 │   │              #   edits/, commands/, policy/, subagents/, logs/, install/, workspace/
 │   ├── bridge/    # the Chrome-extension transport
-│   ├── context/   # token budget and code search: symbol-index (find_symbol /
-│   │              #   find_references), ruby-symbols, pattern-symbols
-│   ├── mcp/       # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each
+│   ├── context/   # token budget, memory-store, and code search: symbol-index
+│   │              #   (find_symbol / find_references), ruby-symbols, pattern-symbols
+│   ├── mcp/       # mcp-server.js (TOOL_DEFINITIONS) + tools/, one handler each;
+│   │              #   client/ talks to the person's own MCP servers
 │   └── atlassian/  prompts/  storage/  watcher/
 └── frontend/      # the terminal UI: input/, transcript/, menus/, screen/, components/;
                    #   imports backend/
