@@ -781,11 +781,11 @@ answered for it. Pty (`FAKE_LOCKED`, `FAKE_LEVELS`): no switch sent, 0 clears at
 
 **Thinking level follows effort (v9.9.3, `core/models/thinking.js`, extension 1.65.0).** Read live (Step 0 of
 `2026-11-06-auto-thinking-visuals.md`): Low/Medium/High on every model, kept across a switch, back to Low on a page
-load. Every main-lane prompt carries `thinking`; the tab reads the trigger ("currently Pro Medium"; the lightest adds
-nothing) and opens the menu only when it is wrong. `same`, the default, is lightest/middle/heaviest for low/medium/high
+load. It is sent when chosen (`set_thinking`) and on every main-lane prompt. The trigger names a level on some accounts
+("Pro Medium"), never on Gemini Auto, so the menu's tick is the read-back; a trigger read as Low made every set "fail". `same`, the default, is lightest/middle/heaviest for low/medium/high
 and max, stepping down past a lock; `/effort thinking <level>` pins one. A failed set is one `✗` row, not retried until
 the setting changes, and the prompt goes anyway. Owner: an account with no levels shows no Thinking anywhere (slider,
-`/settings`, panels, status bar). The model watcher strips the level: a hand-picked Medium read "Flash-Lite Medium".
+`/settings`, panels, status bar). A hand-picked Medium once read as the model "Flash-Lite Medium".
 Pty (`FAKE_LEVELS`): 0 clears at 13 and 24 rows, with levels and without.
 
 ### Workspace

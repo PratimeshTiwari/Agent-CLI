@@ -801,6 +801,8 @@ export async function handleSlashCommand(loop, command, args) {
         // A pin naming something this plan does not offer is the single way
         // this feature can fail quietly, so it is the one thing always said.
         if (plan.pinMissed) browser += ` · ⚠ ${plan.pinMissed}`;
+        // `same as effort` (v9.9.3): a new rung is a new level, set now, after the switch.
+        loop.applyThinkingNow?.();
 
         /*
          * No second line about the cost. It said the next message resends the

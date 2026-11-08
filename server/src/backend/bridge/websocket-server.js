@@ -146,7 +146,7 @@ export function tokenFromUrl(url) {
 export const WORKER_ONLY_TYPES = new Set([
   'inject_prompt', 'new_chat', 'open_thread', 'end_session', 'focus_tab',
   'discover_models', 'switch_model', 'heartbeat_ack', 'stop_generation',
-  'reload_extension',
+  'reload_extension', 'set_thinking',
 ]);
 
 export class WebSocketServer {

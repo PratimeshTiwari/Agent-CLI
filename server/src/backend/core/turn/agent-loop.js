@@ -2861,6 +2861,23 @@ export class AgentLoop {
     this._thinkingFailed = null;
     this._saveConfig();
     this._emitModels();
+    this.applyThinkingNow();
+  }
+
+  /**
+   * Set the tab's level now, not only before the next prompt (v9.9.3).
+   * Reported: "thinking levels do not change". The level rode only on a prompt,
+   * so picking one in `/effort` changed nothing in the tab until a message went,
+   * where a model change switches it at once. Mid-turn it waits: the next
+   * prompt of the turn carries it anyway.
+   */
+  applyThinkingNow() {
+    const level = this._wantedThinking();
+    if (!level) return false;
+    if (String(currentThinking(this.modelOptions || []) || '').toLowerCase() === level.toLowerCase()) return false;
+    if (this.extensionLock?.isBusy?.(mainLane(this.mainModel))) return false;
+    this._toExtension('set_thinking', { level, userInitiated: true });
+    return true;
   }
 
   /** The tab could not set the level: one row, and not asked again until the setting changes. */

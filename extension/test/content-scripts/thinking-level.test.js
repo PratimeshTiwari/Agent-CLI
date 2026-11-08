@@ -83,7 +83,7 @@ const PAGE = (levels) => `<gem-menu role="menu">
   <gem-menu-item role="menuitem" aria-haspopup="true" aria-expanded="false"><span>Thinking level</span></gem-menu-item>
   <gem-menu role="menu">${levels}</gem-menu></gem-menu>`;
 
-function selectOn(levels) {
+function selectOn(levels, { triggerNames = true } = {}) {
   const { window } = new JSDOM(`<body>${PAGE(levels)}</body>`);
   const { document } = window;
   const items = [...document.querySelectorAll('gem-menu-item')];
@@ -94,14 +94,17 @@ function selectOn(levels) {
     el.addEventListener('click', () => {
       clicks.push(el.textContent.trim());
       if (el.getAttribute('role') === 'menuitemradio' && !el.hasAttribute('data-mode-id')) {
+        // As the live page does: the clicked level ticks itself at once. Only
+        // some accounts' triggers name it ("Gemini Auto" never does).
+        el.setAttribute('aria-checked', 'true');
         const name = el.textContent.trim();
-        trigger = name === 'Low' ? 'Pro' : `Pro ${name}`;
+        if (triggerNames) trigger = name === 'Low' ? 'Pro' : `Pro ${name}`;
       }
     });
   }
   const modelOptionPieces = loadFunction(SCRIPT, 'modelOptionPieces');
   const describeModelOption = loadFunction(SCRIPT, 'describeModelOption', { modelOptionPieces });
-  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { describeModelOption, document, knownLevels: [] });
+  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { noteTickedLevel: () => {}, describeModelOption, document, knownLevels: [] });
   const knownLevels = ['Low', 'Medium', 'High'];
   const splitTriggerLabel = split(knownLevels);
   const currentThinkingLabel = () => splitTriggerLabel(trigger).level || knownLevels[0];
@@ -113,12 +116,32 @@ function selectOn(levels) {
     closeModelMenu: () => { closed++; },
     describeMenu,
     currentThinkingLabel,
+    splitTriggerLabel,
+    currentTriggerText: () => trigger,
     waitForDom: async (check) => check(),
     MENU_OPEN_BUDGET_MS: 1,
     MODEL_SETTLE_BUDGET_MS: 1,
   });
   return { fn, clicks, closed: () => closed };
 }
+
+test('a trigger that never names the level (Gemini Auto): the tick confirms it, not the trigger', async () => {
+  const { fn, clicks } = selectOn(level('Low', { checked: true }) + level('Medium') + level('High'), { triggerNames: false });
+  assert.equal(await fn('High'), 'High', 'read back as Low and reported as failed, as it was live');
+  assert.deepEqual(clicks, ['Thinking level', 'High']);
+});
+
+const current = (text, { triggerNamesLevels = null, lastTickedLevel = null } = {}) => loadFunction(SCRIPT, 'currentThinkingLabel', {
+  currentTriggerText: () => text, splitTriggerLabel: split(['Low', 'Medium', 'High']),
+  knownLevels: ['Low', 'Medium', 'High'], triggerNamesLevels, lastTickedLevel,
+})();
+
+test('the level in the tab: named, the lightest where the trigger names levels, else the menu\'s last tick', () => {
+  assert.equal(current('Pro Medium'), 'Medium');
+  assert.equal(current('Pro', { triggerNamesLevels: true, lastTickedLevel: 'High' }), 'Low');
+  assert.equal(current('Gemini Auto', { triggerNamesLevels: false, lastTickedLevel: 'High' }), 'High');
+  assert.equal(current('Gemini Auto'), null, 'unknown until the menu is read, never a guess of Low');
+});
 
 test('opens the row, clicks the level, reads it back from the trigger', async () => {
   const { fn, clicks } = selectOn(level('Low', { checked: true }) + level('Medium') + level('High'));
@@ -143,7 +166,7 @@ test('describeMenu marks the row and the levels, and nothing else', () => {
   const { document } = window;
   const modelOptionPieces = loadFunction(SCRIPT, 'modelOptionPieces');
   const describeModelOption = loadFunction(SCRIPT, 'describeModelOption', { modelOptionPieces });
-  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { describeModelOption, document, knownLevels: [] });
+  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { noteTickedLevel: () => {}, describeModelOption, document, knownLevels: [] });
   const d = describeMenu([...document.querySelectorAll('gem-menu-item')]);
   assert.deepEqual(d.map((m) => [m.submenu, m.level]), [[false, false], [true, false], [false, true], [false, true]]);
 });

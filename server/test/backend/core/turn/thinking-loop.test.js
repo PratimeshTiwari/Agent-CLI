@@ -110,3 +110,19 @@ test('the status bar names the level beside the model, and drops it first', () =
   const none = statusBarLayout({ width: 100, mode: 'plan', model: '3.1 Pro' });
   assert.doesNotMatch(text(none), /thinking/, 'no levels, no word');
 });
+
+test('a level chosen in /effort is sent to the tab at once, not only with the next prompt', () => {
+  // Reported: "thinking levels do not change". The level rode only on a prompt.
+  const { l } = loop();
+  l._saveConfig = () => {};
+  const out = [];
+  l._toExtension = (type, payload) => out.push([type, payload]);
+  l.setThinking('high');
+  assert.deepEqual(out, [['set_thinking', { level: 'High', userInitiated: true }]]);
+  l.modelOptions = l.modelOptions.map((m) => (m.level ? { ...m, selected: m.label === 'High' } : m));
+  l.setThinking('high');
+  assert.equal(out.length, 1, 'already there: nothing sent');
+  l.extensionLock = { isBusy: () => true, enqueue() {} };
+  l.setThinking('medium');
+  assert.equal(out.length, 1, 'mid-turn the next prompt carries it');
+});

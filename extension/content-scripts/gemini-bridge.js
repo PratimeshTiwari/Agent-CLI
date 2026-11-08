@@ -1835,7 +1835,10 @@ function describeMenu(items) {
     };
   });
   const levels = described.filter((m) => m.level && m.label).map((m) => m.label);
-  if (levels.length) knownLevels = levels;
+  if (levels.length) {
+    knownLevels = levels;
+    noteTickedLevel(described.find((m) => m.level && m.selected)?.label || null);
+  }
   return described;
 }
 
@@ -1853,6 +1856,24 @@ function describeMenu(items) {
  */
 let knownLevels = [];
 const LEVEL_WORDS = ['low', 'medium', 'high'];
+
+/*
+ * Not every account's trigger names the level (1.65.0, read live 2026-11-08).
+ * On "Gemini Auto" it says "currently Gemini Auto" at every level, so a set
+ * that worked was read back as Low, reported as failed and never asked again
+ * (owner: "thinking levels do not change"). So the menu is the record: the
+ * level ticked when it was last read, and whether this page's trigger names a
+ * level at all — learnt when a level other than the lightest is ticked.
+ */
+let lastTickedLevel = null;
+let triggerNamesLevels = null;
+
+function noteTickedLevel(level) {
+  lastTickedLevel = level;
+  if (!level || norm(level) === norm(knownLevels[0])) return;
+  const named = splitTriggerLabel(currentTriggerText()).level;
+  triggerNamesLevels = Boolean(named) && norm(named) === norm(level);
+}
 
 function splitTriggerLabel(text) {
   const words = String(text || '').trim().split(/\s+/).filter(Boolean);
@@ -1872,11 +1893,18 @@ function currentTriggerText() {
   return m ? m[1].trim() : null;
 }
 
-/** The level the trigger names; the lightest when it names none, if the levels are known. */
+/**
+ * The level in the tab, or null when it cannot be told without opening the menu.
+ * A level the trigger names is the answer. Where the trigger is known to name
+ * levels, naming none means the lightest; otherwise the menu's last tick is.
+ */
 function currentThinkingLabel() {
   const text = currentTriggerText();
   if (!text) return null;
-  return splitTriggerLabel(text).level || knownLevels[0] || null;
+  const named = splitTriggerLabel(text).level;
+  if (named) { triggerNamesLevels = true; return named; }
+  if (triggerNamesLevels === true) return knownLevels[0] || null;
+  return lastTickedLevel;
 }
 
 /**
@@ -1919,11 +1947,17 @@ async function selectThinkingLevel(wanted) {
   const row = rowAt === -1 ? null : items[rowAt];
   if (row && row.getAttribute('aria-expanded') !== 'true') row.click();
   await waitForDom(() => (items[hitAt].offsetWidth > 0 ? true : null), MENU_OPEN_BUDGET_MS);
-  items[hitAt].click();
+  const hit = items[hitAt];
+  hit.click();
+  // The clicked level ticks itself within 50 ms (read live), before the menu
+  // closes; the trigger says so only on accounts whose trigger names levels.
   const got = await waitForDom(() => {
-    const now = currentThinkingLabel();
-    return now && norm(now) === want ? now : null;
+    if (hit.getAttribute('aria-checked') === 'true' || hit.classList.contains('selected')) return described[hitAt].label;
+    const named = splitTriggerLabel(currentTriggerText()).level;
+    return named && norm(named) === want ? named : null;
   }, MODEL_SETTLE_BUDGET_MS);
+  // The tick only: the trigger may lag the click, so what it names is learnt from a menu read.
+  if (got) lastTickedLevel = got;
   // A level click closes the menu itself; this only acts if it did not.
   closeModelMenu(trigger);
   if (!got) throw new Error(`[set_thinking] clicked "${wanted}", and the picker still says ${currentThinkingLabel() || 'nothing'}`);
@@ -3071,6 +3105,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       runSwitchModel(payload?.label);
       sendResponse({ success: true });
       return true;
+
+    case 'set_thinking':
+      /*
+       * A level chosen in `/effort`, set now (1.65.0). Reported: "thinking
+       * levels do not change" — it rode only on the next prompt. Mid-prompt it
+       * is left: that prompt, or the next, carries the level anyway. It waits
+       * for a model switch sent just before it, since both open the picker.
+       */
+      if (isInjecting) {
+        sendResponse({ success: true, deferred: true });
+        return false;
+      }
+      waitForPickerIdle().then(() => applyThinking(payload?.level)).catch(() => {});
+      sendResponse({ success: true });
+      return false;
 
     case 'get_page_status':
       sendResponse({

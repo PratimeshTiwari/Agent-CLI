@@ -60,7 +60,7 @@ function read(html) {
   const { document } = window;
   const SELECTORS = { modelMenuItem: loadSelectors() };
   const modelMenuItems = loadFunction(SCRIPT, 'modelMenuItems', { SELECTORS, document });
-  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { describeModelOption, document });
+  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { noteTickedLevel: () => {}, describeModelOption, document });
   const items = modelMenuItems();
   return { items, described: describeMenu(items) };
 }
@@ -140,7 +140,7 @@ test('a switch to a locked model throws and clicks nothing', async () => {
   let clicks = 0;
   for (const el of items) el.addEventListener('click', () => { clicks += 1; });
   let closed = 0;
-  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { describeModelOption, document });
+  const describeMenu = loadFunction(SCRIPT, 'describeMenu', { noteTickedLevel: () => {}, describeModelOption, document });
   const selectModelByLabel = loadFunction(SCRIPT, 'selectModelByLabel', {
     findModelTrigger: async () => document.body,
     openModelMenu: async () => items,
