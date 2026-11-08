@@ -5,16 +5,19 @@ through a Gemini tab in your own Chrome, signed in as you: the agent writes the 
 extension types it in and streams the reply back, and the agent reads, edits and runs things in your
 repo.
 
-> [!WARNING]
-> **For development and learning only.** This project exists to explore what is possible when a
-> coding agent drives a chat web app. It is not for personal or commercial use.
+> [!IMPORTANT]
+> **Disclaimer.** This project is provided solely for research, development and educational
+> purposes, to demonstrate what is technically possible. It is not intended for personal or
+> commercial use.
 >
-> - **It automates gemini.google.com**, a consumer web app. Automating it is likely against
->   Google's terms of service and may get your account restricted.
-> - **Not affiliated with or endorsed by Google.** "Gemini" refers only to the service the
->   extension types into.
-> - **No warranty.** It is provided as is, and you are responsible for how you use it. For real
->   work, use a supported tool or an official API.
+> - **Third-party services.** This project interacts with third-party web services. Users are
+>   solely responsible for ensuring that their use complies with the terms of service and
+>   policies of any such service, including those of Google.
+> - **No affiliation.** This project is not affiliated with, endorsed by or sponsored by Google
+>   LLC. "Gemini" and related names are trademarks of their respective owners and are used here
+>   for identification only.
+> - **No warranty.** The software is provided "as is", without warranty of any kind. The authors
+>   accept no liability for any use of it or for any consequence arising from such use.
 
 ![Agent CLI reading two models and documenting them](docs/images/terminal.svg)
 
