@@ -35,6 +35,44 @@ const EFFORT_IDS = new Set(EFFORT_LEVELS.map((e) => e.id));
 const haystack = (m) => `${m.label || ''} ${m.description || ''}`.toLowerCase();
 
 /**
+ * The model the tab is on: the first ticked entry that is not a mode.
+ *
+ * Since 2026-11-06 the picker also ticks a thinking level (`Low`), reported as
+ * a mode. Reading the first ticked entry of any kind made `Low` the current
+ * model whenever no model was ticked.
+ */
+export function selectedModel(models = [], pins = []) {
+  const list = (models || []).filter((m) => m && m.label);
+  /*
+   * A mode still counts when a pin names it: `browserModels.high: "Extended
+   * thinking"` is a person choosing that mode as a rung, and the tab on it is
+   * on that rung. A ticked level is never pinned, so it stays out.
+   */
+  const named = new Set(pins.filter(Boolean).map((p) => String(p).trim().toLowerCase()));
+  return list.find((m) => m.selected && m.isMode !== true)
+    || list.find((m) => m.selected && named.has(m.label.trim().toLowerCase()))
+    || null;
+}
+
+/**
+ * Why a rung has no model when the reason is a lock, else null.
+ *
+ * A locked entry is never picked (`pickModelFor`), so `/effort max` on an
+ * account with 4 Argon locked would say "not available", which is untrue and
+ * hides the reason. This asks what the rung would have taken with every lock
+ * lifted, and names it when that entry is locked.
+ *
+ * @returns {string|null} e.g. "4 Argon is locked on this account"
+ */
+export function lockedReason(effortId, models = [], pin = '') {
+  const options = (models || []).filter((m) => m && m.label);
+  if (!options.some((m) => m.locked) || pickModelFor(effortId, options, pin)) return null;
+  const would = pickModelFor(effortId, options.map((m) => ({ ...m, locked: false })), pin);
+  const hit = would && options.find((m) => m.label === would.model.label);
+  return hit?.locked ? `${hit.label} is locked on this account` : null;
+}
+
+/**
  * The picker's own running order, anchored on the one name that does not drift.
  *
  * Reported by the owner, 2026-09-26: *"Pro is the main identifier — Flash-Lite
@@ -181,7 +219,13 @@ export function browserModelPin(modelConfig, effortId) {
  *        null when there is nothing to pick
  */
 export function pickModelFor(effortId, models = [], pin = '') {
-  const options = (models || []).filter((m) => m && m.label);
+  /*
+   * A locked model does not exist (v9.7). The picker lists it with a lock icon
+   * on accounts that cannot use it, and the ladder used to plan a switch to
+   * it: High to a locked 3.1 Pro, Max to a locked 4 Argon. Dropped before
+   * anything else, the pin included, so the rest reads as if it were absent.
+   */
+  const options = (models || []).filter((m) => m && m.label && !m.locked);
   if (options.length === 0) return null;
 
   /*
@@ -309,7 +353,7 @@ export function modelMismatch(effortId, models = [], pin = '') {
  */
 export function explainModelMismatch(effortId, models = [], pin = '') {
   const options = (models || []).filter((m) => m && m.label);
-  const current = options.find((m) => m.selected);
+  const current = selectedModel(options, [pin]);
   if (!current) {
     return {
       state: 'unknown',
@@ -353,7 +397,7 @@ export function planModelSwitch(effortId, models = [], pin = '') {
     ...(pick.pinMissed ? { pinMissed: pick.pinMissed } : {}),
   };
 
-  const current = options.find((m) => m.selected);
+  const current = selectedModel(options, [pin]);
   if (current && current.label === pick.model.label) {
     return {
       action: 'none', model: pick.model, ...pinFields, reason: `already on ${pick.model.label}`,
@@ -386,10 +430,10 @@ export function planModelSwitch(effortId, models = [], pin = '') {
  */
 export function rungForModel(models = [], setting = '', modelConfig = {}) {
   const options = (models || []).filter((m) => m && m.label);
-  const current = options.find((m) => m.selected);
+  const ids = EFFORT_LEVELS.map((e) => e.id);
+  const current = selectedModel(options, ids.map((id) => browserModelPin(modelConfig, id)));
   if (!current) return null;
 
-  const ids = EFFORT_LEVELS.map((e) => e.id);
   const hits = ids.filter((id) => {
     const pick = pickModelFor(id, options, browserModelPin(modelConfig, id));
     return pick?.model.label === current.label;

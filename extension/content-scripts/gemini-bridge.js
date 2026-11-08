@@ -92,12 +92,14 @@ const SELECTORS = {
     'button[aria-label*="mode picker" i]',
   ],
 
-  // The options, once the picker is open. They are `<gem-menu-item>` elements
-  // with role=menuitem — not menuitemradio, and not inside a mat-menu, both of
-  // which were guessed here first and match nothing.
+  // The options, once the picker is open: `<gem-menu-item>` elements. Read
+  // live on 2026-11-06, a model and a thinking level are `menuitemradio` and
+  // only the row that opens the levels is `menuitem`, so the role selector
+  // matched that one row and worked only by falling through. The element name
+  // goes first; the role stays for an older layout.
   modelMenuItem: [
-    '[role="menu"] [role="menuitem"]',
     'gem-menu-item',
+    '[role="menu"] [role="menuitem"]',
   ],
 
   // The main prompt input textarea
@@ -1803,11 +1805,19 @@ function describeMenu(items) {
     modeOf.set(entry, seenRule);
   }
 
+  /*
+   * A model carries `data-mode-id`; the Thinking level row and its levels do
+   * not (read live, 2026-11-06, on two accounts). Where any entry has one, an
+   * entry without one is a mode whatever the rule says, so a build that drops
+   * the divider cannot make High a model. Where none has one, the rule alone
+   * decides, as before.
+   */
+  const ids = items.some((el) => el.hasAttribute?.('data-mode-id'));
   return items.map((el) => ({
     ...describeModelOption(el),
     // No rule found at all — an older layout, or a plan with no modes. Then
     // nothing is a mode, and the server's word veto is still there behind this.
-    isMode: modeOf.get(el) === true,
+    isMode: modeOf.get(el) === true || (ids && !el.hasAttribute('data-mode-id')),
   }));
 }
 
@@ -2123,8 +2133,8 @@ async function readModelOptions() {
     /*
      * Which one is selected, from the trigger when the menu will not say.
      *
-     * `describeModelOption` reads a `selected` class, and on the real page that
-     * is the only marker — `aria-checked` and `aria-selected` are both absent.
+     * `describeModelOption` reads a `selected` class and `aria-checked` (both
+     * on the page since at least 2026-11-06; only the class before).
      * In a tab that has just mounted the class can be missing on every item,
      * and the server then logs `model_picker_unreadable`: a list it cannot
      * compare against the rung, which is the same as no list at all. Observed
@@ -2135,7 +2145,9 @@ async function readModelOptions() {
      * position for `switch_model`. Used only when the class says nothing, so
      * the DOM's own marker still wins wherever it exists.
      */
-    return described.some((m) => m.selected)
+    // A model, not a level: a ticked `Low` used to answer this and skip the
+    // trigger, on exactly the read that had no model ticked.
+    return described.some((m) => m.selected && !m.isMode)
       ? described
       : markSelected(described, currentModelLabel());
   } finally {
@@ -2263,9 +2275,8 @@ function describeModelOption(el) {
     // "Advanced reasoning". That is what the server matches on, so it survives
     // the names changing.
     description: lines[1] || '',
-    // On the real page the current option is marked by a `selected` class and
-    // nothing else — `aria-checked` and `aria-selected` are both absent, so the
-    // aria checks are future-proofing rather than what fires today.
+    // The current option has a `selected` class and, since at least
+    // 2026-11-06, `aria-checked="true"` too. Either counts.
     //
     // `active` is NOT selection. It is on whichever item the menu opened
     // focused, which is the first one, so reading it would report the top of
@@ -2273,6 +2284,19 @@ function describeModelOption(el) {
     selected: el.classList.contains('selected')
       || el.getAttribute('aria-checked') === 'true'
       || el.getAttribute('aria-selected') === 'true',
+    /*
+     * A model this account cannot use. The page marks it with a lock icon and
+     * nothing else: `aria-disabled` stays "false" on it (read live, 2026-11-06,
+     * an account on Auto with 3.1 Pro and 4 Argon locked). Clicking one does
+     * nothing useful at best, so the server never picks it and the switch
+     * refuses it. The icon's name is matched however it is drawn: attribute or
+     * ligature text.
+     */
+    locked: el.getAttribute('aria-disabled') === 'true'
+      || [...(el.querySelectorAll?.('mat-icon') || [])].some((i) => (
+        i.getAttribute('fonticon') === 'lock'
+        || i.getAttribute('data-mat-icon-name') === 'lock'
+        || (i.textContent || '').trim() === 'lock')),
   };
 }
 
@@ -2334,6 +2358,11 @@ async function selectModelByLabel(label) {
    */
   const described = describeMenu(items).filter((m) => m.label);
   const hit = items.find(matches);
+
+  if (hit && describeModelOption(hit).locked) {
+    closeModelMenu(trigger);
+    throw new Error(`[switch_model] "${label}" is locked on this account`);
+  }
 
   if (!hit) {
     closeModelMenu(trigger);
@@ -2412,15 +2441,27 @@ const norm = (s) => String(s || '').trim().toLowerCase();
 function markSelected(described, triggerLabel) {
   const wanted = norm(triggerLabel);
   const stripVersion = (s) => norm(s).replace(/^\d+(\.\d+)*\s+/, '');
+  // Only models: a thinking level keeps its own tick, and a trigger never
+  // names one.
+  const models = described.map((m, i) => i).filter((i) => !described[i].isMode);
+  const only = (hits) => (hits.length === 1 ? hits[0] : -1);
 
-  let index = described.findIndex((m) => stripVersion(m.label) === wanted);
+  let index = models.find((i) => stripVersion(described[i].label) === wanted) ?? -1;
   if (index === -1) {
-    const hits = described
-      .map((m, i) => i)
-      .filter((i) => wanted && norm(described[i].label).includes(wanted));
-    index = hits.length === 1 ? hits[0] : -1;
+    index = only(models.filter((i) => wanted && norm(described[i].label).includes(wanted)));
   }
-  return described.map((m, i) => ({ ...m, selected: i === index }));
+  /*
+   * The other way round: the trigger reads "Gemini Auto" where the entry is
+   * "Auto" (live, 2026-11-06). Without this a read that missed the tick had no
+   * second chance on that account and marked nothing.
+   */
+  if (index === -1) {
+    index = only(models.filter((i) => {
+      const name = stripVersion(described[i].label);
+      return name && wanted.endsWith(` ${name}`);
+    }));
+  }
+  return described.map((m, i) => (m.isMode ? m : { ...m, selected: i === index }));
 }
 
 /**

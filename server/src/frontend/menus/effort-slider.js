@@ -10,7 +10,9 @@
  * Pure and `.js`, so `node --test` can import it: every row is laid out here
  * at an exact width, and the menu only colours it.
  */
-import { pickModelFor, browserModelPin } from '../../backend/core/models/model-match.js';
+import {
+  pickModelFor, browserModelPin, lockedReason, selectedModel,
+} from '../../backend/core/models/model-match.js';
 
 /**
  * The model a stop would put the tab on, on this account (C2).
@@ -29,10 +31,13 @@ import { pickModelFor, browserModelPin } from '../../backend/core/models/model-m
 export function stopModel(rung, models = [], modelConfig = {}) {
   const options = (models || []).filter((m) => m && m.label);
   if (options.length === 0) return { text: rung.browser, available: true };
-  const pick = pickModelFor(rung.id, options, browserModelPin(modelConfig, rung.id));
+  const pin = browserModelPin(modelConfig, rung.id);
+  const pick = pickModelFor(rung.id, options, pin);
   if (pick) return { text: pick.model.label, available: true };
+  const locked = lockedReason(rung.id, options, pin);
   return {
-    text: rung.id === 'max' ? 'not available on this account' : 'nothing on this account suits it',
+    text: locked ? locked.replace(' on this account', '')
+      : rung.id === 'max' ? 'not available on this account' : 'nothing on this account suits it',
     available: false,
   };
 }
@@ -45,7 +50,7 @@ export function stopModel(rung, models = [], modelConfig = {}) {
  */
 export function tabDiffers(stop, models = []) {
   if (!stop?.available) return null;
-  const tab = (models || []).find((m) => m && m.selected && !m.isMode)?.label;
+  const tab = selectedModel(models)?.label;
   if (!tab) return null;
   return tab.trim().toLowerCase() === String(stop.text).trim().toLowerCase() ? null : tab;
 }

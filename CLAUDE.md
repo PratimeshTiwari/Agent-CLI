@@ -770,6 +770,14 @@ cannot be named from inside, so it is proved: the agent opens it on a `#agent-pa
 extension answers with its `storage.local` id. Bound, nothing else is admitted and a closed profile makes prompts
 wait: **never a fallback.** Unbound, the first install connected wins. Harness: `run-two.sh`, `run-chrome.sh`.
 
+**A locked model does not exist (v9.7, extension 1.63.0).** Read live with Claude in Chrome: an account on
+`Gemini Auto` lists 3.1 Pro and 4 Argon with a lock icon and `aria-disabled="false"`, so the icon is the test
+(`locked` from `describeModelOption`). `pickModelFor` drops locked entries first, pin included; the switch
+refuses one. On that account every rung lands on Auto and the prompt follows the setting, Max reading
+High; `/effort max` says `4 Argon is locked on this account` (`lockedReason`). Both accounts tick a thinking
+level too, reported as a mode: `selectedModel` is the only reader of the tab's model, because a ticked `Low`
+answered for it. Pty (`FAKE_LOCKED`, `FAKE_LEVELS`): no switch sent, 0 clears at 13 and 24 rows.
+
 ### Workspace
 
 `core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
@@ -824,12 +832,6 @@ was written, and the chain named them literally with an `else` sending everythin
 `mcpServer.executeTool`: a fourth loop tool would have gone to a server with no handler and
 come back to the model as an unknown tool it had just been told it has. `LOOP_TOOLS` is derived
 from the catalog now, so the two cannot disagree.
-
-**The drift check caught the move, which is the point of it.** `LOOP_DISPATCHED` in
-`tool-catalog.test.js` scrapes the dispatching source rather than deriving from the catalog —
-derived, it would be comparing the catalog to itself. It went red the moment the arms left
-`agent-loop.js`, and it now reads `loop-tools.js`. **The file it reads must be the file with
-the implementation in it.**
 
 `core/edits/diff-approval.js` holds what happens between building a diff and it being on disk. Three
 parties have to be told the same thing about that, and each has been the odd one out: the model
@@ -1253,14 +1255,6 @@ including the user's turn. A notice is now never fatal, checked *after* the sett
 `session_lost` branches. An allow-list of the ops that may stay alive cannot enforce this: the
 next informational op falls into the same hole. Coupling those is how a demoted row stops settling a watchdog, which is a hung turn
 reported as a quiet log.
-
-`writeTally` is one function because it had been two — `flushExpired` and `flushPending` held
-a copy each, and deleting the level from one left the whole suite green because every test
-reached the other. The storm test could not catch it either: inside the 60s window the tally
-is still a number in memory and never reaches disk, so **a test that never advances the clock
-does not test the collapse.** `test/backend/core/log-levels.test.js` calls `flushPending` for exactly
-that reason, and every demotion there has a negative control naming the case that must stay
-loud.
 
 ### The command log
 

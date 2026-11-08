@@ -170,7 +170,9 @@ import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from '../subagents/subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS, MCP_TOOLS } from '../prompt/tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung, EFFORT_LEVELS } from '../models/effort.js';
-import { planModelSwitch, browserModelPin, rungForModel, pickModelFor } from '../models/model-match.js';
+import {
+  planModelSwitch, browserModelPin, rungForModel, pickModelFor, selectedModel,
+} from '../models/model-match.js';
 import { MODES, describeMode } from '../policy/modes.js';
 import { archiveTurns } from './session-recall.js';
 import { handleSlashCommand as runSlashCommand } from './slash-commands.js';
@@ -905,7 +907,7 @@ export class AgentLoop {
         promptEffort: this._promptEffort(),
         // Which prompt version this reply answered (v5.32): what /prompt compares.
         promptVersion: this.promptVersion,
-        model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
+        model: selectedModel(this.modelOptions)?.label || null,
         timestamp: Date.now(),
       };
       this.conversationHistory.push(agentTurn);
@@ -1167,7 +1169,7 @@ export class AgentLoop {
   if (verdict.action === 'step_down') {
     this._steppedDownThisTurn = true;
     const from = resolveEffort(this._promptEffort());
-    const on = (this.modelOptions || []).find((m) => m?.selected)?.label || from.browser;
+    const on = selectedModel(this.modelOptions)?.label || from.browser;
     this._noticeRow(`✗ ${on} is at its limit · stepping down a rung`);
     // The prompt that hit the limit, verbatim, as the provider retry sends it:
     // a rebuild would lose the tool results it carried.
@@ -2075,7 +2077,8 @@ export class AgentLoop {
      * often this runs, so there is nothing here spamming on its own.
      */
     const options = models.filter((m) => m && m.label);
-    if (options.length > 0 && !options.some((m) => m.selected)) {
+    // A ticked thinking level is not a model (v9.7): it used to quiet this.
+    if (options.length > 0 && !selectedModel(options)) {
       logError(this.workspace, {
         flow: 'agent',
         op: 'model_picker_unreadable',
@@ -2143,7 +2146,12 @@ export class AgentLoop {
     const name = (m) => m.label.trim().toLowerCase();
     const exact = options.filter((m) => name(m) === want);
     const tail = options.filter((m) => name(m).endsWith(` ${want}`));
-    const hit = exact.length === 1 ? exact[0] : tail.length === 1 ? tail[0] : null;
+    // And the other way round: the trigger says "Gemini Auto" for the entry
+    // "Auto" (live, 2026-11-06), which used to cost a re-read of the list.
+    const head = options.filter((m) => want.endsWith(` ${name(m)}`));
+    const hit = exact.length === 1 ? exact[0]
+      : tail.length === 1 ? tail[0]
+        : head.length === 1 ? head[0] : null;
     if (!hit) {
       this.requestModelOptions?.(false);
       return;
@@ -2209,7 +2217,7 @@ export class AgentLoop {
    * failed ask, which is what leaves anything here to report.
    */
   browserModelNotice() {
-    const current = (this.modelOptions || []).find((m) => m && m.selected);
+    const current = selectedModel(this.modelOptions);
     return current
       ? `Continuing on ${current.label} — last seen selected in the tab. `
         + 'Change it there by hand if you want a different one (ctrl+b opens it). '
@@ -3049,7 +3057,7 @@ export class AgentLoop {
     return {
       mode: this.mode,
       effort: resolveEffort(this.modelConfig?.effort).id,
-      model: (this.modelOptions || []).find((m) => m && m.selected)?.label || null,
+      model: selectedModel(this.modelOptions)?.label || null,
       // The tab has not answered yet, so a difference is not a mismatch.
       switching: Boolean(this._switchInFlight),
       contextPct: limit > 0 ? Math.round((this.contextTokens / limit) * 100) : null,

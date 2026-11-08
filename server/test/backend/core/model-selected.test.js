@@ -61,3 +61,19 @@ test('the worker relays it and the bridge watches the label', () => {
   const server = readFileSync(new URL('../../../src/backend/bridge/websocket-server.js', import.meta.url), 'utf8');
   assert.match(server, /case 'model_selected':\n[^]*?noteSelectedModel/);
 });
+
+test('"Gemini Auto" marks the entry "Auto" without asking again (v9.7)', () => {
+  const l = Object.create(AgentLoop.prototype);
+  const asked = [];
+  Object.assign(l, {
+    modelOptions: [
+      { label: 'Auto', isMode: false }, { label: '3.1 Pro', isMode: false, locked: true, selected: true },
+      { label: 'Low', isMode: true, selected: true },
+    ],
+    requestModelOptions: (u) => asked.push(u),
+  });
+  l.noteSelectedModel('Gemini Auto');
+  assert.deepEqual(selected(l), ['Auto']);
+  assert.deepEqual(asked, [], 'it used to cost a re-read of the list');
+  assert.ok(l.modelOptions.find((m) => m.label === 'Low').selected, 'the level keeps its tick');
+});

@@ -1532,3 +1532,19 @@ editor sees it. In Chrome, `open-floating-panel` is a **global** command (`Ctrl+
 `⌘⇧1`): it fires while Chrome is in the background and focuses the floating window rather than
 opening a second. Chrome's Gemini panel itself (`chrome://glic`) is browser UI with no
 extension API — it cannot be the bridge, and nothing here tries to reach it.
+
+## Moved from CLAUDE.md in v9.7
+
+`writeTally` is one function because it had been two — `flushExpired` and `flushPending` held
+a copy each, and deleting the level from one left the whole suite green because every test
+reached the other. The storm test could not catch it either: inside the 60s window the tally
+is still a number in memory and never reaches disk, so **a test that never advances the clock
+does not test the collapse.** `test/backend/core/log-levels.test.js` calls `flushPending` for exactly
+that reason, and every demotion there has a negative control naming the case that must stay
+loud.
+
+**The drift check caught the move, which is the point of it.** `LOOP_DISPATCHED` in
+`tool-catalog.test.js` scrapes the dispatching source rather than deriving from the catalog —
+derived, it would be comparing the catalog to itself. It went red the moment the arms left
+`agent-loop.js`, and it now reads `loop-tools.js`. **The file it reads must be the file with
+the implementation in it.**
