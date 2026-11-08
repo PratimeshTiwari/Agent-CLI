@@ -57,7 +57,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175)
 
 **Highlights**
 
@@ -72,7 +72,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.6 | 11-08 | — | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
+| v9.9.6 | 11-08 | [#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
 | v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
 | v9.9.3 | 11-08 | [#171](https://github.com/PratimeshTiwari/Agent-CLI/pull/171) | Thinking level follows effort |
