@@ -33,6 +33,20 @@ const PROMPTS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'p
 // is on the hot path of every turn.
 const cache = new Map();
 
+// Where the files are read from. Only a test moves it, to a copy, so that no
+// test writes into the source tree: one did, and a running agent's watcher
+// reported the planted file as an edit "made externally by the user" (v9.9.4).
+let promptsRoot = PROMPTS_DIR;
+
+/** Tests only: read prompts from `dir` (a copy of the shipped folder), or back from the shipped one. */
+export function usePromptsDir(dir = null) {
+  promptsRoot = dir || PROMPTS_DIR;
+  cache.clear();
+}
+
+/** The shipped folder, for a test that copies it. */
+export const SHIPPED_PROMPTS_DIR = PROMPTS_DIR;
+
 /**
  * The text of `backend/prompts/<name>.md`, with trailing whitespace trimmed.
  *
@@ -52,8 +66,8 @@ export function prompt(name, dir = null) {
    * own copy in `backend/prompts/<dir>/`; anything it does not override is the base
    * file, so a version is only its differences.
    */
-  const own = dir ? join(PROMPTS_DIR, dir, `${name}.md`) : null;
-  const file = own && existsSync(own) ? own : join(PROMPTS_DIR, `${name}.md`);
+  const own = dir ? join(promptsRoot, dir, `${name}.md`) : null;
+  const file = own && existsSync(own) ? own : join(promptsRoot, `${name}.md`);
   let text;
   try {
     text = readFileSync(file, 'utf-8').trimEnd();

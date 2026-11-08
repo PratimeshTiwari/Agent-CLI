@@ -370,3 +370,17 @@ export function looksLikeEmptyPromise(text) {
   const tail = sentences.slice(-2);
   return tail.some((s) => PROMISE.test(s) && !OFFER.test(s) && !s.endsWith('?'));
 }
+
+/*
+ * A document written into Gemini's Canvas (v9.9.4). Canvas puts the document
+ * in an iframe beside the reply, which the scrape cannot read, so the bridge
+ * leaves this marker where the chip was (`canvasMarker` in gemini-bridge.js;
+ * change both or neither). Seen from use: asked for a design document, Flash
+ * opened a Canvas, said it had written it, and nothing reached the disk.
+ */
+const CANVAS_MARKER = /\[Gemini Canvas: "([^"\n]*)" — written in Gemini's Canvas, not in this reply\]/g;
+
+/** The titles of every Canvas the reply opened, in order; [] for none. */
+export function canvasTitles(text) {
+  return [...String(text || '').matchAll(CANVAS_MARKER)].map((m) => m[1]);
+}

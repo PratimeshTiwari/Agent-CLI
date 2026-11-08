@@ -5,11 +5,35 @@
  * it for user approval via the side panel.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { displayPath, resolveToolPath } from '../../core/workspace/paths.js';
 
+/**
+ * A rewrite that only adds to the end, as an append (v9.9.4).
+ *
+ * Seen from use: building a document section by section, Flash sent the whole
+ * file back as `oldText` and the whole file plus a section as `newText`. One
+ * edit whose `oldText` runs to the end of the file and whose `newText` starts
+ * with it adds only the rest, so that is what is proposed: an addition-only
+ * diff, which auto mode does not stop on. Returns the text to append, or null.
+ */
+export function appendHiddenInEdit(content, edits) {
+  if (!Array.isArray(edits) || edits.length !== 1) return null;
+  const { oldText, newText } = edits[0] || {};
+  if (typeof oldText !== 'string' || typeof newText !== 'string' || oldText.trim().length < 40) return null;
+  const at = content.indexOf(oldText);
+  if (at === -1 || content.indexOf(oldText, at + 1) !== -1) return null;
+  if (content.slice(at + oldText.length).trim() !== '') return null;
+  if (!newText.startsWith(oldText) || newText.length === oldText.length) return null;
+  let rest = newText.slice(oldText.length);
+  // The file's own last newline is kept by an append; do not add a second.
+  if (content.endsWith('\n') && rest.startsWith('\n')) rest = rest.slice(1);
+  return rest.trim() ? rest : null;
+}
+
 export async function editFile(args, context) {
-  const { path: filePath, edits, append } = args;
+  const { path: filePath } = args;
+  let { edits, append } = args;
   const { workspace, diffEngine } = context;
 
   const absPath = resolveToolPath(workspace, filePath);
@@ -38,8 +62,17 @@ export async function editFile(args, context) {
     }
   }
 
+  let converted = false;
+  if (!appending) {
+    let content = null;
+    try { content = readFileSync(absPath, 'utf8'); } catch { /* the diff engine reports it */ }
+    const rest = content === null ? null : appendHiddenInEdit(content, edits);
+    if (rest) { append = rest; edits = []; converted = true; }
+  }
+  const asAppend = appending || converted;
+
   // Generate diff
-  const diff = diffEngine.generateDiff(relPath, edits || [], { append: appending ? append : undefined });
+  const diff = diffEngine.generateDiff(relPath, edits || [], { append: asAppend ? append : undefined });
 
   return {
     diffId: diff.id,
@@ -53,6 +86,7 @@ export async function editFile(args, context) {
       newStart: h.newStart,
       preview: h.lines.slice(0, 10).join('\n') + (h.lines.length > 10 ? '\n...' : ''),
     })),
-    message: `Proposed ${appending ? 'an append' : `${edits.length} edit(s)`} to ${relPath}. Waiting for approval.`,
+    message: `Proposed ${asAppend ? 'an append' : `${edits.length} edit(s)`} to ${relPath}. Waiting for approval.`
+      + (converted ? ' This edit only added to the end, so it ran as an append. Next time send `append` with just the new text, not the whole file twice.' : ''),
   };
 }

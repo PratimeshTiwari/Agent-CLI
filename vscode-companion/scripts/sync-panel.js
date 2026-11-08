@@ -20,6 +20,10 @@ for (const name of FILES) {
         console.error(`sync-panel: ${src} is missing — is this the Agent-CLI checkout?`);
         process.exit(1);
     }
-    fs.copyFileSync(src, path.join(TO, name));
+    // Only when it differs: the test run calls this too, and an unchanged copy
+    // rewritten on every run reached a running agent's watcher as an edit.
+    const to = path.join(TO, name);
+    const same = fs.existsSync(to) && fs.readFileSync(to).equals(fs.readFileSync(src));
+    if (!same) fs.copyFileSync(src, to);
 }
 console.log(`sync-panel: ${FILES.join(', ')} → media/panel/`);
