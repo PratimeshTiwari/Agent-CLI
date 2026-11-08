@@ -40,7 +40,8 @@ import { logError } from './backend/core/logs/error-log.js';
 import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/install/dep-recovery.js';
 import { RESTART_EXIT_CODE } from './backend/core/install/restart.js';
 import { loadUserSettings, saveUserSettings } from './backend/core/workspace/user-settings.js';
-import { firstRunState } from './frontend/screen/welcome.js';
+import { firstRunState, firstRunSettings } from './frontend/screen/welcome.js';
+import { CURRENT_PROMPT_VERSION } from './backend/core/prompt/prompt-versions.js';
 
 /**
  * This file's own directory, at module scope.
@@ -158,8 +159,11 @@ async function main() {
   // Before the loop exists: its session store creates this workspace's folder
   // under workspaces/, and an empty workspaces/ is what says "first start".
   // 'pending' until setup ends, so a ctrl+c halfway brings it back next time.
-  const firstRun = firstRunState({ settings: loadUserSettings(), workspacesDir: resolve(configHome, 'workspaces') });
-  if (firstRun.write !== null) saveUserSettings({ welcomed: firstRun.write });
+  const settingsNow = loadUserSettings();
+  const firstRun = firstRunState({ settings: settingsNow, workspacesDir: resolve(configHome, 'workspaces') });
+  // A new person starts on the current prompt (v9.9.5); nobody else is moved.
+  const firstWrites = firstRunSettings(firstRun, settingsNow, CURRENT_PROMPT_VERSION);
+  if (firstWrites) saveUserSettings(firstWrites);
   
   // Verify workspace exists
   if (!existsSync(config.workspace)) {

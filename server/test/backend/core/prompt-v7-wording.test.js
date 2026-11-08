@@ -8,7 +8,9 @@ import { PromptBuilder } from '../../../src/backend/core/prompt/prompt-builder.j
 import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-versions.js';
 
 /*
- * Prompt v2 (v5.34): the dedup plan, as a version beside the frozen v1.
+ * The current prompt's wording (v7, since v9.9.5): the dedup plan, first
+ * shipped as v2 (v5.34), beside the frozen v1. v7 is v2 plus look-first
+ * (prompt-look-first.test.js), so `v2` below names the dedup, read from v7.
  *
  * Two kinds of assertion, because deleting a repeated rule is only safe if the
  * copy that stays is really there: each change is present in v2 and absent in
@@ -16,13 +18,13 @@ import { PROMPT_VERSIONS } from '../../../src/backend/core/prompt/prompt-version
  */
 
 const v1 = promptShapes({ version: 'v1' });
-const v2 = promptShapes({ version: 'v2' });
+const v2 = promptShapes({ version: 'v7' });
 const count = (text, needle) => text.split(needle).length - 1;
 
-test('v2 is a set of switches, all on', () => {
-  const flags = PROMPT_VERSIONS.v2.flags;
+test('v7 is a set of wording switches, all on', () => {
+  const flags = PROMPT_VERSIONS.v7.flags;
   assert.deepEqual(Object.keys(flags).sort(),
-    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'oneCopy', 'projectCommands', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
+    ['answerDirectly', 'gateReview', 'largeFileDigest', 'logQuery', 'lookFirst', 'oneCopy', 'projectCommands', 'subagentEffortWords', 'symbolLanguages', 'tickWithNextCall', 'trustEditResult', 'walkthroughWithTask']);
   assert.ok(Object.values(flags).every((f) => f === true));
   assert.deepEqual(PROMPT_VERSIONS.v1.flags, {}, 'v1 has no switches');
 });
@@ -137,14 +139,16 @@ test('B: <self_awareness> names the source only when it is not this workspace', 
   assert.match(build(src), /Your own source \(the Agent-CLI server\) is at `[^`]+`, outside it/);
 });
 
-test('v2 is shorter on every turn 0, and only turn 0 and the handovers move', () => {
+test('the dedup is shorter on every turn 0, and only turn 0 and the handovers move', () => {
   for (const effort of ['low', 'medium', 'high']) {
     for (const mode of ['plan', 'auto', 'strict']) {
       for (const sub of ['sub', 'solo']) {
         const key = `${effort}/${mode}/${sub}/turn0`;
         // The dedup is what is measured here; query_log (v6.20) is a tool v1
         // does not have, so its own section is left out of the comparison.
-        const dedup = v2[key].replace(/## query_log[\s\S]*?(?=## )/, '');
+        // Look-first (v7.9) is a rule added on purpose, not dedup: left out too.
+        const dedup = v2[key].replace(/## query_log[\s\S]*?(?=## )/, '')
+          .split('\n').filter((l) => !/answered from files you open/.test(l)).join('\n');
         assert.ok(v2[key].includes('## query_log'), `${key}: v2 offers query_log`);
         assert.ok(dedup.length < v1[key].length, `${key}: ${dedup.length} vs ${v1[key].length}`);
       }

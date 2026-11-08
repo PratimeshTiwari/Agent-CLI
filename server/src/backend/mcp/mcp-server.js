@@ -108,7 +108,7 @@ const TOOL_DEFINITIONS = [
     handler: queryLog,
   },
   {
-    // v9.1: offered by prompt versions with `customMcp` (v5). Who may run what
+    // v9.1: offered once a server is usable, on every prompt version (v9.9.5). Who may run what
     // is core/policy/mcp-approval.js; the handler refuses without it.
     name: 'mcp_describe',
     description: 'List the tools of an MCP server the user added, or the arguments of one of them.',

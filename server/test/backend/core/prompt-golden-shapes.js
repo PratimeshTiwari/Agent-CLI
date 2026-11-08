@@ -6,7 +6,7 @@
  * with every edit compares nothing. `prompt-v1-golden.test.js` hashes these
  * and checks them against `fixtures/prompt-v1-golden.json`.
  *
- * Regenerate only when v1 is *meant* to change (it should not be):
+ * Regenerate only when v1 is *meant* to change (it should not be; v9.9.5 did once):
  *   node --import ./test/setup-home.js test/backend/core/prompt-golden-shapes.js --write
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

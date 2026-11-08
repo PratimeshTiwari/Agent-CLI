@@ -25,7 +25,6 @@ import { openBrowser } from '../../backend/atlassian/cli.js';
 import { changeMcp, listIntegrations } from '../../backend/mcp/client/integrations.js';
 import { removeServer, setServerDisabled } from '../../backend/mcp/client/edit-config.js';
 import { McpAdd } from './McpAdd.jsx';
-import { resolvePromptVersion } from '../../backend/core/prompt/prompt-versions.js';
 import { nextSwitch, setSwitch, switchFor } from '../../backend/mcp/client/switches.js';
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
@@ -37,7 +36,7 @@ import { skillsDir, agentDir } from '../../backend/core/workspace/paths.js';
 import { skillSearchPath, listSkills } from '../../backend/core/prompt/skills.js';
 import { FOCUS_INPUT } from '../constants.js';
 import { MAX_AGENT_NAME, changed, promptVersionRows } from '../../backend/core/turn/slash-commands.js';
-import { versionChanges, versionAdds } from '../../backend/core/prompt/prompt-versions.js';
+import { PROMPT_VERSIONS, versionChanges, versionAdds } from '../../backend/core/prompt/prompt-versions.js';
 import { promptPanelPlan, changesPage, roundsBar, roundsLabel } from '../menus/prompt-view.js';
 import { T, PALETTES, PALETTE_INFO, setTheme, themeName } from '../theme.js';
 import { saveUserSettings } from '../../backend/core/workspace/user-settings.js';
@@ -1079,7 +1078,7 @@ export function Menus({
           const rows = promptVersionRows(agentLoop);
           const current = rows.find((r) => r.current) || rows[0];
           const at = rows.find((r) => r.id === activeMenu.at) || current;
-          const { sub, tight, room } = fit('A switch reaches the chat with your next message.');
+          const { sub, tight, room } = fit('Jira, MCP and memory work on both.');
           // What it adds to the version before it (v8.1: v4's one new line was
           // behind "… +6 more"). → opens a page of everything it changes from
           // v1, which hides the list and scrolls with ↑↓.
@@ -1092,7 +1091,7 @@ export function Menus({
             return (
               <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
                 keys={`${everything.length > room - 1 ? '↑↓ scroll · ' : ''}← or esc back`}>
-                <Text wrap="truncate">{'   '}<Text bold>{everything.length ? `Everything ${at.id} changes from v1` : `${at.id} is the baseline`}</Text></Text>
+                <Text wrap="truncate">{'   '}<Text bold>{everything.length ? `Everything ${at.label} changes from original` : `${at.label} is the baseline`}</Text></Text>
                 {page.lines.map((line) => (
                   line.startsWith('… ')
                     ? <Text key={line} dimColor wrap="truncate">{'     '}{line}</Text>
@@ -1102,14 +1101,16 @@ export function Menus({
             );
           }
           const changes = adds.lines;
-          const heading = changes.length ? `What ${at.id} adds to ${adds.from}` : `${at.id} is the baseline`;
-          const canExpand = everything.length > adds.lines.length;
+          // v9.9.5: two versions, so "adds to the one before" is "changes from original".
+          const heading = changes.length ? `What ${at.label} changes from ${PROMPT_VERSIONS[adds.from]?.label || adds.from}`
+            : 'The baseline, kept to compare against';
           const plan = promptPanelPlan({
             room: room - rows.length, versions: rows.length,
             changes: changes.length ? changes : [at.summary],
           });
+          const canExpand = plan.changes.filter((l) => !l.startsWith('… ')).length < everything.length;
           const max = Math.max(0, ...rows.map((r) => r.p90 ?? r.median ?? 0));
-          const idW = Math.max(...rows.map((r) => r.id.length));
+          const idW = Math.max(...rows.map((r) => r.label.length));
           const barW = Math.max(6, Math.min(24, W - idW - 40));
           return (
             <Panel width={W} title="Prompt" status={current.id} statusTone="accent" sub={sub} tight={tight}
@@ -1119,7 +1120,7 @@ export function Menus({
                 limit={rows.length}
                 initialIndex={Math.max(0, rows.indexOf(at))}
                 items={rows.map((r) => ({
-                  label: r.id, detail: r.hint, value: r.id, current: r.current,
+                  label: r.label, detail: `${r.id} · ${r.hint}`, value: r.id, current: r.current,
                 }))}
                 onHighlight={(item) => setActiveMenu((m) => ({ ...m, at: item.value }))}
                 onSelect={(item) => applyAndReturn(activeMenu, 'prompt', [item.value])}
@@ -1133,7 +1134,7 @@ export function Menus({
                     const sel = r.id === at.id;
                     return (
                       <Text key={r.id} wrap="truncate">
-                        {'   '}<Text color={sel ? T.accent : undefined} bold={sel}>{r.id.padEnd(idW)}</Text>{'  '}
+                        {'   '}<Text color={sel ? T.accent : undefined} bold={sel}>{r.label.padEnd(idW)}</Text>{'  '}
                         <Text color={T.accent}>{'━'.repeat(bar.fill)}</Text>
                         <Text color={T.muted}>{'─'.repeat(bar.tail)}</Text>
                         {' '.repeat(Math.max(0, barW - bar.fill - bar.tail))}{'  '}
@@ -1661,21 +1662,20 @@ export function Menus({
               </Panel>
             );
           }
-          const needsPrompt = !resolvePromptVersion(agentLoop.promptVersion).flags?.customMcp;
-          const { sub, tight, room } = fit(m.problem || homeLine(list, { needsPrompt }));
+          const { sub, tight, room } = fit(m.problem || homeLine(list));
           return (
             <Panel width={W} title="MCP" status={shortPath(list.path)}
               sub={sub} tight={tight} keys="↑↓ move · enter open · esc cancel">
               <Choices
                 limit={room}
-                items={mcpHomeItems(list, { T, needsPrompt })}
+                items={mcpHomeItems(list, { T })}
                 onSelect={(item) => {
                   if (item.value === 'add') { setActiveMenu({ ...m, view: 'add', text: '' }); return; }
                   if (!item.value) return;
-                  if (item.value === 'reload' || item.value === 'prompt') {
+                  if (item.value === 'reload') {
                     setActiveMenu(null);
                     setFocus(FOCUS_INPUT);
-                    handleSubmit(item.value === 'reload' ? '/mcp reload' : '/prompt v5');
+                    handleSubmit('/mcp reload');
                     return;
                   }
                   setActiveMenu({ ...m, view: 'server', server: item.value, problem: null, signingIn: false });

@@ -17,27 +17,40 @@
  *   tools` and `/prompt` can show rounds per turn side by side.
  *
  * Per person, in `~/.agent/settings.json` — the same kind of choice as the
- * theme. Default v1 until the numbers say otherwise (owner, 2026-10-28).
+ * theme. A version is wording only since v9.9.5: v1, frozen, and v7, current.
+ * Features (Jira, MCP, memory) are on for both (`FEATURES`). A new install
+ * starts on v7; a setting that was never written stays v1.
  */
 
 export const PROMPT_VERSIONS = {
   v1: {
     id: 'v1',
-    summary: 'the prompt as of v5.31, frozen as the baseline',
-    hint: 'original prompt', // the settings row: a few words, not the summary
+    summary: 'the wording as of v5.31, unchanged; Jira, MCP and memory as on current',
+    hint: 'original prompt, frozen', // the settings row: a few words, not the summary
+    label: 'original',
     refreshEvery: 20,
     dir: null,
     flags: {},
   },
   /*
-   * v2 (v5.34): the dedup plan, `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`.
-   * Fewer lines that cost a round trip, and one copy of each repeated rule.
-   * The files in `backend/prompts/v2/` carry the same changes for the prompt files.
+   * v7 (v9.9.5): the one current prompt. Owner, 2026-11-08, on a `/prompt` menu
+   * of six: "v3, v4, v5, v6 are all feature upgrades that could be written to
+   * the initial v1 and v2". They were. v4 added Jira, v5 MCP and v6 memory, each
+   * a version only because a prompt change went into a new one; that made a
+   * version per feature and a menu where two rows were real choices.
+   *
+   * Now a version is wording only, and a feature is on wherever it is set up
+   * (`FEATURES`, on v1 too). v7 is v2's wording (the dedup plan,
+   * `.agent/artifacts/plans/2026-10-26-prompt-dedup.md`) plus v3's "look before
+   * answering" on the low and medium rungs. v2 to v6 are read as v7
+   * (`LEGACY_VERSIONS`); rows logged under them keep their labels.
+   * v2's prompt files: `dir` falls back to the base file, not to another folder.
    */
-  v2: {
-    id: 'v2',
-    summary: 'fewer round trips: trusts the edit result, reviews only big changes, one copy of each rule',
-    hint: 'fewer round trips',
+  v7: {
+    id: 'v7',
+    summary: 'fewer round trips, and a question about the project is answered from files opened this turn',
+    hint: 'fewer round trips, looks before answering',
+    label: 'current',
     refreshEvery: 20,
     dir: 'v2',
     flags: {
@@ -47,133 +60,35 @@ export const PROMPT_VERSIONS = {
       tickWithNextCall: true,    // tick task.md in the reply that makes the next call
       oneCopy: true,             // a repeated rule is kept once, nearest its use
       answerDirectly: true,      // lite/flash: a greeting gets no task.md and no plan (v6.7)
-      symbolLanguages: true,     // find_symbol names Ruby as well as JavaScript (v6.8)
+      symbolLanguages: true,     // find_symbol names every language it reads (v6.8, v6.21)
       subagentEffortWords: true, // ask_subagent's effort is low | medium | high | max (v6.15)
       largeFileDigest: true,     // read_file says a large unranged read comes back as a digest (v6.16)
       logQuery: true,            // query_log is offered: log files and exports, however large (v6.20)
       projectCommands: true,     // turn 0 says how this project tests, lints and builds (v7.4)
-    },
-  },
-  /*
-   * v3 (v7.9): v2, plus "look before answering" on the low and medium rungs.
-   * Reported: "how is symbol matching done in this node server" was answered on
-   * Flash-Lite from AGENT.md's map and general knowledge, with nothing opened,
-   * and "let's examine the relevant files" then ended the turn with no call.
-   * Every terse rule was about editing; none said what to do with a question.
-   * A version of its own, because looking costs round trips by design, and in
-   * v2 it would read as the dedup getting worse (owner, 2026-10-31).
-   * v2's prompt files: a `v3` folder would lose them (`dir` falls back to the
-   * base file, not to v2's).
-   */
-  v3: {
-    id: 'v3',
-    summary: 'v2, plus: a question about the project is answered from files opened this turn',
-    hint: 'v2 + look first',
-    refreshEvery: 20,
-    dir: 'v2',
-    flags: {
-      trustEditResult: true,
-      gateReview: true,
-      walkthroughWithTask: true,
-      tickWithNextCall: true,
-      oneCopy: true,
-      answerDirectly: true,
-      symbolLanguages: true,
-      subagentEffortWords: true,
-      largeFileDigest: true,
-      logQuery: true,
-      projectCommands: true,
       lookFirst: true,           // low/medium: open the code before explaining it; a promised call is made (v7.9)
     },
   },
-  /*
-   * v4 (v8.1): v3, plus `jira_issue` — once a Jira site is set up with `agent
-   * atlassian login`. A new tool is part of the prompt, and v1–v3 are what the
-   * numbers so far were measured on, so it is a version of its own. Without a
-   * site the prompt is v3's byte for byte (`PromptBuilder._toolFlags`).
-   */
-  v4: {
-    id: 'v4',
-    summary: 'v3, plus Jira: read, search, create, update, comment, move and attach, each write approved by you',
-    hint: 'v3 + Jira',
-    refreshEvery: 20,
-    dir: 'v2',
-    flags: {
-      trustEditResult: true,
-      gateReview: true,
-      walkthroughWithTask: true,
-      tickWithNextCall: true,
-      oneCopy: true,
-      answerDirectly: true,
-      symbolLanguages: true,
-      subagentEffortWords: true,
-      largeFileDigest: true,
-      logQuery: true,
-      projectCommands: true,
-      lookFirst: true,
-      jira: true,                // jira_issue is offered once a site is set up (v8.1)
-    },
-  },
-  /*
-   * v5 (v9.1): v4, plus `mcp_describe` and `mcp_tool` — once a server in
-   * `~/.agent/mcp.json` is usable. With none the prompt is v4's byte for byte
-   * (`PromptBuilder._toolFlags`), the way v4 is v3's without a Jira site.
-   */
-  v5: {
-    id: 'v5',
-    summary: 'v4, plus the MCP servers you added: each tool asks, runs or is blocked as you set it in /mcp',
-    hint: 'v4 + MCP',
-    refreshEvery: 20,
-    dir: 'v2',
-    flags: {
-      trustEditResult: true,
-      gateReview: true,
-      walkthroughWithTask: true,
-      tickWithNextCall: true,
-      oneCopy: true,
-      answerDirectly: true,
-      symbolLanguages: true,
-      subagentEffortWords: true,
-      largeFileDigest: true,
-      logQuery: true,
-      projectCommands: true,
-      lookFirst: true,
-      jira: true,
-      customMcp: true,           // mcp_describe and mcp_tool, once a server is usable (v9.1)
-    },
-  },
-  /*
-   * v6 (v9.4): v5, plus memory the model actually uses. Measured first: 0
-   * `manage_memory` calls in this repo's usage log, and each call on v1 to v5
-   * re-teaches the chat (`resetPromptState`), so saving a fact cost a full turn 0.
-   * The folder itself is every version's; this is what the prompt does with it.
-   */
-  v6: {
-    id: 'v6',
-    summary: 'v5, plus memory: an index of saved facts, read when needed, and a nudge to save a correction',
-    hint: 'v5 + memory',
-    refreshEvery: 20,
-    dir: 'v2',
-    flags: {
-      trustEditResult: true,
-      gateReview: true,
-      walkthroughWithTask: true,
-      tickWithNextCall: true,
-      oneCopy: true,
-      answerDirectly: true,
-      symbolLanguages: true,
-      subagentEffortWords: true,
-      largeFileDigest: true,
-      logQuery: true,
-      projectCommands: true,
-      lookFirst: true,
-      jira: true,
-      customMcp: true,
-      memoryFolder: true,        // <memory> is an index; facts are named, read and updated (v9.4)
-      saveNudge: true,           // a message that sets a rule carries one line asking to save it (v9.4)
-    },
-  },
 };
+
+/**
+ * Features, on every version (v9.9.5). Each changes the prompt only once it is
+ * set up — a Jira site, a usable MCP server, a saved fact or a message that
+ * sets a rule — except `memoryFolder`, which also words `manage_memory` for
+ * named facts. So v1 with nothing set up is its old bytes but that one tool
+ * line, and the golden file says so.
+ */
+export const FEATURES = Object.freeze({
+  jira: true,         // jira_issue, once a site is set up (v8.1)
+  customMcp: true,    // mcp_describe and mcp_tool, once a server is usable (v9.1)
+  memoryFolder: true, // <memory> is an index; facts are named, read and updated (v9.4)
+  saveNudge: true,    // a message that sets a rule carries one line asking to save it (v9.4)
+});
+
+/** Versions that were, read as the current one; their logged rows keep their labels. */
+export const LEGACY_VERSIONS = Object.freeze(['v2', 'v3', 'v4', 'v5', 'v6']);
+
+/** The one current prompt; what a new install gets. */
+export const CURRENT_PROMPT_VERSION = 'v7';
 
 /**
  * Each switch in a version's `flags`, in a few words, for the `/prompt` menu's
@@ -187,7 +102,7 @@ export const FLAG_NOTES = {
   walkthroughWithTask: 'walkthrough.md only after a task.md',
   oneCopy: 'Each repeated rule is said once, nearest its use',
   answerDirectly: 'A greeting gets an answer, not a task.md and a plan',
-  symbolLanguages: 'find_symbol says it reads Ruby as well as JavaScript',
+  symbolLanguages: 'find_symbol names every language it reads, not only JavaScript',
   subagentEffortWords: 'ask_subagent takes the /effort words, max included',
   largeFileDigest: 'read_file says a large file comes back as a subagent\'s digest',
   logQuery: 'query_log reads log files and Grafana/Datadog exports',
@@ -223,14 +138,28 @@ export function versionAdds(id) {
     .map(([flag]) => FLAG_NOTES[flag] || flag);
   return { from: prev.id, lines };
 }
+/**
+ * What a missing or unreadable setting means: v1, so a person who never chose
+ * is not moved (owner, 2026-11-08). A new install is given v7 at first start.
+ */
 export const DEFAULT_PROMPT_VERSION = 'v1';
 
+/** The id a typed or stored name stands for: `current`/`original`, a legacy id, or null. */
+export function promptVersionId(id) {
+  const key = String(id ?? '').toLowerCase().trim();
+  if (Object.hasOwn(PROMPT_VERSIONS, key)) return key;
+  if (LEGACY_VERSIONS.includes(key) || key === 'current' || key === 'newest' || key === 'latest') {
+    return CURRENT_PROMPT_VERSION;
+  }
+  if (key === 'original' || key === 'baseline') return 'v1';
+  return null;
+}
+
 export function isPromptVersion(id) {
-  return Object.hasOwn(PROMPT_VERSIONS, String(id ?? '').toLowerCase().trim());
+  return promptVersionId(id) != null;
 }
 
 /** The version's entry; anything unknown (an old or hand-edited setting) is the default. */
 export function resolvePromptVersion(id) {
-  const key = String(id ?? '').toLowerCase().trim();
-  return PROMPT_VERSIONS[key] || PROMPT_VERSIONS[DEFAULT_PROMPT_VERSION];
+  return PROMPT_VERSIONS[promptVersionId(id) || DEFAULT_PROMPT_VERSION];
 }

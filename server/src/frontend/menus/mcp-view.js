@@ -14,12 +14,10 @@ export const shortPath = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir(
  * The line under the title, which a short terminal sheds. So it only ever
  * explains: a fault or a missing file is a row of the list, which is not shed.
  */
-export function homeLine(list, { needsPrompt = false } = {}) {
+export function homeLine(list) {
   if (list.error) return 'Fix the file, then choose Reload.';
   if (!list.exists) return `Or edit ${shortPath(list.path)}, the format Claude Code and Cursor use.`;
-  return needsPrompt
-    ? 'Enter shows what a server offers. The model calls these on prompt v5.'
-    : 'Enter opens a server, to set what each of its tools may do.';
+  return 'Enter opens a server, to set what each of its tools may do.';
 }
 
 export const serverLine = (row) => statusLine(row);
@@ -30,7 +28,7 @@ const tone = (row, T) => {
   return {};
 };
 
-export function mcpHomeItems(list, { T = {}, needsPrompt = false } = {}) {
+export function mcpHomeItems(list, { T = {} } = {}) {
   const items = list.rows.map((row) => ({
     label: row.name,
     detail: statusLine(row),
@@ -39,10 +37,6 @@ export function mcpHomeItems(list, { T = {}, needsPrompt = false } = {}) {
   }));
   if (list.error) items.unshift({ label: 'mcp.json', detail: list.error, value: '', colour: T.danger });
   else items.unshift({ label: 'Add a server', detail: 'paste its command, address or JSON', value: 'add' });
-  // Nothing moves on its own: the row offers it, and enter is the yes.
-  if (needsPrompt && list.rows.some((r) => !r.builtin && !['invalid', 'disabled', 'unapproved', 'signed_out'].includes(r.state))) {
-    items.push({ label: 'Use prompt v5', detail: 'lets the model call these, and teaches the chat again', value: 'prompt' });
-  }
   // A row, not the line under the title: a short terminal sheds that one.
   if (list.repo?.error) items.push({ label: '.mcp.json', detail: list.repo.error, value: '', colour: T.danger });
   for (const name of list.repo?.shadowed || []) {

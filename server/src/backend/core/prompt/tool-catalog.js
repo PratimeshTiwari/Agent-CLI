@@ -359,7 +359,8 @@ Parameters:
     name: 'manage_memory',
     dispatch: 'loop',
     verb: 'Memory',
-    // v1 to v5 keep the numbered list; v6 names facts (`memoryFolder`).
+    // Facts are named on every version since v9.9.5 (`memoryFolder` is a feature);
+    // the numbered form is what v1 to v5 said before it.
     flash: (_config, flags = {}) => (flags.memoryFolder
       ? ` — Keep a fact for later sessions. Save a correction or a rule that will still hold. Args: action ("add"|"read"|"update"|"remove"|"list"), fact? (string), why? (string), name? (string, as <memory> lists it)
 `

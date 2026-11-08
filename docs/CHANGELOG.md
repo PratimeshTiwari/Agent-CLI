@@ -1,8 +1,8 @@
 # Changelog
 
 > [!NOTE]
-> **Current: v9.9.4** · extension **1.66.0** · VS Code companion **1.8.17** · prompt **v1** by
-> default, **v6** the newest (`/prompt`).
+> **Current: v9.9.5** · extension **1.66.0** · VS Code companion **1.8.17** · prompt **v7**
+> (current; new installs) or **v1** (original, frozen), with Jira, MCP and memory on both.
 > After updating: Chrome reloads the extension itself; reinstall the companion from `/update` →
 > Editor companion; restart the agent.
 
@@ -28,6 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
+| v9.9.5 | — | — | v7 (v2 to v6 become it) |
 | v9.9.4 | 1.66.0 | — | — |
 | v9.9.3 | 1.65.0 | 1.8.17 | — |
 | v9.9.1 | 1.64.0 | 1.8.16 | — |
@@ -55,7 +56,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174)
 
 **Highlights**
 
@@ -65,10 +66,12 @@ change.
 - **One Chrome profile** gets prompts (`/chrome`), so a second Google account never types them.
 - **Memory is a folder**: one fact per file, with who wrote it, when and why.
 - **Thinking level follows effort**, on accounts whose picker has levels.
+- **One prompt**: current or original, with every feature on both.
 - Conversations are **one folder each**, and `/files` shows where everything is.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
+| v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
 | v9.9.3 | 11-08 | [#171](https://github.com/PratimeshTiwari/Agent-CLI/pull/171) | Thinking level follows effort |
 | v9.9.2 | 11-08 | [#170](https://github.com/PratimeshTiwari/Agent-CLI/pull/170) | Conversations are one folder each |
@@ -83,6 +86,20 @@ change.
 | v9.2 | 11-05 | [#160](https://github.com/PratimeshTiwari/Agent-CLI/pull/160) | `/mcp add` |
 | v9.1 | 11-05 | [#159](https://github.com/PratimeshTiwari/Agent-CLI/pull/159) | The model can call your MCP tools; prompt v5 |
 | v9.0 | 11-05 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158) | The MCP client, listed in `/mcp` |
+
+<details><summary><b>v9.9.5</b> — one prompt</summary>
+
+**Changed**
+- Two prompt versions instead of six: **current** (v7: the leaner wording plus "look before
+  answering") and **original** (v1, frozen, kept to compare against). `/prompt` is two rows.
+- Jira, MCP servers and memory are features, on both versions, each silent until set up. They
+  needed v4, v5 and v6 before.
+- A new install starts on current. A setting of v2 to v6 now means current; someone who never
+  chose stays on original, and the status bar says `v1`.
+
+**Removed**
+- `/mcp`'s "Use prompt v5" row and `/jira`'s "`/prompt v4` offers it": there is nothing to switch.
+</details>
 
 <details><summary><b>v9.9.4</b> — fixes from use</summary>
 

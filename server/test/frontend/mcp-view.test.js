@@ -45,14 +45,9 @@ test('a fault or a missing file is a row: the line above is shed on a short term
   assert.ok(!mcpHomeItems(list([row()]), { T }).some((i) => i.label === 'mcp.json'), 'control: a good file has no such row');
 });
 
-test('off v5 the line says so, and a row offers the switch', () => {
-  assert.match(homeLine(list([row()]), { needsPrompt: true }), /prompt v5/);
-  assert.doesNotMatch(homeLine(list([row()])), /prompt v5/);
-  const offer = (rows, needsPrompt) => mcpHomeItems(list(rows), { needsPrompt }).some((i) => i.value === 'prompt');
-  assert.equal(offer([row()], true), true);
-  assert.equal(offer([row()], false), false, 'control: already on it');
-  assert.equal(offer([row({ state: 'disabled' })], true), false, 'nothing usable to offer');
-  assert.equal(offer([row({ builtin: true })], true), false, 'Jira alone is not a reason');
+test('no prompt version to switch to: the line and the rows never offer one (v9.9.5)', () => {
+  assert.doesNotMatch(homeLine(list([row()])), /prompt/);
+  assert.ok(!mcpHomeItems(list([row()])).some((i) => i.value === 'prompt'));
 });
 
 test('a custom server has switches, and a built-in has none', () => {
@@ -78,7 +73,7 @@ test('a status is drawn once, wherever it had room', () => {
 
 test('a repo\'s server waits, the first answer runs nothing, and it has no mcp.json actions', () => {
   const row = { name: 's', source: 'repo', state: 'unapproved', tools: [], error: null, changed: false };
-  const items = mcpHomeItems({ rows: [row], exists: false, repo: { exists: true, error: null, shadowed: [] } }, { T: { attention: 'A' }, needsPrompt: true });
+  const items = mcpHomeItems({ rows: [row], exists: false, repo: { exists: true, error: null, shadowed: [] } }, { T: { attention: 'A' } });
   const found = items.find((i) => i.label === 's');
   assert.match(found.detail, /needs your ok/);
   assert.equal(found.colour, 'A');
@@ -125,7 +120,7 @@ describe('Atlassian\'s page (v9.9)', () => {
   });
 
   it('a signed-out Atlassian does not offer the prompt switch', () => {
-    const items = mcpHomeItems({ exists: true, rows: [row('signed_out')] }, { needsPrompt: true });
+    const items = mcpHomeItems({ exists: true, rows: [row('signed_out')] });
     assert.ok(!items.some((i) => i.value === 'prompt'));
   });
 });

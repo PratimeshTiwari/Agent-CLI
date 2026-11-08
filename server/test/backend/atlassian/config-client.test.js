@@ -186,7 +186,8 @@ describe('agent atlassian login', () => {
     assert.equal(await done, 0);
     assert.match(shown, /Jira Server \/ Data Center 9\.12\.0/);
     assert.match(shown, /✔ Signed in to http:\/\/127\.0\.0\.1:\d+ as Me Person/);
-    assert.match(shown, /\/prompt v4/);
+    assert.match(shown, /the model is offered Jira with your next message/);
+    assert.doesNotMatch(shown, /\/prompt v4/, 'no version to switch to since v9.9.5');
     assert.ok(!shown.includes(TOKEN), 'the token is never written to the terminal');
     await fake.close();
   });

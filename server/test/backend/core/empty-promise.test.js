@@ -1,6 +1,6 @@
 /**
  * A reply that says it will look and makes no call is asked once to make it
- * (v7.9, prompt v3's `lookFirst`).
+ * (v7.9, first prompt v3's `lookFirst`; the current prompt's, v7, since v9.9.5).
  *
  * The loop goes on only when a reply carries a tool call, so "Let me check the
  * symbol index." with nothing after it ended the turn on the promise.
@@ -34,8 +34,8 @@ function loop(version) {
 
 const PROMISE = 'Let me check the symbol index.';
 
-test('v3: a promise with no call is asked once to make the call', async () => {
-  const { l, sent, panel } = loop('v3');
+test('current (v7): a promise with no call is asked once to make the call', async () => {
+  const { l, sent, panel } = loop('v7');
   await l.handleGeminiResponse('m', { content: PROMISE, complete: true });
   assert.equal(sent.length, 1);
   assert.match(sent[0], /your reply had no tool call/);
@@ -51,8 +51,8 @@ test('v3: a promise with no call is asked once to make the call', async () => {
   assert.equal(l.isProcessing, false);
 });
 
-test('v2 and v1 end the turn as before', async () => {
-  for (const version of ['v1', 'v2']) {
+test('v1 ends the turn as before: look-first is a wording of the current prompt', async () => {
+  for (const version of ['v1']) {
     const { l, sent } = loop(version);
     await l.handleGeminiResponse('m', { content: PROMISE, complete: true });
     assert.equal(sent.length, 0, version);
@@ -60,12 +60,12 @@ test('v2 and v1 end the turn as before', async () => {
   }
 });
 
-test('v3: an answer, or an offer, ends the turn', async () => {
+test('current (v7): an answer, or an offer, ends the turn', async () => {
   for (const content of [
     'The symbol index is built lazily and cached by mtime.',
     "If you'd like, I can check the tests too.",
   ]) {
-    const { l, sent } = loop('v3');
+    const { l, sent } = loop('v7');
     await l.handleGeminiResponse('m', { content, complete: true });
     assert.equal(sent.length, 0, content);
     assert.equal(l.isProcessing, false, content);

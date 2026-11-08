@@ -25,7 +25,7 @@ import { resolveEffort } from '../models/effort.js';
 import { renderToolDefinitions } from './tool-catalog.js';
 import { atlassianSite } from '../../atlassian/config.js';
 import { prompt } from './prompt-loader.js';
-import { DEFAULT_PROMPT_VERSION, resolvePromptVersion } from './prompt-versions.js';
+import { DEFAULT_PROMPT_VERSION, FEATURES, resolvePromptVersion } from './prompt-versions.js';
 import { mcpServersBlock } from '../../mcp/client/prompt-block.js';
 import { readMemoryEnabled } from '../../context/memory-manager.js';
 import { MemoryStore } from '../../context/memory-store.js';
@@ -115,9 +115,12 @@ export class PromptBuilder {
     return prompt(name, resolvePromptVersion(this.promptVersion).dir);
   }
 
-  /** A behaviour switch of this builder's prompt version (v1 has none). */
+  /**
+   * A behaviour switch: a feature, on for every version (v9.9.5), or a
+   * wording switch of this builder's version (v1 has none).
+   */
   _flag(name) {
-    return Boolean(resolvePromptVersion(this.promptVersion).flags?.[name]);
+    return Boolean(FEATURES[name] || resolvePromptVersion(this.promptVersion).flags?.[name]);
   }
 
   /** Turns between condensed reminders, by version. */
@@ -1268,11 +1271,11 @@ ${firstCheck}
    * set by the tests; otherwise the settings are read.
    */
   _toolFlags() {
-    const flags = resolvePromptVersion(this.promptVersion).flags || {};
+    const flags = { ...(resolvePromptVersion(this.promptVersion).flags || {}), ...FEATURES };
     const off = {};
     if (flags.jira && !(this.jiraAvailable ?? Boolean(atlassianSite()))) off.jira = false;
-    // v9.1, the same rule. `mcpServers` is set by the loop, and only a version
-    // with the flag calls it, so v1–v4 never read a server's config.
+    // v9.1, the same rule. `mcpServers` is set by the loop; with none, no
+    // server's config is read.
     if (flags.customMcp && !this._offeredMcp().length) off.customMcp = false;
     return Object.keys(off).length ? { ...flags, ...off } : flags;
   }

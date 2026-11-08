@@ -8,10 +8,10 @@ import { MemoryManager } from '../../../../src/backend/context/memory-manager.js
 import { PromptBuilder } from '../../../../src/backend/core/prompt/prompt-builder.js';
 import { MEMORY_NUDGE } from '../../../../src/backend/core/prompt/standing-rule.js';
 import { renderToolDefinitions } from '../../../../src/backend/core/prompt/tool-catalog.js';
-import { resolvePromptVersion } from '../../../../src/backend/core/prompt/prompt-versions.js';
+import { FEATURES } from '../../../../src/backend/core/prompt/prompt-versions.js';
 import { logToolUsage, summariseToolUsage } from '../../../../src/backend/core/logs/tool-usage.js';
 
-function setup(version = 'v6') {
+function setup(version = 'v7') {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-v6-'));
   fs.mkdirSync(path.join(ws, '.agent'));
   const promptBuilder = new PromptBuilder(ws);
@@ -31,7 +31,8 @@ function setup(version = 'v6') {
 
 const turn0 = (b, userMessage = 'hello') => b.buildPrompt({ userMessage, mode: 'plan', modelConfig: { effort: 'medium' } });
 
-describe('manage_memory on v6', () => {
+// Memory was prompt v6's; since v9.9.5 it is a feature of every version.
+describe('manage_memory, on every prompt version', () => {
   test('add stamps the session, and does not re-teach the chat', async () => {
     const { call, loop, resets } = setup();
     const got = await call({ action: 'add', fact: 'Tests run with pnpm', why: 'the user said so' });
@@ -40,11 +41,11 @@ describe('manage_memory on v6', () => {
     assert.equal(resets(), 0);
   });
 
-  test('negative control: v5 still resets, and takes numbers', async () => {
-    const { call, resets } = setup('v5');
+  test('v1 too: no re-teaching, and facts by name (v1 to v5 reset the chat on every save)', async () => {
+    const { call, resets } = setup('v1');
     await call({ action: 'add', fact: 'a fact' });
-    assert.equal(resets(), 1);
-    assert.equal((await call({ action: 'remove', index: 1 })).result, 'Forgot #1.');
+    assert.equal(resets(), 0);
+    assert.match((await call({ action: 'remove', name: 'a-fact' })).result, /a-fact/);
   });
 
   test('read gives the fact, the reason and the author', async () => {
@@ -98,9 +99,9 @@ describe('the prompt', () => {
     assert.match(six, /<memory>[\s\S]*- fact-one: Fact one[\s\S]*<\/memory>/);
     assert.doesNotMatch(six, /a secret reason/);
 
-    const b = setup('v5');
+    const b = setup('v1');
     b.loop.memoryManager.addMemory('Fact one');
-    assert.match(turn0(b.promptBuilder), /<memory>\n1\. Fact one\n<\/memory>/);
+    assert.match(turn0(b.promptBuilder), /<memory>[\s\S]*- fact-one: Fact one[\s\S]*<\/memory>/, 'v1 gets the index too');
   });
 
   test('no facts, no block', () => {
@@ -111,7 +112,7 @@ describe('the prompt', () => {
     const first = setup();
     await first.call({ action: 'add', fact: 'Deploys go through make ship' });
     const next = new PromptBuilder(first.ws);
-    next.promptVersion = 'v6';
+    next.promptVersion = 'v1';
     assert.match(turn0(next), /make ship/);
   });
 
@@ -123,20 +124,19 @@ describe('the prompt', () => {
     assert.equal(b.memoryNudged, false);
   });
 
-  test('negative controls: v5 never nudges, nor does v6 with memory off', () => {
-    const five = setup('v5');
-    assert.ok(!turn0(five.promptBuilder, 'from now on use pnpm').includes('memory_nudge'));
+  test('v1 nudges too; negative control: never with memory off', () => {
+    const one = setup('v1');
+    assert.ok(turn0(one.promptBuilder, 'from now on use pnpm').includes(MEMORY_NUDGE));
 
     const off = setup();
     fs.writeFileSync(path.join(off.ws, '.agent', 'config.json'), JSON.stringify({ memoryEnabled: false }));
     assert.ok(!turn0(off.promptBuilder, 'from now on use pnpm').includes('memory_nudge'));
   });
 
-  test('the tool text differs by version, on both tiers', () => {
-    const flags = resolvePromptVersion('v6').flags;
+  test('the tool names facts on both tiers; without the feature it took numbers (control)', () => {
     for (const tier of ['flash', 'pro']) {
-      assert.match(renderToolDefinitions(tier, true, {}, flags), /"update"/);
-      assert.doesNotMatch(renderToolDefinitions(tier, true, {}, resolvePromptVersion('v5').flags), /"update"/);
+      assert.match(renderToolDefinitions(tier, true, {}, FEATURES), /"update"/);
+      assert.doesNotMatch(renderToolDefinitions(tier, true, {}, {}), /"update"/);
     }
   });
 });
