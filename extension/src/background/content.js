@@ -730,6 +730,11 @@ export function startCompletionTicks(tabId, everyMs = COMPLETION_TICK_MS) {
       if (res && res.confirmSoon && completionTickers.has(tabId)) {
         // A fraction of the cadence, never more: the confirming look is only
         // useful if it lands well before the next ordinary tick would.
+        // One chain per tab (v9.8): a slow tick landing while a confirm is
+        // pending used to start a second chain beside it, and the map kept only
+        // the newest handle — 26 looks in 4 s where one chain makes 18, more
+        // with every interval. Found when the tests moved to a fake clock.
+        clearTimeout(completionConfirms.get(tabId));
         const soon = setTimeout(tick, Math.min(COMPLETION_CONFIRM_MS, everyMs / 4));
         soon.unref?.();
         completionConfirms.set(tabId, soon);

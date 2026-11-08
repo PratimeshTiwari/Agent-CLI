@@ -18,6 +18,13 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.63.1 — 2026-11-08
+
+**One confirming look at a time.** While the tab answered `confirmSoon`, every 2 s tick started a second
+250 ms chain beside the pending one and kept only the newest handle: 26 `tick_completion` messages in 4 s
+where one chain sends 18, more with every interval. The pending look is cancelled before the next is
+scheduled. Found when `completion-ticks.test.js` moved to `mock.timers` (it flaked on CI on 2026-11-06).
+
 ### 1.63.0 — 2026-11-08
 
 **Locked models are never clicked, and Gemini Auto is read.** Read live on two accounts with Claude in

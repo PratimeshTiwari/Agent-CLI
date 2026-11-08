@@ -5,6 +5,20 @@ through a Gemini tab in your own Chrome, signed in as you: the agent writes the 
 extension types it in and streams the reply back, and the agent reads, edits and runs things in your
 repo.
 
+> [!IMPORTANT]
+> **Disclaimer.** This project is provided solely for research, development and educational
+> purposes, to demonstrate what is technically possible. It is not intended for personal or
+> commercial use.
+>
+> - **Third-party services.** This project interacts with third-party web services. Users are
+>   solely responsible for ensuring that their use complies with the terms of service and
+>   policies of any such service, including those of Google.
+> - **Personal and production use.** For any personal, production or commercial use, use the
+>   official [Gemini API](https://ai.google.dev/gemini-api/docs) through Google AI Studio or
+>   Vertex AI, under its applicable terms.
+> - **No warranty.** The software is provided "as is", without warranty of any kind. The authors
+>   accept no liability for any use of it or for any consequence arising from such use.
+
 ![Agent CLI reading two models and documenting them](docs/images/terminal.svg)
 
 - **Local.** No hosted backend, no telemetry, no keys. Nothing leaves your machine except the chat
@@ -103,7 +117,7 @@ Subagents get tabs of their own. The full design, and the reasons behind it, are
 
 ## Install
 
-You need **Node.js 20+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
+You need **Node.js 22+**, **Google Chrome**, and a **signed-in tab on [gemini.google.com](https://gemini.google.com)**.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PratimeshTiwari/Agent-CLI/main/setup.sh | bash

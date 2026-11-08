@@ -18,6 +18,7 @@ without merging (#6 and #15, both `test-pr`); there is no PR #68 because #68 is 
 
 | Version | Date | Branch | PR | What |
 | --- | --- | --- | --- | --- |
+| v9.8 | 2026-11-08 | `v9.8/duplicate-keys-and-small-fixes` | [#167](https://github.com/PratimeshTiwari/Agent-CLI/pull/167) | `/mcp` no longer prints React's duplicate-key warning on Jira's page (#165); a fast double ↓ in a menu moves two rows; Node 22 or newer; the completion-ticks test runs on a fake clock, which found confirm chains doubling. Extension 1.63.1. The README opens with a disclaimer: for development and learning only |
 | v9.7 | 2026-11-08 | `v9.7/locked-models-and-auto` | [#166](https://github.com/PratimeshTiwari/Agent-CLI/pull/166) | A locked model is never picked or clicked; on a Gemini Auto account every rung lands on Auto and the prompt follows the setting. Extension 1.63.0 |
 | v9.6 | 2026-11-06 | `v9.6/repo-mcp-and-http` | [#164](https://github.com/PratimeshTiwari/Agent-CLI/pull/164) | A repo's `.mcp.json` runs nothing until you allow it, per folder and per entry. MCP servers can be HTTP, with headers |
 | v9.5 | 2026-11-06 | `v9.5/update-menu` | [#163](https://github.com/PratimeshTiwari/Agent-CLI/pull/163) | `/update` is a menu: pull, and the companion in the editors you pick. `/doctor` can update everything, inside ranges or to latest |

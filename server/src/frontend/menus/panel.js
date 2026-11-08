@@ -84,6 +84,23 @@ export function listWindow({ count, cursor = 0, room }) {
   return { start, end, above: start, below: count - end };
 }
 
+/**
+ * A React key for every row, never two alike (v9.8). Rows that do nothing on
+ * enter carry `value: ''`, and `''` is not nullish, so `key ?? value` gave
+ * Jira's two tool rows in `/mcp` the same key: Ink printed React's
+ * "two children with the same key" warning into the frame, twice per render.
+ * An empty or repeated key falls back to the row's position.
+ */
+export function rowKeys(items) {
+  const seen = new Set();
+  return items.map((item, i) => {
+    const own = item?.key ?? item?.value;
+    const key = own === undefined || own === null || own === '' || seen.has(String(own)) ? `#${i}` : String(own);
+    seen.add(key);
+    return key;
+  });
+}
+
 /** A path cut from the left, so the end — the part that names it — stays. */
 export function cutStart(text, width) {
   const s = String(text ?? '');
