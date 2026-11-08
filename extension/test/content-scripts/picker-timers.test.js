@@ -305,8 +305,8 @@ test('and falls back to the trigger when no item is marked selected', () => {
   assert.match(body, /markSelected\(described, currentModelLabel\(\)\)/,
     'a freshly mounted menu with no `selected` class is reported as unreadable, '
     + 'which the server treats as no list at all');
-  assert.match(body, /described\.some\(\(m\) => m\.selected\)/,
-    'the fallback runs unconditionally, so the DOM’s own marker is discarded');
+  assert.match(body, /described\.some\(\(m\) => m\.selected && !m\.isMode\)/,
+    'the fallback runs unconditionally, or a ticked thinking level (a mode) skips it (v9.7)');
 });
 
 test('and the wait is bounded, so a genuinely missing picker still fails', () => {

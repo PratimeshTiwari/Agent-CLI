@@ -18,6 +18,22 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.63.0 — 2026-11-08
+
+**Locked models are never clicked, and Gemini Auto is read.** Read live on two accounts with Claude in
+Chrome: one on Auto with 3.1 Pro and 4 Argon locked, and a Thinking level row with Low, Medium and High
+on both.
+
+- `describeModelOption` reports `locked`: a `mat-icon` named `lock` (attribute or ligature), or
+  `aria-disabled="true"`. The page keeps `aria-disabled="false"` on a locked model, so the icon is the test.
+  `selectModelByLabel` refuses a locked entry and clicks nothing.
+- `describeMenu`: where any entry has `data-mode-id`, one without it is a mode, so the levels stay out of
+  the ladder even without the divider.
+- The trigger fallback runs when no **model** is ticked; a ticked level used to skip it.
+- `markSelected` matches "Gemini Auto" to the entry "Auto", and leaves a level's tick alone.
+- `modelMenuItem` tries `gem-menu-item` first: models and levels are `menuitemradio`, so the role selector
+  matched only the Thinking level row.
+
 ### 1.62.0 — 2026-11-05
 
 **One Chrome profile gets prompts.** Each install keeps an id in `storage.local`, sent on `identify`,

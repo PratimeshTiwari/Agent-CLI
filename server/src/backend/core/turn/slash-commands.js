@@ -22,7 +22,9 @@ import * as paths from '../workspace/paths.js';
 import { EFFORT_LEVELS, resolveEffort, foldEffort } from '../models/effort.js';
 import { logError } from '../logs/error-log.js';
 import { saveUserSettings } from '../workspace/user-settings.js';
-import { planModelSwitch, browserModelPin, pickModelFor } from '../models/model-match.js';
+import {
+  planModelSwitch, browserModelPin, pickModelFor, lockedReason,
+} from '../models/model-match.js';
 import { MISMATCH_POLICIES, mismatchPolicy } from '../models/model-fallback.js';
 import { PROMPT_VERSIONS, PROMPT_VERSION_IDS, DEFAULT_PROMPT_VERSION, isPromptVersion } from '../prompt/prompt-versions.js';
 import { summariseToolUsage } from '../logs/tool-usage.js';
@@ -679,12 +681,13 @@ export async function handleSlashCommand(loop, command, args) {
          */
         if (chosen.id === 'max' && before.id !== 'max') {
           const offered = (loop.modelOptions || []).filter((m) => m && m.label);
-          if (!pickModelFor('max', offered, browserModelPin(loop.modelConfig, 'max'))) {
+          const maxPin = browserModelPin(loop.modelConfig, 'max');
+          if (!pickModelFor('max', offered, maxPin)) {
             if (!offered.length) loop.requestModelOptions?.(true);
             return {
               message: `${renamed}⚙ effort  stays **${before.name}** · `
                 + (offered.length
-                  ? 'Argon is not available on this account'
+                  ? (lockedReason('max', offered, maxPin) || 'Argon is not available on this account')
                   : 'the tab has not said which models it has yet — try `/effort max` again in a moment'),
             };
           }

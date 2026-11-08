@@ -12,6 +12,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
 import { ProfileBinding } from '../../../src/backend/core/workspace/profile-binding.js';
+import { readFileSync as readVersionFile } from 'node:fs';
+
+// The checkout's own version, so this extension is never "older than the checkout".
+const CURRENT = JSON.parse(readVersionFile(new URL('../../../../extension/manifest.json', import.meta.url), 'utf8')).version;
 
 const WS = mkdtempSync(join(tmpdir(), 'one-profile-'));
 const WORK = { dir: 'Profile 2', name: 'Work', email: '' };
@@ -36,7 +40,7 @@ function rig(saved = {}) {
       type: 'unknown',
       ws: { readyState: 1, OPEN: 1, send: (raw) => got.push(JSON.parse(raw)), close: (code) => closed.push(code) },
     });
-    await srv._handleMessage(id, { type: 'identify', payload: { clientType: 'extension', version: '1.62.0', ...(installId ? { installId } : {}) } });
+    await srv._handleMessage(id, { type: 'identify', payload: { clientType: 'extension', version: CURRENT, ...(installId ? { installId } : {}) } });
     return {
       id,
       got,

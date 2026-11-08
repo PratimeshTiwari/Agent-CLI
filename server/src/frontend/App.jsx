@@ -23,7 +23,7 @@ import { SLASH_COMMANDS, FOCUS_INPUT, FOCUS_TERMINAL, THINKING_MESSAGES, reserve
 import { resolveEffort } from '../backend/core/models/effort.js';
 import { DEFAULT_PROMPT_VERSION } from '../backend/core/prompt/prompt-versions.js';
 import { isSilentTooLong, lastActivityAt, noteActivity } from './transcript/activity.js';
-import { modelMismatch, browserModelPin } from '../backend/core/models/model-match.js';
+import { modelMismatch, browserModelPin, selectedModel } from '../backend/core/models/model-match.js';
 import { mismatchPolicy } from '../backend/core/models/model-fallback.js';
 import { planBoxRow, findPlanFile, planWorthReviewing } from './transcript/plan-box.js';
 import { groupTurns, parseTurnActions } from './transcript/transcript.js';
@@ -731,8 +731,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
    * true recently beats no name at all, and the mismatch row beside it is what
    * catches a real disagreement.
    */
-  const browserModelLabel = (agentLoop.modelOptions || [])
-    .find((m) => m && m.selected)?.label || null;
+  const browserModelLabel = selectedModel(agentLoop.modelOptions)?.label || null;
 
   /*
    * How the warm-up went (v5.27), until the first message is sent. Read off the
