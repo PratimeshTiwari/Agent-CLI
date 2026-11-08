@@ -233,7 +233,8 @@ the model, which reads what it needs.
 - **Keep to one Google account.** `/chrome` lists your Chrome profiles, opens the one you choose and pairs with its
   extension. No other profile gets a prompt, and if the chosen one is closed, prompts wait for it.
 - **Use your MCP servers.** Run `/mcp add` and paste the server's command, its address or the JSON from its
-  README; tokens go in your Keychain, not the config. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses.
+  README; tokens go in your Keychain, not the config. Or ask the agent to add it: it shows you the command first,
+  you type any token yourself, and it saves the server only once it answers. You can also edit `~/.agent/mcp.json`, in the format Claude Code uses.
   A repo's own `.mcp.json` is read too, and nothing in it runs until you allow it in `/mcp`. Each
   tool asks first, runs on its own or is blocked, as you set it in `/mcp`; strict mode always asks.
 - **Work with Jira.** Read, search, create, update, comment, move and attach, on Cloud and

@@ -24,7 +24,7 @@ import { fitCommand } from '../menus/mcp-add.js';
 import { openBrowser } from '../../backend/atlassian/cli.js';
 import { changeMcp, listIntegrations } from '../../backend/mcp/client/integrations.js';
 import { removeServer, setServerDisabled } from '../../backend/mcp/client/edit-config.js';
-import { McpAdd } from './McpAdd.jsx';
+import { McpAdd, SetupValues } from './McpAdd.jsx';
 import { nextSwitch, setSwitch, switchFor } from '../../backend/mcp/client/switches.js';
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
@@ -407,6 +407,15 @@ export function Menus({
       setActiveMenu({ ...activeMenu, all: false });
       return;
     }
+    // mcp_setup's box (v9.9.7): esc is Don't add, at the choice or a secret
+    // field. Closing it unanswered would leave the turn waiting on it.
+    if (activeMenu?.type === 'command_approval' && activeMenu.payload?.setup) {
+      setActiveMenu(null);
+      agentLoop.answerCommandApproval('reject', null);
+      setHistory(prev => [...prev, { role: 'system', content: '[System: You did not add it]' }]);
+      setFocus(FOCUS_INPUT);
+      return;
+    }
     // `/mcp` (v9.0): from a server's tools back to the list.
     if (activeMenu?.type === 'mcp' && activeMenu.view === 'add') return; // its own steps: McpAdd
     if (activeMenu?.type === 'mcp' && activeMenu.view === 'remove') {
@@ -568,6 +577,18 @@ export function Menus({
           const p = activeMenu.payload;
           // An MCP call (v9.1) brings its own: Run, Always for this tool, Don't run.
           const choices = p.choices || [{ label: 'Send', value: 'send' }, { label: "Don't send", value: 'reject' }];
+          const answered = (value, values) => {
+            setActiveMenu(null);
+            agentLoop.answerCommandApproval(value, null, values);
+            const words = p.setup ? ['did not add', 'added'] : p.choices ? ['did not run', 'ran'] : ['did not send', 'sent'];
+            setHistory(prev => [...prev, { role: 'system', content: `[System: ${value === 'reject' ? `You ${words[0]} it` : `You ${words[1]} it`}]` }]);
+            setFocus(FOCUS_INPUT);
+          };
+          // mcp_setup (v9.9.7): after Test and add, the secrets it needs, typed
+          // here and handed to the loop, never to the model.
+          if (activeMenu.stage === 'values') {
+            return <SetupValues ask={p.ask} width={W} onDone={(values) => answered('send', values)} />;
+          }
           return (
             <Panel tight ruled={approval?.ruled !== false} tone="attention" width={W}
               title={p.title || 'Send this?'}
@@ -586,10 +607,11 @@ export function Menus({
                 initialIndex={choices.length - 1}
                 items={choices}
                 onSelect={(item) => {
-                  setActiveMenu(null);
-                  agentLoop.answerCommandApproval(item.value, null);
-                  setHistory(prev => [...prev, { role: 'system', content: `[System: ${item.value === 'reject' ? `You did not ${p.choices ? 'run' : 'send'} it` : `You ${p.choices ? 'ran' : 'sent'} it`}]` }]);
-                  setFocus(FOCUS_INPUT);
+                  if (item.value !== 'reject' && p.ask?.length) {
+                    setActiveMenu({ ...activeMenu, stage: 'values' });
+                    return;
+                  }
+                  answered(item.value);
                 }}
               />
             </Panel>

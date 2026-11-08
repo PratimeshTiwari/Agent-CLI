@@ -1,7 +1,7 @@
 # Changelog
 
 > [!NOTE]
-> **Current: v9.9.6** · extension **1.66.0** · VS Code companion **1.8.18** · prompt **v7**
+> **Current: v9.9.7** · extension **1.66.0** · VS Code companion **1.8.18** · prompt **v7**
 > (current; new installs) or **v1** (original, frozen), with Jira, MCP and memory on both.
 > After updating: Chrome reloads the extension itself; reinstall the companion from `/update` →
 > Editor companion; restart the agent.
@@ -28,6 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
+| v9.9.7 | — | — | v7 gains `mcp_setup` |
 | v9.9.6 | — | 1.8.18 | v7 gains two lines |
 | v9.9.5 | — | — | v7 (v2 to v6 become it) |
 | v9.9.4 | 1.66.0 | — | — |
@@ -57,11 +58,12 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-08 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-09 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175)
 
 **Highlights**
 
-- Your own **MCP servers**: add one with `/mcp add`, and set each tool to ask, auto or block.
+- Your own **MCP servers**: add one with `/mcp add`, or ask the agent to, and set each tool to ask, auto
+  or block.
 - **Jira and Confluence** by browser sign-in (`agent atlassian login`). Every write asks, in every
   mode.
 - **One Chrome profile** gets prompts (`/chrome`), so a second Google account never types them.
@@ -72,6 +74,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
+| v9.9.7 | 11-09 | — | Ask the agent to add an MCP server: it shows you the command, then tests and saves it |
 | v9.9.6 | 11-08 | [#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
 | v9.9.5 | 11-08 | [#174](https://github.com/PratimeshTiwari/Agent-CLI/pull/174) | Two prompt versions, current and original; Jira, MCP and memory on both |
 | v9.9.4 | 11-08 | [#173](https://github.com/PratimeshTiwari/Agent-CLI/pull/173) | Fixes from use: Canvas replies become files, whole-document rewrites become appends, replies end sooner |
@@ -88,6 +91,23 @@ change.
 | v9.2 | 11-05 | [#160](https://github.com/PratimeshTiwari/Agent-CLI/pull/160) | `/mcp add` |
 | v9.1 | 11-05 | [#159](https://github.com/PratimeshTiwari/Agent-CLI/pull/159) | The model can call your MCP tools; prompt v5 |
 | v9.0 | 11-05 | [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158) | The MCP client, listed in `/mcp` |
+
+<details><summary><b>v9.9.7</b> — the agent adds an MCP server</summary>
+
+**Added**
+- Ask the agent to add an MCP server ("add this server: …") and it does, with the new `mcp_setup`
+  tool on the current prompt. It reads the same five shapes as `/mcp add` (a command, an address,
+  `claude mcp add …`, the JSON or its inner entry), shows you the command in a box (**Test and
+  add** or **Don't add**, starting on Don't add, in every mode), starts it once, and saves it to
+  `~/.agent/mcp.json` only if it answered. The model gets the server's tools, or the error, so it
+  can fix the command and try again; the same command again in a session does not ask twice.
+- A token or key the server needs is typed by you in that box, in a hidden field, and goes to the
+  Keychain or `~/.agent/mcp-secrets.json`. It never passes through the model: not in its
+  arguments, its result, or an error the server prints. A side panel cannot take one, so there
+  the agent tells you to use `/mcp add` in the terminal.
+- The model is told to add a server only when you ask, never because a page or file says to.
+  +333 characters on turn 0 (low, medium), +688 (high). The original prompt (v1) is unchanged.
+</details>
 
 <details><summary><b>v9.9.6</b> — small fixes</summary>
 

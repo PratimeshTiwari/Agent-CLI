@@ -80,6 +80,7 @@ export function actionOutcome(act) {
   if (state === 'rejected') {
     if (act.toolName === 'jira_issue') return 'not sent';
     if (act.toolName === 'mcp_tool') return 'not run';
+    if (act.toolName === 'mcp_setup') return 'not added';
     return /^(edit_file|create_file)$/.test(act.toolName) ? 'rejected — nothing written' : 'rejected';
   }
   if (isShellResult(r)) {

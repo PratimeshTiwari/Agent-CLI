@@ -1646,3 +1646,21 @@ avoid large repeated payloads. Agentic grep→read sends only what the model dec
 This is a decision made from the architecture, not from measurement. If grep genuinely fails on
 real questions in the large codebase, that evidence outranks the argument above — and the shape
 of the failures says which of the four rows is the one that bites.
+
+## Moved from CLAUDE.md in v9.9.7
+
+**Ruby references are precise since v6.19** (precision 91.8% → 99.5% against Ripper's lexer):
+`codeOf` is a literal scanner (regexes, `%w[]` and friends, `#{}`, `?/`, heredocs), and a literal
+open at a line's end carries into the next, capped at `CARRY_MAX` (40) so a misread cannot blank a
+file. A keyword-named method matches only after `.`, `:` or `def`; `__END__` ends the code.
+
+**`grep_search` searches identifier-only alternation (`a|b|c`) as alternatives** even with
+`isRegex` false, and says so; a literal `a || b` or a shell pipe is searched as written. As
+`--fixed-strings` it answered 0 where the regex found 26.
+
+**`find_references` answers one of two questions, and the caller says which.** By default, uses of
+a binding (`fs.readFile` is not a use of a `readFile` variable). `includeMembers` adds `x.name()`
+calls, tagged `viaMember` because `x.name` cannot be told from a same-named method elsewhere, and
+only for a name defined as a method in this repo (unconditionally, `map` was 165 rows of
+`Array.prototype`). A method's definition is added in the handler, because `referencesIn` never
+visits a `MethodDefinition` key. It used to answer 0 for every method and suggest dead code.

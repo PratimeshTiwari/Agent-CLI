@@ -198,6 +198,9 @@ function unusedName(name, taken) {
   return out;
 }
 
+/** The command or address as a box shows it. A value is never drawn, only its name. */
+export const commandLine = (entry) => entry.url || [entry.command, ...(entry.args || [])].join(' ');
+
 export function nameProblem(name, taken = []) {
   if (!SERVER_NAME.test(name)) return 'Letters, digits, - and _ only, up to 40.';
   if (taken.includes(name)) return `There is already a server called ${name}.`;
