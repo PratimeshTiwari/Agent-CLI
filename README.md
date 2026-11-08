@@ -108,8 +108,8 @@ the model each level uses on your account.
 4. It runs them (edits and risky commands ask you first) and sends the results back as the next
    message, until the reply has no more calls.
 
-Subagents get tabs of their own. The full design, and the reasons behind it, are in
-[`CLAUDE.md`](CLAUDE.md), under **Architecture**.
+Subagents get tabs of their own. The rules are in [`CLAUDE.md`](CLAUDE.md), under
+**Architecture**, and the full design and the reasons behind it in [`docs/design/`](docs/design/README.md).
 
 ## Install
 
@@ -299,7 +299,8 @@ details folded, and which extension and companion each release needs.
 ## More
 
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): every release
-- [`CLAUDE.md`](CLAUDE.md): architecture, internals, and why things are the way they are
+- [`CLAUDE.md`](CLAUDE.md): how it works and the rules that must not break
+- [`docs/design/`](docs/design/README.md): why each part is the way it is, by area
 - [`server/src/backend/README.md`](server/src/backend/README.md) · [`server/src/frontend/README.md`](server/src/frontend/README.md): what is where in the code, and how to debug it
 - [`extension/README.md`](extension/README.md) · [`vscode-companion/README.md`](vscode-companion/README.md)
 

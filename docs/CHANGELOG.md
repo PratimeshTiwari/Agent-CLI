@@ -107,6 +107,13 @@ change.
   the agent tells you to use `/mcp add` in the terminal.
 - The model is told to add a server only when you ask, never because a page or file says to.
   +333 characters on turn 0 (low, medium), +688 (high). The original prompt (v1) is unchanged.
+
+**Docs**
+- `CLAUDE.md` is cut from 144,684 characters to about 34,000: what this is, how to work on it, and
+  the rules that must not break, by area. Every paragraph it held moved word for word to
+  [`docs/design/`](design/README.md), one file per area, and the whole old file is kept as
+  [`docs/old-claude.md`](old-claude.md). `docs-size.test.js` now caps it at 45,000 and checks
+  that every design file it links to exists.
 </details>
 
 <details><summary><b>v9.9.6</b> — small fixes</summary>

@@ -86,4 +86,5 @@ folder, or the test writes into your real `~/.agent`.
 - **A write to Jira or Confluence always asks**, in every mode, with no "always": `core/policy/external-approval.js`
   for `jira_issue`, and the `external` check in `tool-policy.js` for Atlassian's MCP server.
 
-The reasons behind all of this are in [`CLAUDE.md`](../../../CLAUDE.md), section Architecture.
+The rules are in [`CLAUDE.md`](../../../CLAUDE.md), section Architecture; the reasons behind them are in
+[`docs/design/`](../../../docs/design/README.md), one file per area.

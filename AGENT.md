@@ -86,5 +86,5 @@ disagree, so **the description is the contract**.
   scroll and drag-select. Anything that would be clickable is a keybinding.
 - **One answer per turn** — never drafts or A/B alternatives to choose between.
 
-`CLAUDE.md` carries the reasoning behind each of these — read it when you need
-to know *why*, not just *what*.
+`CLAUDE.md` carries the rules behind each of these, and `docs/design/<area>.md`
+the reasoning — read them when you need to know *why*, not just *what*.
