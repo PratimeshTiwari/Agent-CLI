@@ -31,6 +31,8 @@ const { browseLabel, pickedFile, buildWebviewHtml, readBridge, selectionMarker, 
 const VIEW_ID = 'agentCli.chat';
 const SECONDARY_VIEW_ID = 'agentCli.chatSecondary';
 const OPENED_ONCE_KEY = 'agentCli.chatOpenedOnce';
+const MOVE_OFFERED_KEY = 'agentCli.moveOffered';
+const MOVE_YES = 'Move to the right';
 
 /** Whether this editor has a secondary side bar for extensions (VS Code 1.106+). */
 function supportsSecondarySidebar(version) {
@@ -148,6 +150,28 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     if (context.globalState && !context.globalState.get(OPENED_ONCE_KEY)) {
         context.globalState.update(OPENED_ONCE_KEY, true);
         focusChatView({ quiet: true }).catch(() => {});
+    }
+
+    /*
+     * Cursor (1.8.18). Built on VS Code 1.105, below the 1.106 that lets an
+     * extension declare a view in the secondary side bar, so the chat opens on
+     * the left beside the files. A person can still move a view there: focus
+     * it, then the editor's own "Move View" picker. Offered once, and kept as
+     * a command, because only the person can choose a side bar in that picker.
+     */
+    async function moveChatView() {
+        if (!(await focusChatView({ quiet: true }))) return false;
+        await vscode.commands.executeCommand('workbench.action.moveFocusedView');
+        return true;
+    }
+    sub(vscode.commands.registerCommand('agentCli.moveChat', () => moveChatView().catch(() => false)));
+    if (!secondary && context.globalState && !context.globalState.get(MOVE_OFFERED_KEY)) {
+        context.globalState.update(MOVE_OFFERED_KEY, true);
+        Promise.resolve(vscode.window.showInformationMessage(
+            'Agent CLI: the chat is in the left side bar. Move it to the right, beside the editor? '
+              + 'Pick "Secondary Side Bar" in the list that opens.',
+            MOVE_YES, 'Keep it here',
+        )).then((choice) => (choice === MOVE_YES ? moveChatView() : false)).catch(() => {});
     }
 
     // ── Requests from the page ────────────────────────────────────────
@@ -317,4 +341,4 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     );
 }
 
-module.exports = { registerChatPanel, PROPOSED_SCHEME, supportsSecondarySidebar };
+module.exports = { registerChatPanel, PROPOSED_SCHEME, supportsSecondarySidebar, MOVE_YES };

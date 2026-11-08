@@ -164,6 +164,35 @@ test('the chat lives in the secondary side bar where the editor has one', async 
     assert.ok(executed.some((a) => a[0] === 'setContext' && a[2] === false), 'the context key is put back');
   });
 
+  // Cursor is VS Code 1.105: the chat opens on the left, and moving it is offered once (1.8.18).
+  await t.test('below 1.106 a move to the right is offered once, and yes opens the Move View picker', async () => {
+    const state = memento({ 'agentCli.chatOpenedOnce': true });
+    const { MOVE_YES } = require('../chat-panel.js');
+    const stub = stubVscode(root, '1.105.1');
+    stub.vscode.window.showInformationMessage = (...a) => { stub.shown.push(a[0]); return Promise.resolve(MOVE_YES); };
+    const realLoad = Module._load;
+    Module._load = function (req, ...rest) { return req === 'vscode' ? stub.vscode : realLoad.call(this, req, ...rest); };
+    t.after(() => { Module._load = realLoad; });
+    forgetCompanion();
+    require('../extension.js').activate({ subscriptions: [], extensionUri: stub.vscode.Uri.file(path.join(__dirname, '..')),
+      extension: { packageJSON: require('../package.json') }, globalState: state });
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    assert.match(stub.shown.join('\n'), /Move it to the right/);
+    assert.equal(state.data['agentCli.moveOffered'], true);
+    const order = stub.executed.map((a) => a[0]);
+    assert.ok(order.indexOf('agentCli.chat.focus') < order.indexOf('workbench.action.moveFocusedView'), order.join(' '));
+    assert.ok(stub.registered.commands.has('agentCli.moveChat'), 'and kept as a command');
+  });
+
+  await t.test('control: not offered again, nor on an editor with a secondary side bar', () => {
+    for (const [version, seed] of [['1.105.1', { 'agentCli.moveOffered': true }], ['1.107.0', {}]]) {
+      const { shown, executed } = activateWith(t, root, version, memento({ 'agentCli.chatOpenedOnce': true, ...seed }));
+      assert.ok(!shown.some((m) => /Move it to the right/.test(m)), version);
+      assert.ok(!executed.some((a) => a[0] === 'workbench.action.moveFocusedView'), version);
+    }
+  });
+
   await t.test('control: it is shown once, not on every start', () => {
     const { executed } = activateWith(t, root, '1.107.0', memento({ 'agentCli.chatOpenedOnce': true }));
     assert.ok(!executed.some((a) => /\.focus$/.test(String(a[0]))));

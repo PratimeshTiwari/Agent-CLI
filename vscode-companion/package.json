@@ -3,7 +3,7 @@
   "displayName": "Agent CLI Companion",
   "description": "Chat with the local Agent CLI from the sidebar, plus editor state, diagnostics, Add to Agent Chat, and plan review.",
   "icon": "media/icon.png",
-  "version": "1.8.17",
+  "version": "1.8.18",
   "publisher": "pratimesh-tiwari",
   "author": {
     "name": "Pratimesh Tiwari"
@@ -26,6 +26,11 @@
         "title": "Add to Agent Chat",
         "category": "Agent CLI",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "agentCli.moveChat",
+        "title": "Move Chat to Another Side Bar",
+        "category": "Agent CLI"
       },
       {
         "command": "agentCli.attachToChat",
