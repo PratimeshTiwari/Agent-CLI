@@ -100,6 +100,22 @@ export const DIFF_BOX_BELOW = 3;
  *
  * @returns {{rows: Array, margins: boolean, reason: boolean, hint: boolean, height: number}}
  */
+/**
+ * What the change adds and removes, from the whole patch: the box's header
+ * counted the rows it showed, so a box shed to one line said `+0 / -0`.
+ */
+export function patchCounts(patch) {
+  let added = 0;
+  let removed = 0;
+  if (typeof patch !== 'string') return { added, removed };
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) added++;
+    else if (line.startsWith('-')) removed++;
+  }
+  return { added, removed };
+}
+
 export function diffBoxLayout({ patch, choices = 3, reason = false, expanded = false, terminalHeight = 24, maxRows = null, collapsed = 16 } = {}) {
   // `maxRows`: what App gives the box, the input's rows and the live frame's
   // past one row of the turn (as the command box). Else the screen's height.
@@ -109,12 +125,15 @@ export function diffBoxLayout({ patch, choices = 3, reason = false, expanded = f
     { margins: true, reason, floor: 3 },
     { margins: false, reason, floor: 3 },
     { margins: false, reason: false, floor: 1 },
+    // Last, the `d` hint: the box's smallest whole form is nine rows, one more
+    // than 13 rows leave it. `… N more lines` still says what is not shown.
+    { margins: false, reason: false, floor: 1, hint: false },
   ];
   let last = null;
   for (const level of levels) {
     for (let maxLines = start; maxLines >= level.floor; maxLines--) {
       const rows = rowsFromPatch(patch, { maxLines });
-      const hint = expanded || rows.some((r) => r.type === 'more');
+      const hint = level.hint !== false && (expanded || rows.some((r) => r.type === 'more'));
       const height = 2 + choices + (level.reason ? 1 : 0)
         + (rows.length ? rows.length + (level.margins ? 2 : 0) : 0) + (hint ? 1 : 0);
       last = { rows, margins: level.margins, reason: level.reason, hint, height };

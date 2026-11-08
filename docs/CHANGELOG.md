@@ -96,7 +96,8 @@ change.
   box stays open and the key approves nothing. On current, the next prompt tells the model which
   mode it is in now, and the side panels follow.
 - The edit approval box fits a short terminal: diff lines, then spacing, then the reason give way,
-  never a choice, and the rest of the turn is charged for it.
+  never a choice, and the rest of the turn is charged for it. Its header counts the whole change;
+  a box cut short said `+0 / -0`.
 
 **Changed**
 - `marked-terminal` 8; bold and the other styles are its own. Node 22.12 or newer.

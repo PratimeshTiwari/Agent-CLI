@@ -3,7 +3,7 @@ import { exec, execFile } from 'child_process';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { QuestionPrompt } from './QuestionPrompt.jsx';
-import { diffBoxLayout } from '../transcript/diff-preview.js';
+import { diffBoxLayout, patchCounts } from '../transcript/diff-preview.js';
 import ThemePreview from './ThemePreview.jsx';
 import { previewSize, PREVIEW_ROWS } from '../menus/theme-preview.js';
 import { DiffRows } from './DiffRows.jsx';
@@ -2198,9 +2198,7 @@ export function DiffApproval({
     expanded, terminalHeight, collapsed: DIFF_ROWS_COLLAPSED,
   });
   const { rows } = fitted;
-  const hidden = rows.some((r) => r.type === 'more');
-  const added = rows.filter((r) => r.type === 'add').length;
-  const removed = rows.filter((r) => r.type === 'del').length;
+  const { added, removed } = patchCounts(diffRequest.patch);
   const critical = diffRequest.riskLevel === 'critical';
 
 
@@ -2244,7 +2242,7 @@ export function DiffApproval({
         }}
       />
 
-      {(hidden || expanded) && (
+      {fitted.hint && (
         <Text dimColor wrap="truncate">
           {expanded
             ? '   d — collapse'

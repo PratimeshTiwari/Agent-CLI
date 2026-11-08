@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diffBoxLayout, DIFF_BOX_BELOW, rowsFromPatch } from '../../../src/frontend/transcript/diff-preview.js';
+import { diffBoxLayout, DIFF_BOX_BELOW, patchCounts, rowsFromPatch } from '../../../src/frontend/transcript/diff-preview.js';
 
 const patch = (n) => ['@@ -1,1 +1,' + (n + 1) + ' @@', ' const a = 1;', ...Array.from({ length: n }, (_, i) => `+line ${i}`)].join('\n');
 
@@ -41,4 +41,20 @@ test('expanded grows into the room there is, and no further', () => {
   const l = diffBoxLayout({ patch: patch(40), choices: 2, reason: false, expanded: true, terminalHeight: 30 });
   assert.equal(l.height, 30 - DIFF_BOX_BELOW);
   assert.ok(l.rows.length > 16);
+});
+
+test('App\'s 13-row budget: the `d` hint goes last, and the box is eight rows', () => {
+  // frameBudget 4 at 13 rows; the box has the input's 3, the spinner's 2, and
+  // the live turn keeps one: 8. Its smallest form with the hint is nine.
+  const l = diffBoxLayout({ patch: patch(3), choices: 3, reason: false, maxRows: 3 + 2 + 4 - 1 });
+  assert.equal(l.height, 8);
+  assert.equal(l.hint, false);
+  assert.ok(l.rows.some((r) => r.type === 'more'), '`… N more lines` still says what is hidden');
+});
+
+test('the header counts the whole patch, not the rows shown', () => {
+  const p = ['--- a/x.js', '+++ b/x.js', '@@ -1,2 +1,4 @@', ' a', '-b', '+c', '+d', '+e'].join('\n');
+  assert.deepEqual(patchCounts(p), { added: 3, removed: 1 });
+  const shown = rowsFromPatch(p, { maxLines: 1 });
+  assert.equal(shown.filter((r) => r.type === 'add').length, 0, 'control: one row shows no additions');
 });

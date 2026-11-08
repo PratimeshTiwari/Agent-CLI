@@ -832,10 +832,13 @@ export function App({ agentLoop, wsServer, closing = false }) {
   // The diff box the same way (v9.9.6). It was sized from the screen's height
   // alone, with the live turn's rows above it uncharged: at 13 rows a two-line
   // edit cleared the screen when the box appeared and on each redraw of it.
+  // It also has the spinner's rows, which `reservedRows` counts and InputBar
+  // does not draw while a diff is up.
+  const DIFF_FREE_ROWS = INPUT_ROWS + (compact ? 1 : 2);
   const diffBox = diffRequest
     ? diffBoxLayout({
       patch: diffRequest.patch, choices: diffChoiceCount(mode), reason: Boolean(diffRequest.riskReason),
-      expanded: diffExpanded, maxRows: INPUT_ROWS + frameBudget - 1,
+      expanded: diffExpanded, maxRows: DIFF_FREE_ROWS + frameBudget - 1,
     })
     : null;
   // What a menu drawn in place of the input may use: the input's own rows and
@@ -854,7 +857,7 @@ export function App({ agentLoop, wsServer, closing = false }) {
     ? Math.max(3, INPUT_ROWS + frameBudget - 1)
     : Math.max(3, frameBudget + INPUT_ROWS + idleRows);
   const liveBudget = Math.max(1, frameBudget - (approval ? Math.max(0, approval.rows - INPUT_ROWS) : 0)
-    - (diffBox ? Math.max(0, diffBox.height - INPUT_ROWS) : 0)
+    - (diffBox ? Math.max(0, diffBox.height - DIFF_FREE_ROWS) : 0)
     - (menuMidTurn ? menuRows - INPUT_ROWS : 0));
 
   /*
