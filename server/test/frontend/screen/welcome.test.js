@@ -85,8 +85,10 @@ test('decoration is dropped as the terminal gets shorter, spacing last of all', 
   assert.equal(mid.themePreview, false, 'the theme screen with its preview is 21 rows');
   assert.equal(mid.themeSample, true, 'too short for the box still gets a sample');
   assert.equal(mid.namePreview, true);
-  assert.equal(onboardingLayout(13).themeSample, true, 'compact: 10 rows plus two, under 13');
-  assert.equal(onboardingLayout(12).themeSample, false, '12 rows leave 11, and that is one short');
+  // Compact, the theme screen is 4 rows plus one per palette (seven since v9.9.1: 11), and the
+  // sample two more, inside rows - 1.
+  assert.equal(onboardingLayout(14).themeSample, true, 'compact: 11 rows plus two, under 14');
+  assert.equal(onboardingLayout(13).themeSample, false, '13 rows leave 12, and that is one short');
   const short = onboardingLayout(12);
   assert.equal(short.compact, true);
 });

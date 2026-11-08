@@ -59,7 +59,7 @@ export function Panel({ ruled = true, head = null, title, status = null, statusT
  * pickers do. Off for anything that approves or destroys: a digit typed into
  * a prompt that appeared under the keyboard must not answer it.
  *
- * Items: `{label, value, key?, detail?, current?, colour?, tone?, glyph?, glyphTone?}`.
+ * Items: `{label, value, key?, detail?, link?, current?, colour?, tone?, glyph?, glyphTone?}`.
  * `tone` is a theme role for the detail; without one the detail is dim.
  * `glyph` leads the label (`● On`, `+ Allow a command…`), coloured by the role
  * `glyphTone` (v6.3). A list with glyphs hides the `1.` column — the glyph is
@@ -151,7 +151,13 @@ export function Choices({
               // does not recolour it: only the label takes the accent, or the
               // row you are on is the hardest one to read (owner, 2026-10-27).
               <Text color={item.tone && item.tone !== 'text' ? T[item.tone] : undefined}
-                dimColor={!item.tone || item.tone === 'muted'}>{'  '}{item.detail}</Text>
+                dimColor={!item.tone || item.tone === 'muted'}>{'  '}
+                {/* `link` (v9.9.1): an OSC 8 link around the detail, as a settings
+                    row has (v7.9). Zero width, so the column is unchanged. */}
+                {item.link ? `\x1b]8;;${item.link}\x1b\\` : null}
+                <Text underline={Boolean(item.link)}>{item.detail}</Text>
+                {item.link ? '\x1b]8;;\x1b\\' : null}
+              </Text>
             ) : null}
             {item.current ? <Text color={T.success}>{'  ✔'}</Text> : null}
           </Text>

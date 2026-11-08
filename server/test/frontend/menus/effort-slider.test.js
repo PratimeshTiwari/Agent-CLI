@@ -86,3 +86,20 @@ test('tabDiffers: the slider warns when the tab is on another model (v7.9)', asy
   assert.equal(tabDiffers({ text: '3.1 Pro', available: true }, []), null, 'picker never read');
   assert.equal(tabDiffers({ text: '3.1 Pro', available: true }, [{ label: 'Deep Research', isMode: true, selected: true }]), null);
 });
+
+test('an Auto-only account: the slider says Auto is the only model, and what is locked (v9.9.1)', async () => {
+  const { onlyModel, onlyModelLine } = await import('../../../src/frontend/menus/effort-slider.js');
+  const auto = [
+    { label: 'Auto', selected: true },
+    { label: '3.1 Pro', locked: true },
+    { label: '4 Argon', locked: true },
+    { label: 'High', isMode: true, selected: true },
+  ];
+  const only = onlyModel(auto);
+  assert.deepEqual(only, { label: 'Auto', locked: ['3.1 Pro', '4 Argon'] });
+  assert.equal(onlyModelLine(only), 'Auto is the only model here · 3.1 Pro, 4 Argon locked');
+  // A real choice, an unread picker, or a list of one: the stop's own model as before.
+  assert.equal(onlyModel([{ label: '3.8 Flash' }, { label: '3.1 Pro' }, { label: '4 Argon', locked: true }]), null);
+  assert.equal(onlyModel([]), null);
+  assert.equal(onlyModel([{ label: 'Auto' }]), null);
+});

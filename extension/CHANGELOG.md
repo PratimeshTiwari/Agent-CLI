@@ -18,6 +18,15 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.64.0 — 2026-11-08
+
+**The terminal's AMOLED black theme reaches the panel.** `/theme amoled` in the terminal sets
+`data-theme="amoled"` on the panel's root, from `panel_state`'s new `theme`; any other theme lets go,
+so the panel follows the system (Chrome) or the editor (VS Code) as before. The attribute outranks both
+`:root` blocks and the editor's theme bridge, so it is true black in both. A theme picked in the
+terminal is sent at once rather than on the next turn. An agent older than v9.9.1 sends no theme, and
+the panel keeps what it has.
+
 ### 1.63.1 — 2026-11-08
 
 **One confirming look at a time.** While the tab answered `confirmSoon`, every 2 s tick started a second

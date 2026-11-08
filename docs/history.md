@@ -1561,3 +1561,24 @@ every VS Code ships rg for its own search (`@vscode/ripgrep-universal/bin/darwin
 Cursor's `@vscode/ripgrep/bin/rg`). `core/install/find-rg.js` looks in `AGENT_RG`, then PATH, then the
 editors' bundles; `grep_search` and `/doctor` both use it, and the tool row reads `from Visual
 Studio Code`. `doctor.js` may import local modules now, and the built-ins test follows them down.
+
+## Moved from CLAUDE.md in v9.9.1
+
+**And the extraction immediately found a second one of the same shape.** The read-only
+exemption — `ls` must not need a keystroke, or the prompt becomes something people dismiss
+without reading — was written as *any shell tool the classifier calls safe*, and
+`run_background` is a shell tool. So `run_background npm run dev` was exempt on the strength of
+a verdict about the **command text**, while the process it spawns is still running after the
+turn, the mode, and possibly the session have ended. The classifier reads a string; it cannot
+see that. `DETACHED_TOOLS` is the flag that lets the exemption ask. It was invisible while the
+policy was a branch inside dispatch and took one test to surface once it was a function.
+
+**The slash-command sweep's two faults (v5.x).**
+Two real faults fell out of the sweep, both the same shape — the interface not
+saying what happened. **A wrong effort word was ignored rather than
+rejected**: `/effort deeep` fell through to the status display, which prints
+the current rung and the ladder and reads exactly like a confirmation, so you
+believe it changed and every later turn goes out on the old rung. And **a bare
+`/` answered "No such command: `/`" followed by "Type `/` on its own to see
+what there is"** — advice to do the thing that had just been done. It lists
+the commands now, and an unknown command says so *and then* lists them.

@@ -527,9 +527,17 @@ function tabDiffers(state) {
   return rung.model.trim().toLowerCase() === state.model.trim().toLowerCase() ? '' : state.model;
 }
 
+/** `amoled` is the one terminal palette the panels take; any other leaves them on the system's or the editor's. */
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'amoled') root.dataset.theme = 'amoled';
+  else delete root.dataset.theme;
+}
+
 function showPanelState(state) {
   if (!panelStateEl || !state) return;
   panelState = state;
+  if ('theme' in state) applyTheme(state.theme);
   const differs = tabDiffers(state);
   if (effortText) {
     effortText.textContent = state.effort || 'effort';

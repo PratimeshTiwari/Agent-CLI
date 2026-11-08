@@ -1,5 +1,11 @@
 # Agent CLI Companion: version history
 
+## 1.8.16 — 2026-11-08
+
+**The chat can be true black.** With the terminal on `/theme amoled`, the chat's surfaces are black
+instead of the editor's sidebar colour; any other theme follows the editor as before. See extension
+1.64.0.
+
 ## 1.8.15 — 2026-11-05
 
 **The chat finds the agent when a repo has a stray `.agent`.** The agent no longer takes a folder

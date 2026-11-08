@@ -137,7 +137,7 @@ Then two things no installer can do for you:
 open file, cursor and Problems panel, and adds the chat panel and **Attach to Agent CLI**:
 
 ```bash
-code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.15.vsix
+code --install-extension ~/Agent-CLI/vscode-companion/cli-agent-companion-1.8.16.vsix
 ```
 
 Other editors, other install folders and Antigravity IDE are covered in
@@ -210,9 +210,10 @@ conversation.
 | `/shell` | one shell command, then back to the prompt |
 | `/compact` | summarise now (it also offers to when the chat is nearly full) |
 | `/history` | past conversations; pick one to reopen |
+| `/files` | where this project's task list, plans, memory, conversations, logs and backups are; cmd+click opens one |
 | `/context` | what is in the window and which files feed the prompt |
 | `/subagents on·off` | parallel tabs for research and review |
-| `/theme` | Dark, Light, colour-blind, Terminal (the default) or Mono |
+| `/theme` | Dark, AMOLED black, Light, colour-blind, Terminal (the default) or Mono; AMOLED turns the side panels black too |
 | `/logs` | failures, speed, tool use and notices |
 | `/jira` | check the Jira sign-in |
 | `/chrome` | choose the Chrome profile that gets prompts, and so the Google account; `/chrome any` lifts it |

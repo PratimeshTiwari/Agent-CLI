@@ -206,9 +206,12 @@ export class WebSocketServer {
      * model and a false ⚠ until the turn after next. Also covers a model picked
      * by hand in the tab, which no command answers at all.
      */
-    this.agentLoop.onModels?.(() => this.broadcast('extension', {
+    const sendPanelState = () => this.broadcast('extension', {
       id: randomUUID(), type: 'panel_state', payload: { state: this.agentLoop.panelState?.() || null }, timestamp: Date.now(),
-    }));
+    });
+    this.agentLoop.onModels?.(sendPanelState);
+    // A theme picked in the terminal reaches the panels now, not on the next turn.
+    this.agentLoop.onPanelChange?.(sendPanelState);
   }
 
   /**

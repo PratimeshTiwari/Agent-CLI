@@ -814,14 +814,8 @@ mode asked about the same call through the classifier's "Unknown tool" default. 
 mode was the permissive one.** The fix is not "add it to the list" — there is no list any more,
 so the next tool that writes is gated by declaring itself beside its description.
 
-**And the extraction immediately found a second one of the same shape.** The read-only
-exemption — `ls` must not need a keystroke, or the prompt becomes something people dismiss
-without reading — was written as *any shell tool the classifier calls safe*, and
-`run_background` is a shell tool. So `run_background npm run dev` was exempt on the strength of
-a verdict about the **command text**, while the process it spawns is still running after the
-turn, the mode, and possibly the session have ended. The classifier reads a string; it cannot
-see that. `DETACHED_TOOLS` is the flag that lets the exemption ask. It was invisible while the
-policy was a branch inside dispatch and took one test to surface once it was a function.
+`DETACHED_TOOLS` makes the read-only exemption ask about `run_background`, whose process outlives
+the turn: [`docs/history.md`](docs/history.md#moved-from-claudemd-in-v991).
 
 **The rest of the dispatch loop came apart the same way.** `_executeToolCalls` was 487
 lines; it is 240 now, and the two pieces that left are the two that were doing something other
@@ -972,6 +966,13 @@ tool now goes through `paths.resolveToolPath`, and `isAgentArtifact` too. `resol
 same rule. **A stray that a launch already filled is not recognised:** `config.json` and `sessions/`
 make it look deliberate, so it stays a root. A shell command (`cat .agent/artifacts/task.md`) is not
 mapped either. Pty: `task.md` in the scope, no `.agent` in the repo, 0 clears at 13 and 24 rows.
+
+**`/files` and `.agent/README.md` (v9.9.1, `frontend/menus/files-view.js`, `core/workspace/agent-readme.js`).**
+Steps A and B of the `.agent` plan. `/files` lists the task list, plans, memory, the conversation and
+earlier ones, logs, `/undo` backups, the home copy and the README, each an OSC 8 link (`Choices`
+takes `link`); enter shows it in Finder by argv, and a missing one opens the nearest folder and says so.
+The README goes to the resolved root after `new AgentLoop`, never creates `.agent`, and is rewritten
+only while its first line is the marker. `/reset` moves it. Pty: 0 clears at 13 and 24 rows.
 
 **The landmine:** `homeDir()` is `~/.agent`. A naive upward walk from any project under `$HOME`
 finds it and would adopt the global home as a project root, pooling every project's state and
@@ -1467,14 +1468,7 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   `MemoryManager`, `ContextManager`, `DiffEngine` and `TaskManager` cost nothing
   in a temp workspace and cannot lie that way.
 
-  Two real faults fell out of the sweep, both the same shape — the interface not
-  saying what happened. **A wrong effort word was ignored rather than
-  rejected**: `/effort deeep` fell through to the status display, which prints
-  the current rung and the ladder and reads exactly like a confirmation, so you
-  believe it changed and every later turn goes out on the old rung. And **a bare
-  `/` answered "No such command: `/`" followed by "Type `/` on its own to see
-  what there is"** — advice to do the thing that had just been done. It lists
-  the commands now, and an unknown command says so *and then* lists them.
+  The two faults the sweep found (`/effort deeep`, a bare `/`) are in `docs/history.md`.
 
 - **A local command must not touch a running turn.** `handleSubmit` set
   `isProcessing` and cleared `activeToolCalls` before looking at what was
@@ -1736,7 +1730,9 @@ sent as a message; 0 clears at 10, 13, 24 rows.
   the markdown renderer's colours (`marked-terminal`, configured once at load) and the banner
   gradient. The plan for the rest is `.agent/artifacts/plans/2026-10-24-ui-redesign.md`.
   **Palettes since v5.16:** `dark`, `light`, `dark-colorblind`, `light-colorblind` (Okabe–Ito
-  blue/orange), `mono` (every role `null` — plain text) and `terminal`, still the default. Each
+  blue/orange), `mono` (every role `null` — plain text), `amoled` (v9.9.1: dark's inks on `#000`; Ink paints no page, so
+  `screen/terminal-bg.js` sets the terminal's with OSC 11 and OSC 111 resets it on a switch, exit or crash;
+  the panels take it from `panel_state.theme`) and `terminal`, still the default. Each
   palette but `terminal`/`mono` names the background it was designed for in `PALETTE_INFO`, and
   a test holds every role to WCAG 4.5:1 against it (3:1 for `muted`). `/theme` previews by
   calling `setTheme` on highlight; esc restores `original`; enter saves to

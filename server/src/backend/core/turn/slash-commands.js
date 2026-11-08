@@ -175,7 +175,7 @@ export const COMMAND_OPTIONS = {
   subagents: [['', 'say whether they are on'], ['on', 'parallel tabs for research and review'], ['off', 'one tab only'],
     ['large-files <subagent|direct>', 'who reads a large file']],
   context: [], auto: [], strict: [], clear: [], settings: [], shell: [], plans: [], undo: [], diff: [],
-  new: [], restart: [], exit: [], jira: [],
+  new: [], restart: [], exit: [], jira: [], files: [],
   mcp: [['', 'servers and their tools'], ['add', 'add a server, step by step'], ['reload', 'read mcp.json again and restart every server']],
   chrome: [['', 'choose the Chrome profile that gets prompts'], ['any', 'let the first profile connected take them']],
 };

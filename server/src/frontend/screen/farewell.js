@@ -36,6 +36,7 @@
  */
 import { leave } from '../../backend/core/install/restart.js';
 import { rewindSequence } from './screen-span.js';
+import { restoreTerminalBackground } from './terminal-bg.js';
 
 
 let ink = null;
@@ -170,7 +171,8 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
     try { rewindTo = screen.span.rewindTo(await screen.askRow(ASK_ROW_MS)); } catch { rewindTo = null; }
   }
   try { ink?.unmount(); } catch { /* going anyway */ }
-  try { out.write(exitText(agentLoop, out, { rewindTo })); } catch { /* going anyway */ }
+  // The terminal's own background back (amoled), before the footer is printed on it.
+  try { out.write(restoreTerminalBackground({ write: false }) + exitText(agentLoop, out, { rewindTo })); } catch { /* going anyway */ }
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
   await leave(code, { wsServer, agentLoop, delay: 0 });
 }

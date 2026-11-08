@@ -10,11 +10,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
 import { WebSocketServer } from '../../../src/backend/bridge/websocket-server.js';
+import { loadUserSettings, saveUserSettings } from '../../../src/backend/core/workspace/user-settings.js';
 
 function loop() {
   const l = new AgentLoop({
@@ -89,4 +90,33 @@ test('turn_idle carries the footer state', () => {
   const idle = out.find((m) => m.type === 'turn_idle');
   assert.ok(idle);
   assert.equal(idle.payload.state.mode, l.mode);
+});
+
+test('panelState names the saved theme, and a theme change reaches the panels at once (v9.9.1)', () => {
+  const before = loadUserSettings().theme;
+  try {
+    const { l } = loop();
+    saveUserSettings({ theme: 'amoled' });
+    assert.equal(l.panelState().theme, 'amoled');
+    saveUserSettings({ theme: undefined });
+    assert.equal(l.panelState().theme, null, 'nothing saved is null, which the panel reads as "let go"');
+
+    const s = new WebSocketServer({ port: 0, agentLoop: l });
+    const out = [];
+    s.broadcast = (to, m) => { out.push(m); return true; };
+    saveUserSettings({ theme: 'amoled' });
+    l.notifyPanelChange();
+    const sent = out.filter((m) => m.type === 'panel_state');
+    assert.equal(sent.length, 1, '/theme must not wait for the next model event');
+    assert.equal(sent[0].payload.state.theme, 'amoled');
+  } finally {
+    saveUserSettings({ theme: before });
+  }
+});
+
+test('/theme in the terminal tells the panels (source)', () => {
+  for (const file of ['../../../src/frontend/hooks/use-slash-commands.js', '../../../src/frontend/components/Menus.jsx']) {
+    const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.match(src, /saveUserSettings\(\{ theme: [^}]+\}\);\s*agentLoop\.notifyPanelChange\?\.\(\);/, file);
+  }
 });

@@ -75,6 +75,38 @@
   }
 }
 
+/*
+ * The terminal's `amoled` palette (v9.9.1), set by panel.js from the saved
+ * theme. The attribute outranks both `:root` blocks above and the editor's
+ * THEME_BRIDGE, so it is true black in Chrome and in VS Code alike. Only the
+ * surfaces change; the inks are `dark`'s.
+ */
+:root[data-theme="amoled"] {
+  --bg: #000000;
+  --bg-raised: #111114;
+  --bg-sunken: #0a0a0b;
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --border: #2a2b30;
+  --border-subtle: #1a1a1d;
+
+  --text: #e6e6e6;
+  --muted: #9ba1b8;
+  --faint: #7c8197;
+
+  --accent: #7aa2f7;
+  --attention: #ff9e64;
+  --success: #9ece6a;
+  --danger: #f7768e;
+  --link: #7dcfff;
+  --plan: #e0af68;
+  --auto: #73daca;
+  --strict: #bb9af7;
+
+  --add-bg: #0b1f12;
+  --del-bg: #220d10;
+  --on-accent: #000000;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;

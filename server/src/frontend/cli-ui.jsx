@@ -9,6 +9,7 @@ import { Onboarding } from './components/Onboarding.jsx';
 import { Intro, Goodbye } from './components/Intro.jsx';
 import { animationAllowed, OUTRO_MS } from './screen/intro.js';
 import { setTheme, startupTheme } from './theme.js';
+import { installTerminalBackground } from './screen/terminal-bg.js';
 import { loadUserSettings } from '../backend/core/workspace/user-settings.js';
 import { createProbeHold } from './input/ink-probe-hold.js';
 import { asBracketedDrop, createDropJoiner } from './input/file-drop.js';
@@ -174,6 +175,8 @@ export class CliUI {
     // Before the first frame: a theme applied after it would draw the banner in
     // the old colours, and <Static> never repaints it.
     setTheme(startupTheme(process.env, loadUserSettings().theme));
+    // amoled's black page, and every later switch (previews too) followed.
+    installTerminalBackground(process.stdout);
 
     // Where the session begins: asked before the first frame, in raw mode so
     // the answer is neither echoed nor held for a newline. Ink turns raw mode

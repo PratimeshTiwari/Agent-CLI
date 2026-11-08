@@ -3073,7 +3073,22 @@ export class AgentLoop {
           : { id: rung.id, name: rung.name, model: rung.id === 'max' ? 'not on this account' : 'nothing suits it', available: false };
       }),
       modes: MODES.map((id) => ({ id, about: describeMode(id).replace(/^\w+ — /, '') })),
+      // The terminal's saved palette (v9.9.1). Only `amoled` changes the panels,
+      // which otherwise follow the system or the editor's theme.
+      theme: loadUserSettings().theme || null,
     };
+  }
+
+  /** Told when something the panels' footer shows changed outside a turn (`/theme`). */
+  onPanelChange(fn) {
+    (this._panelListeners ||= new Set()).add(fn);
+    return () => this._panelListeners.delete(fn);
+  }
+
+  notifyPanelChange() {
+    for (const fn of this._panelListeners || []) {
+      try { fn(); } catch { /* a listener must not stop the update */ }
+    }
   }
 
   /**
