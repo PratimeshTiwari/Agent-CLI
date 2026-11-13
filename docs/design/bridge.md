@@ -26,6 +26,13 @@ entry before changing the mechanism it describes.
   is returned as soon as the send lands. **A clock fix has as many sites as the clock has
   callers**: `waitForDom`, the paste-settle check and `waitForSendButton` all run on the observer
   clock, and are tested with a `setTimeout` that never fires.
+- **The picker is found by its selectors, then by shape, and checked (v9.9.8, extension 1.67.0).**
+  Read live 2026-11-13: entries turned round, purpose above model ("Code and analysis / 4 Argon"),
+  so the line that starts with a version is the name wherever it sits. Reported 2026-11-14 from a
+  work account ("Chat" picker): the structural search raced the selectors on a fresh tab and opened
+  the "+" menu, so effort offered "Upload files". Selectors now get their whole wait first; a menu
+  with no `data-mode-id` that offers to upload is refused by name; a missed picker logs the page's
+  menu buttons.
 - **A reply's finished row ends the wait (v9.9.4, #104, extension 1.66.0).** Read live: Gemini's
   copy row under a reply lands ~0.6 s after its last text. Once the text is still for 250 ms and the
   newest `model-response` (never `initialLastReply`, the previous turn's) has it, the turn completes

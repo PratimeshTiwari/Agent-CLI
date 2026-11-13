@@ -34,7 +34,7 @@ floating window.
   and `⚠` when the tab is on another model. Bind `⌘⇧1` once at `chrome://extensions/shortcuts`
   (choose **Global**).
 - **Stays current.** The agent checks the version Chrome loaded, and from 1.58.0 on an extension
-  older than the checkout reloads itself between turns. Current version: **1.66.0**.
+  older than the checkout reloads itself between turns. Current version: **1.67.0**.
 
 ```
 agent  ──ws://127.0.0.1:7777──▶  service worker  ──▶  content script  ──▶  gemini.google.com

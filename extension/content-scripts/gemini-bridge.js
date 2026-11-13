@@ -1961,7 +1961,7 @@ function currentThinkingLabel() {
 async function selectThinkingLevel(wanted) {
   const want = norm(wanted);
   const trigger = await findModelTrigger();
-  if (!trigger) throw new Error('[set_thinking] no control that opens the mode picker');
+  if (!trigger) throw noTriggerError('set_thinking');
   let items = await openModelMenu(trigger);
   let described = describeMenu(items);
   let hitAt = described.findIndex((m) => m.level && norm(m.label) === want);
@@ -2057,9 +2057,50 @@ async function applyThinking(wanted) {
  *
  * Returns null rather than throwing, so each caller keeps its own message.
  */
+/*
+ * The selectors first, for the whole budget; the structural search only after
+ * (1.67.0). Racing the two on a fresh tab let the search answer before the
+ * picker had mounted, with the one popup button already there: the "+" menu.
+ * Reported 2026-11-14 from a work account: `/effort` offered "Upload files",
+ * "Add from Drive" and "More uploads" as models. A page where the selectors
+ * never match pays the wait once, not on every read.
+ */
+let selectorsMissed = false;
+
 async function findModelTrigger() {
-  const now = () => findElement(SELECTORS.modelTrigger) || findModelTriggerStructurally();
-  return now() || await waitForDom(now, PICKER_READY_BUDGET_MS);
+  const bySelector = () => findElement(SELECTORS.modelTrigger);
+  const hit = bySelector()
+    || (selectorsMissed ? null : await waitForDom(bySelector, PICKER_READY_BUDGET_MS));
+  if (hit) { selectorsMissed = false; return hit; }
+  selectorsMissed = true;
+  return findModelTriggerStructurally();
+}
+
+/*
+ * A menu that is not the mode picker (1.67.0): no entry carries a
+ * `data-mode-id`, and an entry offers to upload or attach. Refused by name, so
+ * the log says which control was opened instead of the server taking
+ * "Upload files" for a model.
+ */
+const NOT_MODELS = /upload|drive|file|photo|camera|import|notebook|attach/i;
+
+function foreignMenu(items) {
+  if (items.some((el) => el.hasAttribute?.('data-mode-id'))) return null;
+  const labels = items.map((el) => describeModelOption(el).label).filter(Boolean);
+  return labels.some((l) => NOT_MODELS.test(l)) ? labels : null;
+}
+
+/** The composer's menu buttons, by label: what a missed picker leaves in the log. */
+function composerMenuButtons() {
+  return [...document.querySelectorAll('button[aria-haspopup="true"], button[aria-haspopup="menu"]')]
+    .map((b) => (b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean).slice(0, 8);
+}
+
+function noTriggerError(op) {
+  const seen = composerMenuButtons();
+  return new Error(`[${op}] no control that opens the mode picker`
+    + (seen.length ? ` (menu buttons on the page: ${seen.join(', ')})` : ''));
 }
 
 function modelMenuItems() {
@@ -2076,6 +2117,12 @@ async function openModelMenu(trigger) {
     const found = modelMenuItems();
     return found.length > 1 ? found : null;
   }, MENU_OPEN_BUDGET_MS);
+  const foreign = items && foreignMenu(items);
+  if (foreign) {
+    closeModelMenu(trigger);
+    const name = (trigger.getAttribute('aria-label') || trigger.textContent || '').trim();
+    throw new Error(`[open_model_menu] "${name}" opened another menu (${foreign.join(', ')}), not the mode picker`);
+  }
   return items || [];
 }
 
@@ -2289,7 +2336,9 @@ function runSwitchModel(label) {
       type: 'model_options',
       payload: {
         models,
-        switchedTo: (models.find((m) => m.selected) || {}).label || null,
+        // A model, never a level: with no model ticked, the ticked `Low` was
+        // reported as "it stayed on Low" (2026-11-13).
+        switchedTo: (models.find((m) => m.selected && !m.isMode) || {}).label || null,
         requested: label ?? null,
       },
     }))
@@ -2328,7 +2377,7 @@ async function readModelOptions() {
    * always already there and `waitForDom` returns on its first check.
    */
   const trigger = await findModelTrigger();
-  if (!trigger) throw new Error('[find_model_trigger] no control that opens the mode picker');
+  if (!trigger) throw noTriggerError('find_model_trigger');
 
   try {
     let items = await openModelMenu(trigger);
@@ -2395,13 +2444,16 @@ function findModelTriggerStructurally() {
 
   // Everything else in the composer that opens a menu — attachments, canvas,
   // the mic — by the words their labels use.
-  const NOT_THE_PICKER = /send|submit|attach|upload|mic|voice|image|canvas|research/i;
+  const NOT_THE_PICKER = /send|submit|attach|upload|mic|voice|image|canvas|research|tool|add|file|drive|notebook|setting/i;
+  // A button that says what it is wins over the first one left (1.67.0).
+  const SAYS_PICKER = /mode|model|currently/i;
+  const text = (b) => `${b.getAttribute('aria-label') || ''} ${b.textContent || ''}`;
 
   let node = input;
   for (let level = 0; node && level < 8; level++) {
     const buttons = [...node.querySelectorAll('button[aria-haspopup="true"], button[aria-haspopup="menu"]')]
-      .filter((b) => !NOT_THE_PICKER.test(`${b.getAttribute('aria-label') || ''} ${b.textContent || ''}`));
-    if (buttons.length > 0) return buttons[0];
+      .filter((b) => !NOT_THE_PICKER.test(text(b)));
+    if (buttons.length > 0) return buttons.find((b) => SAYS_PICKER.test(text(b))) || buttons[0];
     node = node.parentElement;
   }
   return null;
@@ -2487,6 +2539,21 @@ function describeModelOption(el) {
     if (pieces.length >= 2) lines = pieces;
   }
 
+  /*
+   * Name first, whichever line Gemini puts it on (1.67.0). Read live
+   * 2026-11-13: the picker turned round, the purpose on top and the model
+   * under it — "Code and analysis / 4 Argon" where it was "4 Argon / Complex
+   * tasks". Taking the top line made the server match on purposes, find no
+   * Pro to anchor on, and the trigger ("currently Pro") match nothing, so
+   * every switch read back as failed. A model name starts with its version
+   * ("3.1 Pro", "4 Argon"); a purpose never does, and "Auto / Adapts to your
+   * needs" has no version on either line, so it stays as it is.
+   */
+  const versioned = (s) => /^\d+(\.\d+)*\s+\S/.test(s || '');
+  if (lines.length >= 2 && versioned(lines[1]) && !versioned(lines[0])) {
+    lines = [lines[1], lines[0], ...lines.slice(2)];
+  }
+
   return {
     label: lines[0] || '',
     // Gemini writes a one-line purpose under each name — "Fastest answers",
@@ -2529,7 +2596,7 @@ async function selectModelByLabel(label) {
   if (!wanted) throw new Error('[switch_model] no model named');
 
   const trigger = await findModelTrigger();
-  if (!trigger) throw new Error('[find_model_trigger] no control that opens the mode picker');
+  if (!trigger) throw noTriggerError('find_model_trigger');
 
   const matches = (el) => describeModelOption(el).label.trim().toLowerCase() === wanted;
 
@@ -2678,6 +2745,10 @@ function markSelected(described, triggerLabel) {
       const name = stripVersion(described[i].label);
       return name && wanted.endsWith(` ${name}`);
     }));
+  }
+  // A trigger that names the purpose ("Code and analysis") rather than the model.
+  if (index === -1) {
+    index = only(models.filter((i) => wanted && norm(described[i].description) === wanted));
   }
   return described.map((m, i) => (m.isMode ? m : { ...m, selected: i === index }));
 }

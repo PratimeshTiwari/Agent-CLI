@@ -159,3 +159,36 @@ test('a switch to a locked model throws and clicks nothing', async () => {
   await selectModelByLabel('Auto');
   assert.equal(clicks, 1);
 });
+
+/*
+ * The picker as read live on 2026-11-13 (/u/3): the purpose on the label line
+ * and the model on the sublabel — "Code and analysis / 4 Argon". Reported as
+ * `/effort` failing every switch with "it stayed on Low": the server matched on
+ * purposes, and the trigger, which still names the model, matched none of them.
+ */
+const TURNED = page(model('a1', 'Auto', 'Adapts to your needs', { checked: true })
+  + model('l1', 'Quick answers', '3.5 Flash-Lite')
+  + model('f1', 'Everyday help', '3.8 Flash')
+  + model('p1', 'Code and analysis', '3.1 Pro')
+  + model('g1', 'Most complex work', '4 Argon', { lock: true }));
+
+test('2026-11-13: the model name is the label, wherever Gemini puts it', () => {
+  const { described } = read(TURNED);
+  assert.deepEqual(described.filter((d) => !d.isMode).map((d) => [d.label, d.description]), [
+    ['Auto', 'Adapts to your needs'],
+    ['3.5 Flash-Lite', 'Quick answers'], ['3.8 Flash', 'Everyday help'],
+    ['3.1 Pro', 'Code and analysis'], ['4 Argon', 'Most complex work'],
+  ]);
+  // Levels have no version on either line and stay as they are.
+  assert.deepEqual(described.filter((d) => d.level).map((d) => d.label), ['Low', 'Medium', 'High']);
+});
+
+test('2026-11-13: the trigger naming a model, or a purpose, selects that model', () => {
+  const { described } = read(TURNED);
+  const cleared = described.map((d) => (d.isMode ? d : { ...d, selected: false }));
+  const picked = (t) => markSelected(cleared, t).filter((r) => r.selected && !r.isMode).map((r) => r.label);
+  assert.deepEqual(picked('Pro'), ['3.1 Pro']);
+  assert.deepEqual(picked('Flash'), ['3.8 Flash']);
+  assert.deepEqual(picked('Code and analysis'), ['3.1 Pro']);
+});
+
