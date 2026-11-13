@@ -18,6 +18,24 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.67.0 — 2026-11-13
+
+**The picker turned round, and `/effort` switches again.** Gemini now writes each entry's purpose
+on top and the model under it ("Code and analysis / 4 Argon", read live). The bridge took the top
+line as the name, so the server matched rungs against purposes with no Pro to anchor on, the
+trigger ("currently Pro") matched no entry, and every switch read back as failed. A line that
+starts with a version number is now the name, wherever it sits; the trigger may also name the
+purpose. A failed switch named the ticked thinking level as where the tab "stayed" ("it stayed on
+Low"); it now names only a model.
+
+**The "+" menu is never read as the models.** On a work account whose picker reads "Chat", `/effort`
+offered "Upload files", "Add from Drive" and "More uploads" as effort models. On a fresh tab the
+fallback search for the picker answered before the picker had mounted, with the one menu button
+already there. The known selectors now get their whole wait first (once per page); the fallback
+skips tool, add and file buttons and prefers one whose label says mode, model or "currently"; and a
+menu with no `data-mode-id` that offers to upload is refused by name. When no picker is found, the
+error lists the page's menu buttons, so `/logs` says what the page called it.
+
 ### 1.66.0 — 2026-11-08
 
 **A Canvas is named, not dropped.** Asked for a design document, Gemini wrote it into its Canvas,
