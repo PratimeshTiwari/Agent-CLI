@@ -18,6 +18,27 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.68.0 — 2026-11-21
+
+**Replies say which prompt they answer.** Every main-lane prompt now carries a `sendId`, and the
+bridge echoes it on every reply, stream chunk, timeout and worker failure, so the server can drop
+what belongs to a prompt it has moved past. Without it, a reply from a stopped or timed-out turn
+was read as the next turn's answer, and that turn's real answer was then thrown away.
+
+**A stop reaches a prompt that is still going in.** `stop_generation` found no Stop button while
+a prompt was waiting on the picker or being typed, so the prompt was typed and sent after esc. It
+now backs out before typing or before sending, and answers the worker as done, not failed (a
+failure would reopen the tab). A second prompt arriving during an inject no longer overwrites the
+first one's request data before being refused, which tagged the first prompt's reply with the
+second's id; it waits for a stopped inject to back out instead.
+
+**No typing under a reply still being written.** An inject waits, on the DOM's clock, for the Stop
+button to go before typing (`busy_wait` in the trace). The send button does not exist while Gemini
+writes, so typing earlier only moved the wait into `waitForSendButton` and its Enter fallback.
+
+**`accepted`.** Once Gemini has the prompt the bridge says so, and the server's two-minute silence
+clock starts from there rather than from the enqueue.
+
 ### 1.67.0 — 2026-11-13
 
 **The picker turned round, and `/effort` switches again.** Gemini now writes each entry's purpose

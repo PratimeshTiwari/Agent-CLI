@@ -184,7 +184,7 @@ import { SessionStore } from '../../storage/session-store.js';
 import { ContextManager } from '../../context/context-manager.js';
 import { McpServers } from '../../mcp/client/servers.js';
 import { MemoryManager } from '../../context/memory-manager.js';
-import { ExtensionLock, mainLane, subLane } from '../../bridge/extension-lock.js';
+import { ExtensionLock, mainLane, subLane, laneFor } from '../../bridge/extension-lock.js';
 import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from '../policy/tool-policy.js';
 import { runExternalTool } from '../policy/external-approval.js';
@@ -341,6 +341,7 @@ export class AgentLoop {
       for (const fn of this._idleListeners || []) {
         try { fn(); } catch { /* a listener must not break the turn's ending */ }
       }
+      this._drainHeldMessages();
     }
   }
 
@@ -379,6 +380,23 @@ export class AgentLoop {
     const to = this._modeSwitch || null;
     this._modeSwitch = null;
     return to;
+  }
+
+  /**
+   * Send the next held message (v9.9.9), after the idle listeners have run and
+   * on a later tick, so a turn that ends inside a handler is fully ended
+   * first. The terminal's own queue drains on the same edge; whichever goes
+   * second is held again, never lost.
+   */
+  _drainHeldMessages() {
+    if (!this._heldMessages?.length || this._drainScheduled) return;
+    this._drainScheduled = true;
+    setImmediate(() => {
+      this._drainScheduled = false;
+      if (this.isProcessing || !this._heldMessages?.length) return;
+      const next = this._heldMessages.shift();
+      this.handleUserMessage(next.content, next.callbacks, next.options).catch(() => {});
+    });
   }
 
   /** Called on every busy → idle edge. Returns the unsubscribe. */
@@ -562,7 +580,12 @@ export class AgentLoop {
     // One in-flight prompt per model, not one for the whole bridge — see
     // bridge/extension-lock.js.
     this.extensionLock = new ExtensionLock({
-      send: (payload) => this.callbacks?.injectPrompt?.(payload),
+      send: (payload) => {
+        // What the main tab is working on now (v9.9.9): a reply carrying any
+        // other id is from a prompt this loop has moved past.
+        if (!payload?.isSubagent) this._inTabSendId = payload?.sendId || null;
+        return this.callbacks?.injectPrompt?.(payload);
+      },
       onStall: (lane, model) => this._onExtensionStall(lane, model),
       timeoutMs: EXTENSION_RESPONSE_TIMEOUT,
     });
@@ -602,10 +625,17 @@ export class AgentLoop {
    */
   async handleUserMessage(content, callbacks, options = {}) {
     if (this.isProcessing) {
+      /*
+       * Held, never dropped (v9.9.9, rule 11). The terminal queues its own
+       * prompts and only calls this when idle; a side panel's message arrived
+       * here mid-turn and got "busy, please wait" with the message thrown away.
+       * It goes after the turn, in the order it came; a stop empties it.
+       */
+      (this._heldMessages ||= []).push({ content, callbacks, options });
       callbacks.sendToPanel({
         id: randomUUID(),
         type: 'status',
-        payload: { message: '⏳ Agent is busy processing. Please wait...' },
+        payload: { message: '⏳ Queued · sent when this turn ends' },
         timestamp: Date.now(),
       });
       return;
@@ -764,6 +794,7 @@ export class AgentLoop {
         timestamp: Date.now(),
       });
       this.isProcessing = false;
+      this._stopOwedReply();
       this.abortExtensionWork();
     }
   }
@@ -779,6 +810,13 @@ export class AgentLoop {
     // longer wanted. Subagent tabs are disposable, so only the main lane's
     // thread is the session's.
     if (!isSubagent) this._recordThread(payload.tabUrl);
+
+    // A reply to a prompt this loop is no longer waiting for (v9.9.9). An
+    // untagged reply is an older extension's, and is taken as before.
+    if (!isSubagent && payload.sendId && payload.sendId !== this._awaitedSendId) {
+      this._discardOutdatedReply(payload);
+      return;
+    }
 
     // Allow subagent responses through even when main agent isn't processing —
     // background GitHub tasks use _executeSubagent without setting isProcessing.
@@ -1063,6 +1101,55 @@ export class AgentLoop {
   }
 
   /** A main-lane reply that arrived after its turn ended. Logged, released, dropped. */
+  /**
+   * A stream chunk, or the tab saying it has the prompt (v9.9.9). Returns
+   * false when the chunk is not to be shown: an earlier prompt's, or the
+   * `accepted` signal, which has no text.
+   *
+   * Stream chunks went only to the screen, so the silence clock armed at
+   * enqueue was never stopped by text: any reply still being written two
+   * minutes after it was queued was resent in a fresh tab, which closed the
+   * tab that was writing it. The test that said text stops the clock fed a
+   * `gemini_response` chunk the bridge never sends.
+   */
+  noteReplyProgress(payload = {}) {
+    if (payload.isSubagent) return true;
+    if (payload.sendId && payload.sendId !== this._awaitedSendId) return false;
+    if (payload.accepted) {
+      // From here, not from the enqueue: queue, picker and typing are not
+      // Gemini's silence.
+      if (this._silentTimer) this._armSilentWatch();
+      return false;
+    }
+    if (String(payload.content || '').trim()) this._clearSilentWatch();
+    return true;
+  }
+
+  /** True for a tagged message of a prompt other than the one awaited (v9.9.9). */
+  isOutdatedSend(sendId) {
+    return Boolean(sendId) && sendId !== this._awaitedSendId;
+  }
+
+  /**
+   * A reply whose id is not the one awaited (v9.9.9): dropped, logged as a
+   * notice. When it was the prompt the tab was holding, its end frees the
+   * lane, so whatever queued behind it goes; a reply from further back frees
+   * nothing, because the lane is now someone else's.
+   */
+  _discardOutdatedReply(payload) {
+    const finished = payload.complete || payload.timedOut;
+    if (!finished) return;
+    logNotice(this.workspace, {
+      flow: 'agent', op: 'outdated_reply',
+      message: 'A reply to an earlier prompt arrived and was discarded',
+      meta: { heldByTab: payload.sendId === this._inTabSendId },
+    });
+    if (payload.sendId === this._inTabSendId) {
+      this._inTabSendId = null;
+      this._releaseExtension();
+    }
+  }
+
   _discardStaleReply() {
     /*
      * Two different things wear this one name, and only one is a fault.
@@ -2907,6 +2994,21 @@ export class AgentLoop {
      * turn into a chat that had never seen the task — the reply was a generic
      * essay. A tab the extension has to open goes to this conversation instead.
      */
+    /*
+     * Every main-lane prompt carries an id the tab echoes on its replies
+     * (v9.9.9). Replies carried none, so a reply from a turn that was stopped,
+     * timed out or retried — or a compaction summary that came after its
+     * deadline — was read as the answer to whatever was in flight next, and
+     * that prompt's real answer was then thrown away as stale. Reproduced
+     * against the real loop and lock (`stale-reply-id.test.js`).
+     */
+    if (!payload.isSubagent && !payload.sendId) {
+      payload = { ...payload, sendId: randomUUID() };
+    }
+    if (!payload.isSubagent && payload.expectResponse) this._awaitedSendId = payload.sendId;
+    // The lane is named when the prompt is sent, so a model change before its
+    // reply releases the lane that holds it, not an idle one (v9.9.9).
+    if (!payload.isSubagent) this._mainLaneHeld = laneFor(payload);
     const url = payload.isSubagent ? null : this._threadUrl();
     // The thinking level the tab applies before typing (v9.9.3); main lane only.
     const thinking = payload.isSubagent ? null : this._wantedThinking();
@@ -2983,7 +3085,7 @@ export class AgentLoop {
    * releasing the wrong one leaves the right one wedged for the rest of the
    * session with later prompts vanishing into it silently.
    */
-  _releaseExtension(lane = mainLane(this.mainModel)) {
+  _releaseExtension(lane = this._mainLaneHeld || mainLane(this.mainModel)) {
     this.extensionLock.release(lane);
     // A model switch that arrived mid-turn has been waiting for exactly this.
     this._flushModelSwitch();
@@ -3115,6 +3217,7 @@ export class AgentLoop {
       message: 'No reply text after the retry either; the turn was ended',
     });
     this.isProcessing = false;
+    this._stopOwedReply();
     this.abortExtensionWork();
     this.callbacks?.sendToPanel?.({
       id: randomUUID(),
@@ -3122,6 +3225,20 @@ export class AgentLoop {
       payload: { message: tabUnreachableMessage(tabLink(this)) },
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * Tell the tab to stop writing a reply nobody will read (v9.9.9).
+   *
+   * Only esc sent `stop_generation`. A turn ended by the second silence, the
+   * lane watchdog or an exception freed the lane and left Gemini writing, so
+   * the next prompt was typed into a busy composer with no send button and
+   * waited out `waitForSendButton`. Only when the main lane is held, which is
+   * exactly "a reply is owed"; never for a closed tab or a failed send.
+   */
+  _stopOwedReply() {
+    if (!this.extensionLock?.isBusy?.(this._mainLaneHeld || mainLane(this.mainModel))) return;
+    this._toExtension('stop_generation', { targetModel: this.mainModel });
   }
 
   abortExtensionWork() {
@@ -3179,8 +3296,10 @@ export class AgentLoop {
    */
   noteUserStop() {
     this._userStoppedAt = Date.now();
-    // Stopping means stopping: a steer must not come back as the next message.
+    // Stopping means stopping: a steer must not come back as the next message,
+    // and nor does a panel message held behind the turn.
     this._steers = [];
+    this._heldMessages = [];
     // An MCP call in flight gets the protocol's cancel, and the rest never start.
     this._mcpAbort?.abort();
   }
@@ -3306,6 +3425,7 @@ export class AgentLoop {
         timestamp: Date.now(),
       });
     }
+    this._stopOwedReply();
     this.abortExtensionWork();
   }
 

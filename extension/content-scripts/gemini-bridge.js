@@ -155,6 +155,15 @@ const SELECTORS = {
 
 // ── State ────────────────────────────────────────────────────────────
 let isInjecting = false;
+/**
+ * A stop that arrived while a prompt was still going in (v9.9.9, 1.68.0).
+ * The stop button does not exist yet then, so `stop_generation` clicked
+ * nothing and the prompt was typed and sent after the person had stopped it.
+ * `injectPrompt` reads this before typing and before sending.
+ */
+let injectStopped = false;
+/** The inject in progress, so the next one can wait out a stopped one. */
+let currentInject = null;
 // Why the last injectPrompt returned false, for the worker's error (1.56.0).
 let lastInjectError = null;
 
@@ -329,6 +338,26 @@ let completionCheck = null;
 /** Whether the in-flight turn is one observation short of settled. */
 let quietPending = () => false;
 let currentRequestData = null;
+/**
+ * The prompt the running response observer belongs to (v9.9.9, 1.68.0).
+ *
+ * Every reply, stream chunk and timeout carries its `sendId`, so the server
+ * can tell an answer to the prompt it is waiting for from a late one to a
+ * prompt it has moved past. Taken when the observer starts, not read from
+ * `currentRequestData` at send time: the next inject replaces that while the
+ * last observer may still be finishing.
+ */
+let observedSend = null;
+const replyTag = () => ({
+  ...(observedSend?.sendId ? { sendId: observedSend.sendId } : {}),
+  ...(observedSend?.isSubagent ? { isSubagent: true } : {}),
+});
+/**
+ * How long a prompt waits for a reply still being written before it is typed
+ * (v9.9.9). The send button does not exist while Gemini writes, so typing
+ * earlier only moved the wait into `waitForSendButton` and its Enter fallback.
+ */
+const BUSY_COMPOSER_BUDGET_MS = 60000;
 let sawGenerating = false;
 /**
  * When Gemini was last seen generating (its Stop button visible).
@@ -707,7 +736,19 @@ async function injectPrompt(text, { thinking = null } = {}) {
   const thinkingStart = Date.now();
   await applyThinking(thinking);
   const thinkingMs = Date.now() - thinkingStart;
+  /*
+   * A reply still being written (v9.9.9): wait for it, on the DOM's clock.
+   * The server now stops a reply it no longer wants, so this is usually short;
+   * typing under it found no send button and waited 30 s, then pressed Enter.
+   */
+  let busyMs = 0;
+  if (stopButtonVisible()) {
+    const busyStart = Date.now();
+    await waitForDom(() => (injectStopped || !stopButtonVisible() ? true : null), BUSY_COMPOSER_BUDGET_MS);
+    busyMs = Date.now() - busyStart;
+  }
   traceStart();
+  if (busyMs && turnTrace) turnTrace.stages.busy_wait = busyMs;
   if (thinking && thinkingMs > 50 && turnTrace) turnTrace.stages.thinking = thinkingMs;
   // Its own stage, only when it happened: a subagent turn waiting on its
   // model switch is normal, and folding the wait into `find_input` would send
@@ -721,6 +762,7 @@ async function injectPrompt(text, { thinking = null } = {}) {
   const buttonsBeforeText = enabledButtons();
 
   try {
+    if (injectStopped) return 'cancelled';
     // The ladder first, then the shape — a redesigned class name should
     // cost a log line, not the turn.
     const input = findInputResilient();
@@ -900,6 +942,14 @@ async function injectPrompt(text, { thinking = null } = {}) {
     // Wait for the send button to become enabled (Gemini validates input and uploads images)
     traceMark('type');
 
+    // Stopped while it was being typed: take it back out, send nothing.
+    if (injectStopped) {
+      input.focus();
+      document.execCommand('selectAll', false, null);
+      document.execCommand('delete', false, null);
+      return 'cancelled';
+    }
+
     const sendBtn = await waitForSendButton(input, 30000, buttonsBeforeText);
 
     if (sendBtn === 'submitted') {
@@ -934,6 +984,17 @@ async function injectPrompt(text, { thinking = null } = {}) {
 
     // Start watching for the response
     startResponseObserver();
+    /*
+     * Gemini has the prompt (v9.9.9). The server's two-minute silence clock
+     * starts again from here, so the queue, the picker and typing a long
+     * prompt into a hidden tab are no longer charged to Gemini's silence.
+     */
+    if (observedSend?.sendId) {
+      safeSend({
+        type: 'gemini_response_stream',
+        payload: { content: '', complete: false, accepted: true, ...replyTag() },
+      }).catch(() => {});
+    }
 
     return true;
   } catch (err) {
@@ -1190,6 +1251,10 @@ function waitForSendButton(input, maxWait = 30000, buttonsBeforeText = null) {
  */
 function startResponseObserver() {
   stopResponseObserver();
+  observedSend = {
+    sendId: currentRequestData?.sendId || null,
+    isSubagent: Boolean(currentRequestData?.isSubagent),
+  };
   lastResponseText = '';
   responseStartTime = Date.now();
   lastActivityTime = Date.now();
@@ -1270,6 +1335,7 @@ function startResponseObserver() {
                 content: lastResponseText,
                 complete: false,
                 streaming: true,
+                ...replyTag(),
               },
             }).catch(() => {}); // Side panel may not be open
           }
@@ -1457,6 +1523,7 @@ function startResponseObserver() {
            */
           neverSubmitted: composerStillHoldsPrompt() ?? (!isGenerating && !sawGenerating),
           composerStillHolds: composerStillHoldsPrompt(),
+          ...replyTag(),
         },
       });
       return;
@@ -1476,6 +1543,7 @@ function startResponseObserver() {
           content: lastResponseText || '[No response received — max timeout reached]',
           complete: false,
           timedOut: true,
+          ...replyTag(),
         },
       });
       return;
@@ -3058,6 +3126,7 @@ function onResponseComplete(responseText) {
       timedOut: false,
       requestId: currentRequestData?.requestId,
       isSubagent: currentRequestData?.isSubagent,
+      ...replyTag(),
     },
   });
 }
@@ -3113,27 +3182,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
 
     case 'inject_prompt':
-      currentRequestData = {
-        requestId: payload.requestId,
-        isSubagent: payload.isSubagent,
-        // Between turns (v6.6, #104): when the server sent this, when it got
-        // here, and the server's own share of the gap. Folded into the trace.
-        sentAt: payload.sentAt,
-        receivedAt: Date.now(),
-        gap: payload.gap,
-      };
-      lastInjectError = null;
-      injectPrompt(payload.prompt, { thinking: payload.thinking || null }).then(success => {
+      (async () => {
+        // A prompt that was stopped mid-typing is backing out; the next one
+        // waits for that rather than being refused (v9.9.9).
+        if (isInjecting && injectStopped && currentInject) await currentInject.catch(() => {});
+        /*
+         * Refused before anything is recorded (v9.9.9). `currentRequestData`
+         * was overwritten first, so the prompt still going in started its
+         * observer under the refused prompt's id, and its reply was taken as
+         * that prompt's answer.
+         */
+        if (isInjecting) {
+          sendResponse({ success: false, error: 'the tab was still typing the previous prompt' });
+          return;
+        }
+        currentRequestData = {
+          requestId: payload.requestId,
+          sendId: payload.sendId || null,
+          isSubagent: payload.isSubagent,
+          // Between turns (v6.6, #104): when the server sent this, when it got
+          // here, and the server's own share of the gap. Folded into the trace.
+          sentAt: payload.sentAt,
+          receivedAt: Date.now(),
+          gap: payload.gap,
+        };
+        lastInjectError = null;
+        injectStopped = false;
+        currentInject = injectPrompt(payload.prompt, { thinking: payload.thinking || null });
+        const success = await currentInject;
+        // Stopped before it was sent: nothing is owed and nothing failed, so it
+        // is not reported as a failure (which would reopen the tab).
+        if (success === 'cancelled') { sendResponse({ success: true, cancelled: true }); return; }
         // The reason travels with a failure: the worker used to say only
         // "Content script reported failure" (1.56.0).
         sendResponse(success ? { success } : { success, error: lastInjectError || undefined });
-      }).catch(err => {
+      })().catch(err => {
         console.error('[Gemini Bridge] injectPrompt threw:', err);
         sendResponse({ success: false, error: err.message });
       });
       return true; // Async response
 
     case 'stop_generation':
+      // A prompt still going in is taken back before it is sent (v9.9.9).
+      if (isInjecting) injectStopped = true;
       // Try to find the stop generating button
       const stopBtn = findElement([
         'button[aria-label*="Stop"]',
