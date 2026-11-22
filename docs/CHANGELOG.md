@@ -60,7 +60,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-22 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–PRNUM
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-22 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#179](https://github.com/PratimeshTiwari/Agent-CLI/pull/179)
 
 **Highlights**
 
@@ -76,7 +76,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.9 | 11-22 | PRNUM | Stuck and slow turns: a reply says which prompt it answers, so a late one is never the next turn's answer; streamed text stops the two-minute silence clock (a long reply was resent and killed); a dying turn stops the tab; panel messages mid-turn are held; `<tool_call>` markup is a call |
+| v9.9.9 | 11-22 | [#179](https://github.com/PratimeshTiwari/Agent-CLI/pull/179) | Stuck and slow turns: a reply says which prompt it answers, so a late one is never the next turn's answer; streamed text stops the two-minute silence clock (a long reply was resent and killed); a dying turn stops the tab; panel messages mid-turn are held; `<tool_call>` markup is a call |
 | v9.9.8 | 11-14 | [#178](https://github.com/PratimeshTiwari/Agent-CLI/pull/178) | `/effort` switches again: Gemini's picker now puts the purpose above the model, and the "+" menu is never read as the models |
 | v9.9.7 | 11-09 | [#176](https://github.com/PratimeshTiwari/Agent-CLI/pull/176), [#177](https://github.com/PratimeshTiwari/Agent-CLI/pull/177) | Ask the agent to add an MCP server: it shows you the command, then tests and saves it; `CLAUDE.md` cut to the rules |
 | v9.9.6 | 11-08 | [#175](https://github.com/PratimeshTiwari/Agent-CLI/pull/175) | Shift+tab at an approval box; the diff box fits; no Canvas; Cursor's chat can move right |
