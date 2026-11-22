@@ -291,3 +291,44 @@ test('a fence on the same line as the prose', async (t) => {
     assert.match(cleanContent, /```bash\nnpm test\n```/);
   });
 });
+
+/*
+ * Reported 2026-11-22, "why tool call is not made": Gemini (Auto, low effort)
+ * wrote its calls as markup, nothing parsed them, and the markup was shown as
+ * the answer.
+ */
+test('calls written as <tool_call> markup (v9.9.9)', async (t) => {
+  await t.test('the reply that was seen: two self-closing tags', () => {
+    const { toolCalls, cleanContent } = parse(
+      `<tool_call name="list_directory" args='{}' /> <tool_call name="read_file" args='{"path": "README.md"}' />`,
+    );
+    assert.deepEqual(toolCalls, [
+      { name: 'list_directory', args: {} },
+      { name: 'read_file', args: { path: 'README.md' } },
+    ]);
+    assert.equal(cleanContent, '');
+  });
+
+  await t.test('a tag with the args as its body, and a tag with no args', () => {
+    const { toolCalls } = parse('<tool_call name="grep_search">{"pattern": "x"}</tool_call>\n<tool_call name="list_directory" />');
+    assert.deepEqual(toolCalls.map((c) => [c.name, c.args]), [['grep_search', { pattern: 'x' }], ['list_directory', {}]]);
+  });
+
+  await t.test('an apostrophe inside double-quoted args survives', () => {
+    const { toolCalls } = parse(`<tool_call name="grep_search" args="{&quot;pattern&quot;: &quot;it's&quot;}" />`);
+    assert.equal(toolCalls[0].args.pattern, "it's");
+  });
+
+  await t.test('an unknown name, or args that are not JSON, stay in the reply', () => {
+    for (const text of ['<tool_call name="format_disk" args=\'{}\' />', '<tool_call name="read_file" args=\'not json\' />']) {
+      const { toolCalls, cleanContent } = parse(text);
+      assert.equal(toolCalls.length, 0, text);
+      assert.equal(cleanContent, text);
+    }
+  });
+
+  await t.test('the JSON block path is unchanged beside it', () => {
+    const { toolCalls } = parse(`Looking.\n\n${block('{"name":"read_file","args":{"path":"a.js"}}')}`);
+    assert.equal(toolCalls.length, 1);
+  });
+});

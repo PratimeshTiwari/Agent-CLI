@@ -168,7 +168,7 @@ import { tabUnreachableMessage, tabClosedMessage, TAB_CLOSED_MID_TURN } from '..
 import { runDelegatedRead, shouldDelegateRead } from '../subagents/delegated-read.js';
 import { logReadRedirect, runLogRead } from './log-read.js';
 import { runSubAgentSession } from '../subagents/subagent-session.js';
-import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS, MCP_TOOLS } from '../prompt/tool-catalog.js';
+import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS, MCP_TOOLS, TOOL_CATALOG } from '../prompt/tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung, EFFORT_LEVELS } from '../models/effort.js';
 import {
   planModelSwitch, browserModelPin, rungForModel, pickModelFor, selectedModel,
@@ -4302,6 +4302,8 @@ export class AgentLoop {
 
     // Fallback: Robust brace-matching to find any JSON object hidden in the text
     // This handles missing backticks, weird UI wrappers, or malformed markdown
+    cleanContent = this._takeMarkupCalls(cleanContent, calls);
+
     let startIndex = 0;
     while ((startIndex = cleanContent.indexOf('{', startIndex)) !== -1) {
       let openBraces = 0;
@@ -4373,6 +4375,57 @@ export class AgentLoop {
     cleanContent = cleanContent.replace(/(?:^|\n)(?:JSON|tool_call)\s*(?:\n|$)/gi, '\n');
 
     return { toolCalls: calls, cleanContent: cleanContent.trim() };
+  }
+
+  /**
+   * Calls written as markup instead of a JSON block (v9.9.9).
+   *
+   * Reported 2026-11-22, "why tool call is not made": on the Auto model at low
+   * effort, with the full prompt and its ```json examples on turn 0, Gemini
+   * answered "what is this project about?" with
+   *
+   *     <tool_call name="list_directory" args='{}' /> <tool_call name="read_file" args='{"path": "README.md"}' />
+   *
+   * Nothing parsed it — the brace scan found `{}` and `{"path": …}`, neither
+   * with a `name` — so the markup was shown as the answer and no tool ran.
+   * Taken here in both shapes, `args='…'` on a self-closing tag and
+   * `<tool_call name="…">{args}</tool_call>`, and only for a name the catalog
+   * has, so markup quoted in prose is never run. A body that is not JSON
+   * leaves the tag where it was.
+   */
+  _takeMarkupCalls(text, calls) {
+    const known = new Set(TOOL_CATALOG.map((t) => t.name));
+    const decode = (v) => String(v).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const argsOf = (raw) => {
+      const body = decode(raw ?? '').trim();
+      if (!body) return {};
+      try {
+        const parsed = JSON.parse(this._cleanJsonString(body));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+      } catch { return null; }
+    };
+    const taken = [];
+    const take = (whole, name, raw) => {
+      if (!known.has(name)) return whole;
+      const args = argsOf(raw);
+      if (!args) return whole;
+      calls.push({ name, args });
+      taken.push(name);
+      return '';
+    };
+    // One pass, so the calls keep the order they were written in.
+    const out = text.replace(
+      /<tool_call\s+name=(["'])([\w.-]+)\1(?:\s+(?:args|arguments)=(["'])([\s\S]*?)\3)?\s*(?:\/>|>([\s\S]*?)<\/tool_call>)/g,
+      (whole, _q, name, _q2, attr, body) => take(whole, name, attr ?? body),
+    );
+    if (taken.length) {
+      logNotice(this.workspace, {
+        flow: 'agent', op: 'tool_call_markup',
+        message: `Took ${taken.length} call(s) written as <tool_call> markup`,
+        meta: { names: taken },
+      });
+    }
+    return out;
   }
 
   _cleanJsonString(str) {
