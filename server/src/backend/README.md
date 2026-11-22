@@ -53,6 +53,8 @@ by hand.
 | something failed | `/logs`, or `.agent/logs/errors.jsonl`. Each row names its flow (`bridge`, `extension`, `agent`, `tool`…) and `op` |
 | a send to the tab failed | `/logs extension`; `lastInjectError` carries the page's reason |
 | a turn is slow | `/logs speed`: each stage of a turn, from `.agent/logs/traces.jsonl` |
+| a reply answered the wrong message, or a turn hung after esc | `/logs notices`: `outdated_reply` / `outdated_failure` are an earlier prompt's, dropped by `sendId`; `busy_wait` in `/logs speed` is a prompt waiting for the last reply to finish |
+| a reply shows tool markup and nothing ran | `/logs notices` for `tool_call_markup`; the shapes parsed are in `_extractToolCalls` / `_takeMarkupCalls` |
 | the model calls the wrong tools, or too many rounds | `/logs tools` (`.agent/logs/tool-usage.jsonl`) |
 | a command ran, or was blocked | `/commands` (`.agent/logs/commands/<date>.jsonl`) |
 | the prompt itself | `/context` for what feeds it; `/prompt` for the version and what it adds |
