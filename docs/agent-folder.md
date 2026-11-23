@@ -97,6 +97,8 @@ not do that on purpose, it is clutter.
 ├── mcp.json               your MCP servers, in the format Claude Code uses (`/mcp add` writes it, or you do)
 ├── mcp-secrets.json       server tokens, 0600, where there is no Keychain (macOS uses the Keychain)
 ├── mcp-cache.json         the tools each server last listed, so `/mcp` has something to show
+├── models.json            the models your Gemini account last offered, per Chrome profile, so
+│                          `/effort` names them before the tab is open (display only)
 ├── AGENT.md               instructions for every project (optional; you write it)
 ├── recent-workspaces.json what /set-workspace offers
 ├── workspaces/<name>-<hash>/conversations/   the second copy of each project's conversations

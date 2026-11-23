@@ -252,7 +252,8 @@ Details: [`docs/design/prompt-and-models.md`](docs/design/prompt-and-models.md).
 - **Effort rungs** low / medium / high / max map to the account's models (`rungForModel`,
   `pickModelFor`, `model-match.test.js`). Max is the model named Argon, else the first after Pro;
   without it Max is not shown (slider, settings, panels); a locked one is shown, marked locked.
-  The tab reads its models whenever a tab of ours loads (`content_script_ready`).
+  The tab reads its models whenever a tab of ours loads (`content_script_ready`); the last list is
+  shown until then (`saved-models.js`, display only: decisions read the live list).
 - **The browser differing from the effort is asked about once** (`/effort mismatch ask|follow|switch`),
   never mid-turn; the footer shows `⚠ <model>`, the slider only under the current effort. A switch is confirmed by reading the picker back;
   a failed switch or a quota reply steps **down**, never up (`core/models/model-fallback.js`).
