@@ -137,3 +137,28 @@ test('a failure to open is caught, not thrown', () => {
   assert.match(focusModelTab, /ensureModelTab\([^)]*\)\.catch\(/,
     'a rejected tab creation escapes the keybinding');
 });
+
+/*
+ * v9.9.9.1 (1.69.0): owner, 2026-11-23 — "once gemini tab is opened, our
+ * effort needs one random switch to fetch available model names, can we
+ * refresh those on page refresh". The ask made when a tab is created usually
+ * lands before the content script listens, and a refresh asked nothing.
+ */
+const MAIN = readFileSync(join(here, '../../src/background/main.js'), 'utf8');
+const readyCase = (() => {
+  const start = MAIN.indexOf("case 'content_script_ready':");
+  return MAIN.slice(start, MAIN.indexOf('break;', MAIN.indexOf('});', start)) + 6);
+})();
+
+test('a tab of ours that finished loading is asked for its models', () => {
+  assert.match(readyCase, /discover_models/, 'content_script_ready asks nothing');
+  assert.match(readyCase, /whoseTab\(/, 'it must ask only the agent\'s own tab');
+  assert.match(readyCase, /whose\?\.main/, 'only the main tab: never the person\'s, never a subagent\'s');
+});
+
+test('a second ask while the picker is being read is answered by the first', () => {
+  const discover = bridge.slice(bridge.indexOf("case 'discover_models':"), bridge.indexOf("case 'switch_model':"));
+  assert.match(discover, /pickerInFlight > 0/);
+  assert.ok(discover.indexOf('pickerInFlight > 0') < discover.indexOf('readModelOptions()'),
+    'the guard must come before the read');
+});

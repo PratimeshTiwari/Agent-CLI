@@ -15,12 +15,11 @@ test('each rung names the model it maps to on this account', () => {
   const { efforts } = state({
     modelOptions: [{ label: '3.1 Flash-Lite' }, { label: '3.8 Flash' }, { label: '3.1 Pro', selected: true }],
   });
-  assert.deepEqual(efforts.map((e) => e.id), ['low', 'medium', 'high', 'max']);
+  // Max without Argon is not offered at all (v9.9.9.1, owner: "we will not
+  // show it, unlike locked"); it was listed and refused.
+  assert.deepEqual(efforts.map((e) => e.id), ['low', 'medium', 'high']);
   assert.equal(efforts.find((e) => e.id === 'low').model, '3.1 Flash-Lite');
   assert.equal(efforts.find((e) => e.id === 'high').model, '3.1 Pro');
-  const max = efforts.find((e) => e.id === 'max');
-  assert.equal(max.available, false, 'Max without Argon must be refused, as in the terminal');
-  assert.equal(max.model, 'not on this account');
 });
 
 test('Max is offered where Argon exists', () => {

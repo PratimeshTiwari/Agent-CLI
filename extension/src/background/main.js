@@ -152,6 +152,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
        */
       case 'content_script_ready':
         sendResponse({ success: true });
+        /*
+         * A tab of ours finished loading — opened, refreshed, or reopened by a
+         * repair — so read its models now (v9.9.9.1, 1.69.0). The ask made when
+         * the tab is created usually lands before this listener exists and is
+         * lost, and a refresh asked nothing, so the list (and with it which
+         * rungs exist, and whether Max does) stayed unknown until the first
+         * effort switch read it. Main tabs only: never the person's own tabs,
+         * and a subagent's tab is switched before it is read.
+         */
+        if (sender.tab?.id !== undefined && isSocketOpen()) {
+          const tabId = sender.tab.id;
+          whoseTab(tabId).then((whose) => {
+            if (!whose?.main) return;
+            chrome.tabs.sendMessage(tabId, { type: 'discover_models' }).catch(() => {});
+          }).catch(() => {});
+        }
         break;
 
       case 'connect':

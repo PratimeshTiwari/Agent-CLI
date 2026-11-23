@@ -104,3 +104,45 @@ test('an Auto-only account: the slider says Auto is the only model, and what is 
   assert.equal(onlyModel([]), null);
   assert.equal(onlyModel([{ label: 'Auto' }]), null);
 });
+
+// ── v9.9.9.1 ────────────────────────────────────────────────────────
+import { effortLevels, sliderWarning, stopModel } from '../../../src/frontend/menus/effort-slider.js';
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const m = (label, extra = {}) => ({ label, ...extra });
+const THREE = [m('3.1 Flash-Lite'), m('3 Flash'), m('3.1 Pro', { selected: true })];
+const WITH_ARGON = [...THREE, m('4 Argon')];
+const ARGON_LOCKED = [...THREE, m('4 Argon', { locked: true })];
+const ids = (levels) => levels.map((l) => l.id);
+
+test('Max is not offered on an account without it; a locked one still is', () => {
+  assert.deepEqual(ids(effortLevels(EFFORT_LEVELS, THREE)), ['low', 'medium', 'high'], 'no Argon: no Max');
+  assert.deepEqual(ids(effortLevels(EFFORT_LEVELS, WITH_ARGON)), ['low', 'medium', 'high', 'max']);
+  assert.deepEqual(ids(effortLevels(EFFORT_LEVELS, ARGON_LOCKED)), ['low', 'medium', 'high', 'max'], 'locked is listed');
+  assert.match(stopModel(EFFORT_LEVELS.find((l) => l.id === 'max'), ARGON_LOCKED).text, /locked/);
+  assert.deepEqual(ids(effortLevels(EFFORT_LEVELS, [])), ids(EFFORT_LEVELS), 'an unread picker hides nothing');
+});
+
+test('the panels are offered the same rungs', () => {
+  const l = new AgentLoop({ workspace: mkdtempSync(join(tmpdir(), 'levels-')), mcpServer: {}, diffEngine: {}, riskClassifier: {}, promptBuilder: {} });
+  l.modelOptions = THREE;
+  assert.deepEqual(l.panelState().efforts.map((e) => e.id), ['low', 'medium', 'high']);
+  l.modelOptions = ARGON_LOCKED;
+  const max = l.panelState().efforts.find((e) => e.id === 'max');
+  assert.equal(max.available, false);
+  assert.match(max.model, /locked/);
+});
+
+test('#180: browsing the slider never warns; only the current effort does', () => {
+  // The screenshot: effort High, tab on 3.1 Pro (right), marker browsed to Low.
+  const low = stopModel(EFFORT_LEVELS.find((l) => l.id === 'low'), THREE);
+  const high = stopModel(EFFORT_LEVELS.find((l) => l.id === 'high'), THREE);
+  assert.equal(sliderWarning({ markedId: 'low', currentId: 'high', stop: low, models: THREE }), null);
+  assert.equal(sliderWarning({ markedId: 'high', currentId: 'high', stop: high, models: THREE }), null, 'they agree');
+  const onFlash = THREE.map((x) => ({ ...x, selected: x.label === '3 Flash' }));
+  assert.equal(sliderWarning({ markedId: 'high', currentId: 'high', stop: high, models: onFlash }), '3 Flash',
+    'the current effort on the wrong model still warns');
+});

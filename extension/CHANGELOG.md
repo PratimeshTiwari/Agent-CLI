@@ -18,6 +18,15 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.69.0 — 2026-11-23
+
+**The models are read when a tab of ours loads.** Owner: "once gemini tab is opened, our effort
+needs one random switch to fetch available model names". The ask made when the agent creates a tab
+usually arrives before the content script listens, and a page refresh asked nothing, so the list
+stayed unknown until the first effort switch read it. The worker now answers `content_script_ready`
+from the agent's main tab (never the person's own tab, never a subagent's) with `discover_models`.
+A read already running answers a second ask.
+
 ### 1.68.0 — 2026-11-21
 
 **Replies say which prompt they answer.** Every main-lane prompt now carries a `sendId`, and the

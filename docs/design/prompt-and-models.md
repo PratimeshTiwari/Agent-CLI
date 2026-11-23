@@ -80,6 +80,16 @@ without Argon answers `stays <rung> · Argon is not available on this account` a
 nothing. `promptRung` folds Max to High at build time, because the system prompt names its rung. The
 slider's model line names what the marked stop maps to on this account (`stopModel` in
 `frontend/menus/effort-slider.js`), dimmed as `not available on this account` for Max without Argon.
+**Since v9.9.9.1 Max without Argon is not shown at all** (owner, 2026-11-23: "if argon is not
+available, we will not show it (unlike locked)"): `effortLevels` drops it from the slider once the
+picker has been read, `panelState().efforts` from the panels, and the settings ladder already
+skipped it. A locked Argon stays, marked locked, because the account has it. An unread picker
+hides nothing. Before that, the list was often unknown until the first switch: the ask made when a
+tab is created arrives before the content script listens, and a refresh asked nothing. The worker
+now asks the agent's main tab on `content_script_ready` (extension 1.69.0); `tabrig/` with
+`reload-main` shows the read after a reload, and none with 1.68.0. **Issue #180:** the slider's
+`⚠ browser 3.1 Pro` compared the tab with whichever stop the marker was on, so browsing to Low
+with High on Pro (correct) warned; `sliderWarning` warns only under the current effort.
 
 **The browser differing from the effort is asked about, and a failed switch steps down (v5.28,
 `core/models/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message

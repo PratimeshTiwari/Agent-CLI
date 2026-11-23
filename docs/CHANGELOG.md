@@ -1,7 +1,7 @@
 # Changelog
 
 > [!NOTE]
-> **Current: v9.9.9** · extension **1.68.0** · VS Code companion **1.8.18** · prompt **v7**
+> **Current: v9.9.9.1** · extension **1.69.0** · VS Code companion **1.8.18** · prompt **v7**
 > (current; new installs) or **v1** (original, frozen), with Jira, MCP and memory on both.
 > After updating: Chrome reloads the extension itself; reinstall the companion from `/update` →
 > Editor companion; restart the agent.
@@ -28,6 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
+| v9.9.9.1 | 1.69.0 | — | — |
 | v9.9.9 | 1.68.0 | — | — |
 | v9.9.8 | 1.67.0 | — | — |
 | v9.9.7 | — | — | v7 gains `mcp_setup` |
@@ -60,7 +61,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-22 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#179](https://github.com/PratimeshTiwari/Agent-CLI/pull/179)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-23 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#181](https://github.com/PratimeshTiwari/Agent-CLI/pull/181)
 
 **Highlights**
 
@@ -76,6 +77,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
+| v9.9.9.1 | 11-23 | [#181](https://github.com/PratimeshTiwari/Agent-CLI/pull/181) | The models are read whenever a tab of ours loads, not on the first effort switch; Max is not shown on an account without Argon (a locked one is); the slider warns about the browser only under the current effort (#180) |
 | v9.9.9 | 11-22 | [#179](https://github.com/PratimeshTiwari/Agent-CLI/pull/179) | Stuck and slow turns: a reply says which prompt it answers, so a late one is never the next turn's answer; streamed text stops the two-minute silence clock (a long reply was resent and killed); a dying turn stops the tab; panel messages mid-turn are held; `<tool_call>` markup is a call |
 | v9.9.8 | 11-14 | [#178](https://github.com/PratimeshTiwari/Agent-CLI/pull/178) | `/effort` switches again: Gemini's picker now puts the purpose above the model, and the "+" menu is never read as the models |
 | v9.9.7 | 11-09 | [#176](https://github.com/PratimeshTiwari/Agent-CLI/pull/176), [#177](https://github.com/PratimeshTiwari/Agent-CLI/pull/177) | Ask the agent to add an MCP server: it shows you the command, then tests and saves it; `CLAUDE.md` cut to the rules |

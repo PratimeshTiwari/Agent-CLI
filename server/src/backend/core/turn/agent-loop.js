@@ -171,7 +171,7 @@ import { runSubAgentSession } from '../subagents/subagent-session.js';
 import { MUTATING_TOOLS, SHELL_TOOLS, toolVerb, EXTERNAL_TOOLS, MCP_TOOLS, TOOL_CATALOG } from '../prompt/tool-catalog.js';
 import { resolveEffort, effortFromConfig, promptRung, EFFORT_LEVELS } from '../models/effort.js';
 import {
-  planModelSwitch, browserModelPin, rungForModel, pickModelFor, selectedModel,
+  planModelSwitch, browserModelPin, rungForModel, pickModelFor, selectedModel, lockedReason,
 } from '../models/model-match.js';
 import { MODES, describeMode } from '../policy/modes.js';
 import { wantedThinking, normaliseThinkingSetting, currentThinking, thinkingStops } from '../models/thinking.js';
@@ -3348,10 +3348,15 @@ export class AgentLoop {
         const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
         if (options.length === 0) return { id: rung.id, name: rung.name, model: rung.browser, available: true };
         const pick = pickModelFor(rung.id, options, browserModelPin(this.modelConfig, rung.id));
-        return pick
-          ? { id: rung.id, name: rung.name, model: pick.model.label, available: true }
-          : { id: rung.id, name: rung.name, model: rung.id === 'max' ? 'not on this account' : 'nothing suits it', available: false };
-      }),
+        if (pick) return { id: rung.id, name: rung.name, model: pick.model.label, available: true };
+        // No Max on this account (v9.9.9.1): not offered at all, as in the
+        // terminal's slider. A locked one is listed, marked locked.
+        if (rung.id === 'max') {
+          const locked = lockedReason(rung.id, options, browserModelPin(this.modelConfig, rung.id));
+          return locked ? { id: rung.id, name: rung.name, model: locked.replace(' on this account', ''), available: false } : null;
+        }
+        return { id: rung.id, name: rung.name, model: 'nothing suits it', available: false };
+      }).filter(Boolean),
       modes: MODES.map((id) => ({ id, about: describeMode(id).replace(/^\w+ — /, '') })),
       // Thinking level (v9.9.3), only where the picker has levels: the setting,
       // the level ticked in the tab, what `same` means on this effort, and the
