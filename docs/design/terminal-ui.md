@@ -75,6 +75,14 @@ wanted. Both bytes are in `HOTKEYS` (raw mode clears IXON, so ctrl+s arrives ins
 the terminal), and `chordGate` allows 1.5 s between them. Pty: delivered, drawn, and the fallback
 sent as a message; 0 clears at 10, 13, 24 rows.
 
+## Switching workspace on screen (v9.9.9.5)
+
+`/workspace <path>` no longer restarts. `CliUI.switchTo(agentLoop)` re-renders `Root` under a new
+`key`, with no intro and no setup, so App remounts on the new loop: every hook, ref and
+subscription is built again and none crosses over. What the old App committed to `<Static>` stays in
+the scrollback, and the new project's banner is drawn under it. Measured in `tabrig/`: 0 full
+clears from the switch at 13, 24 and 30 rows (the one clear counted is exit's erase-back).
+
 ## From Gotchas
 
 - `App.jsx` is performance-sensitive: it avoids re-rendering during streaming to prevent

@@ -16,9 +16,8 @@
  */
 
 import { resolve, dirname } from 'path';
-import { homeDir, ensureDir, setActiveScope, resolveState, codeDir } from './backend/core/workspace/paths.js';
+import { homeDir, ensureDir, setActiveScope, resolveState } from './backend/core/workspace/paths.js';
 import { runMigrations } from './backend/core/install/migrate.js';
-import { writeAgentReadme } from './backend/core/workspace/agent-readme.js';
 import { HELP_TEXT } from './backend/core/install/cli-help.js';
 import { hostEditor } from './backend/core/workspace/host-editor.js';
 import { rememberWorkspace } from './backend/core/workspace/workspaces.js';
@@ -29,16 +28,10 @@ import { WebSocketServer } from './backend/bridge/websocket-server.js';
 import { openChromeProfile } from './backend/core/workspace/chrome-profiles.js';
 import { SLASH_COMMANDS } from './frontend/constants.js';
 import { AGENT_COMMANDS } from './backend/core/turn/slash-commands.js';
-import { MCPServer } from './backend/mcp/mcp-server.js';
-import { AgentLoop } from './backend/core/turn/agent-loop.js';
-import { PromptBuilder } from './backend/core/prompt/prompt-builder.js';
-import { DiffEngine } from './backend/core/edits/diff-engine.js';
-import { RiskClassifier } from './backend/core/commands/risk-classifier.js';
-import { FileWatcher } from './backend/watcher/file-watcher.js';
-import { TaskManager } from './backend/core/commands/task-manager.js';
 import { logError } from './backend/core/logs/error-log.js';
 import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/install/dep-recovery.js';
-import { RESTART_EXIT_CODE } from './backend/core/install/restart.js';
+import { RESTART_EXIT_CODE, registerWorkspaceSwitcher } from './backend/core/install/restart.js';
+import { buildWorld, switchWorld } from './backend/core/workspace/workspace-world.js';
 import { loadUserSettings, saveUserSettings } from './backend/core/workspace/user-settings.js';
 import { firstRunState, firstRunSettings } from './frontend/screen/welcome.js';
 import { CURRENT_PROMPT_VERSION } from './backend/core/prompt/prompt-versions.js';
@@ -222,36 +215,14 @@ async function main() {
   // Determine agent source directory (the 'server' folder)
   const agentSourceDir = resolve(SRC_DIR, '../');
 
-  // Initialize components
-  const diffEngine = new DiffEngine(config.workspace);
-  const riskClassifier = new RiskClassifier(config.workspace);
-  const promptBuilder = new PromptBuilder(config.workspace, agentSourceDir);
-  const mcpServer = new MCPServer(config.workspace, diffEngine);
-
-  const taskManager = new TaskManager(config.workspace);
-  
-  // Start building the index asynchronously in the background
-
-
-  const agentLoop = new AgentLoop({
-    workspace: config.workspace,
-    mcpServer,
-    promptBuilder,
-    diffEngine,
-    riskClassifier,
-    editor: config.editor,
-    configHome,
-    continueSession: config.continue,
-    resumeSessionId: config.sessionId,
-    agentSourceDir,
-    taskManager,
+  // Everything built from the workspace, in one place: a switch rebuilds it
+  // the same way (v9.9.9.5, core/workspace/workspace-world.js). Migrations ran
+  // above, before `ensureConfigDir`, so the first world does not run them again.
+  const worldOpts = { agentSourceDir, editor: config.editor, configHome };
+  let world = buildWorld(config.workspace, {
+    ...worldOpts, continueSession: config.continue, resumeSessionId: config.sessionId, migrate: () => {},
   });
-  // The folder's own README (v9.9.1). After the loop, which has made `.agent`;
-  // it never creates one itself, and it never throws.
-  writeAgentReadme(config.workspace);
-
-  const fileWatcher = new FileWatcher(codeDir(config.workspace), agentLoop);
-  fileWatcher.start();
+  const { agentLoop } = world;
 
   const wsServer = new WebSocketServer({
     port: config.port,
@@ -309,6 +280,11 @@ async function main() {
   const cli = new CliUI(agentLoop, wsServer, { welcome: firstRun.show });
   cli.start();
 
+  registerWorkspaceSwitcher(async (target) => {
+    world = await switchWorld(world, target, worldOpts, { wsServer });
+    cli.switchTo(world.agentLoop);
+  });
+
   /**
    * Far enough to matter.
    *
@@ -345,6 +321,8 @@ async function main() {
   const hasExt = () => wsServer.clients
     && Array.from(wsServer.clients.values()).some((c) => c.type === 'extension');
 
+  const relaunched = process.env.AGENT_CLI_RESTARTED === '1';
+  delete process.env.AGENT_CLI_RESTARTED; // not for anything this process starts
   const greetExtension = async () => {
     if (!hasExt()) {
       await new Promise((resolve) => {
@@ -360,6 +338,14 @@ async function main() {
     }
 
     if (hasExt()) return;
+    /*
+     * A relaunch (`/update`, `/restart`) never opens Gemini (v9.9.9.5). The
+     * extension was connected a moment ago and is on its reconnect backoff;
+     * 1.5 s is shorter than that, so this opened a tab the extension does not
+     * own beside the one it does — "the older tab is not closed". A prompt
+     * meanwhile is held until it is back.
+     */
+    if (relaunched) return;
 
     // Never console.error here: the Ink UI owns the terminal by now, and a
     // write into its frame is destroyed by the next repaint anyway.
@@ -369,7 +355,7 @@ async function main() {
 
       // v9.3: the plain `open` below lands in Chrome's last used profile, which
       // is the account a chosen profile exists to avoid.
-      const chosen = agentLoop.browserProfile.current;
+      const chosen = world.agentLoop.browserProfile.current;
       if (chosen) openChromeProfile(chosen.dir, startUrl);
       else if (process.platform === 'darwin') {
         exec(`open "${startUrl}"`);
@@ -402,8 +388,8 @@ async function main() {
   // the app is a keypress, handled in cli-ui); SIGTERM is someone stopping us.
   // Either way: the same farewell as /exit and a double ctrl+c.
   const shutdown = async () => {
-    fileWatcher.stop();
-    await exitWithFarewell({ agentLoop, wsServer });
+    world.fileWatcher.stop();
+    await exitWithFarewell({ agentLoop: world.agentLoop, wsServer });
   };
 
   process.on('SIGINT', shutdown);

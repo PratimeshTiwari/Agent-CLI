@@ -107,7 +107,8 @@ not do that on purpose, it is clutter.
 
 A few files appear briefly and remove themselves: `pending-reload.json` after `/update`,
 `doctor-change.json` while a `/doctor` change is being confirmed, `dep-recovery.json` after a
-missing package was installed, and `next-workspace` while switching projects.
+missing package was installed, and `next-workspace` while a restart switches projects (only when the
+agent runs without its supervisor's in-place switch; `/workspace` normally switches without one).
 
 Set `AGENT_CLI_HOME` to use another folder instead of `~/.agent` (the tests do this).
 

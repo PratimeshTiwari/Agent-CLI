@@ -203,5 +203,20 @@ export class CliUI {
       kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] },
     });
     registerInk(instance);
+    this.instance = instance;
+    this.inkOptions = { animate, outro };
+  }
+
+  /**
+   * The app again, on another workspace's loop (v9.9.9.5). A new key remounts
+   * App, so every hook, ref and subscription is built on the new loop and none
+   * is carried over; what the old App committed to <Static> stays in the
+   * scrollback above. No intro, no setup.
+   */
+  switchTo(agentLoop) {
+    this.agentLoop = agentLoop;
+    this.generation = (this.generation || 0) + 1;
+    this.instance?.rerender(<Root key={`ws-${this.generation}`} agentLoop={agentLoop} wsServer={this.wsServer}
+      welcome={false} animate={false} outro={this.inkOptions?.outro} />);
   }
 }

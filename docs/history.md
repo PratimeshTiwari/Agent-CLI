@@ -491,6 +491,10 @@ system prompt already grants self-editing, so it unlocks nothing and silently re
 supervisor now makes possible. The choice is left in `~/.agent/next-workspace` and `src/index.js`
 consumes it on relaunch — a file, because the child cannot rewrite its own argv, and read-once,
 because a stale handover would silently override `--workspace` on every later start.
+**Re-opened 2026-11-23 (v9.9.9.5), by the owner:** the switch is in place again, but rebuilt, not
+re-pointed — `core/workspace/workspace-world.js` constructs the whole world anew and disposes the
+old one, which is the restart's guarantee without the process. The restart stays as the fallback
+when no switcher is registered. See `docs/design/state-and-sessions.md`.
 
 **Settings rows can outgrow the viewport.** *(done.)* `describeSettings` padded to a fixed width
 with no bound against terminal width, so long values wrapped — in the live frame, which is the

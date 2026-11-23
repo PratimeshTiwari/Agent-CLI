@@ -1,7 +1,7 @@
 # Changelog
 
 > [!NOTE]
-> **Current: v9.9.9.4** · extension **1.71.0** · VS Code companion **1.8.18** · prompt **v7**
+> **Current: v9.9.9.5** · extension **1.71.0** · VS Code companion **1.8.18** · prompt **v7**
 > (current; new installs) or **v1** (original, frozen), with Jira, MCP and memory on both.
 > After updating: Chrome reloads the extension itself; reinstall the companion from `/update` →
 > Editor companion; restart the agent.
@@ -28,6 +28,7 @@ change.
 
 | Release | Extension | Companion | Prompt |
 | --- | --- | --- | --- |
+| v9.9.9.5 | 1.71.0 | — | — |
 | v9.9.9.4 | 1.71.0 | — | — |
 | v9.9.9.3 | 1.71.0 | — | — |
 | v9.9.9.2 | 1.70.0 | — | — |
@@ -64,7 +65,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-23 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#184](https://github.com/PratimeshTiwari/Agent-CLI/pull/184)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-23 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#185](https://github.com/PratimeshTiwari/Agent-CLI/pull/185)
 
 **Highlights**
 
@@ -80,6 +81,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
+| v9.9.9.5 | 11-23 | [#185](https://github.com/PratimeshTiwari/Agent-CLI/pull/185) | `/workspace` switches without restarting: the project's world is rebuilt in place, the same Gemini tab is kept; a relaunch (`/update`, `/restart`) no longer opens a stray Gemini tab |
 | v9.9.9.4 | 11-23 | [#184](https://github.com/PratimeshTiwari/Agent-CLI/pull/184) | `/effort` names your models from the first frame: the last list the browser reported is kept per Chrome profile (`~/.agent/models.json`), for display only |
 | v9.9.9.3 | 11-23 | [#183](https://github.com/PratimeshTiwari/Agent-CLI/pull/183) | One agent tab: `/effort` no longer opens a second one; after a restart (a workspace switch) a message is held for the extension instead of opening an unowned tab; a background read no longer fails a waiting `/effort` |
 | v9.9.9.2 | 11-23 | [#182](https://github.com/PratimeshTiwari/Agent-CLI/pull/182) | Exit closes the agent's own Gemini tab (never yours) and prints the chat's link; `/history` rows link to their chats; chats on `/u/<n>` accounts are recorded at all, so they resume |

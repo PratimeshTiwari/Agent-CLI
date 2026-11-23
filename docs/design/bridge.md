@@ -71,6 +71,14 @@ entry before changing the mechanism it describes.
   (no URL) if nothing connects in 10 s; `tabrig/` after `/workspace`: one tab, the message
   delivered into it on reconnect. Also: a background read's "no tab yet" notice no longer
   settles an `/effort` that is waiting for its own read ("could not read its model picker").
+- **A relaunch never opens Gemini; a workspace switch keeps the bridge (v9.9.9.5).** The start
+  greeted the extension for 1.5 s, then ran `open https://gemini.google.com/app`; after `/update`
+  or `/restart` the extension is on its reconnect backoff and takes longer, so each relaunch left
+  an unowned tab beside the agent's. The supervisor sets `AGENT_CLI_RESTARTED`, and the greeting
+  waits (`relaunch-greeting.test.js`). The harness never saw it: its `open` is a shim. `/workspace`
+  no longer relaunches at all: `setAgentLoop` hands the bridge a new loop while the socket, its
+  clients and held prompts stay, and `bridge.json` moves to the new project
+  (`docs/design/state-and-sessions.md`).
 - **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
   `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
   tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not

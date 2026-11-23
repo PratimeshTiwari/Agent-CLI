@@ -40,7 +40,7 @@ const SLASH_COMMANDS = [
   { name: 'plan', desc: 'Plan Mode — edits ask first, Markdown in the repo does not · `/plan show` previews the plan', group: 'work' },
   { name: 'strict', desc: 'Strict Plan Mode — every edit asks, Markdown too', group: 'work' },
   { name: 'auto', desc: 'Auto Mode — safe edits apply automatically', group: 'work' },
-  { name: 'workspace', desc: 'Where the agent works — and switch, which restarts', group: 'project' },
+  { name: 'workspace', desc: 'Where the agent works — and switch to another project', group: 'project' },
   { name: 'memory', desc: 'What the agent has learned about this project', group: 'chat' },
   { name: 'context', desc: 'Show what is in the context window', group: 'chat' },
   { name: 'compact', desc: 'Compact history to save tokens', group: 'chat' },

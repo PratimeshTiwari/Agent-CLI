@@ -22,7 +22,7 @@ import path from 'path';
 import * as paths from '../core/workspace/paths.js';
 import { logTrace } from '../core/logs/trace-log.js';
 import { resolveEffort } from '../core/models/effort.js';
-import { prepareWorkspaceSwitch, leaveWhenIdle, RESTART_EXIT_CODE } from '../core/install/restart.js';
+import { requestWorkspaceSwitch } from '../core/install/restart.js';
 import { canPickFolder, pickFolder } from '../core/workspace/folder-picker.js';
 import { projectName } from '../core/workspace/workspaces.js';
 import { planResume } from '../core/turn/chat-thread.js';
@@ -177,6 +177,23 @@ export class WebSocketServer {
     // Always provide background callbacks so headless tasks
     // can use the extension bridge even when no user message is being processed.
     this._wireBackgroundCallbacks();
+  }
+
+  /**
+   * A new loop after a workspace switch (v9.9.9.5). The socket, the clients and
+   * the held prompts stay: the extension never notices, and keeps its tab.
+   * `bridge.json` moves to the new project's state folder, where the VS Code
+   * companion looks for it.
+   */
+  setAgentLoop(agentLoop) {
+    this._removeBridgeFile();
+    this.bridgeFile = null;
+    this.agentLoop = agentLoop;
+    this._wireBackgroundCallbacks();
+    if (this.wss) this._writeBridgeFile();
+    this.broadcast('extension', {
+      id: randomUUID(), type: 'panel_state', payload: { state: agentLoop.panelState?.() || null }, timestamp: Date.now(),
+    });
   }
 
   _wireBackgroundCallbacks() {
@@ -816,7 +833,7 @@ export class WebSocketServer {
         break;
 
       case 'set_workspace': {
-        const outcome = prepareWorkspaceSwitch(payload?.path);
+        const outcome = requestWorkspaceSwitch(payload?.path, { agentLoop: this.agentLoop, wsServer: this });
         if (!outcome.ok) {
           this.broadcast('extension', {
             id: randomUUID(), type: 'error',
@@ -827,12 +844,12 @@ export class WebSocketServer {
         }
         this.broadcast('extension', {
           id: randomUUID(), type: 'status',
-          payload: { message: `⟳ Restarting in ${outcome.target}…` },
+          payload: { message: outcome.inPlace ? `⟳ Switching to ${outcome.target}…` : `⟳ Restarting in ${outcome.target}…` },
           timestamp: Date.now(),
         });
-        // Not out from under a running turn — the browser would keep generating
-        // into a socket nobody is holding and the reply would never be drawn.
-        leaveWhenIdle(RESTART_EXIT_CODE, { wsServer: this, agentLoop: this.agentLoop });
+        // Waits for the turn (`whenIdle`): the browser would otherwise keep
+        // generating into a loop that is gone.
+        outcome.done.catch(() => {});
         break;
       }
 
