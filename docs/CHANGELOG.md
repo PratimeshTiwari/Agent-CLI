@@ -64,7 +64,7 @@ change.
 | v5.34 | — | — | v2 |
 | v5.32 | — | — | v1 frozen |
 
-## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-23 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#183](https://github.com/PratimeshTiwari/Agent-CLI/pull/183)
+## v9 — MCP, Atlassian, one Chrome profile · 2026-11-05 … 11-23 · [#158](https://github.com/PratimeshTiwari/Agent-CLI/pull/158)–[#184](https://github.com/PratimeshTiwari/Agent-CLI/pull/184)
 
 **Highlights**
 
@@ -80,7 +80,7 @@ change.
 
 | Release | Date | PR | Summary |
 | --- | --- | --- | --- |
-| v9.9.9.4 | 11-23 | — | `/effort` names your models from the first frame: the last list the browser reported is kept per Chrome profile (`~/.agent/models.json`), for display only |
+| v9.9.9.4 | 11-23 | [#184](https://github.com/PratimeshTiwari/Agent-CLI/pull/184) | `/effort` names your models from the first frame: the last list the browser reported is kept per Chrome profile (`~/.agent/models.json`), for display only |
 | v9.9.9.3 | 11-23 | [#183](https://github.com/PratimeshTiwari/Agent-CLI/pull/183) | One agent tab: `/effort` no longer opens a second one; after a restart (a workspace switch) a message is held for the extension instead of opening an unowned tab; a background read no longer fails a waiting `/effort` |
 | v9.9.9.2 | 11-23 | [#182](https://github.com/PratimeshTiwari/Agent-CLI/pull/182) | Exit closes the agent's own Gemini tab (never yours) and prints the chat's link; `/history` rows link to their chats; chats on `/u/<n>` accounts are recorded at all, so they resume |
 | v9.9.9.1 | 11-23 | [#181](https://github.com/PratimeshTiwari/Agent-CLI/pull/181) | The models are read whenever a tab of ours loads, not on the first effort switch; Max is not shown on an account without Argon (a locked one is); the slider warns about the browser only under the current effort (#180) |
