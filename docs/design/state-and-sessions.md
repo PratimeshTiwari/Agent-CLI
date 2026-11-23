@@ -94,7 +94,12 @@ spins forever there, which hung three test files until the 2-minute cap.
 
 **Resuming has two doors, and one of them used to skip the browser.** The model's memory is not
 `history.jsonl` — that is the *human's* record. It is the chat thread in the tab, and Gemini keeps
-that thread's id in the URL (`/app/<id>`), which the conversation's `chat.json` stores. `resumeSessionById`
+that thread's id in the URL (`/app/<id>`), which the conversation's `chat.json` stores. **Until
+v9.9.9.2 only `/app/<id>` was recognised**: a profile whose Gemini runs as a second account
+(`/u/3/app/<id>`, the test account) returned null from `threadFromUrl`, so its sessions recorded no
+thread at all — no resume into the chat, no steering back to it. The account is now part of the
+thread (`account: 3`), kept when a known chat is first seen with it, and every link is built by
+`chatLink` (`_threadUrl`, compaction, the worker's `openThread`), so it opens on that account. `resumeSessionById`
 restores all four halves: the transcript, `chatThread`, an `open_thread` to the extension, and —
 only when there is no thread — `pendingRecap`.
 

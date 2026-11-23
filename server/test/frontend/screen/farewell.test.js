@@ -133,3 +133,42 @@ test('exit into a pipe: the footer alone, never escape codes', () => {
   assert.match(text, /^\nResume this session with:\nagent --resume /);
   assert.equal(exitText({ sessionStore: new SessionStore(ws()) }, { isTTY: false }), '');
 });
+
+// v9.9.9.2: exit closes the agent's own Gemini tab and says where the chat is.
+test('exit asks for the tab to be closed, and names the chat on its account', async () => {
+  _resetFarewell();
+  registerInk({ clear() {}, unmount() {} });
+  const store = new SessionStore(ws());
+  say(store, 'hello');
+  let asked = 0;
+  const written = [];
+  await exitWithFarewell({
+    agentLoop: { sessionStore: store, chatThread: { model: 'gemini', id: 'abc123', account: 3 }, closeTabOnExit: () => { asked += 1; return true; } },
+    out: { isTTY: false, write: (s) => written.push(s) },
+    exit: () => {},
+  });
+  assert.equal(asked, 1, 'the tab is asked to close once');
+  assert.match(written.join(''), /Gemini chat: https:\/\/gemini\.google\.com\/u\/3\/app\/abc123/);
+  _resetFarewell();
+});
+
+test('no chat yet: no chat line', () => {
+  assert.doesNotMatch(farewellText('id1'), /Gemini chat/);
+});
+
+test('the loop sends close_main_tab, and records a /u/3 chat with its account', () => {
+  const l = new AgentLoop({ workspace: ws(), mcpServer: {}, diffEngine: {}, riskClassifier: {}, promptBuilder: { resetPromptState() {} } });
+  const sent = [];
+  l.callbacks = { sendToPanel: (m) => { sent.push(m); return true; } };
+  l.sessionStore = { setThread() {} };
+  assert.equal(l.closeTabOnExit(), true);
+  assert.equal(sent[0].type, 'close_main_tab');
+  assert.equal(sent[0].payload.targetModel, 'gemini');
+
+  l._recordThread('https://gemini.google.com/u/3/app/abc123def456');
+  assert.deepEqual(l.chatThread, { model: 'gemini', id: 'abc123def456', account: 3 });
+  // Known first without its account, then with it: the account is kept.
+  l.chatThread = { model: 'gemini', id: 'abc123def456' };
+  l._recordThread('https://gemini.google.com/u/3/app/abc123def456');
+  assert.equal(l.chatThread.account, 3);
+});

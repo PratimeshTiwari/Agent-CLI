@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { archiveTurns } from './session-recall.js';
 import { logNotice } from '../logs/error-log.js';
 import { browserTabUrl } from '../workspace/settings.js';
+import { chatLink } from './chat-thread.js';
 
 /**
  * How long to wait for the thread's summary before condensing locally.
@@ -156,7 +157,7 @@ export function progressText() {
 /** The tab the main chat is in, as a link a terminal can open (v7.9). */
 export function tabLink(loop) {
   return browserTabUrl(loop.browserTab)
-    || (loop.previousThread?.id ? `https://gemini.google.com/app/${loop.previousThread.id}` : 'https://gemini.google.com/app');
+    || (chatLink(loop.previousThread) || 'https://gemini.google.com/app');
 }
 
 function progress(loop, step) {

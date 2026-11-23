@@ -3,7 +3,7 @@ import { getState, setState } from './state.js';
 import { retryDelay, resolvePort, socketUrlFor } from './policy.js';
 import { broadcastToSidePanel, sendToServer } from './messaging.js';
 import { installId, reportOpenPairings } from './pairing.js';
-import { injectPromptIntoModel, reportInjectFailure, triggerNewChatInModel, broadcastTabStatus, sendToModelTab, endSession, openThread, focusModelTab, takeTabFailure, ensureModelTab } from './content.js';
+import { injectPromptIntoModel, reportInjectFailure, triggerNewChatInModel, broadcastTabStatus, sendToModelTab, endSession, openThread, focusModelTab, takeTabFailure, ensureModelTab, closeMainTab } from './content.js';
 
 /**
  * The socket to the local agent, and the retry policy around it.
@@ -382,6 +382,10 @@ async function handleServerMessage(message) {
       // rather than when a turn completes is the whole point of a session: the
       // next turn has to find the thread still there.
       await endSession(payload?.sessionId);
+      break;
+    case 'close_main_tab':
+      // The agent is exiting (v9.9.9.2): its own tab goes with it.
+      await closeMainTab(payload?.targetModel || 'gemini');
       break;
     case 'focus_tab':
       // ctrl+b. The result was discarded, so "show me the tab" failing looked

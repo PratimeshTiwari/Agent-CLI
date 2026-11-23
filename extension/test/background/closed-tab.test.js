@@ -258,3 +258,32 @@ test('a handler that throws is not called an unreadable message', () => {
   assert.ok(parse < label && label < handler, 'the label belongs to the parse alone');
   assert.match(source, /injectPromptIntoModel\(payload\)\.catch\(/);
 });
+
+/*
+ * v9.9.9.2 (1.70.0): the agent exiting closes its own tab, and only that one.
+ * Owner, 2026-11-23: "if the agent is exiting, close the gemini tab along with
+ * it (only the tab that opened with the agent)".
+ */
+test('exit closes the main tab, never the person\'s own, and is not reported as a close', async () => {
+  reset();
+  const mine = open(CHAT);                                  // the person's own tab
+  const main = await worker.ensureModelTab('gemini', { url: CHAT });
+  assert.equal(await worker.closeMainTab('gemini'), true);
+  assert.equal(world.tabs.has(main.id), false, 'the agent\'s tab is closed');
+  assert.equal(world.tabs.has(mine.id), true, 'the person\'s tab is left alone');
+  assert.equal(await worker.whoseTab(main.id), null, 'forgotten first, so no tab_closed follows');
+});
+
+test('with only the person\'s tabs open, exit closes nothing', async () => {
+  reset();
+  const mine = open(CHAT);
+  assert.equal(await worker.closeMainTab('gemini'), false);
+  assert.equal(world.tabs.has(mine.id), true);
+});
+
+test('the socket routes close_main_tab to it', () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../src/background/socket.js'), 'utf8');
+  const at = src.indexOf("case 'close_main_tab':");
+  assert.ok(at > 0, 'no case for close_main_tab');
+  assert.match(src.slice(at, at + 200), /closeMainTab\(/);
+});

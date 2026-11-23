@@ -159,7 +159,7 @@ function oneLineError(result) {
   return line.slice(0, 160);
 }
 import * as paths from '../workspace/paths.js';
-import { threadFromUrl, threadFromInput } from './chat-thread.js';
+import { threadFromUrl, threadFromInput, chatLink } from './chat-thread.js';
 import { logToolUsage } from '../logs/tool-usage.js';
 import { auditHandover, describeFindings, countChecklist, hasHandoverBlock } from './handover-audit.js';
 import { diagnosticsAfterEdit } from '../edits/edit-diagnostics.js';
@@ -1718,6 +1718,12 @@ export class AgentLoop {
     const thread = threadFromUrl(url);
     if (!thread?.id) return;
     if (this.chatThread?.id === thread.id) {
+      // The same chat, now known with its account (v9.9.9.2): keep the
+      // account, so its link opens where the chat is. Not a new thread.
+      if (thread.account !== undefined && this.chatThread.account !== thread.account) {
+        this.chatThread = { ...this.chatThread, account: thread.account };
+        if (!this._warming && !this._threadUnsaved) this.sessionStore?.setThread?.(this.chatThread);
+      }
       // The warm-up's chat, now holding a real exchange: the disk can have it.
       if (this._threadUnsaved && !this._warming) {
         this._threadUnsaved = false;
@@ -2940,6 +2946,18 @@ export class AgentLoop {
     return block;
   }
 
+  /**
+   * The agent is exiting (v9.9.9.2): the extension closes the tab this agent
+   * worked in, and only that one. Not on a restart (`/update`, a workspace
+   * switch), which goes on in the same tab. Returns whether it reached the
+   * extension.
+   */
+  closeTabOnExit() {
+    try {
+      return Boolean(this._toExtension('close_main_tab', { targetModel: this.mainModel }));
+    } catch { return false; }
+  }
+
   /** The model the main conversation runs on. Subagents name their own. */
   get mainModel() {
     return this.modelConfig.main || 'gemini';
@@ -3075,7 +3093,7 @@ export class AgentLoop {
     const seen = this.browserTab?.url;
     // The tab's own URL when it is this chat: it carries the `/u/<n>` account.
     if (seen && this.browserTab?.thread === id) return seen;
-    return `https://gemini.google.com/app/${id}`;
+    return chatLink(this.chatThread);
   }
 
   /**

@@ -29,6 +29,7 @@ import { nextSwitch, setSwitch, switchFor } from '../../backend/mcp/client/switc
 import { canPickFolder, pickFolder } from '../../backend/core/workspace/folder-picker.js';
 import { readCommands, listCommandDays } from '../../backend/core/logs/command-log.js';
 import { EFFORT_LEVELS, resolveEffort } from '../../backend/core/models/effort.js';
+import { chatLink } from '../../backend/core/turn/chat-thread.js';
 import { mismatchPolicy } from '../../backend/core/models/model-fallback.js';
 import { describeSettings, filterSettings, stagedChanges, changedLines, SETTING_GROUPS } from '../../backend/core/workspace/settings.js';
 import { listWorkspaceCandidates } from '../../backend/core/workspace/workspaces.js';
@@ -1453,7 +1454,7 @@ export function Menus({
           const { sub, tight, room } = fit('↩ continue in the same tab · ↻ replay with a recap');
           return (
             <Panel width={W} title="Past conversations" status={String(n)} sub={sub} tight={tight}
-              keys="↑↓ move · enter reopen · esc cancel">
+              keys="↑↓ move · enter reopen · cmd+click opens the chat · esc cancel">
               <Choices
                 limit={room}
                 items={activeMenu.sessions.map((session) => ({
@@ -1466,6 +1467,8 @@ export function Menus({
                   detail: `${session.resume === 'continue' ? '↩' : '↻'}`
                     + `  ${String(session.turns ?? '?').padStart(3)} turns`
                     + `  ${oneLine(session.title || session.id, 60)}`,
+                  // The conversation's Gemini chat (v9.9.9.2), on its account.
+                  link: chatLink(session.thread) || undefined,
                   value: session.id,
                   key: session.id,
                 }))}

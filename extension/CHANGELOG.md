@@ -18,6 +18,15 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.70.0 — 2026-11-23
+
+**The agent's tab closes with the agent.** Owner: "if the agent is exiting, close the gemini tab
+along with it (only the tab that opened with the agent)". `close_main_tab`, sent only by a real
+exit (never a restart), closes the main tab through `pickMainTab`, which returns only tabs this
+extension opened, so the person's own Gemini tabs are never touched. It is forgotten before it is
+removed, so no `tab_closed` follows. **`open_thread` keeps the account:** a chat recorded on
+`/u/<n>` is reopened there, not on the browser's first account.
+
 ### 1.69.0 — 2026-11-23
 
 **The models are read when a tab of ours loads.** Owner: "once gemini tab is opened, our effort
