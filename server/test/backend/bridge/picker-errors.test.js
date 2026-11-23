@@ -105,3 +105,37 @@ test('a lost batch session is still handed to its own resolver', async () => {
   assert.deepEqual(loop.resolved, [['r1', { sessionLost: true }]]);
   assert.equal(loop.aborted, false);
 });
+
+/*
+ * v9.9.9.3, reported 2026-11-23: on a fresh start /effort printed "The browser
+ * could not read its model picker: no tab open yet". The read sent at connect
+ * found no tab (a notice), and was taken as the answer to /effort's own read,
+ * which had just opened a tab and was still on its way.
+ */
+import { AgentLoop } from '../../../src/backend/core/turn/agent-loop.js';
+
+function realLoop() {
+  const l = new AgentLoop({ workspace: mkdtempSync(join(tmpdir(), 'picker-bg-')), mcpServer: {}, diffEngine: {}, riskClassifier: {}, promptBuilder: {} });
+  const panel = [];
+  l.callbacks = { sendToPanel: (m) => { panel.push(m); return true; } };
+  return { l, panel };
+}
+const said = (panel) => panel.map((m) => m.payload?.message || '').join('\n');
+
+test('a background "no tab yet" does not answer an /effort that is waiting', async () => {
+  const { l, panel } = realLoop();
+  l._pendingEffortSwitch = { rung: 'high' };
+  const bridge = new WebSocketServer({ port: 0, agentLoop: l });
+  bridge.clients.set('c1', { type: 'extension' });
+  await bridge._handleMessage('c1', { type: 'error', payload: {
+    op: 'discover_models', level: 'notice', stage: 'tab',
+    message: 'no tab open yet, so there is no picker to read — nothing to do',
+  } });
+  assert.doesNotMatch(said(panel), /could not read its model picker/);
+  assert.ok(l._pendingEffortSwitch, 'still waiting for its own read');
+
+  // Its own read failing still says so.
+  await bridge._handleMessage('c1', { type: 'error', payload: { op: 'discover_models', message: 'no control that opens the mode picker' } });
+  assert.match(said(panel), /could not read its model picker: no control/);
+  assert.equal(l._pendingEffortSwitch, null);
+});

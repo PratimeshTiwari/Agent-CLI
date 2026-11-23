@@ -548,8 +548,12 @@ export async function pickMainTab(targetModel = 'gemini') {
     try {
       const tab = await chrome.tabs.get(remembered);
       // A tab that has navigated away is no longer this lane's tab, even though
-      // its id is unchanged.
-      if (tab && tab.url && matchesModelUrl(tab.url, targetModel)) return tab;
+      // its id is unchanged. A tab still loading has no `url` yet, only a
+      // `pendingUrl` (v9.9.9.3): read as "navigated away", it was forgotten and
+      // a second tab opened beside it — the effort switch's tab, reported as
+      // "when I change effort it opens a second gemini tab".
+      const url = tab?.url || tab?.pendingUrl;
+      if (tab && url && matchesModelUrl(url, targetModel)) return tab;
     } catch {
       /* closed while we were not looking */
     }
@@ -1008,7 +1012,23 @@ async function trySendToTab(tab, message, targetModel, { repairs = true } = {}) 
   return success;
 }
 
-export async function ensureModelTab(targetModel = 'gemini', opts) {
+/**
+ * One tab open at a time per model (v9.9.9.3). `/effort` sends `discover_models`,
+ * `switch_model` and `set_thinking` together, each through here, and the tab
+ * was recorded only after it was created — so each saw "no tab" and opened
+ * its own. Later callers now wait for the tab being opened.
+ */
+const opening = new Map();
+
+export function ensureModelTab(targetModel = 'gemini', opts) {
+  const busy = opening.get(targetModel);
+  if (busy) return busy;
+  const run = openModelTab(targetModel, opts).finally(() => opening.delete(targetModel));
+  opening.set(targetModel, run);
+  return run;
+}
+
+async function openModelTab(targetModel = 'gemini', opts) {
   const targetUrl = MODEL_URLS[targetModel];
   if (!targetUrl) return null;
 

@@ -983,7 +983,9 @@ export class WebSocketServer {
          * later as `model_options_unanswered` — which reads as two faults.
          */
         if (NON_FATAL_EXTENSION_OPS.has(payload?.op)) {
-          this.agentLoop.settleModelOptions?.(payload?.message || null);
+          // A background read's "no tab yet" is a notice; it must not answer
+          // an /effort that opened a tab and is waiting on it (v9.9.9.3).
+          this.agentLoop.settleModelOptions?.(payload?.message || null, { background: payload?.level === 'notice' });
           break;
         }
 
@@ -1218,6 +1220,12 @@ export class WebSocketServer {
       client.type = 'closing';
       client.ws.close(4001, 'admitted');
     }
+  }
+
+  /** Whether a browser extension is connected and identified (v9.9.9.3). */
+  hasExtension() {
+    for (const client of this.clients.values()) if (client.type === 'extension') return true;
+    return false;
   }
 
   sendInjectPrompt(msg) {

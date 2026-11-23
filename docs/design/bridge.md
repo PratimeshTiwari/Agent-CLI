@@ -57,6 +57,20 @@ entry before changing the mechanism it describes.
   an orphan. An unsubmitted prompt (`!sawGenerating`) is resent once, **verbatim**
   (`_lastMainPrompt`; rebuilding has side effects). Not retried: `timedOut` with partial text, and a
   delivered prompt after a disconnect — both risk a double answer.
+- **One agent tab, and a prompt held across a restart (v9.9.9.3, extension 1.71.0).** Reported:
+  "when i change effort, it again opens a second gemini tab", and "changing workspace also
+  restarts the agent and the older tab is not closed". Three causes, each reproduced first.
+  `/effort` sends three picker messages at once, each through `ensureModelTab`, which recorded the
+  tab only after creating it: three asks, up to three tabs (`one-tab.test.js`). A tab still
+  loading has `url: ''` and a `pendingUrl`; `pickMainTab` read that as navigated away, forgot it
+  and released its ownership. And the terminal's `injectPrompt` broadcast on its own: with the
+  extension a few seconds from reconnecting after a restart, it ran `open
+  https://gemini.google.com/app` — a tab the extension does not own, possibly in another profile —
+  and handed the prompt back (`tabrig/`: "Opened … in your browser", then two tabs). It now holds
+  through `sendInjectPrompt` like every other caller, says it is waiting, and only starts Chrome
+  (no URL) if nothing connects in 10 s; `tabrig/` after `/workspace`: one tab, the message
+  delivered into it on reconnect. Also: a background read's "no tab yet" notice no longer
+  settles an `/effort` that is waiting for its own read ("could not read its model picker").
 - **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
   `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
   tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not

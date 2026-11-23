@@ -18,6 +18,16 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.71.0 — 2026-11-23
+
+**One agent tab, not two.** Reported: "agent opens a gemini tab, and when i change effort, it
+again opens a second gemini tab and on that everything happens". `/effort` sends
+`discover_models`, `switch_model` and `set_thinking` together, each through `ensureModelTab`, and
+the tab was recorded only after it was created, so each saw "no tab" and opened one. And a tab
+still loading has no `url`, only a `pendingUrl`, which `pickMainTab` read as "navigated away" and
+forgot. `ensureModelTab` is now single-flight per model, and a loading tab is read by its
+`pendingUrl` (`one-tab.test.js`, red against 1.70.0).
+
 ### 1.70.0 — 2026-11-23
 
 **The agent's tab closes with the agent.** Owner: "if the agent is exiting, close the gemini tab

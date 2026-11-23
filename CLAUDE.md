@@ -126,7 +126,7 @@ The short list. Each is explained in its area below.
 9. **`frontend/` imports `backend/`, never the reverse.**
 10. **Nothing the user waits for goes before the first frame** (`startup-order.test.js`).
 11. **An undelivered prompt is held, never dropped; a delivered one is never resent** if that
-    risks a double answer.
+    risks a double answer. The terminal holds through `sendInjectPrompt` too; nothing `open`s Gemini.
 12. **Colour is a role (`T.accent`), never a name.**
 13. **This file stays short.** A new feature adds a line or two to its area here; its story goes in
     its design file and `docs/CHANGELOG.md`. `docs-size.test.js` caps this file.
@@ -188,6 +188,7 @@ The rules, each with an incident behind it ([`docs/design/bridge.md`](docs/desig
 
 - **The reconnect alarm is periodic and permanent.** `stopKeepAlive` must not clear it
   (`watchdog-alarm.test.js`).
+- **One tab per model:** `ensureModelTab` is single-flight, and a loading tab counts (`pendingUrl`).
 - **An undelivered prompt is held, not dropped.** `flushPendingInjects` drains when a client
   identifies as an extension (not on socket open); past `INJECT_BUFFER_TTL_MS` it is dropped.
 - **Readiness is a handshake, not a sleep** (`waitForBridge`: `ready`, `canType`).

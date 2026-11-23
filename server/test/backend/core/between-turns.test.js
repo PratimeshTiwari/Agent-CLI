@@ -85,8 +85,11 @@ test('the reply clock and the gap are wired where the turn passes them', () => {
   assert.match(src, /await this\._parked\(new Promise/, 'the command approval is parked');
   assert.match(readFileSync(new URL('../../../src/backend/core/edits/diff-approval.js', import.meta.url), 'utf8'), /parked\(loop, new Promise/);
   assert.match(readFileSync(new URL('../../../src/backend/core/turn/loop-tools.js', import.meta.url), 'utf8'), /loop\._parked\(asked\)/);
-  // The terminal broadcasts its own inject rather than calling sendInjectPrompt;
-  // the first pty run had no `deliver` on any prompt because of it.
+  // The terminal once broadcast its own inject, and the first pty run had no
+  // `deliver` on any prompt because of it. Since v9.9.9.3 it goes through
+  // `sendInjectPrompt` (held while the extension is away), which stamps it.
   assert.match(readFileSync(new URL('../../../src/frontend/hooks/use-agent-callbacks.js', import.meta.url), 'utf8'),
+    /wsServer\.sendInjectPrompt\(msg\)/);
+  assert.match(readFileSync(new URL('../../../src/backend/bridge/websocket-server.js', import.meta.url), 'utf8'),
     /payload: \{ \.\.\.msg, sentAt: Date\.now\(\) \}/);
 });
