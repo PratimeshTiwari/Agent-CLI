@@ -378,8 +378,9 @@ Details: [`docs/design/context-and-memory.md`](docs/design/context-and-memory.md
   prompt's `.agent/artifacts/…` is one literal for every repo; a stray `.agent` holding only
   `artifacts/` and `tmp/` under a real root is skipped and its files moved (`isStrayAgentDir`). The user-facing map
   is [`docs/agent-folder.md`](docs/agent-folder.md); keep it in step with `paths.js`.
-- **Workspace paths** are `core/workspace/workspaces.js`; `AgentLoop.setWorkspace` is the one place
-  that rewires collaborators (never the session store).
+- **Workspace paths** are `core/workspace/workspaces.js`. A switch is in place and **rebuilds, never
+  re-points**: `core/workspace/workspace-world.js` builds start and switch alike; only the process,
+  the bridge (same tab) and the screen survive (`workspace-world.test.js`). A relaunch never opens Gemini.
 - **Home** is `~/.agent` (`AGENT_CLI_HOME` overrides; the older names are still read). Never
   `~/.gemini`, which belongs to Google's tools.
 - **Conversations** are one folder each (`conversations/<id>/`), written to the workspace copy and

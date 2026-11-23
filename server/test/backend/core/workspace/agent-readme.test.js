@@ -57,9 +57,14 @@ test('it names the folders docs/agent-folder.md names, and /reset moves it', () 
   assert.ok(STATE_ENTRIES.includes('README.md'), '/reset should take it with the rest');
 });
 
-test('main.js writes it at startup, after the migrations', () => {
+test('every world writes it, after the migrations (start and switch alike)', () => {
+  // Since v9.9.9.5 main.js builds its world through workspace-world.js, which a
+  // workspace switch uses too; main.js runs the migrations first.
   const main = readFileSync(new URL('../../../../src/main.js', import.meta.url), 'utf8');
-  const at = main.indexOf('writeAgentReadme(');
+  assert.ok(main.indexOf('runMigrations(config.workspace)') < main.indexOf('buildWorld(config.workspace'));
+  const world = readFileSync(new URL('../../../../src/backend/core/workspace/workspace-world.js', import.meta.url), 'utf8');
+  const body = world.slice(world.indexOf('export function buildWorld('));
+  const at = body.indexOf('writeAgentReadme(');
   assert.ok(at > 0, 'never called');
-  assert.ok(at > main.indexOf('runMigrations(config.workspace)'), 'before the migrations, it could land in a stray');
+  assert.ok(at > body.indexOf('migrate(workspace)'), 'before the migrations, it could land in a stray');
 });

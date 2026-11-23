@@ -111,7 +111,9 @@ for (let restarts = 0; ; restarts++) {
     stdio: 'inherit',
     // How the child knows a supervisor is listening. Without it, /restart has
     // nothing to exit into and says so rather than quitting on the user.
-    env: { ...process.env, AGENT_CLI_SUPERVISED: '1' },
+    // AGENT_CLI_RESTARTED (v9.9.9.5): a relaunch, so the extension was
+    // connected a moment ago and the start must not open Gemini for it.
+    env: { ...process.env, AGENT_CLI_SUPERVISED: '1', AGENT_CLI_RESTARTED: restarts > 0 ? '1' : '' },
   });
 
   // A start that broke after `/doctor` changed a package: put it back, once,

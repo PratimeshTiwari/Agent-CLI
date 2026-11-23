@@ -38,7 +38,8 @@ test('main.js gives first start its settings before the loop reads them (source)
   const main = readFileSync(join(here, '../../../src/main.js'), 'utf8');
   const at = main.indexOf('firstRunSettings(firstRun, settingsNow, CURRENT_PROMPT_VERSION)');
   assert.ok(at > 0, 'main.js no longer writes the first-start settings');
-  assert.ok(at < main.indexOf('new AgentLoop('), 'written after the loop has read the setting');
+  // The loop is built by `buildWorld` since v9.9.9.5.
+  assert.ok(at < main.indexOf('buildWorld(config.workspace'), 'written after the loop has read the setting');
 });
 
 test('ctrl+c halfway brings it back, even though the loop has created workspaces/<slug> by then', () => {
@@ -115,7 +116,7 @@ test('main decides before the loop exists, and before the UI starts', () => {
   const src = readFileSync(join(here, '../../../src/main.js'), 'utf8');
   const decide = src.indexOf('firstRunState(');
   assert.ok(decide > 0);
-  assert.ok(decide < src.indexOf('new AgentLoop('),
+  assert.ok(decide < src.indexOf('buildWorld(config.workspace'),
     "the loop's session store creates workspaces/<slug>, so deciding after it never shows setup");
   assert.ok(decide < src.indexOf('new CliUI('));
 });

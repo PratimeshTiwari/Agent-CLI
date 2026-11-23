@@ -2967,6 +2967,26 @@ export class AgentLoop {
    * switch), which goes on in the same tab. Returns whether it reached the
    * extension.
    */
+  /**
+   * Taken down by a workspace switch (v9.9.9.5, `core/workspace/workspace-world.js`).
+   * The process lives on, so nothing of this loop may: its timers, its
+   * listeners and the MCP servers it started. The tab is not closed — the next
+   * loop uses it.
+   */
+  async dispose() {
+    this.disposed = true;
+    for (const key of ['_modelOptionsWatchdog', '_silentTimer', '_retryTimer']) {
+      clearTimeout(this[key]);
+      this[key] = null;
+    }
+    this._idleListeners?.clear();
+    this._heldMessages = [];
+    try { this.extensionLock?.abortAll?.(); } catch { /* nothing held */ }
+    const mcp = this._mcp;
+    this._mcp = null;
+    await mcp?.dispose?.();
+  }
+
   closeTabOnExit() {
     try {
       return Boolean(this._toExtension('close_main_tab', { targetModel: this.mainModel }));

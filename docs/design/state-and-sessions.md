@@ -9,11 +9,33 @@
 
 `core/workspace/workspaces.js` owns path handling for the workspace: `resolveWorkspaceInput` (`~`
 expansion, relative paths, quotes), `validateWorkspace` (exists / is a directory / readable) and
-`listWorkspaceCandidates` for the `/set-workspace` picker. `AgentLoop.setWorkspace` is the one
-place that rewires the collaborators that hold a copy of the path — `/workspace` and
-`/agent-dir` each used to carry their own list and had already drifted. SessionStore is
-deliberately *not* rebound: doing so would write the current conversation into another
-project's history.
+`listWorkspaceCandidates` for the `/set-workspace` picker.
+
+**Switching (v9.9.9.5): in place, rebuilt, never re-pointed.** History: `AgentLoop.setWorkspace`
+once rewired four collaborators and left the session store, memory and config on the old project,
+so memory went to the old project and its allowlist stayed armed; the fix was a restart through
+the exit-75 supervisor (`docs/history.md`, "The workspace commands"). Owner, 2026-11-23: "changing
+workspace also restarts the agent and the older tab is not closed … can you avoid restarting the
+agent … or make it more seamless?" Two findings first. The stray tab came from the restart, not the
+switch: the new process greets the extension for 1.5 s and then runs `open
+https://gemini.google.com/app`, and the extension on its reconnect backoff takes longer, so every
+relaunch opened a tab it does not own (the harness never saw it: its `open` is a shim). The
+supervisor now sets `AGENT_CLI_RESTARTED` and a relaunch never opens anything. And the restart's
+real guarantee is that *nothing* survives from the old project, which a rebuild gives without a
+new process.
+
+`core/workspace/workspace-world.js`: `buildWorld(workspace)` constructs everything built from a
+path (diff engine, risk classifier, prompt builder, MCP server, task manager, loop, file watcher,
+the `.agent` README), and `main.js` builds the first world through it, so a start and a switch
+cannot wire differently. `switchWorld` clears the scope, builds the new world, hands the bridge
+the new loop (`setAgentLoop`: the socket, clients and held prompts stay; `bridge.json` moves to the
+new project) and disposes the old one (watcher stopped, background tasks killed, timers cleared,
+MCP children closed; the tab is kept). `CliUI.switchTo` remounts App under a new key, so no hook or
+ref crosses over; the old transcript stays in the scrollback with the new banner under it. Both
+front-ends go through `requestWorkspaceSwitch` (waits for the turn, refuses a bad path or the same
+folder); with no switcher registered it is the restart it was. `workspace-world.test.js` fails a
+re-pointed loop on "A's allowlist is armed in B". `tabrig/`: one tab throughout, a fresh chat in
+it, the next prompt delivered there, 0 full clears from the switch at 13, 24 and 30 rows.
 
 ## Where `.agent/` actually is
 

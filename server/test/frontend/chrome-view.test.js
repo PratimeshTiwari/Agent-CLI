@@ -23,7 +23,7 @@ test('the line says what a choice means', () => {
 
 test('a start with a chosen profile opens that one, never the default browser', () => {
   const main = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
-  const at = main.indexOf('const chosen = agentLoop.browserProfile.current;');
+  const at = main.indexOf('const chosen = world.agentLoop.browserProfile.current;');
   assert.ok(at > 0 && at < main.indexOf("exec(`open \"${startUrl}\"`)"));
   assert.match(main.slice(at, at + 240), /if \(chosen\) openChromeProfile\(chosen\.dir, startUrl\);\s+else if \(process\.platform === 'darwin'\)/);
 });

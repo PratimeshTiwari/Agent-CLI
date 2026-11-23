@@ -94,3 +94,48 @@ export function prepareWorkspaceSwitch(raw, { env = process.env } = {}) {
 
   return { ok: true, target };
 }
+
+/*
+ * In place, not a restart (v9.9.9.5). `main.js` registers how to switch the
+ * running process (`core/workspace/workspace-world.js`); without one — a test,
+ * an embedding — the switch is the restart it always was.
+ */
+let switcher = null;
+
+/** `fn(target)` switches this process to `target` and resolves when it has. */
+export function registerWorkspaceSwitcher(fn) {
+  switcher = typeof fn === 'function' ? fn : null;
+}
+
+/** Run `fn` once the loop is idle: never out from under a running turn. */
+export function whenIdle(agentLoop, fn) {
+  if (!agentLoop?.isProcessing) return Promise.resolve().then(fn);
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(() => {
+      if (agentLoop.isProcessing) return;
+      clearInterval(timer);
+      Promise.resolve().then(fn).then(resolve, reject);
+    }, IDLE_POLL_MS);
+    timer.unref?.();
+  });
+}
+
+/**
+ * Switch workspace, both front-ends' one entry.
+ *
+ * @returns {{ok: true, target: string, inPlace: boolean, done: Promise} | {ok: false, error: string}}
+ */
+export function requestWorkspaceSwitch(raw, { agentLoop, wsServer, env = process.env } = {}) {
+  if (!switcher) {
+    const outcome = prepareWorkspaceSwitch(raw, { env });
+    if (!outcome.ok) return outcome;
+    leaveWhenIdle(RESTART_EXIT_CODE, { wsServer, agentLoop });
+    return { ...outcome, inPlace: false, done: Promise.resolve() };
+  }
+  const target = resolveWorkspaceInput(raw);
+  const problem = validateWorkspace(target);
+  if (problem) return { ok: false, error: problem };
+  if (agentLoop?.workspace === target) return { ok: false, error: `Already in \`${target}\`.` };
+  const run = switcher;
+  return { ok: true, target, inPlace: true, done: whenIdle(agentLoop, () => run(target)) };
+}

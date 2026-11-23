@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import * as paths from '../../backend/core/workspace/paths.js';
-import { leave, leaveWhenIdle, prepareWorkspaceSwitch, RESTART_EXIT_CODE } from '../../backend/core/install/restart.js';
+import { leave, leaveWhenIdle, requestWorkspaceSwitch, RESTART_EXIT_CODE } from '../../backend/core/install/restart.js';
 import { exitWithFarewell } from '../screen/farewell.js';
 import { createSkill, listSkills, skillSearchPath } from '../../backend/core/prompt/skills.js';
 import { describeDestructive } from '../menus/destructive.js';
@@ -1278,25 +1278,26 @@ export async function handleSlashCommand(query, {
      * version this replaced. See CLAUDE.md → P1.
      */
     async function switchWorkspace(raw) {
-      // Validation, the supervisor check and the handover file are all in
-      // core/install/restart.js now, because the side panel asks for the same thing
-      // and the bridge cannot reach a React hook. Only the wording is local.
-      const outcome = prepareWorkspaceSwitch(raw);
+      // In place since v9.9.9.5: the bridge, the tab and the screen stay; the
+      // project's world is rebuilt (`core/workspace/workspace-world.js`).
+      const outcome = requestWorkspaceSwitch(raw, { agentLoop, wsServer });
       if (!outcome.ok) {
         setHistory(prev => [...prev, { role: 'assistant', content: `❌ ${outcome.error}`, isLocal: true }]);
         setIsProcessing(false);
         return;
       }
-      const { target } = outcome;
+      const { target, inPlace } = outcome;
       const running = agentLoop.isProcessing;
       setHistory(prev => [...prev, {
         role: 'assistant', isLocal: true,
         content: running
           ? `⟳ Switching to \`${target}\` when this turn finishes — \`esc\` to stop it and go now.`
-          : `⟳ Restarting in \`${target}\`…`,
+          : (inPlace ? `⟳ Switching to \`${target}\`…` : `⟳ Restarting in \`${target}\`…`),
       }]);
       setIsProcessing(false);
-      leaveWhenIdle(RESTART_EXIT_CODE, { wsServer, agentLoop });
+      outcome.done.catch((err) => setHistory(prev => [...prev, {
+        role: 'assistant', isLocal: true, content: `❌ Could not switch: ${err.message}`,
+      }]));
     }
 
     if (command === 'switch-workspace') {
