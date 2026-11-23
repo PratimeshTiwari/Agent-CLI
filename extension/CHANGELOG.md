@@ -18,6 +18,25 @@ per-change history below.
 > The corrections are marked in place. 1.28.1's account of its own fix is
 > disproved by a measurement recorded in 1.28.2.
 
+### 1.72.0 — 2026-11-23
+
+**The tab the agent opens is the agent's.** Reported: "efforts are not loaded on first start,
+changing effort opens a new tab still". The tab on screen at first start is opened by the agent
+through the OS (its start link, or `/chrome`'s pairing link), never by `chrome.tabs.create`, so it
+was nobody's: the first `/effort` or prompt opened a second tab, and its models were never read
+(only our own tabs are). Those links now carry a mark, `#g7k=o` or `#g7k=<code>`; the content
+script hands it over with `content_script_ready`, the worker adopts the tab as the main one
+(`adoptAgentTab`) and reads its models.
+
+**The pairing code leaves the address.** Asked: "will google know about this?" A fragment is never
+sent in a request, but the page's scripts can read it and it stayed in the history. The content
+script removes the mark as soon as it has read it, and no longer logs or reports the full address.
+The name says nothing now (`#g7k=`, was `#agent-pair=`, still read). A code read while the worker
+was not connected is held and reported on connect.
+
+**A profile change closes the old profile's agent tab** (the server sends `close_main_tab` before
+refusing it).
+
 ### 1.71.0 — 2026-11-23
 
 **One agent tab, not two.** Reported: "agent opens a gemini tab, and when i change effort, it

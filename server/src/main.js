@@ -26,11 +26,12 @@ import { fileURLToPath } from 'url';
 import { exitWithFarewell } from './frontend/screen/farewell.js';
 import { WebSocketServer } from './backend/bridge/websocket-server.js';
 import { openChromeProfile } from './backend/core/workspace/chrome-profiles.js';
+import { startUrl as agentStartUrl } from './backend/core/workspace/profile-binding.js';
 import { SLASH_COMMANDS } from './frontend/constants.js';
 import { AGENT_COMMANDS } from './backend/core/turn/slash-commands.js';
 import { logError } from './backend/core/logs/error-log.js';
 import { recoverMissingDependency, explainFailure, clearAttempt } from './backend/core/install/dep-recovery.js';
-import { RESTART_EXIT_CODE, registerWorkspaceSwitcher } from './backend/core/install/restart.js';
+import { RESTART_EXIT_CODE, registerWorkspaceSwitcher, leave } from './backend/core/install/restart.js';
 import { buildWorld, switchWorld } from './backend/core/workspace/workspace-world.js';
 import { loadUserSettings, saveUserSettings } from './backend/core/workspace/user-settings.js';
 import { firstRunState, firstRunSettings } from './frontend/screen/welcome.js';
@@ -349,7 +350,9 @@ async function main() {
 
     // Never console.error here: the Ink UI owns the terminal by now, and a
     // write into its frame is destroyed by the next repaint anyway.
-    const startUrl = 'https://gemini.google.com/app';
+    // Marked, so the extension adopts it as the agent's tab (v9.9.9.6) instead of
+    // opening a second one on the first /effort or prompt.
+    const startUrl = agentStartUrl();
     try {
       const { exec } = await import('child_process');
 
@@ -394,6 +397,19 @@ async function main() {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  /*
+   * The terminal went away (v9.9.9.6): the VS Code companion runs the agent in
+   * a hidden terminal, and closing the window hangs it up. Node's default was
+   * to die on the spot, leaving the agent's Gemini tab open. No farewell — no
+   * one is reading, and asking the terminal for its cursor row would wait for
+   * an answer that never comes — only the tab closed and the bridge stopped.
+   */
+  process.on('SIGHUP', async () => {
+    process.stdout.on('error', () => {}); // writes to a hung-up terminal fail
+    try { world.fileWatcher.stop(); } catch { /* going anyway */ }
+    const closing = Boolean(world.agentLoop.closeTabOnExit?.());
+    await leave(0, { wsServer, agentLoop: world.agentLoop, delay: closing ? 150 : 0 });
+  });
 }
 
 /**

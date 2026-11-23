@@ -148,6 +148,37 @@
         input.dispatchEvent(new Event('input')); // let the panel resize and light the send button
     }
 
+    /*
+     * Start agent, under the "No agent is running" line (1.9.0). The editor's
+     * own, so it lives here and not in panel.js, which Chrome's side panel
+     * shares: Chrome cannot start a process. The line, and this with it, is
+     * removed by the panel when the agent connects.
+     */
+    function addStartButton(starting) {
+        const rows = document.querySelectorAll('.message-status[data-kind="no_agent"]');
+        const row = rows[rows.length - 1];
+        if (!row || row.querySelector('.agent-start')) return;
+        const bar = document.createElement('div');
+        bar.className = 'agent-start-bar';
+        bar.innerHTML = '<button type="button" class="agent-start">Start agent</button>'
+            + '<button type="button" class="agent-show-terminal" title="The agent runs in a hidden terminal; this shows it">Show terminal</button>';
+        bar.querySelector('.agent-start').addEventListener('click', () => {
+            setStarting(true);
+            vscode.postMessage({ type: 'start_agent' });
+        });
+        bar.querySelector('.agent-show-terminal').addEventListener('click', () => vscode.postMessage({ type: 'show_terminal' }));
+        row.appendChild(bar);
+        setStarting(Boolean(starting));
+    }
+
+    function setStarting(on) {
+        document.querySelectorAll('.agent-start').forEach((b) => {
+            b.disabled = on;
+            b.textContent = on ? 'Starting…' : 'Start agent';
+        });
+        document.querySelectorAll('.agent-show-terminal').forEach((b) => { b.hidden = !on; });
+    }
+
     window.addEventListener('message', (event) => {
         const m = event.data || {};
         if (m.type === 'bridge') {
@@ -163,11 +194,21 @@
                     // `**…**` showed its asterisks (1.8.10). `kind` lets the
                     // panel remove the line once the agent connects.
                     deliver({ type: 'status', payload: { kind: 'no_agent', message: reason === 'stale'
-                        ? 'The agent for this folder has stopped. Run agent in a terminal, or Agent CLI: Start Agent from the command palette.'
-                        : 'No agent is running for this folder. Run agent in a terminal, or Agent CLI: Start Agent from the command palette.' } });
+                        ? 'The agent for this folder has stopped.'
+                        : 'No agent is running for this folder.' } });
+                    addStartButton(m.payload.starting);
                 }
                 askForBridgeSoon();
             }
+        } else if (m.type === 'agent_starting') {
+            setStarting(true);
+            // Look again soon, not after the backoff has grown to 10 s.
+            retryMs = 500;
+            askForBridgeSoon();
+        } else if (m.type === 'agent_failed') {
+            toldMissing = null;
+            deliver({ type: 'status', payload: { kind: 'no_agent', message: (m.payload && m.payload.message) || 'The agent did not start.' } });
+            addStartButton(false);
         } else if (m.type === 'insert') {
             insertAttachment(m.payload || {});
         } else if (m.type === 'add_files') {

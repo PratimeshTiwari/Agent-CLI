@@ -1,9 +1,9 @@
 import { connectWebSocket, isSocketOpen, ensureWatchdogAlarm } from './socket.js';
 import { sendToServer } from './messaging.js';
 import { getState } from './state.js';
-import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, whoseTab, reportClosedTab, subagentAnswered, endSession, stopCompletionTicks, isSessionTab } from './content.js';
+import { broadcastTabStatus, reinjectModelTabs, restoreFocusFrom, forgetTab, whoseTab, reportClosedTab, subagentAnswered, endSession, stopCompletionTicks, isSessionTab, adoptAgentTab } from './content.js';
 import { handleCommand } from './floating.js';
-import { reportPairing } from './pairing.js';
+import { reportPairing, reportPairToken } from './pairing.js';
 
 // Keyboard shortcuts from the manifest's `commands` — the global one included.
 chrome.commands?.onCommand.addListener((command) => { handleCommand(command); });
@@ -161,12 +161,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          * effort switch read it. Main tabs only: never the person's own tabs,
          * and a subagent's tab is switched before it is read.
          */
-        if (sender.tab?.id !== undefined && isSocketOpen()) {
+        if (sender.tab?.id !== undefined) {
           const tabId = sender.tab.id;
-          whoseTab(tabId).then((whose) => {
-            if (!whose?.main) return;
-            chrome.tabs.sendMessage(tabId, { type: 'discover_models' }).catch(() => {});
-          }).catch(() => {});
+          const mark = payload?.agentMark;
+          // A tab the agent opened (1.72.0): ours from here, and a pairing
+          // code reported, or held until the socket is up.
+          const adopted = mark ? adoptAgentTab(tabId).catch(() => false) : Promise.resolve(false);
+          if (mark && mark !== 'o') reportPairToken(mark, isSocketOpen()).catch(() => {});
+          // After the adoption has claimed it, so a marked tab is read too.
+          if (isSocketOpen()) {
+            adopted.then(() => whoseTab(tabId)).then((whose) => {
+              if (!whose?.main) return;
+              chrome.tabs.sendMessage(tabId, { type: 'discover_models' }).catch(() => {});
+            }).catch(() => {});
+          }
         }
         break;
 

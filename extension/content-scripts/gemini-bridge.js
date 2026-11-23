@@ -3134,6 +3134,15 @@ function onResponseComplete(responseText) {
 // ── Message Handler ─────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  /*
+   * A copy that a newer one has stopped answers nothing (1.72.0). The worker
+   * injects a fresh copy into every Gemini tab when it starts, and the newer
+   * copy stops this one (`__agentBridgeStop`) — but with the extension still
+   * alive this listener kept answering beside it: tabrig showed one prompt
+   * typed and sent twice, and a `ping` answered `ready: false` by the stopped
+   * copy, first, for a tab that was fine.
+   */
+  if (bridgeInvalidated) return false;
   const { type, payload } = message;
 
   switch (type) {
@@ -3388,13 +3397,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ── Initialization ──────────────────────────────────────────────────
-console.log('[Agent CLI] Content script loaded on:', window.location.href);
+/*
+ * The agent's mark on a link it opened (1.72.0): `#g7k=<32 hex>` for a
+ * profile pairing, `#g7k=o` for the tab it opens at start (`#agent-pair=` from
+ * older agents too). Read once, handed to the worker with the ready message,
+ * then taken out of the address: a fragment is never sent in a request, but
+ * the page's own scripts can read it and it would sit in the history.
+ */
+function takeAgentMark(loc, hist) {
+  const mark = String(loc.hash || '').match(/^#(?:g7k|agent-pair)=([0-9a-f]{32}|o)$/)?.[1] || null;
+  if (mark) {
+    try {
+      hist.replaceState(hist.state, '', loc.pathname + loc.search);
+    } catch { /* the worker still has it; the address keeps the mark */ }
+  }
+  return mark;
+}
+const agentMark = takeAgentMark(window.location, history);
+console.log('[Agent CLI] Content script loaded on:', window.location.origin + window.location.pathname);
 
 // Notify service worker that we're ready
 safeSend({
   type: 'content_script_ready',
   payload: {
-    url: window.location.href,
+    url: window.location.origin + window.location.pathname,
+    ...(agentMark ? { agentMark } : {}),
     timestamp: Date.now(),
   },
 });

@@ -1,5 +1,19 @@
 # Agent CLI Companion: version history
 
+## 1.9.0 — 2026-11-23
+
+**Start agent, in the sidebar, out of sight.** Asked for: "instead of starting in a visible
+terminal, should have a button start agent and it should start in a terminal hidden from user
+view like claude code sidebar". The "No agent is running for this folder" line in the chat now
+carries a **Start agent** button. It runs `agent` for the folder in a terminal made with
+`hideFromUser`: the agent still has a real terminal (it is an Ink app), but none opens on screen.
+**Show terminal** under the line, the terminal icon on the chat's title bar, or **Agent CLI: Show
+Agent Terminal** brings it up. The terminal's own process is a login shell running `exec agent`,
+so it closes when the agent does and its exit code says why a start failed (127: `agent` is not
+installed, run `./setup.sh`). One per folder: an agent already running there, in any terminal,
+is used instead. The pop-up that offered to start one is gone; the button replaces it. Closing
+the window hangs the agent's terminal up, and the agent (v9.9.9.6) closes its Gemini tab on that.
+
 ## 1.8.18 — 2026-11-08
 
 **Cursor: the chat can move to the right.** Cursor is built on VS Code 1.105, and an extension can

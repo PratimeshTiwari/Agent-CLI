@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { browseLabel, pickedFile, buildWebviewHtml, readBridge, selectionMarker, selectionBody, agentStateDir } = require('./chat-panel-html.js');
+const { createAgentTerminal } = require('./agent-terminal.js');
 
 /*
  * Two homes for one view (1.8.10), the way Claude Code's extension does it:
@@ -48,9 +49,13 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     const media = vscode.Uri.joinPath(context.extensionUri, 'media');
     const version = context.extension?.packageJSON?.version || '';
     let view = null;
-    let offeredStart = false;
 
     const post = (message) => view?.webview.postMessage(message);
+    // The agent this window started, in a terminal kept out of sight (1.9.0).
+    const agentTerminal = createAgentTerminal(vscode, {
+        onFailed: (message) => post({ type: 'agent_failed', payload: { message } }),
+    });
+    sub(agentTerminal);
     const bridgeFile = () => {
         const root = workspaceRoot();
         return root ? path.join(agentStateDir(root), 'bridge.json') : null;
@@ -180,15 +185,18 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
             case 'need_bridge': {
                 const file = bridgeFile();
                 const found = file ? readBridge(file) : { missing: 'no-folder' };
-                post({ type: 'bridge', payload: found });
-                if (found.missing && found.missing !== 'no-folder' && !offeredStart) {
-                    offeredStart = true;
-                    vscode.window.showInformationMessage(
-                        'Agent CLI: no agent is running for this folder.', 'Start agent',
-                    ).then((choice) => { if (choice) startAgent(); });
-                }
+                if (found.port) agentTerminal.noteConnected();
+                // No pop-up offering to start one (1.9.0): the sidebar's own
+                // "No agent is running" line carries a Start agent button.
+                post({ type: 'bridge', payload: { ...found, starting: !found.port && agentTerminal.running } });
                 break;
             }
+            case 'start_agent':
+                startAgent();
+                break;
+            case 'show_terminal':
+                showAgentTerminal();
+                break;
             case 'show_diff':
                 openDiff(message.payload).catch((err) => {
                     vscode.window.showWarningMessage(`Agent CLI: could not open the diff — ${err.message}`);
@@ -320,21 +328,41 @@ function registerChatPanel(context, { workspaceRoot, AGENT_DIR }) {
     }
 
     // ── Starting the agent, and getting to the panel ──────────────────
+    /**
+     * Start the agent for this folder, out of sight (1.9.0). `agent` takes its
+     * workspace from the directory it starts in; the sidebar's retry loop picks
+     * the bridge up once the agent writes it. One per folder: an agent already
+     * running here, from any terminal, is used instead.
+     */
     function startAgent() {
         const root = workspaceRoot();
         if (!root) {
             vscode.window.showWarningMessage('Agent CLI: open a folder first.');
-            return;
+            return false;
         }
-        // `agent` takes its workspace from the directory it starts in. The
-        // panel's retry loop picks the bridge up once the agent writes it.
-        const terminal = vscode.window.createTerminal({ name: 'Agent CLI', cwd: root });
-        terminal.show();
-        terminal.sendText('agent');
+        const file = bridgeFile();
+        if (file && readBridge(file).port) {
+            focusChatView({ quiet: true }).catch(() => {});
+            return false;
+        }
+        const started = agentTerminal.start(root);
+        post({ type: 'agent_starting' });
+        focusChatView({ quiet: true }).catch(() => {});
+        return started;
+    }
+
+    function showAgentTerminal() {
+        if (agentTerminal.show()) return true;
+        vscode.window.showInformationMessage(
+            'Agent CLI: no agent was started from this window. An agent started in your own terminal is in that terminal.',
+            'Start agent',
+        ).then((choice) => { if (choice) startAgent(); });
+        return false;
     }
 
     sub(
         vscode.commands.registerCommand('agentCli.startAgent', startAgent),
+        vscode.commands.registerCommand('agentCli.showAgentTerminal', showAgentTerminal),
         vscode.commands.registerCommand('agentCli.focusChat', async () => {
             if (await focusChatView()) post({ type: 'focus_input' });
         }),

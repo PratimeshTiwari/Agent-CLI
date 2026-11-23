@@ -17,7 +17,15 @@ import { loadUserSettings, saveUserSettings } from './user-settings.js';
 
 export const PAIR_TTL_MS = 2 * 60_000;
 export const GEMINI_URL = 'https://gemini.google.com/app';
-export const pairUrl = (token) => `${GEMINI_URL}#agent-pair=${token}`;
+/*
+ * The agent's mark on a link it opens (v9.9.9.6, extension 1.72.0): a name that
+ * says nothing, removed from the address by the content script once read. The
+ * token is random, used once and dead after two minutes; the name hides only
+ * what it is for. `#g7k=o` marks the tab opened at start.
+ */
+export const AGENT_MARK = 'g7k';
+export const pairUrl = (token) => `${GEMINI_URL}#${AGENT_MARK}=${token}`;
+export const startUrl = () => `${GEMINI_URL}#${AGENT_MARK}=o`;
 
 export class ProfileBinding {
   constructor({ load = loadUserSettings, save = saveUserSettings, now = Date.now } = {}) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PAIR_TTL_MS, ProfileBinding, pairUrl } from '../../../../src/backend/core/workspace/profile-binding.js';
+import { PAIR_TTL_MS, ProfileBinding, pairUrl, startUrl } from '../../../../src/backend/core/workspace/profile-binding.js';
 
 const rig = (saved = {}) => {
   const writes = [];
@@ -56,7 +56,9 @@ test('clear lifts it and says so; a screen that throws stops nothing', () => {
   assert.deepEqual(writes, [{ chromeProfile: null }]);
 });
 
-test('the token is a fragment, which a browser never sends to Google', () => {
+test('the token is a fragment, never sent in a request, under a name that says nothing (v9.9.9.6)', () => {
   assert.equal(new URL(pairUrl('ab')).search, '');
-  assert.equal(new URL(pairUrl('ab')).hash, '#agent-pair=ab');
+  assert.equal(new URL(pairUrl('ab')).hash, '#g7k=ab');
+  assert.doesNotMatch(pairUrl('ab'), /agent|pair/);
+  assert.equal(new URL(startUrl()).hash, '#g7k=o', 'the start link is marked, so the extension adopts it');
 });

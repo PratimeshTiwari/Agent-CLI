@@ -190,3 +190,37 @@ test('without the token the webview is refused', async () => {
   v.dom.window.close();
   await server.stop();
 });
+
+/*
+ * Start agent in the sidebar (1.9.0): the "No agent is running" line carries a
+ * button that asks the host to start one hidden, and says Starting… until the
+ * agent connects, when the panel removes the line and the button with it.
+ */
+test('no agent: the sidebar offers Start agent, and asks the host to start it', async () => {
+  const v = webview();
+  const doc = v.w.document;
+  v.fromHost({ type: 'bridge', payload: { missing: 'no-agent' } });
+  const button = doc.querySelector('.message-status[data-kind="no_agent"] .agent-start');
+  assert.ok(button, 'no Start agent button under the no-agent line');
+  assert.equal(button.textContent, 'Start agent');
+  assert.equal(doc.querySelector('.agent-show-terminal').hidden, true, 'nothing to show yet');
+
+  button.click();
+  assert.ok(v.toHost.some((m) => m.type === 'start_agent'));
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, 'Starting…');
+  assert.equal(doc.querySelector('.agent-show-terminal').hidden, false);
+  doc.querySelector('.agent-show-terminal').click();
+  assert.ok(v.toHost.some((m) => m.type === 'show_terminal'));
+
+  // It never connected: the reason, and the button back.
+  v.fromHost({ type: 'agent_failed', payload: { message: 'The agent did not start: `agent` was not found.' } });
+  assert.match(doc.body.textContent, /was not found/);
+  const again = [...doc.querySelectorAll('.agent-start')].at(-1);
+  assert.equal(again.disabled, false);
+  v.dom.window.close();
+});
+
+test('the Chrome side panel has no Start agent: it cannot start a process', () => {
+  assert.doesNotMatch(panelJs + panelHtml, /agent-start|start_agent/);
+});

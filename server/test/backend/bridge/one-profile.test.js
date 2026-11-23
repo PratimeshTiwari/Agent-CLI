@@ -119,6 +119,31 @@ test('pairing moves the prompts, refuses the old profile and leaves its chat', a
   assert.deepEqual([main.prompts(), back.prompts()], [0, 1]);
 });
 
+/*
+ * v9.9.9.6, owner 2026-11-23: "profile change should also close the last
+ * unused tab by the extension". The old profile is told to close the tab it
+ * opened for the agent, before it is turned away; the new one is not.
+ */
+test('pairing another profile closes the old profile\'s agent tab, and only that', async () => {
+  const { connect, browserProfile } = rig();
+  const main = await connect('main');
+  const work = await connect('work');
+  await work.say('pair', { token: browserProfile.startPairing(WORK) });
+  const closes = (c) => c.got.filter((m) => m.type === 'close_main_tab');
+  assert.equal(closes(main).length, 1, 'the old profile keeps its tab');
+  assert.equal(closes(main)[0].payload.targetModel, 'gemini');
+  const order = main.got.map((m) => m.type);
+  assert.ok(order.indexOf('close_main_tab') < order.lastIndexOf('status'), 'closed before it is told it is refused');
+  assert.equal(closes(work).length, 0, 'the chosen profile lost its tab');
+});
+
+test('a profile refused on arrival is not told to close anything', async () => {
+  const { connect } = rig({ chromeProfile: { ...WORK, install: 'work' } });
+  const other = await connect('other');
+  assert.equal(other.type(), 'refused');
+  assert.equal(other.got.filter((m) => m.type === 'close_main_tab').length, 0, "its tabs were never the agent's");
+});
+
 test('pairing the one already connected keeps its chat', async () => {
   const { connect, calls, browserProfile } = rig();
   const only = await connect('only');

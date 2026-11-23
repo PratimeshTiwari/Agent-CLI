@@ -62,7 +62,22 @@ const THEME_BRIDGE = `
 #send-btn.ready, .diff-btn.accept, .question-actions .question-submit {
   background: var(--vscode-button-background, var(--accent));
   border-color: var(--vscode-button-background, var(--accent));
-}`;
+}
+/* Start agent (1.9.0): the editor's own button, under "No agent is running". */
+.agent-start-bar { display: flex; gap: 8px; margin-top: 6px; }
+.agent-start, .agent-show-terminal {
+  font-family: var(--vscode-font-family, inherit); font-size: 12px; cursor: pointer;
+  border: 1px solid var(--vscode-button-border, transparent); border-radius: 3px; padding: 3px 10px;
+}
+.agent-start {
+  background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff);
+}
+.agent-start:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #1177bb); }
+.agent-start:disabled { opacity: 0.6; cursor: default; }
+.agent-show-terminal {
+  background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
+}
+`;
 
 /**
  * The agent's state directory for a workspace — where it reads `editor.json`

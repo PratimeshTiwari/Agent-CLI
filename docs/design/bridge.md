@@ -79,6 +79,21 @@ entry before changing the mechanism it describes.
   no longer relaunches at all: `setAgentLoop` hands the bridge a new loop while the socket, its
   clients and held prompts stay, and `bridge.json` moves to the new project
   (`docs/design/state-and-sessions.md`).
+- **The tab the agent opens is the agent's; one prompt is typed once (v9.9.9.6, extension 1.72.0).**
+  Reported: "efforts are not loaded on first start, changing effort opens a new tab still". The
+  tab on screen at a first start is opened through the OS (the start link, or `/chrome`'s pairing
+  link), so it was nobody's: `/effort` or the first prompt opened a second one, and only our own tabs
+  are read for models. Both links now carry `#g7k=` (`o`, or the pairing code); the content script
+  reads it, hands it over with `content_script_ready`, and removes it from the address (the page's
+  scripts could read it, and it sat in the history); the worker adopts the tab (`adoptAgentTab`). A
+  code read while unconnected is held in `storage.session` and reported on connect. A `/chrome`
+  switch sends the old profile `close_main_tab` before refusing it. **Found on the way, older than
+  all of it:** the worker injects a fresh content script into every Gemini tab when it starts, and
+  the new copy stops the old one, but the old copy's message listener went on answering: `tabrig/`
+  showed one prompt sent twice, and a stopped copy answering `ping` with `ready: false`, first.
+  The listener now returns at once when `bridgeInvalidated` (`stopped-copy.test.js`, red before).
+  `tabrig/` after: one tab, mark gone, one send. A hangup (`SIGHUP`, what a closing VS Code window
+  sends its terminals) now closes the agent's tab; before, Node died on the spot.
 - **Two minutes without a word is resent once, in a fresh tab (v8.0, `SILENT_REPLY_MS`,
   `_onSilentReply`, extension 1.57.0 `freshTab`).** Reported with screenshots: Gemini took a
   tool-results prompt, showed its thinking dots and wrote nothing; after a reload the chat did not
@@ -204,8 +219,8 @@ per version and only between turns: no app on macOS opens a `chrome://` link.
 
 **Prompts go to one profile (v9.3, `/chrome`, `core/workspace/profile-binding.js`, extension 1.62.0).**
 `broadcast` reaches every extension, so a second profile typed every prompt into a second account. A profile
-cannot be named from inside, so it is proved: the agent opens it on a `#agent-pair=<token>` link and that
-extension answers with its `storage.local` id. Bound, nothing else is admitted and a closed profile makes prompts
+cannot be named from inside, so it is proved: the agent opens it on a `#g7k=<token>` link (`#agent-pair=`
+before v9.9.9.6) and that extension answers with its `storage.local` id. Bound, nothing else is admitted and a closed profile makes prompts
 wait: **never a fallback.** Unbound, the first install connected wins. Harness: `run-two.sh`, `run-chrome.sh`.
 
 ## From Gotchas
