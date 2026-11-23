@@ -2385,7 +2385,15 @@ export class AgentLoop {
    * replaced by a failure to ask. What is cleared is the timer and the pending
    * `/effort`, because nothing further is coming for either.
    */
-  settleModelOptions(reason = null) {
+  settleModelOptions(reason = null, { background = false } = {}) {
+    /*
+     * Not an answer to the /effort that is waiting (v9.9.9.3). On a fresh
+     * start the read sent at connect finds no tab and says so; /effort's own
+     * read opens one and is still on its way. Taking the first for the second
+     * printed "The browser could not read its model picker: no tab open yet"
+     * for an /effort that was about to work.
+     */
+    if (background && this._pendingEffortSwitch) return;
     clearTimeout(this._modelOptionsWatchdog);
     this._modelOptionsWatchdog = null;
 

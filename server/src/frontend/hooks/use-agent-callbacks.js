@@ -7,6 +7,9 @@ import * as paths from '../../backend/core/workspace/paths.js';
 import { mergeLoopHistory } from '../transcript/transcript.js';
 import { FOCUS_INPUT } from '../constants.js';
 
+/** How long a held prompt waits for the extension before Chrome is started (v9.9.9.3). */
+export const EXTENSION_WAIT_MS = 10_000;
+
 /**
  * Keep the plan that is about to be replaced.
  *
@@ -210,63 +213,31 @@ export function buildAgentCallbacks({
           return delivered;
     },
     injectPrompt: (msg) => {
-      const success = wsServer.broadcast('extension', {
-        id: crypto.randomUUID(),
-        type: 'inject_prompt',
-        // Stamped as `sendInjectPrompt` stamps it: the tab records the gap to
-        // its own receipt as `deliver` (v6.6, #104).
-        payload: { ...msg, sentAt: Date.now() },
+      /*
+       * Held, never dropped (v9.9.9.3, rule 11). This called `broadcast` itself,
+       * and with no extension connected it ran `open https://gemini.google.com/app`
+       * and handed the prompt back. After a restart — a workspace switch, an
+       * update — the extension is a few seconds from reconnecting, so the
+       * message went to a second, unowned tab opened by the OS (possibly in
+       * another Chrome profile), and the agent's own tab sat beside it, never
+       * closed. `sendInjectPrompt` holds it until the extension identifies
+       * (`flushPendingInjects`), into the tab the agent already owns.
+       */
+      if (wsServer.sendInjectPrompt(msg)) return;
+      setHistory(prev => [...prev, {
+        role: 'assistant',
+        isLocal: true,
         timestamp: Date.now(),
-      });
-      
-      if (!success) {
+        content: '⏳ Waiting for the Chrome extension to connect · your message goes as soon as it does',
+      }]);
+      // Chrome may not be running at all: after a beat with nothing connected,
+      // start it (no URL: the extension opens its own tab once it connects).
+      setTimeout(() => {
+        if (wsServer.hasExtension?.()) return;
         try {
-          const startUrl = 'https://gemini.google.com/app';
-          if (process.platform === 'darwin') exec(`open "${startUrl}"`);
-          else if (process.platform === 'win32') exec(`start "" "${startUrl}"`);
-          else exec(`xdg-open "${startUrl}"`);
-        } catch (e) {}
-
-        agentLoop.isProcessing = false;
-        agentLoop.abortExtensionWork();
-        setIsProcessing(false);
-
-        // Take the turn back out before asking for it again.
-        //
-        // `handleUserMessage` pushes the user's message to `conversationHistory`
-        // *before* it tries to send, so by the time we get here it is already
-        // recorded — and telling someone to "submit your prompt again" then put
-        // it in twice. The prompt is handed back to the input box instead, so
-        // retyping is not needed at all.
-        const dropped = agentLoop.conversationHistory
-          .slice().reverse().find((t) => t.role === 'user');
-        if (dropped) {
-          const at = agentLoop.conversationHistory.lastIndexOf(dropped);
-          if (at !== -1) {
-            agentLoop.conversationHistory.splice(at, 1);
-            // The session file is append-only, so the turn is already in it.
-            // Rewriting keeps the two copies agreeing — otherwise `--continue`
-            // resurrects a turn that was never sent.
-            try { agentLoop.sessionStore?.saveHistory?.(agentLoop.conversationHistory); } catch { /* not worth failing the notice */ }
-          }
-          setInputAtEnd?.(dropped.content || '');
-        }
-
-        setHistory(prev => [
-          ...prev,
-          // `isLocal`, like every other UI-only message: it is not in
-          // `conversationHistory`, and counting it as loop history shifts
-          // `mergeLoopHistory` by one and costs a turn on screen.
-          {
-            role: 'assistant',
-            isLocal: true,
-            timestamp: Date.now(),
-            content: '⚠️ **Gemini Extension Reconnecting…**\n\nOpened '
-              + '`https://gemini.google.com/app` in your browser. Your prompt is back in '
-              + 'the input box — press enter once the tab is up.',
-          },
-        ]);
-      }
+          if (process.platform === 'darwin') exec('open -a "Google Chrome"');
+        } catch { /* the notice already says what to do */ }
+      }, EXTENSION_WAIT_MS).unref?.();
     },
     requestDiffApproval: (diff) => {
       setDiffRequest(diff);

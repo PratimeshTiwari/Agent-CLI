@@ -50,7 +50,8 @@ function bodyOf(src, decl) {
   throw new Error(`unbalanced braces reading ${decl}`);
 }
 
-const ensureModelTab = bodyOf(worker, 'export async function ensureModelTab(');
+// The work is `openModelTab`; `ensureModelTab` makes it single-flight (v9.9.9.3).
+const ensureModelTab = bodyOf(worker, 'async function openModelTab(');
 
 test('claiming a tab is what triggers the picker read', () => {
   assert.match(ensureModelTab, /discover_models/,

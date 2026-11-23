@@ -417,7 +417,8 @@
     if (remembered !== void 0) {
       try {
         const tab = await chrome.tabs.get(remembered);
-        if (tab && tab.url && matchesModelUrl(tab.url, targetModel)) return tab;
+        const url = tab?.url || tab?.pendingUrl;
+        if (tab && url && matchesModelUrl(url, targetModel)) return tab;
       } catch {
       }
       mainTabs.delete(targetModel);
@@ -620,7 +621,15 @@
     }
     return success;
   }
-  async function ensureModelTab(targetModel = "gemini", opts) {
+  var opening = /* @__PURE__ */ new Map();
+  function ensureModelTab(targetModel = "gemini", opts) {
+    const busy = opening.get(targetModel);
+    if (busy) return busy;
+    const run = openModelTab(targetModel, opts).finally(() => opening.delete(targetModel));
+    opening.set(targetModel, run);
+    return run;
+  }
+  async function openModelTab(targetModel = "gemini", opts) {
     const targetUrl = MODEL_URLS[targetModel];
     if (!targetUrl) return null;
     const existing = await pickMainTab(targetModel);
