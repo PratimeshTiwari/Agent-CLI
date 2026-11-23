@@ -510,6 +510,20 @@ export async function closeMainTab(targetModel = 'gemini') {
   return true;
 }
 
+/**
+ * A Gemini tab the agent opened itself, through the OS (1.72.0): the one it
+ * opens at start, or a `/chrome` pairing link. Marked by the link, so it is
+ * never a tab of the person's. It was nobody's: the first `/effort` or prompt
+ * found no tab of ours and opened a second one beside it, and the models were
+ * never read, because only our own tabs are. Now it is the agent's main tab.
+ */
+export async function adoptAgentTab(tabId, targetModel = 'gemini') {
+  if (tabId === undefined || tabId === null || subagentTabs.has(tabId)) return false;
+  await claimOwnedTab(tabId);
+  mainTabs.set(targetModel, tabId);
+  return true;
+}
+
 export function forgetTab(tabId) {
   stopCompletionTicks(tabId);
   subagentTabs.delete(tabId);

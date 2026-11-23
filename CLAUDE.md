@@ -214,7 +214,11 @@ The rules, each with an incident behind it ([`docs/design/bridge.md`](docs/desig
 - **A fresh session starts in a new chat** (`_freshChatOwed`); `--continue`/`--resume` reopen the
   stored thread.
 - **One profile gets prompts** (`/chrome`, `profile-binding.js`): bound by a pairing link, never
-  a fallback to another profile.
+  a fallback to another profile; a switch closes the old profile's agent tab.
+- **A tab the agent opens is the agent's:** its links carry `#g7k=` (`o` at start, a code for
+  pairing), adopted on `content_script_ready` and then removed from the address.
+- **A stopped copy of the content script answers nothing** (`bridgeInvalidated`): the worker
+  re-injects into every Gemini tab on start (`stopped-copy.test.js`).
 - **A provider error resends the failed prompt** after 3 s then 8 s; a usage limit steps the model
   down instead (`core/turn/reply-recovery.js`).
 - **Tool amnesia** ("I cannot access your files"): a new thread re-teaches the whole prompt
@@ -410,6 +414,8 @@ Details: [`docs/design/state-and-sessions.md`](docs/design/state-and-sessions.md
   equal.
 - The panels follow the terminal's design and its colour roles; `panelState()` sends what they show,
   so they keep no copy.
+- **Start agent** in the VS Code sidebar runs `agent` in a terminal made with `hideFromUser`
+  (`agent-terminal.js`); **Show Agent Terminal** reveals it. A hangup (window closed) closes the tab.
 
 Details: [`docs/design/companion-and-panels.md`](docs/design/companion-and-panels.md).
 

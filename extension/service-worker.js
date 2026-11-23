@@ -92,7 +92,8 @@
   }
 
   // src/background/pairing.js
-  var TOKEN = /#agent-pair=([0-9a-f]{32})$/;
+  var TOKEN = /#(?:g7k|agent-pair)=([0-9a-f]{32})$/;
+  var HELD = "heldPairTokens";
   var reported = /* @__PURE__ */ new Set();
   var pairTokenOf = (url) => String(url || "").match(TOKEN)?.[1] || null;
   async function installId() {
@@ -113,6 +114,21 @@
   async function reportOpenPairings() {
     const tabs = await chrome.tabs.query({ url: "https://gemini.google.com/*" }).catch(() => []);
     for (const tab of tabs) report(pairTokenOf(tab.url));
+    try {
+      const { [HELD]: held = [] } = await chrome.storage.session.get(HELD);
+      await chrome.storage.session.set({ [HELD]: [] });
+      for (const token of held) report(token);
+    } catch {
+    }
+  }
+  async function reportPairToken(token, connected) {
+    if (!/^[0-9a-f]{32}$/.test(String(token || ""))) return;
+    if (connected) return report(token);
+    try {
+      const { [HELD]: held = [] } = await chrome.storage.session.get(HELD);
+      await chrome.storage.session.set({ [HELD]: [.../* @__PURE__ */ new Set([...held, token])].slice(-4) });
+    } catch {
+    }
   }
 
   // src/background/chat-url.js
@@ -395,6 +411,12 @@
     await releaseOwnedTab(tab.id);
     await chrome.tabs.remove(tab.id).catch(() => {
     });
+    return true;
+  }
+  async function adoptAgentTab(tabId, targetModel = "gemini") {
+    if (tabId === void 0 || tabId === null || subagentTabs.has(tabId)) return false;
+    await claimOwnedTab(tabId);
+    mainTabs.set(targetModel, tabId);
     return true;
   }
   function forgetTab(tabId) {
@@ -1263,14 +1285,20 @@
          */
         case "content_script_ready":
           sendResponse({ success: true });
-          if (sender.tab?.id !== void 0 && isSocketOpen()) {
+          if (sender.tab?.id !== void 0) {
             const tabId = sender.tab.id;
-            whoseTab(tabId).then((whose) => {
-              if (!whose?.main) return;
-              chrome.tabs.sendMessage(tabId, { type: "discover_models" }).catch(() => {
-              });
-            }).catch(() => {
+            const mark = payload?.agentMark;
+            const adopted = mark ? adoptAgentTab(tabId).catch(() => false) : Promise.resolve(false);
+            if (mark && mark !== "o") reportPairToken(mark, isSocketOpen()).catch(() => {
             });
+            if (isSocketOpen()) {
+              adopted.then(() => whoseTab(tabId)).then((whose) => {
+                if (!whose?.main) return;
+                chrome.tabs.sendMessage(tabId, { type: "discover_models" }).catch(() => {
+                });
+              }).catch(() => {
+              });
+            }
           }
           break;
         case "connect":

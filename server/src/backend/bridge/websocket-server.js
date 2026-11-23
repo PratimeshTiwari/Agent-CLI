@@ -1229,7 +1229,15 @@ export class WebSocketServer {
    */
   _reviewExtensions() {
     for (const client of this.clients.values()) {
-      if (client.type === 'extension' && !this._admitsExtension(client)) this._refuseExtension(client, { quiet: true });
+      if (client.type === 'extension' && !this._admitsExtension(client)) {
+        // The profile it was is not the one chosen now (/chrome): its tab of
+        // ours goes with it (v9.9.9.6). Only the tab it opened for the agent.
+        this._send(client.ws, {
+          id: randomUUID(), type: 'close_main_tab',
+          payload: { targetModel: this.agentLoop?.mainModel || 'gemini' }, timestamp: Date.now(),
+        });
+        this._refuseExtension(client, { quiet: true });
+      }
     }
     for (const client of this.clients.values()) {
       if (client.type !== 'refused' || !this._admitsExtension(client)) continue;

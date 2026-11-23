@@ -56,7 +56,8 @@ function stubVscode(root, version = '1.107.0', { unregistered = [] } = {}) {
         return item;
       },
       showQuickPick: async (items) => items[items.length - 1],
-      createTerminal: (o) => ({ show() {}, sendText: (t) => executed.push(['terminal', o.cwd, t]) }),
+      createTerminal: (o) => { executed.push(['terminal', o.cwd, o]); return { show() {}, sendText: (t) => executed.push(['terminal', o.cwd, t]) }; },
+      onDidCloseTerminal: () => disposable,
       showTextDocument: async () => {},
     },
     languages: {
@@ -239,17 +240,18 @@ test('the companion activates and the chat view answers its page', async (t) => 
     assert.equal(webview.options.enableScripts, true);
   });
 
-  await t.test('no agent: the page is told why, and starting one is offered', async () => {
+  // 1.9.0: the offer is the sidebar's Start agent button, not a pop-up.
+  await t.test('no agent: the page is told why, with no pop-up', async () => {
     onMessage({ type: 'need_bridge' });
-    assert.deepEqual(posted.at(-1), { type: 'bridge', payload: { missing: 'no-agent' } });
-    assert.ok(shown.some((s) => /no agent is running/i.test(s)));
+    assert.deepEqual(posted.at(-1), { type: 'bridge', payload: { missing: 'no-agent', starting: false } });
+    assert.ok(!shown.some((s) => /no agent is running/i.test(s)), 'a pop-up on top of the button');
   });
 
   await t.test('a running agent: the page is given its port and token', () => {
     fs.mkdirSync(path.join(root, '.agent', 'state'), { recursive: true });
     fs.writeFileSync(path.join(root, '.agent', 'state', 'bridge.json'), JSON.stringify({ port: 7801, token: 'tok', pid: process.pid }));
     onMessage({ type: 'need_bridge' });
-    assert.deepEqual(posted.at(-1), { type: 'bridge', payload: { port: 7801, token: 'tok' } });
+    assert.deepEqual(posted.at(-1), { type: 'bridge', payload: { port: 7801, token: 'tok', starting: false } });
   });
 
   await t.test('a diff opens in the editor', async () => {
@@ -312,8 +314,23 @@ test('the companion activates and the chat view answers its page', async (t) => 
     assert.deepEqual(lines.map((l) => l.paths), [[a.fsPath, b.fsPath], [a.fsPath]]);
   });
 
-  await t.test('Start Agent runs `agent` in the folder', () => {
+  await t.test('Start Agent runs `agent` in the folder, in a hidden terminal (1.9.0)', () => {
+    fs.rmSync(path.join(root, '.agent', 'state', 'bridge.json'), { force: true }); // none running
     registered.commands.get('agentCli.startAgent')();
-    assert.ok(executed.some((a) => a[0] === 'terminal' && a[1] === root && a[2] === 'agent'));
+    const made = executed.find((a) => a[0] === 'terminal' && a[1] === root && typeof a[2] === 'object');
+    assert.ok(made, 'no terminal made in the folder');
+    assert.equal(made[2].hideFromUser, true);
+    const runs = process.platform === 'win32'
+      ? executed.some((a) => a[0] === 'terminal' && a[2] === 'agent')
+      : made[2].shellArgs.join(' ').includes('agent');
+    assert.ok(runs, 'agent is not what it runs');
+    assert.ok(registered.commands.has('agentCli.showAgentTerminal'));
+  });
+
+  await t.test('an agent already running for the folder is used, not a second one', () => {
+    fs.writeFileSync(path.join(root, '.agent', 'state', 'bridge.json'), JSON.stringify({ port: 7801, token: 'tok', pid: process.pid }));
+    const before = executed.filter((a) => a[0] === 'terminal').length;
+    registered.commands.get('agentCli.startAgent')();
+    assert.equal(executed.filter((a) => a[0] === 'terminal').length, before);
   });
 });

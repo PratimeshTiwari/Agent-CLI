@@ -66,6 +66,22 @@ extension adds the command with nothing bound, and the shortcut silently does no
 the day it shipped. The worker sends `floatingShortcut` on identify (`''` = unbound, `null` =
 unreadable) and the server's `shortcutNotice` says to set it at `chrome://extensions/shortcuts`.
 
+## Start agent, out of sight (companion 1.9.0, v9.9.9.6)
+
+Owner, 2026-11-23: "instead of starting in a visible terminal, should have a button start agent and it
+should start in a terminal hidden from user view like claude code sidebar". The agent is an Ink app and
+needs a real terminal, so it still gets one: `agent-terminal.js` makes it with `hideFromUser`, its own
+process a login, interactive shell running `exec agent` (the shim lives in `~/.local/bin`), so the
+terminal closes when the agent does and the exit code says why a start failed (127: not installed).
+`isTransient`, so a restored window does not bring back a second agent. The button lives in the VS Code
+shim (`media/vscode-shim.js`), under the "No agent is running" line, never in `panel.js`: Chrome's
+panel cannot start a process (`webview.test.js` checks both). One agent per folder: a live
+`bridge.json` means use it. **Show terminal** under the line, the terminal icon on the chat's title bar,
+or **Agent CLI: Show Agent Terminal** reveals it. The pop-up that offered to start one is gone. When the
+window closes, VS Code hangs the terminal up; the agent handles `SIGHUP` by closing its Gemini tab and
+leaving without a farewell (no one is reading, and asking the terminal for its cursor row would wait
+forever). `tabrig/`: `kill -HUP` on the agent closed its tab.
+
 ## From Gotchas
 
 - **A file dropped on a side panel is a tag too (v6.17, `onDropFiles` in `side-panel/panel.js`).**

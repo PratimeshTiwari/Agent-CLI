@@ -89,3 +89,20 @@ test('a tab that really navigated away is still let go', async () => {
   tabs.get(tab.id).url = 'https://example.com/';
   assert.equal(await worker.pickMainTab('gemini'), null);
 });
+
+/*
+ * 1.72.0, owner 2026-11-23: "efforts are not loaded on first start, changing
+ * effort opens a new tab still". The tab on screen was opened by the agent
+ * through the OS (the start link, or /chrome's pairing link), so it was not
+ * ours: /effort opened another, and its models were never read.
+ */
+test('a tab the agent opened is adopted: /effort uses it, and opens nothing', async () => {
+  reset();
+  const t = { id: ++nextId, url: 'https://gemini.google.com/app', status: 'complete' };
+  tabs.set(t.id, t); // opened by the OS, not by chrome.tabs.create
+  assert.equal(await worker.pickMainTab('gemini'), null, 'control: not ours before');
+  assert.equal(await worker.adoptAgentTab(t.id), true);
+  assert.equal((await worker.ensureModelTab('gemini')).id, t.id);
+  assert.equal(creates.length, 0, 'a second tab');
+  assert.deepEqual(await worker.whoseTab(t.id), { main: 'gemini' }, 'so its models are read');
+});
