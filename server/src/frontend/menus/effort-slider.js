@@ -52,6 +52,23 @@ export function stopModel(rung, models = [], modelConfig = {}) {
  * @returns {{label: string, locked: string[]} | null} null when the picker is
  *          unread or there is a real choice
  */
+/**
+ * The rungs the slider shows (v9.9.9.1). Max is left out when the browser has
+ * reported its models and none of them is Max's (no Argon, nothing after Pro):
+ * a stop that can never be chosen is noise. A **locked** Max stays, marked
+ * locked, because the account has it and could unlock it. Until the list is
+ * known every rung shows, as before.
+ */
+export function effortLevels(levels, models = [], modelConfig = {}) {
+  const known = (models || []).some((m) => m && m.label && !m.isMode);
+  if (!known) return levels;
+  return levels.filter((rung) => {
+    if (rung.id !== 'max') return true;
+    if (stopModel(rung, models, modelConfig).available) return true;
+    return Boolean(lockedReason(rung.id, (models || []).filter((m) => m && m.label), browserModelPin(modelConfig, rung.id)));
+  });
+}
+
 export function onlyModel(models = []) {
   const options = (models || []).filter((m) => m && m.label && !m.isMode);
   const open = options.filter((m) => !m.locked);
@@ -85,6 +102,19 @@ export function tabDiffers(stop, models = []) {
  *            labels: Array<{text: string, col: number}>}}
  *          `labels[i].col` is where that level's name starts, relative to `indent`
  */
+/**
+ * The `⚠ browser …` on the slider's model line (v9.9.9.1, issue #180): only
+ * under the **current** effort. It compared the tab with whichever stop the
+ * marker was on, so browsing to Low with the tab on Pro (which High maps to,
+ * and which is right) warned "⚠ browser 3.1 Pro" on every stop but the
+ * current one. Browsing is not a mismatch; the tab differing from the effort
+ * you are on is.
+ */
+export function sliderWarning({ markedId, currentId, stop, models = [] }) {
+  if (markedId !== currentId) return null;
+  return tabDiffers(stop, models);
+}
+
 export function sliderLayout({ levels, at = 0, width = 80 }) {
   const n = levels.length;
   const names = levels.map((l) => l.name.toLowerCase());

@@ -11,7 +11,7 @@ import { oneLine } from '../text.js';
 import { helpPage, nextTab, commandRows, HELP_TABS, HELP_CHROME_ROWS } from '../menus/help.js';
 import { panelRoom, wrapLines, cutStart } from '../menus/panel.js';
 import { filterUnderline, settingsKeys, stepValue } from '../menus/settings-view.js';
-import { sliderLayout, stopModel, tabDiffers, onlyModel, onlyModelLine, stepThinking, thinkingLine } from '../menus/effort-slider.js';
+import { sliderLayout, stopModel, tabDiffers, onlyModel, onlyModelLine, stepThinking, thinkingLine, effortLevels, sliderWarning } from '../menus/effort-slider.js';
 import { thinkingStops, normaliseThinkingSetting } from '../../backend/core/models/thinking.js';
 import { Panel, Choices } from './Panel.jsx';
 import { ChromeProfiles } from './ChromeProfiles.jsx';
@@ -338,7 +338,10 @@ export function Menus({
     // or a digit applies. Nothing applies on a move, so esc changes nothing.
     if (activeMenu?.type === 'effort') {
       const current = resolveEffort(agentLoop.modelConfig?.effort).id;
-      const at = Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === (activeMenu.at || current)));
+      // Max is not offered on an account without it (v9.9.9.1, `effortLevels`).
+      const LEVELS = effortLevels(EFFORT_LEVELS, agentLoop.modelOptions, agentLoop.modelConfig);
+      const found = LEVELS.findIndex((e) => e.id === (activeMenu.at || current));
+      const at = found >= 0 ? found : LEVELS.length - 1;
       // The Thinking row (v9.9.3), only on an account whose picker has levels.
       const tStops = thinkingStops(agentLoop.modelOptions || []);
       const tSetting = normaliseThinkingSetting(agentLoop.modelConfig?.thinking);
@@ -353,8 +356,8 @@ export function Menus({
         return;
       }
       const digitPick = /^[1-9]$/.test(_char) ? Number(_char) - 1 : -1;
-      if (tStops.length && tAt !== tSetting && (key.return || (digitPick >= 0 && digitPick < EFFORT_LEVELS.length))) {
-        const effortId = EFFORT_LEVELS[key.return ? at : digitPick].id;
+      if (tStops.length && tAt !== tSetting && (key.return || (digitPick >= 0 && digitPick < LEVELS.length))) {
+        const effortId = LEVELS[key.return ? at : digitPick].id;
         // Only thinking moved: its answer is the reply. Both: thinking is set
         // first, quietly, and the effort row answers (the status bar says the level).
         if (effortId === current) {
@@ -367,13 +370,13 @@ export function Menus({
         return;
       }
       if (key.leftArrow || key.rightArrow) {
-        const next = Math.max(0, Math.min(EFFORT_LEVELS.length - 1, at + (key.leftArrow ? -1 : 1)));
-        if (next !== at) setActiveMenu({ ...activeMenu, at: EFFORT_LEVELS[next].id });
+        const next = Math.max(0, Math.min(LEVELS.length - 1, at + (key.leftArrow ? -1 : 1)));
+        if (next !== at) setActiveMenu({ ...activeMenu, at: LEVELS[next].id });
         return;
       }
       const digit = /^[1-9]$/.test(_char) ? Number(_char) - 1 : -1;
-      if (key.return || (digit >= 0 && digit < EFFORT_LEVELS.length)) {
-        applyAndReturn(activeMenu, 'effort', [EFFORT_LEVELS[key.return ? at : digit].id]);
+      if (key.return || (digit >= 0 && digit < LEVELS.length)) {
+        applyAndReturn(activeMenu, 'effort', [LEVELS[key.return ? at : digit].id]);
         return;
       }
     }
@@ -748,20 +751,22 @@ export function Menus({
            * `sliderLayout` at an exact width; keys are in the `useInput` above.
            */
           const current = resolveEffort(agentLoop.modelConfig?.effort).id;
-          const at = Math.max(0, EFFORT_LEVELS.findIndex((e) => e.id === (activeMenu.at || current)));
-          const marked = EFFORT_LEVELS[at];
-          const s = sliderLayout({ levels: EFFORT_LEVELS, at, width: W });
+          const LEVELS = effortLevels(EFFORT_LEVELS, agentLoop.modelOptions, agentLoop.modelConfig);
+          const found = LEVELS.findIndex((e) => e.id === (activeMenu.at || current));
+          const at = found >= 0 ? found : LEVELS.length - 1;
+          const marked = LEVELS[at];
+          const s = sliderLayout({ levels: LEVELS, at, width: W });
           const pad = ' '.repeat(s.indent);
           // The spaces that centre `text` under the bar.
           const lead = (text) => ' '.repeat(Math.max(1, s.indent + Math.floor((s.span - text.length) / 2)));
           // Each stop names the model it maps to on this account (C2).
-          const stops = EFFORT_LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
+          const stops = LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
           const model = stops[at];
           // One model on the account (v9.9.1): say so, rather than "Auto" under every stop.
           const only = onlyModel(agentLoop.modelOptions);
           const modelText = only ? onlyModelLine(only) : model.text;
           const tick = marked.id === current ? '  ✔ current' : '';
-          const differs = tabDiffers(model, agentLoop.modelOptions);
+          const differs = sliderWarning({ markedId: marked.id, currentId: current, stop: model, models: agentLoop.modelOptions });
           const warn = differs ? `  ⚠ browser ${differs}` : '';
           // The Thinking row (v9.9.3): absent on an account with no levels.
           const tStops = thinkingStops(agentLoop.modelOptions || []);
@@ -784,7 +789,7 @@ export function Menus({
             <Panel width={W} title="Effort" tight={tight}
               keys={thinking
                 ? `↑↓ effort or thinking · ←/→ adjust · enter confirm · esc cancel`
-                : `←/→ adjust · 1–${EFFORT_LEVELS.length} or enter confirm · esc cancel`}>
+                : `←/→ adjust · 1–${LEVELS.length} or enter confirm · esc cancel`}>
               {tight ? null : <Text dimColor wrap="truncate">{pad}{s.ends}</Text>}
               <Text wrap="truncate">
                 {pad}<Text color={T.muted}>{s.bar.before}</Text>
@@ -801,7 +806,7 @@ export function Menus({
                       {gap}
                       {i === at
                         ? <Text bold color={T.accent}>{label.text}</Text>
-                        : <Text dimColor={EFFORT_LEVELS[i].id !== current || !stops[i].available}>{label.text}</Text>}
+                        : <Text dimColor={LEVELS[i].id !== current || !stops[i].available}>{label.text}</Text>}
                     </React.Fragment>
                   );
                 })}

@@ -3282,6 +3282,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, deferred: true });
         return false;
       }
+      // A read already running answers this one too (v9.9.9.1): a new tab is
+      // asked both when it is created and when it says it is ready.
+      if (pickerInFlight > 0) {
+        sendResponse({ success: true, coalesced: true });
+        return false;
+      }
       readModelOptions()
         .then((models) => safeSend({ type: 'model_options', payload: { models } }))
         .catch((err) => safeSend({

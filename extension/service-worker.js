@@ -1241,6 +1241,15 @@
          */
         case "content_script_ready":
           sendResponse({ success: true });
+          if (sender.tab?.id !== void 0 && isSocketOpen()) {
+            const tabId = sender.tab.id;
+            whoseTab(tabId).then((whose) => {
+              if (!whose?.main) return;
+              chrome.tabs.sendMessage(tabId, { type: "discover_models" }).catch(() => {
+              });
+            }).catch(() => {
+            });
+          }
           break;
         case "connect":
           sendResponse({ success: true, connected: isSocketOpen() });
