@@ -1178,6 +1178,8 @@ export async function injectPromptIntoModel(payload) {
           url: targetUrl,
           detail: openFailure,
           message: 'Could not open a Gemini tab · open a Chrome window and send again',
+          // Whose prompt failed (v9.9.9, 1.68.0), so a late failure cannot end a later turn.
+          ...(payload?.sendId ? { sendId: payload.sendId } : {}),
         },
       };
       broadcastToSidePanel(errorMsg);
@@ -1207,6 +1209,7 @@ export async function injectPromptIntoModel(payload) {
           op: 'chat_unreachable', stage: 'navigate', targetModel,
           wanted: placed.wanted, landed: placed.landed,
           message: 'Could not get back to this session\'s chat',
+          ...(payload?.sendId ? { sendId: payload.sendId } : {}),
         },
       };
       broadcastToSidePanel(errorMsg);
@@ -1244,6 +1247,7 @@ export async function injectPromptIntoModel(payload) {
         // Whose prompt it was (1.58.0): a subagent's failure is that request's,
         // and must not end the user's turn in another tab.
         ...(payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}),
+        ...(payload?.sendId ? { sendId: payload.sendId } : {}),
       },
     };
     lastTabFailure = null;
@@ -1271,6 +1275,7 @@ export function reportInjectFailure(payload, err) {
         ? 'A subagent\'s gemini tab failed · your turn goes on without it'
         : 'Could not open a Gemini tab · open a Chrome window and send again',
       ...(payload?.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}),
+      ...(payload?.sendId ? { sendId: payload.sendId } : {}),
     },
   };
   broadcastToSidePanel(errorMsg);

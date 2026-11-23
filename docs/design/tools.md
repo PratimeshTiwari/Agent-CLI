@@ -42,6 +42,17 @@ needs `LOOKS_LIKE_TOOL_CALL`, the `"name"` key the contract requires. A block th
 is also no longer deleted: it returned `''` unconditionally, so a model answering "your config
 should be:" had the answer removed from its own reply.
 
+**Calls written as markup (v9.9.9, `_takeMarkupCalls`).** Reported 2026-11-22, "why tool call is
+not made": on the Auto model at low effort, with the full prompt and its ```` ```json ````
+examples on turn 0, Gemini answered "what is this project about?" with
+`<tool_call name="list_directory" args='{}' /> <tool_call name="read_file" args='{"path":
+"README.md"}' />`. No prompt file shows that shape. The brace scan found `{}` and
+`{"path": …}`, neither with a `name`, so the markup was the answer and nothing ran, and no
+nudge fired: the reply neither promised to look nor held broken JSON. Both shapes (args as an
+attribute on a self-closing tag, args as the body) are now calls, in written order, only for a
+name in `TOOL_CATALOG` and only when the args are JSON, so markup quoted in prose stays text.
+Each is logged as the notice `tool_call_markup`, so `/logs` says how often the model drifts.
+
 **A running command shows its last five lines (v5.21), like Claude Code's Bash rows.** `run_command`
 was silent until it exited. `exec` keeps collecting exactly as before — the model's result cannot
 change because the screen watches — and listeners on the child's streams feed `core/commands/output-tail.js`,

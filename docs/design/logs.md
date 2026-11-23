@@ -52,6 +52,13 @@ feature working, or *a watchdog gave up*, where the deadline was shorter than th
 with no clock is a flag that ages into a lie. **Never demote by op name** — the op is what
 the two cases share.
 
+**Three notices since v9.9.9** (`sendId`, see `bridge.md`): `outdated_reply` (a reply to an
+earlier prompt, dropped; `heldByTab` says whether it freed the lane), `outdated_failure` (an
+earlier prompt's tab failure, which no longer ends the turn in flight), and `tool_call_markup`
+(calls taken from `<tool_call>` markup, with their names). `stale_response` still means a reply
+after the turn had ended; these mean a reply during a *later* turn, which used to be read as its
+answer.
+
 **And how loudly something is recorded must not decide what the bridge does about it.** The
 `error` case still settles `NON_FATAL_EXTENSION_OPS` and resolves `session_lost` regardless
 of level. **It holds the other way too, and 1.41.0 shipped proof:** `menu_left_open` was a

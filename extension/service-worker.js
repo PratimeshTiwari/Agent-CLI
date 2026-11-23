@@ -713,7 +713,9 @@
             targetModel,
             url: targetUrl,
             detail: openFailure,
-            message: "Could not open a Gemini tab \xB7 open a Chrome window and send again"
+            message: "Could not open a Gemini tab \xB7 open a Chrome window and send again",
+            // Whose prompt failed (v9.9.9, 1.68.0), so a late failure cannot end a later turn.
+            ...payload?.sendId ? { sendId: payload.sendId } : {}
           }
         };
         broadcastToSidePanel(errorMsg);
@@ -734,7 +736,8 @@
             targetModel,
             wanted: placed.wanted,
             landed: placed.landed,
-            message: "Could not get back to this session's chat"
+            message: "Could not get back to this session's chat",
+            ...payload?.sendId ? { sendId: payload.sendId } : {}
           }
         };
         broadcastToSidePanel(errorMsg);
@@ -762,7 +765,8 @@
           message: payload.isSubagent ? `A subagent's ${targetModel} tab failed \xB7 your turn goes on without it` : `Communication with the ${targetModel} tab failed \xB7 check the browser`,
           // Whose prompt it was (1.58.0): a subagent's failure is that request's,
           // and must not end the user's turn in another tab.
-          ...payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}
+          ...payload.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {},
+          ...payload?.sendId ? { sendId: payload.sendId } : {}
         }
       };
       lastTabFailure = null;
@@ -780,7 +784,8 @@
         targetModel: payload?.targetModel || "gemini",
         detail: err?.message,
         message: payload?.isSubagent ? "A subagent's gemini tab failed \xB7 your turn goes on without it" : "Could not open a Gemini tab \xB7 open a Chrome window and send again",
-        ...payload?.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {}
+        ...payload?.isSubagent ? { isSubagent: true, requestId: payload.requestId } : {},
+        ...payload?.sendId ? { sendId: payload.sendId } : {}
       }
     };
     broadcastToSidePanel(errorMsg);

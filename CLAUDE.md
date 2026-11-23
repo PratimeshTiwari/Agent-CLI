@@ -202,7 +202,10 @@ The rules, each with an incident behind it ([`docs/design/bridge.md`](docs/desig
   would answer a question it never saw. Subagents keep `sendWithRepairs`. An unsubmitted prompt
   is resent once, verbatim (`_lastMainPrompt`).
 - **Two silent minutes** (`SILENT_REPLY_MS`) resend once, verbatim, in a fresh tab on the same
-  chat; a second silence ends the turn.
+  chat; a second silence ends the turn. The clock starts at `accepted` and stream text stops it
+  (`noteReplyProgress`); any turn that dies with a reply owed stops the tab (`_stopOwedReply`).
+- **Every main prompt carries a `sendId`**, echoed on its replies, chunks and failures; anything
+  tagged for another prompt is dropped (`stale-reply-id.test.js`, `outdated-send.test.js`).
 - **A closed tab ends the turn and says so**, decided by the lane; never reopened and resent.
 - **A message the tab never sent is carried** in front of the next one (`carryUndelivered`).
 - **Every main prompt carries `threadUrl`**, and the tab is put back on the session's chat before
@@ -264,7 +267,8 @@ Details: [`docs/design/prompt-and-models.md`](docs/design/prompt-and-models.md).
   flag). Loop-answered tools (`ask_question`, `ask_subagent`, `manage_memory`) are in
   `core/turn/loop-tools.js`, derived from the catalog.
 - **Tool-call parsing:** only a fenced block tagged `json`, or an untagged one with a `"name"` key,
-  is a call. A block that yields no call stays in the reply.
+  is a call. A block that yields no call stays in the reply. `<tool_call name="…" …>` markup is
+  a call only for a catalog name with JSON args (`_takeMarkupCalls`).
 - **Reads go into the prompt as numbered text.** One that does not fit is cut by whole lines and
   names the missing range (`fitReadResult`). A partial read ends with the headings or definitions
   it did not show. An unranged read of a large file goes to a subagent for a digest when that is

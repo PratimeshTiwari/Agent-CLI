@@ -606,7 +606,11 @@ export class WebSocketServer {
         break;
 
       case 'gemini_response_stream':
-        // Content script sending partial/streaming response — forward to CLI
+        // Content script sending partial/streaming response — forward to CLI.
+        // The loop is told first (v9.9.9): text arriving is what stops the
+        // two-minute silence clock, and a chunk of an earlier prompt's reply
+        // must not be drawn under this one.
+        if (this.agentLoop.noteReplyProgress?.(payload) === false) break;
         if (this.agentLoop.callbacks) {
           this.agentLoop.callbacks.sendToPanel({
             id,
@@ -1003,6 +1007,19 @@ export class WebSocketServer {
          * too, and an allow-list of the ops that may stay alive cannot enforce
          * it: the next informational op would be killed the same way.
          */
+        /*
+         * A failure of a prompt this loop has moved past (v9.9.9): a stopped
+         * turn's prompt that failed after the next one had started. Ending the
+         * turn here would end the wrong one. Untagged errors (older
+         * extensions, picker ops) go on as before.
+         */
+        if (this.agentLoop.isOutdatedSend?.(payload?.sendId)) {
+          logNotice(this.agentLoop.workspace, {
+            flow: 'extension', op: 'outdated_failure',
+            message: `A failure of an earlier prompt arrived and was ignored (${payload?.op || 'error'})`,
+          });
+          break;
+        }
         // A thinking level that would not set (v9.9.3): one row, the turn goes on.
         if (payload?.op === 'set_thinking') {
           this.agentLoop.noteThinkingFailed?.(payload);

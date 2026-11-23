@@ -67,6 +67,39 @@ entry before changing the mechanism it describes.
   `/app/<id>`, then closes the stuck tab, which ends the silent generation so it cannot answer
   late. A second silence ends the turn with the failed-send line. Caveat: a model that thinks for
   over two minutes without text is resent too. Pty (`FAKE_SILENT_FIRST=1`, the real two minutes).
+  **Correction, v9.9.9:** "the first streamed text stops it" was not true. `gemini_response_stream`
+  went only to the screen (`websocket-server.js` relayed it as `response_stream`), so only a
+  finished reply stopped the clock, and any reply still being written two minutes after it was
+  *queued* was resent and its tab closed. The test that said text stops it fed a `gemini_response`
+  chunk the bridge never sends. One `silent_reply` in the 11-02 log fits. Chunks now go through
+  `noteReplyProgress` first, and the clock restarts when the tab reports `accepted`, so the queue,
+  the picker and typing into a hidden tab are not charged to Gemini.
+- **A reply says which prompt it answers (v9.9.9, extension 1.68.0, `sendId`).** Reported: "sometimes
+  prompt gets stuck or something takes extra time". Replies carried no id, and the only stale guard
+  was `!isProcessing`, so anything arriving after the next turn began was that turn's answer.
+  Reproduced against the real loop and lock: a stopped turn's late reply, a compaction summary past
+  its `_askThread` deadline (the lane stays held, so the next prompt queued behind it and was
+  answered by the summary), and a late reply freeing the lane under the turn in flight. Every
+  main-lane prompt now carries a `sendId`; the content script takes it when the observer starts
+  (`observedSend`, not `currentRequestData`, which the next inject replaces) and echoes it on
+  replies, chunks and timeouts; the worker echoes it on `no_tab`, `chat_unreachable` and
+  `tab_unreachable`. The loop drops anything tagged for another prompt (`_discardOutdatedReply`,
+  `isOutdatedSend`), freeing the lane only if that prompt was the one the tab held
+  (`_inTabSendId`). Untagged messages, from an older extension, are taken as before.
+- **A dying turn stops the tab, and the next prompt waits for it (v9.9.9).** Only esc sent
+  `stop_generation`; the second silence, the watchdog and an exception freed the lane and left
+  Gemini writing, so the next prompt was typed into a composer with no send button and spent
+  `waitForSendButton`'s 30 s before pressing Enter. `_stopOwedReply` sends the stop when the main
+  lane is held (never for a closed tab or a failed send), and an inject waits for the Stop button
+  to go, on the DOM's clock, up to 60 s (`busy_wait`; 8,038 ms in `tabrig/`, where `main`'s
+  extension spent the same wait in `send`). Found in `tabrig/` with the real extension: a stop
+  that landed while a prompt was still in `injectPrompt` (waiting on the picker) clicked nothing,
+  and the prompt was typed after esc; and a second inject arriving then overwrote
+  `currentRequestData` *before* being refused, so the worker reopened the chat in a fresh tab
+  (~8 s). A stop now sets `injectStopped`, checked before typing and before sending (a backed-out
+  prompt answers `cancelled`, not a failure, which would reopen the tab), and a refusal records
+  nothing. A panel message sent mid-turn was answered "busy" and dropped; it is held
+  (`_heldMessages`) and sent on the idle edge.
 - **A closed tab is noticed (v8.10, `noteTabClosed`, extension 1.61.0 `tab_closed`, `whoseTab`).**
   Owner: end the turn and say so, never reopen and resend. Decided by the **lane**, not
   `pendingGeminiResponse`, which no reply clears: a reply owed ends the turn and carries the message;
