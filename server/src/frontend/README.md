@@ -33,6 +33,7 @@ terminal.
 | a reply renders wrongly | `transcript/markdown.js` |
 | a tool row says the wrong thing | `transcript/tool-rows.js` and `transcript/action-row.js` |
 | a menu does not fit | `menus/panel.js` (`panelRoom`) |
+| the screen is wrong after `/workspace` | `CliUI.switchTo` in `cli-ui.jsx` remounts App under a new key on the new loop; nothing from the old App may survive it |
 
 **Run it in a real terminal.** Tests check the logic; only a terminal shows a frame. The harness
 described in CLAUDE.md, "Verifying anything a person sees", drives the CLI under a pty with a fake extension and

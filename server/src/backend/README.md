@@ -30,7 +30,7 @@ Inside `core/`, one folder per job:
 | `subagents/` | a subagent's tab session, large files read by a subagent | `subagent-session.js` |
 | `logs/` | failures, traces, tool usage, the command log | `error-log.js` |
 | `install/` | `agent doctor`, updates, restart, migration of old layouts, `/reset` | `doctor.js` |
-| `workspace/` | paths, workspaces, settings, the Chrome profile that gets prompts, `.agent/README.md` | `paths.js` |
+| `workspace/` | paths, workspaces, settings, the Chrome profile that gets prompts, `.agent/README.md`; everything built from a workspace, for start and switch alike | `paths.js`, `workspace-world.js` |
 
 `workspace/paths.js` is the only place a `.agent/` path is built. Import it; never write the path
 by hand.
@@ -59,6 +59,8 @@ by hand.
 | a command ran, or was blocked | `/commands` (`.agent/logs/commands/<date>.jsonl`) |
 | the prompt itself | `/context` for what feeds it; `/prompt` for the version and what it adds |
 | a package or tool is missing | `agent doctor` from the shell, `/doctor` inside |
+| after `/workspace`, something still acts on the old project | `core/workspace/workspace-world.js`: anything built from a path belongs in `buildWorld`, and goes in `disposeWorld`; `workspace-world.test.js` lists what is checked |
+| a second Gemini tab after a restart or `/update` | nothing on our side opens one now (`AGENT_CLI_RESTARTED`, `sendInjectPrompt`); see `docs/design/bridge.md`, v9.9.9.3 |
 
 A failure that is expected (no tab yet at connect, a user's stop) is written as a **notice**, not
 a failure; `/logs notices` lists them. Decide by "should someone act on this", never by op name.

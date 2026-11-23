@@ -206,6 +206,7 @@ conversation.
 | `/shell` | one shell command, then back to the prompt |
 | `/compact` | summarise now (it also offers to when the chat is nearly full) |
 | `/history` | past conversations; pick one to reopen |
+| `/workspace <path>` | switch to another project without restarting: same Gemini tab, a fresh chat; bare `/workspace` picks from recent ones |
 | `/files` | where this project's task list, plans, memory, conversations, logs and backups are; cmd+click opens one |
 | `/context` | what is in the window and which files feed the prompt |
 | `/subagents on·off` | parallel tabs for research and review |
