@@ -21,8 +21,11 @@
  */
 
 /** Where each site keeps the conversation id in its URL. */
+// The `/u/<n>/` account segment is optional (v9.9.9.2). It was not allowed, so
+// a profile whose Gemini runs as a second account (`/u/3/app/<id>`) never had
+// its chat recorded: no resume, no steering back to the chat, no link.
 const THREAD_PATTERNS = [
-  { model: 'gemini', re: /^https?:\/\/gemini\.google\.com\/app\/([A-Za-z0-9_-]+)/ },
+  { model: 'gemini', re: /^https?:\/\/gemini\.google\.com\/(?:u\/(\d+)\/)?app\/([A-Za-z0-9_-]+)/ },
 ];
 
 /**
@@ -40,9 +43,20 @@ export function threadFromUrl(url) {
   const text = String(url || '');
   for (const { model, re } of THREAD_PATTERNS) {
     const m = text.match(re);
-    if (m) return { model, id: m[1] };
+    if (m) return m[1] !== undefined ? { model, id: m[2], account: Number(m[1]) } : { model, id: m[2] };
   }
   return null;
+}
+
+/**
+ * The chat's own link (v9.9.9.2), on its account when one was recorded, so it
+ * opens where the conversation is rather than on the browser's first account.
+ * Null for a thread with no id.
+ */
+export function chatLink(thread) {
+  if (!thread?.id || (thread.model && thread.model !== 'gemini')) return null;
+  const account = Number.isInteger(thread.account) ? `u/${thread.account}/` : '';
+  return `https://gemini.google.com/${account}app/${thread.id}`;
 }
 
 /**

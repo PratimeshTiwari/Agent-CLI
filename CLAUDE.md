@@ -385,7 +385,7 @@ Details: [`docs/design/context-and-memory.md`](docs/design/context-and-memory.md
 - **Resuming restores four things**: transcript, `chatThread`, an `open_thread` to the extension,
   and a recap only when there is no thread. `--resume`/`--continue` go through
   `resumeThreadOnConnect`; the invariant is a reopened thread or a recap, never neither
-  (`resume-thread.test.js`).
+  (`resume-thread.test.js`). A thread keeps its `/u/<n>` account; links come from `chatLink`.
 - **Compaction** (`core/turn/compaction.js`) happens before the next message, never mid-turn, and
   is offered, not forced (Compact now / Continue in this chat). The summary is asked of the current
   chat and handed over once as `<compacted_context>` with the last 3 exchanges.
@@ -472,8 +472,9 @@ The frontend is Ink. Claude Code is the reference design.
 - **No mouse tracking.** Scroll, select and copy are the terminal's. `Ctrl+E` toggles verbosity for
   the whole transcript and is the only deliberate full clear.
 - **A child spawned while Ink is up must not inherit stderr.**
-- **Exit** erases back to the launch line and prints `agent --resume <id>`; ctrl+c is decided in
-  `cli-ui` (`exitOnCtrlC: false`).
+- **Exit** erases back to the launch line and prints `agent --resume <id>` and the chat's link; it
+  closes the agent's own tab (`close_main_tab`, owned tabs only), never on a restart. ctrl+c is
+  decided in `cli-ui` (`exitOnCtrlC: false`).
 
 Details: [`docs/design/terminal-ui.md`](docs/design/terminal-ui.md).
 

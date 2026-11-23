@@ -491,6 +491,25 @@ async function openTab(url, active = true) {
   }
 }
 
+/**
+ * The agent is exiting: close the tab it was working in (v9.9.9.2, 1.70.0).
+ *
+ * Owner, 2026-11-23: "if the agent is exiting, close the gemini tab along with
+ * it (only the tab that opened with the agent)". Only the main tab, and only
+ * an owned one — every owned tab is one this extension opened, never the
+ * person's — so `pickMainTab`, which reads nothing else, is the whole check.
+ * Forgotten before it is removed, so the close listener does not report it as
+ * a tab closed mid-turn. Subagent and session tabs close themselves already.
+ */
+export async function closeMainTab(targetModel = 'gemini') {
+  const tab = await pickMainTab(targetModel);
+  if (!tab) return false;
+  forgetTab(tab.id);
+  await releaseOwnedTab(tab.id); // awaited: the close listener reads storage
+  await chrome.tabs.remove(tab.id).catch(() => { /* already gone */ });
+  return true;
+}
+
 export function forgetTab(tabId) {
   stopCompletionTicks(tabId);
   subagentTabs.delete(tabId);
@@ -1407,7 +1426,9 @@ export async function openThread(thread) {
   const id = thread?.id;
   if (!id || !MODEL_URLS[model]) return false;
 
-  const url = `https://gemini.google.com/app/${id}`;
+  // On the chat's own account when it was recorded (v9.9.9.2).
+  const account = Number.isInteger(thread?.account) ? `u/${thread.account}/` : '';
+  const url = `https://gemini.google.com/${account}app/${id}`;
 
   try {
     const existing = await pickMainTab(model);

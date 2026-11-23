@@ -388,6 +388,15 @@
       return win.tabs[0];
     }
   }
+  async function closeMainTab(targetModel = "gemini") {
+    const tab = await pickMainTab(targetModel);
+    if (!tab) return false;
+    forgetTab(tab.id);
+    await releaseOwnedTab(tab.id);
+    await chrome.tabs.remove(tab.id).catch(() => {
+    });
+    return true;
+  }
   function forgetTab(tabId) {
     stopCompletionTicks(tabId);
     subagentTabs.delete(tabId);
@@ -841,7 +850,8 @@
     const model = thread?.model || "gemini";
     const id = thread?.id;
     if (!id || !MODEL_URLS[model]) return false;
-    const url = `https://gemini.google.com/app/${id}`;
+    const account = Number.isInteger(thread?.account) ? `u/${thread.account}/` : "";
+    const url = `https://gemini.google.com/${account}app/${id}`;
     try {
       const existing = await pickMainTab(model);
       const tab = existing ? await chrome.tabs.update(existing.id, { url, active: true }) : await openTab(url);
@@ -1096,6 +1106,9 @@
       }
       case "end_session":
         await endSession(payload?.sessionId);
+        break;
+      case "close_main_tab":
+        await closeMainTab(payload?.targetModel || "gemini");
         break;
       case "focus_tab":
         if (!await focusModelTab(payload?.targetModel)) reportTabFailure("focus_tab");

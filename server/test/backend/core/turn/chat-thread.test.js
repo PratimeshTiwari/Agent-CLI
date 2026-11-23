@@ -104,3 +104,22 @@ describe('planResume — three outcomes, because they are three promises', () =>
     ), false);
   });
 });
+
+// v9.9.9.2: a chat on a second account (`/u/3/app/<id>`) was not recognised,
+// so its session never recorded a thread: no resume, no link.
+import { chatLink } from '../../../../src/backend/core/turn/chat-thread.js';
+
+test('a chat on another account is recognised, with its account', () => {
+  assert.deepEqual(threadFromUrl('https://gemini.google.com/u/3/app/bfaf9b2dad21f688'),
+    { model: 'gemini', id: 'bfaf9b2dad21f688', account: 3 });
+  assert.deepEqual(threadFromUrl(GEM), { model: 'gemini', id: 'bfaf9b2dad21f688' }, 'the default account is unchanged');
+  assert.equal(sameThread(threadFromUrl('https://gemini.google.com/u/3/app/bfaf9b2dad21f688'), threadFromUrl(GEM)), true,
+    'the same chat, whichever way it was written');
+});
+
+test('the chat link opens on the chat\'s own account', () => {
+  assert.equal(chatLink({ model: 'gemini', id: 'abc', account: 3 }), 'https://gemini.google.com/u/3/app/abc');
+  assert.equal(chatLink({ model: 'gemini', id: 'abc' }), 'https://gemini.google.com/app/abc');
+  assert.equal(chatLink(null), null);
+  assert.equal(chatLink({ model: 'gemini' }), null);
+});

@@ -13,7 +13,13 @@ there was no conversation).** Startup asks the cursor row (`ESC[6n`) before the 
 longer `console.clear()`s; `frontend/screen/screen-span.js` follows every byte written (stdout.write is wrapped)
 and moves that row up on each scroll; exit asks again and rewinds only if the two agree — else (the
 launch line scrolled off, ctrl+e cleared, no answer) it clears screen and scrollback and puts the
-footer at the top. The reports are matched out of stdin before Ink sees them. The pty driver answers
+footer at the top. The reports are matched out of stdin before Ink sees them. **Since v9.9.9.2**
+the footer also names the Gemini chat (`Gemini chat: <link>`, on its account), and exit closes the
+agent's own tab (owner: "close the gemini tab along with it, only the tab that opened with the
+agent"): `exitWithFarewell` sends `close_main_tab` and waits 150 ms for the frame to leave; `leave`
+alone, which restarts use, does not. The worker closes only `pickMainTab`'s tab, an owned one, and
+forgets it first so no `tab_closed` follows (`tabrig/`: the agent's tab went, a Gemini tab opened
+beside it stayed). `/history` rows carry the chat as an OSC 8 link (cmd+click). The pty driver answers
 `ESC[6n` from a live pyte screen (`NO_DSR=1` for the fallback). An *exact* Claude Code exit for a
 session longer than one screen needs the alternate screen, which costs native scrollback. Every way out — a double ctrl+c, `/exit`, SIGINT, SIGTERM — calls Ink's `clear()`
 (erases only the live frame and syncs its log, so the final render on unmount writes nothing),

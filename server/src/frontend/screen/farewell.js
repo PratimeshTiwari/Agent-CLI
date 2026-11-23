@@ -35,6 +35,7 @@
  * plain `node --test` can import it.
  */
 import { leave } from '../../backend/core/install/restart.js';
+import { chatLink } from '../../backend/core/turn/chat-thread.js';
 import { rewindSequence } from './screen-span.js';
 import { restoreTerminalBackground } from './terminal-bg.js';
 
@@ -85,7 +86,7 @@ export function registerInk(instance) {
  * @param {boolean} [opts.dim] - wrap each line in SGR dim. Ink is unmounted by
  *   now, so this is a raw escape; the caller decides whether the stream wants it.
  */
-export function farewellText(id, { workspace = null, cwd = process.cwd(), dim = false } = {}) {
+export function farewellText(id, { workspace = null, cwd = process.cwd(), dim = false, chat = null } = {}) {
   // Nothing worth resuming: say nothing. The screen above already shows
   // that nothing happened, and a sentence about it is noise on every exit.
   if (!id) return '';
@@ -93,7 +94,9 @@ export function farewellText(id, { workspace = null, cwd = process.cwd(), dim = 
   // Per line rather than around the block, so a terminal that resets SGR at a
   // newline (some do) still draws the second line dim.
   const paint = (line) => (dim ? `\x1b[2m${line}\x1b[22m` : line);
-  return `\n${paint('Resume this session with:')}\n${paint(`agent --resume ${id}${where}`)}\n`;
+  // The Gemini chat it ran in (v9.9.9.2), since exit closes its tab.
+  const link = chat ? `\n${paint(`Gemini chat: ${chat}`)}` : '';
+  return `\n${paint('Resume this session with:')}\n${paint(`agent --resume ${id}${where}`)}${link}\n`;
 }
 
 /**
@@ -118,7 +121,9 @@ export function farewellFor(agentLoop, { cwd = process.cwd(), dim = false } = {}
   } catch {
     id = null; // a farewell must never stop the exit
   }
-  return farewellText(id, { workspace: agentLoop?.workspace, cwd, dim });
+  let chat = null;
+  try { chat = chatLink(agentLoop?.chatThread); } catch { chat = null; }
+  return farewellText(id, { workspace: agentLoop?.workspace, cwd, dim, chat });
 }
 
 /** `clear`: screen, scrollback, cursor home. */
@@ -173,8 +178,11 @@ export async function exitWithFarewell({ agentLoop, wsServer, code = 0, out = pr
   try { ink?.unmount(); } catch { /* going anyway */ }
   // The terminal's own background back (amoled), before the footer is printed on it.
   try { out.write(restoreTerminalBackground({ write: false }) + exitText(agentLoop, out, { rewindTo })); } catch { /* going anyway */ }
+  // The agent's own Gemini tab goes with it (v9.9.9.2, owner's ask). Sent
+  // before the socket closes; the short wait lets the frame leave.
+  const closing = Boolean(agentLoop?.closeTabOnExit?.());
   if (exit) return exit(code); // test seam: `leave` ends in process.exit
-  await leave(code, { wsServer, agentLoop, delay: 0 });
+  await leave(code, { wsServer, agentLoop, delay: closing ? 150 : 0 });
 }
 
 /** Test seam. */
