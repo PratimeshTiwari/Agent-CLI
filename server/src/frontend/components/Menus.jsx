@@ -338,13 +338,15 @@ export function Menus({
     // `/effort` is a slider: ←/→ move the marker and stop at the ends, enter
     // or a digit applies. Nothing applies on a move, so esc changes nothing.
     if (activeMenu?.type === 'effort') {
+      // Live, or last launch's until the tab answers (v9.9.9.4); display only.
+      const shown = agentLoop.shownModelOptions ?? agentLoop.modelOptions ?? [];
       const current = resolveEffort(agentLoop.modelConfig?.effort).id;
       // Max is not offered on an account without it (v9.9.9.1, `effortLevels`).
-      const LEVELS = effortLevels(EFFORT_LEVELS, agentLoop.modelOptions, agentLoop.modelConfig);
+      const LEVELS = effortLevels(EFFORT_LEVELS, shown, agentLoop.modelConfig);
       const found = LEVELS.findIndex((e) => e.id === (activeMenu.at || current));
       const at = found >= 0 ? found : LEVELS.length - 1;
       // The Thinking row (v9.9.3), only on an account whose picker has levels.
-      const tStops = thinkingStops(agentLoop.modelOptions || []);
+      const tStops = thinkingStops(shown);
       const tSetting = normaliseThinkingSetting(agentLoop.modelConfig?.thinking);
       const tAt = activeMenu.thinking || tSetting;
       if (tStops.length && (key.upArrow || key.downArrow)) {
@@ -751,8 +753,10 @@ export function Menus({
            * under it, and what the marked one is on two lines below. Laid out by
            * `sliderLayout` at an exact width; keys are in the `useInput` above.
            */
+          // Live, or last launch's until the tab answers (v9.9.9.4); display only.
+          const shown = agentLoop.shownModelOptions ?? agentLoop.modelOptions ?? [];
           const current = resolveEffort(agentLoop.modelConfig?.effort).id;
-          const LEVELS = effortLevels(EFFORT_LEVELS, agentLoop.modelOptions, agentLoop.modelConfig);
+          const LEVELS = effortLevels(EFFORT_LEVELS, shown, agentLoop.modelConfig);
           const found = LEVELS.findIndex((e) => e.id === (activeMenu.at || current));
           const at = found >= 0 ? found : LEVELS.length - 1;
           const marked = LEVELS[at];
@@ -761,21 +765,21 @@ export function Menus({
           // The spaces that centre `text` under the bar.
           const lead = (text) => ' '.repeat(Math.max(1, s.indent + Math.floor((s.span - text.length) / 2)));
           // Each stop names the model it maps to on this account (C2).
-          const stops = LEVELS.map((e) => stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig));
+          const stops = LEVELS.map((e) => stopModel(e, shown, agentLoop.modelConfig));
           const model = stops[at];
           // One model on the account (v9.9.1): say so, rather than "Auto" under every stop.
-          const only = onlyModel(agentLoop.modelOptions);
+          const only = onlyModel(shown);
           const modelText = only ? onlyModelLine(only) : model.text;
           const tick = marked.id === current ? '  ✔ current' : '';
           const differs = sliderWarning({ markedId: marked.id, currentId: current, stop: model, models: agentLoop.modelOptions });
           const warn = differs ? `  ⚠ browser ${differs}` : '';
           // The Thinking row (v9.9.3): absent on an account with no levels.
-          const tStops = thinkingStops(agentLoop.modelOptions || []);
+          const tStops = thinkingStops(shown);
           const thinking = tStops.length ? thinkingLine({
             stops: tStops,
             at: activeMenu.thinking || normaliseThinkingSetting(agentLoop.modelConfig?.thinking),
             rung: marked.id,
-            options: agentLoop.modelOptions || [],
+            options: shown,
           }) : null;
           const onThinking = Boolean(thinking) && activeMenu.row === 'thinking';
           const { tight } = fit('', thinking ? 6 : 5);
@@ -1256,8 +1260,10 @@ export function Menus({
           // Option C′ (`frontend/menus/settings-view.js`): the filter on top, underlined;
           // switches and ladders that ←/→ change in place; the hint on the
           // selected row. Tabs drawn as `/help` draws them.
+          // Live, or last launch's until the tab answers (v9.9.9.4); display only.
+          const knownModels = agentLoop.shownModelOptions ?? agentLoop.modelOptions ?? [];
           const stops = Object.fromEntries(EFFORT_LEVELS.map((e) =>
-            [e.id, stopModel(e, agentLoop.modelOptions, agentLoop.modelConfig)]));
+            [e.id, stopModel(e, knownModels, agentLoop.modelConfig)]));
           const pending = activeMenu.pending || {};
           const shown = matches.map((row) => {
             const value = pending[row.label] ?? row.value;

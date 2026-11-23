@@ -72,7 +72,9 @@ test('each stop names its model on this account', async () => {
 test('the menu draws the stop\'s model, dimmed when unavailable', () => {
   const menus = readFileSync(new URL('../../../src/frontend/components/Menus.jsx', import.meta.url), 'utf8');
   const block = menus.slice(menus.indexOf("activeMenu?.type === 'effort' && (() =>"));
-  assert.match(block, /stopModel\(e, agentLoop\.modelOptions, agentLoop\.modelConfig\)/);
+  // `shown` since v9.9.9.4: the live list, or the last launch's until the tab answers.
+  assert.match(block, /stopModel\(e, shown, agentLoop\.modelConfig\)/);
+  assert.match(block, /const shown = agentLoop\.shownModelOptions/);
   assert.match(block, /dimColor=\{!model\.available\}/);
   assert.doesNotMatch(block.slice(0, block.indexOf('</Panel>')), /marked\.browser/,
     'the generic family name is back under the bar');

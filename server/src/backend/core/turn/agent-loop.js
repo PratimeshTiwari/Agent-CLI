@@ -185,6 +185,7 @@ import { ContextManager } from '../../context/context-manager.js';
 import { McpServers } from '../../mcp/client/servers.js';
 import { MemoryManager } from '../../context/memory-manager.js';
 import { ExtensionLock, mainLane, subLane, laneFor } from '../../bridge/extension-lock.js';
+import { loadSavedModels, saveModels } from '../models/saved-models.js';
 import { runBatchTask } from './turn-runner.js';
 import { requiresApproval, isBlockedOutright } from '../policy/tool-policy.js';
 import { runExternalTool } from '../policy/external-approval.js';
@@ -556,6 +557,9 @@ export class AgentLoop {
      */
     this._freshChatOwed = !this._resumeOnConnect;
     this.browserProfile = new ProfileBinding();
+    // The last list the browser reported, for display until the tab answers
+    // (v9.9.9.4, `core/models/saved-models.js`). Never used to decide anything.
+    this.savedModelOptions = loadSavedModels(this._modelsKey());
     // Warm start (v5.27): `~/.agent/settings.json`, per person. Read once; the
     // first extension to identify spends it (`warmUpOnConnect`).
     this.startupMode = startupMode();
@@ -2245,6 +2249,9 @@ export class AgentLoop {
     clearTimeout(this._modelOptionsWatchdog);
     this._modelOptionsWatchdog = null;
     this.modelOptions = models;
+    // Remembered for the next launch's first frame (v9.9.9.4).
+    const kept = saveModels(models, this._modelsKey());
+    if (kept) this.savedModelOptions = kept;
     // A fresh reading ends the suppression whether it agrees or not: from here
     // a disagreement is standing rather than in flight, and worth the row.
     // Before the emit, which the panels' footer reads.
@@ -2966,6 +2973,20 @@ export class AgentLoop {
     } catch { return false; }
   }
 
+  /**
+   * What the screens show as the account's models (v9.9.9.4): the live list,
+   * or the one saved last time until the tab answers. Display only — every
+   * decision reads `modelOptions`.
+   */
+  get shownModelOptions() {
+    return this.modelOptions?.length ? this.modelOptions : (this.savedModelOptions || []);
+  }
+
+  /** Which saved list is this profile's: the bound Chrome install, else `default`. */
+  _modelsKey() {
+    return this.browserProfile?.current?.install || 'default';
+  }
+
   /** The model the main conversation runs on. Subagents name their own. */
   get mainModel() {
     return this.modelConfig.main || 'gemini';
@@ -3371,7 +3392,7 @@ export class AgentLoop {
       // it maps to on this account (the terminal's slider says the same), and
       // each mode with the line the terminal's status row uses for it.
       efforts: EFFORT_LEVELS.map((rung) => {
-        const options = (this.modelOptions || []).filter((m) => m && m.label && !m.isMode);
+        const options = (this.shownModelOptions ?? this.modelOptions ?? []).filter((m) => m && m.label && !m.isMode);
         if (options.length === 0) return { id: rung.id, name: rung.name, model: rung.browser, available: true };
         const pick = pickModelFor(rung.id, options, browserModelPin(this.modelConfig, rung.id));
         if (pick) return { id: rung.id, name: rung.name, model: pick.model.label, available: true };

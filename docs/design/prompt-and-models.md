@@ -90,6 +90,16 @@ now asks the agent's main tab on `content_script_ready` (extension 1.69.0); `tab
 `reload-main` shows the read after a reload, and none with 1.68.0. **Issue #180:** the slider's
 `⚠ browser 3.1 Pro` compared the tab with whichever stop the marker was on, so browsing to Low
 with High on Pro (correct) warned; `sliderWarning` warns only under the current effort.
+**Since v9.9.9.4 the last list is kept across launches** (owner, 2026-11-23: "on first start, the
+agent does not load the model names and efforts"). Validated first: the list was memory only, the
+read at connect found no tab (414 `discover_models` notices in this repo's log), and since v9.9.9.2
+exit closes the tab, so a new start never has one. `core/models/saved-models.js` writes
+`~/.agent/models.json` on every usable read, per Chrome profile (the bound install, or `default`),
+with `selected` stripped; a read with no models never overwrites it. **Display only:**
+`shownModelOptions` (the live list, else the saved one) feeds the slider, the settings ladder and
+the panels' efforts; the mismatch row, the footer's browser name, switches and fallbacks still read
+`modelOptions`, so a stale list can never claim the tab disagrees. `tabrig/` with a seeded home:
+`/effort` on the first frame shows `3.1 Pro` and no Max, where it showed `Gemini Pro` and Max.
 
 **The browser differing from the effort is asked about, and a failed switch steps down (v5.28,
 `core/models/model-fallback.js`).** Under the default policy, `ask`, `handleSubmit` stops before the message
